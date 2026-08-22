@@ -1,0 +1,25 @@
+name: Student 5 CI
+
+on:
+  push:
+    paths:
+      - 'student-5/**'
+      - '.github/workflows/student-5-ci.yml'
+  pull_request:
+    paths:
+      - 'student-5/**'
+      - '.github/workflows/student-5-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Build and Validate Student 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Tests Placeholder
+        run: echo "Validating Student 5 microservices..."

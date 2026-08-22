@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Shared Frontend Portal
+  shared-ui:
+    build:
+      context: ./shared/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+
+  # Student 1: Trip & Itinerary Management
+  student-1-service:
+    build:
+      context: ./student-1
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+
+  # Student 2: Accommodation Management
+  student-2-service:
+    build:
+      context: ./student-2
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+
+  # Student 3: Transport Management
+  student-3-service:
+    build:
+      context: ./student-3
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+
+  # Student 4: Activities & Attractions Management
+  student-4-service:
+    build:
+      context: ./student-4
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+
+  # Student 5: Budget & Expense Management
+  student-5-service:
+    build:
+      context: ./student-5
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+
+  # Local AI Model Runtime (Ollama)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
