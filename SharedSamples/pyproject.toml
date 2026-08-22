@@ -1,0 +1,69 @@
+[project]
+name = "ScrapeService"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pyyaml>=6.0",
+    "beautifulsoup4",
+    "playwright",
+    "seqlog>=0.4.2",
+    "structlog>=24.1",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["ScrapeService*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "UP", "B", "SIM",
+    "N", "C4", "PIE", "RET", "RSE", "RUF",
+    "PERF", "FURB", "A", "ISC", "T10", "FLY",
+    "C90", "BLE", "EM", "PGH", "TC", "TID",
+    "ARG", "PTH", "LOG", "ASYNC", "FA",
+]
+ignore = ["TID252"]
+
+[tool.ruff.lint.per-file-ignores]
+# PascalCase package name is intentional
+"**" = ["N999"]
+# MonitorDataClasses use UPPER_CASE @property names by convention
+"**/monitor_dataclasses.py" = ["N802"]
+"**/dataclasses.py" = ["N802"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ScrapeService"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency/parameter helpers are designed to be called in argument
+# defaults; this is the idiomatic pattern, so exempt them from B008.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Security",
+]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves model annotations at runtime to build validators, so the
+# TC rules must not push their imports into a TYPE_CHECKING-only block.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
+[tool.ruff.format]
+quote-style = "double"
