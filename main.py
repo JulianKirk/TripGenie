@@ -1,5 +1,3 @@
-
-
 def main():
     print("Starting '41026 Advanced Software Development - Trip Genie'")
 
