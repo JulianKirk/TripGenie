@@ -1,0 +1,231 @@
+from __future__ import annotations
+
+from datetime import date, time
+from enum import Enum
+from typing import Annotated, Generic, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+TripIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=6,
+        max_length=64,
+        pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$",
+    ),
+]
+ItemIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=6,
+        max_length=64,
+        pattern=r"^item_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$",
+    ),
+]
+IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
+ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
+LongText = Annotated[str, StringConstraints(max_length=2000)]
+
+T = TypeVar("T")
+
+
+def _validate_iso_date(value: str) -> str:
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("must be a valid ISO date in YYYY-MM-DD format") from exc
+
+    return value
+
+
+def _validate_iso_time(value: str) -> str:
+    try:
+        parsed = time.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("must be a valid HH:MM time") from exc
+
+    if parsed.second or parsed.microsecond:
+        raise ValueError("must be a valid HH:MM time")
+
+    return value
+
+
+def _normalise_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    return stripped or None
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class TripStatus(str, Enum):
+    DRAFT = "draft"
+    PLANNED = "planned"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class ItineraryCategory(str, Enum):
+    ACCOMMODATION = "accommodation"
+    TRANSPORT = "transport"
+    ACTIVITY = "activity"
+    MEAL = "meal"
+    NOTE = "note"
+    OTHER = "other"
+
+
+class ErrorDetail(StrictModel):
+    field: str
+    issue: str
+
+
+class ErrorBody(StrictModel):
+    code: str
+    message: str
+    details: list[ErrorDetail] = Field(default_factory=list)
+
+
+class ErrorEnvelope(StrictModel):
+    error: ErrorBody
+
+
+class DataEnvelope(StrictModel, Generic[T]):
+    data: T
+
+
+class HealthResponse(StrictModel):
+    status: str
+    service: str
+    sqlite_path: str
+
+
+class DeleteResponse(StrictModel):
+    id: str
+    deleted: bool = True
+
+
+class TripFields(StrictModel):
+    name: ShortText
+    destination: ShortText
+    start_date: IsoDate
+    end_date: IsoDate
+    traveller_count: int = Field(ge=1, le=1000)
+    status: TripStatus
+    notes: LongText | None = None
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def validate_date_fields(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TripCreate(TripFields):
+    id: TripIdentifier | None = None
+
+
+class TripUpdate(StrictModel):
+    name: ShortText | None = None
+    destination: ShortText | None = None
+    start_date: IsoDate | None = None
+    end_date: IsoDate | None = None
+    traveller_count: int | None = Field(default=None, ge=1, le=1000)
+    status: TripStatus | None = None
+    notes: LongText | None = None
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def validate_date_fields(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TripRecord(TripFields):
+    id: TripIdentifier
+
+
+class ItineraryItemFields(StrictModel):
+    date: IsoDate
+    start_time: IsoTime | None = None
+    end_time: IsoTime | None = None
+    title: ShortText
+    location: ShortText | None = None
+    description: LongText | None = None
+    category: ItineraryCategory
+    notes: LongText | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_item_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_item_time(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_time(value)
+
+    @field_validator("location", "description", "notes")
+    @classmethod
+    def normalise_optional_fields(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class ItineraryItemCreate(ItineraryItemFields):
+    id: ItemIdentifier | None = None
+
+
+class ItineraryItemUpdate(StrictModel):
+    date: IsoDate | None = None
+    start_time: IsoTime | None = None
+    end_time: IsoTime | None = None
+    title: ShortText | None = None
+    location: ShortText | None = None
+    description: LongText | None = None
+    category: ItineraryCategory | None = None
+    notes: LongText | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_item_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_date(value)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_item_time(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_time(value)
+
+    @field_validator("location", "description", "notes")
+    @classmethod
+    def normalise_optional_fields(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class ItineraryItemRecord(ItineraryItemFields):
+    id: ItemIdentifier
+    trip_id: TripIdentifier
