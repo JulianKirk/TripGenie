@@ -1,125 +1,130 @@
-# Student 1 Release 0 Scope, Requirements, and Risk Plan
+# Student 1 Release 0 Scope, Assessed Workflow, and Evidence Plan
 
-Related architecture: [Student 1 Release 0 architecture and contracts](../../architecture/student-1-release-0-architecture.md)
+Related architecture: [Student 1 Release 0 architecture, runtime modes, and decision traceability](../../architecture/student-1-release-0-architecture.md)
+Related ADRs: [ADR-0001](../../architecture/decisions/0001-student-1-service-mapping.md), [ADR-0002](../../architecture/decisions/0002-student-1-internal-api-and-observability.md)
 
-## 1. Release 0 scope
-Student 1 Release 0 covers the first deployable slice of TripGenie's trip and itinerary management capability. It is intentionally limited to a three-service Student 1 stack:
+## 1. Documentation stance
 
-1. an HTMX frontend for trip planning flows;
-2. a backend/API service for orchestration, validation, and AI suggestion calls; and
-3. a database API service that is the **only** service allowed to access the Student 1 SQLite file.
+This update uses three labels consistently:
+
+- **Assignment / Group 07 requirement** - scope already carried by this repository and PR #17.
+- **Lab pattern/example** - a visible example from `Georges034302/asd-labs`.
+- **TripGenie decision** - a project-specific choice or proposal, recorded in an ADR when it should persist.
+
+Because the assignment handout is not committed in this repository snapshot, the traceability table below points the **Assignment / Group 07 requirement** column at the repository artefacts that currently carry that scope: README, Docker Compose, CI, and the paired Student 1 design docs.
+
+This issue updates design/reporting documentation only. It does **not** claim that the Student 1 three-service stack, timings, or AI behaviour are already implemented or verified. The current repository still exposes a placeholder `student-1-service` in [docker-compose.yml][TG-COMPOSE]; this plan describes the Release 0 target state, not executed proof.
+
+## 2. Course source pack used
+
+| Source | Why it matters |
+| --- | --- |
+| [AI Agent Configuration Guide][CFG] | Establishes local Ollama as the baseline runtime and recommends `qwen2.5:0.5b` for implementation work plus `llama3.1:8b` for review work. |
+| [Lab 01][L1] | Defines the initial assessed loop as `PLAN -> ACT -> OBSERVE -> ADAPT`, with deterministic checks, manual evidence capture, and one bounded improvement. |
+| [Lab 02][L2] | Extends the loop to `PLAN -> ACT -> OBSERVE -> IMPLEMENTATION AGENT -> REVIEW AGENT -> HUMAN REVIEW -> ADAPT` and requires evidence-backed review plus human decision. |
+| [Lab 03][L3] | Externalises prompt assets, adds context-aware QA, and keeps prompt/review outputs grounded in live validation evidence. |
+| [Lab 04][L4] | Separates UI-mode from AI-mode, uses a three-service architecture example, introduces ADR work, and shows stage banners such as `[START]`, `[OBSERVE]`, `[PROMPTS]`, `[LLM]`, `[DONE]`. |
+| [asd-labs README][ASD-README] plus visible repo tree snapshot [ASD-TREE] | README references Labs 05/06, but the visible repository snapshot used here exposes only Labs 01-04 plus the AI guide and README, so later-lab requirements are treated as unavailable rather than inferred. |
+
+## 3. Traceability summary
+
+| Topic | Assignment / Group 07 requirement | Visible lab pattern/example | TripGenie Student 1 decision |
+| --- | --- | --- | --- |
+| Service decomposition | Student 1 Release 0 stays inside a three-service, independently containerised slice with local Ollama, shared home page navigation, Docker Compose, and CI continuity [TG-README][TG-COMPOSE][TG-CI]. | Lab 04 uses `frontend-service`, `enrolment-service`, and `database-service` as the microservice example [L4]. | Map that pattern onto Group 07's shared home page plus Student 1 frontend/backend/database target services; record naming and ports in [ADR-0001](../../architecture/decisions/0001-student-1-service-mapping.md). |
+| CRUD and database ownership | Student 1 owns trip and itinerary CRUD while keeping one service as the only SQLite owner [TG-ARCH]. | Labs 01-04 keep SQLite ownership local to the data layer and use HTTP between services in Lab 04 [L1][L4]. | Student 1 database API remains the only SQLite owner; frontend and backend use HTTP instead of shared file access. |
+| Local Ollama baseline | Release 0 keeps Ollama local and out of Release 1/2 features [TG-ARCH]. | The AI guide and Labs 01-04 use local Ollama throughout [CFG][L1][L2][L3][L4]. | Treat `qwen2.5:0.5b` and `llama3.1:8b` as subject baselines/recommendations, not mandatory runtime claims; keep `deepseek-r1:8b` out of Release 0 because it is presented as later-lab reasoning support [CFG]. |
+| Assessed loop | Student 1 documentation must support the course-assessed evidence/review loop for reports and demos [TG-ARCH]. | Labs 01-04 define the loop as development/review work with evidence, prompts, human decision, rerun, and adaptation [L1][L2][L3][L4]. | Treat the assessed loop as the Student 1 development-and-validation workflow, not as the end-user itinerary suggestion runtime. |
+| UI-mode vs AI-mode | Student 1 still needs a clear runtime story for CRUD flows and Ollama-assisted suggestions [TG-ARCH]. | Lab 04 separates Normal UI from AI Mode in the frontend and backend routes [L4]. | Keep runtime CRUD in UI-mode and bounded suggestions in AI-mode, while documenting both separately from the assessed loop. |
+| Prompt assets and review roles | Release 0 reporting must explain how prompts, evidence, and review outputs are retained [TG-ARCH]. | Lab 03 externalises prompt files; Labs 02-04 split implementation and review roles [L2][L3][L4]. | Keep prompt assets versioned and separate from service code or report prose; record which prompt text and model pair produced each review outcome. |
+| Later-lab scope | Release 0 excludes MCP, RAG, multi-agent runtime, and unverified showcase requirements [TG-ARCH]. | The visible snapshot does not expose Labs 05/06 content even though README lists them [ASD-README][ASD-TREE]. | Do not invent CI/showcase requirements from hidden later labs; keep Release 0 limited to what is visible and already agreed in Group 07 scope. |
+| Internal API / observability detail | Student 1 may still want health checks, internal routes, or richer logs for implementation [TG-ARCH]. | Visible labs require evidence and stage banners, but do not visibly mandate `/internal/*`, `/ready`, fixed retry counts, or exact log schemas [L1][L2][L3][L4]. | Treat `/internal/*`, `/health`, `/ready`, run IDs, correlation IDs, retry caps, and exact log schemas as TripGenie proposals only, tracked in [ADR-0002](../../architecture/decisions/0002-student-1-internal-api-and-observability.md). |
+
+## 4. Release 0 scope
 
 ### In scope
-- Trip CRUD for `trips`.
-- Itinerary item CRUD for `itinerary_items`.
-- Filtering itinerary items by trip and date.
-- AI-generated draft itinerary suggestions through Ollama, executed as a bounded backend Plan -> Act -> Observe -> Adapt run.
-- Service health endpoints, validation rules, and documented integration boundaries.
-- Structured per-run logging, run IDs, and correlation IDs for AI suggestion runs.
+
+- Trip CRUD and itinerary-item CRUD design for Student 1.
+- Filtering itinerary items by trip and date/category.
+- A local Ollama-assisted **draft suggestion** capability that stays inside Student 1 and requires human approval before persistence.
+- Documentation of a three-container Student 1 target architecture that preserves the Group 07 shared home page pattern.
+- Evidence-backed report guidance for prompts, live validation, review output, human decision, and rerun/adaptation.
 
 ### Explicitly out of scope
-- Release 1 MCP, RAG, and retrieval-enhanced prompting.
-- Release 2 multi-agent, cloud, or autonomous cross-service orchestration.
-- Direct writes into Student 2-5 data stores or shared database/file access.
 
-## 2. Functional requirements
+- Auto-persisted AI decisions or autonomous product behaviour presented as the assessed course loop.
+- Release 1 MCP/RAG features and Release 2 multi-agent/cloud features.
+- Invented Labs 05/06 requirements.
+- Claims that proposed endpoints, timings, or observability conventions already work without execution evidence.
 
-| ID | Requirement | Release 0 expectation |
+## 5. The assessed Student 1 workflow
+
+The course-assessed loop is a **software development and review workflow**.
+
+- **Lab 01** establishes `PLAN -> ACT -> OBSERVE -> ADAPT` around deterministic validation and one improvement [L1].
+- **Lab 02** adds implementation agent, review agent, and explicit human decision [L2].
+- **Lab 03** moves prompt text into files and keeps outputs tied to live evidence [L3].
+- **Lab 04** applies the same evidence discipline to architecture work, ADRs, and UI-mode/AI-mode separation [L4].
+
+For Student 1 Release 0, the concrete assessed workflow should be documented and demonstrated like this:
+
+| Step | Student 1 activity | Evidence to retain in the report |
 | --- | --- | --- |
-| FR-01 | Manage trips | Users can create, list, view, update, and delete trips with `name`, `destination`, `start_date`, `end_date`, `traveller_count`, `status`, and `notes`. |
-| FR-02 | Manage itinerary items | Users can create, list, view, update, and delete itinerary items for a trip with `date`, `start_time`, `end_time`, `title`, `location`, `description`, `category`, and `notes`. |
-| FR-03 | Filter itinerary by trip/date | Users can request itinerary items for a specific trip and optionally narrow the result set by `date` and `category`. |
-| FR-04 | Enforce planning rules | The backend rejects invalid trip date ranges, invalid time ranges, itinerary dates outside the parent trip window, and missing required fields. |
-| FR-05 | Generate AI suggestions | Users can trigger a bounded AI itinerary-suggestion run for one trip/day. The backend builds a structured plan from the user's goal, trip constraints, existing itinerary, and prompt context, then returns validated draft suggestions without persisting them automatically. |
-| FR-06 | Provide operational visibility | Frontend, backend, and database API services each expose a health endpoint, and AI suggestion runs emit auditable stage-transition logs with run/correlation IDs, dependency snapshots, and validation outcomes. |
-| FR-07 | Preserve ownership boundaries | Frontend talks only to backend; backend reads current trip/items and later persists user-approved changes through the database API; only the database API owns the SQLite file and cascade deletion behavior. |
-| FR-08 | Preserve human approval | AI suggestions remain drafts only. A user must explicitly accept/edit them and persist the final itinerary items through the existing CRUD endpoints. |
+| Plan | Define the bounded goal for the current slice or change: scope, endpoint(s), data rules, pass condition, and any NFR being checked. | The written goal, success criteria, and explicit scope boundary. |
+| Act + Observe | Run the relevant app/services, inspect the database or seed data, and execute browser plus `curl` checks. Capture expected/actual/pass-fail results and any timing evidence. | DB observations, browser results, `curl` outputs, Expected/Actual/Pass-Fail table rows, and NFR timings where applicable. |
+| Implementation agent | Feed the live evidence into the implementation prompt. The course baseline is local Ollama with `qwen2.5:0.5b` for implementation-oriented advice [CFG][L2][L3]. | Prompt asset used, model name, and the exact implementation recommendation returned. |
+| Review agent | Review the implementation recommendation using the same evidence. The course baseline review model is `llama3.1:8b` [CFG][L2][L3]. | Prompt asset used, model name, and the three-line `Risk / Correction / Retest` output or equivalent evidence-backed review note. |
+| Human review | Accept, partially accept, or reject the AI recommendation based on the evidence. | Human decision, short rationale, and any scope correction. |
+| Adapt + rerun | Apply one bounded improvement, rerun the relevant checks, and compare before/after results. | What changed, which checks were rerun, before/after evidence, and the final outcome. |
 
-## 3. Non-functional requirements
+## 6. Prompt assets and report evidence to retain
 
-| ID | Requirement | Release 0 expectation |
+Student 1 documentation should explicitly retain or reference:
+
+1. the prompt assets or prompt excerpts used for implementation/review;
+2. the live evidence that informed them;
+3. the implementation-agent output;
+4. the review-agent output;
+5. the human decision; and
+6. the rerun/retest evidence after adaptation.
+
+At minimum, the report evidence pack should include:
+
+- a short PLAN statement and stop condition;
+- manual browser and `curl` checks recorded as **Expected / Actual / Pass-Fail**;
+- database evidence showing the relevant Student 1 state or schema assumptions;
+- the NFR timing proof when a timing requirement is claimed;
+- prompt file/path references for implementation, review, and any context-aware runtime prompt assets;
+- ADR links for any long-lived TripGenie-specific deviations from the visible labs.
+
+**Important:** the visible course prompts repeatedly warn against inventing new services, APIs, database fields, or requirements [L1][L2][L3][L4]. Student 1 report text should therefore label every claim as either an assignment requirement, a visible lab example, or a TripGenie project decision.
+
+## 7. Runtime AI-mode is separate from the assessed loop
+
+The bounded TripGenie itinerary-suggestion flow can remain in Release 0, but it is a **runtime design** rather than the course-assessed loop.
+
+| Concern | Assessed course loop | TripGenie runtime AI-mode |
 | --- | --- | --- |
-| NFR-01 | Independent deployment units | Student 1 frontend, backend, and database services are containerised separately so they can be built, run, and debugged independently. |
-| NFR-02 | Clear data ownership | The Student 1 SQLite file is mounted only into the database API service. No other TripGenie service reads or writes the file directly. |
-| NFR-03 | Graceful dependency handling | If Ollama or the database API is unavailable, CRUD flows still work and AI suggestion runs terminate with a documented dependency/manual-review outcome instead of crashing the stack. |
-| NFR-04 | Predictable contracts | All REST endpoints use JSON payloads, ISO `YYYY-MM-DD` dates, `HH:MM` times, and a shared error envelope. |
-| NFR-05 | Local-first operability | Configuration is injected through environment variables and fixed container ports so the stack remains consistent with the repository's Docker-based development model. |
-| NFR-06 | Performance for core workflows | CRUD and filtering should remain lightweight for a single-trip planning workflow; AI suggestion runs may be slower but remain bounded by backend timeouts and `AI_SUGGESTION_MAX_ATTEMPTS=2`. |
-| NFR-07 | Maintainable scope | Release 0 documentation and contracts must stay limited to trip/itinerary management and not quietly absorb Release 1 or Release 2 concerns. |
-| NFR-08 | Internal consistency | Documentation must align with the current repository layout, current shared UI port assumptions, and the Student 1 assignment brief without claiming unverified runtime behaviour. |
-| NFR-09 | Auditable agent runs | Each AI suggestion run has a run ID, correlation ID, stage transition history, dependency snapshot, and termination reason suitable for debugging and review. |
+| Trigger | Student/team validates or improves the system. | A user requests itinerary help for a specific trip/day. |
+| Main evidence | DB checks, browser checks, `curl`, timing evidence, prompt outputs, and human review. | Current trip/itinerary context, prompt assets, and model output returned to the user. |
+| Decision point | Human decides whether to accept, partially accept, or reject a recommended change. | Human user reviews/edit suggestions before any persistence. |
+| Persistence | Adaptation changes docs/code, then reruns evidence checks. | Suggestions remain drafts until the user saves them through normal CRUD. |
 
-## 4. Release 0 feature plan
+That distinction replaces the earlier wording that treated the runtime suggestion flow itself as `PLAN -> ACT -> OBSERVE -> ADAPT`.
 
-| Slice | Capability | Outcome | Dependencies |
-| --- | --- | --- | --- |
-| Slice 1 | Service boundaries and contracts | Lock the three-service design, ports, ownership rules, schemas, and public/internal APIs before implementation starts. | Current repo structure and Docker conventions |
-| Slice 2 | Trip lifecycle | Deliver trip create/read/update/delete flows and trip-level validation so a plan can exist independently of itinerary details. | Slice 1 |
-| Slice 3 | Itinerary lifecycle | Deliver itinerary item CRUD plus trip/date filtering so users can build and inspect day plans. | Slice 2 |
-| Slice 4 | AI itinerary-suggestion run | Add a bounded backend-to-Ollama execution loop that reads current trip context via the database API, retries within a documented limit, and returns validated draft suggestions without automatic persistence. | Slice 2, Slice 3 |
-| Slice 5 | Operational hardening | Add health endpoints, dependency status reporting, per-run stage logs, and documented failure behaviour for database API and Ollama outages. | Slice 1, Slice 4 |
+## 8. Limitations and open points
 
-## 5. Risk plan
+- [asd-labs README][ASD-README] advertises Labs 05/06, but the visible repository snapshot used for this update exposes only Labs 01-04 plus the AI guide and README [ASD-TREE]. No later-lab requirement is asserted here.
+- Current Group 07 repository evidence still shows a placeholder Student 1 service in [docker-compose.yml][TG-COMPOSE]; service names, ports, internal API paths, and observability details remain proposed until implemented.
+- `deepseek-r1:8b` appears in the AI guide only as a reasoning model for later labs [CFG], so it is intentionally kept out of Student 1 Release 0 scope.
 
-| Risk | Why it matters | Mitigation in Release 0 |
-| --- | --- | --- |
-| Service availability | Frontend, backend, database API, and Ollama are separate processes, so partial outages are possible. | Provide per-service health endpoints, keep CRUD independent from Ollama, and surface degraded dependency state from the backend. |
-| Invalid dates and times | Trip windows and itinerary times are core planning data; invalid ranges undermine all downstream logic. | Validate `start_date <= end_date`, `start_time < end_time`, and enforce itinerary dates within the parent trip range at the backend and database layers. |
-| Ollama unavailable or slow | AI suggestions are optional but visible user functionality. | Treat AI as best-effort, apply backend timeouts, return `503 DEPENDENCY_UNAVAILABLE`, and terminate with a manual-review outcome so users can continue manual planning. |
-| Model output violates constraints | Ollama can return duplicates, unsupported categories, or dates/times that do not fit the trip window. | Normalise every candidate to the itinerary item create schema, validate against trip/date/category rules and existing itinerary state, log failures, and retry only within the documented attempt limit. |
-| Hidden persistence of AI drafts | Users must understand that AI output is advisory until reviewed. | Keep AI suggestions in memory only, return `persisted = false`, and require explicit follow-up CRUD calls to save accepted items. |
-| Cross-service data consistency | Accommodation, transport, activities, and budget data live in different student-owned services. | Keep Student 1 as the source of truth only for trips and itinerary items, avoid distributed writes, and integrate via documented API boundaries rather than shared storage. |
-| Scope creep into Release 1/2 | MCP, RAG, and cloud autonomy would distort Release 0 implementation cost and timelines. | State explicit exclusions in all design artefacts and keep AI suggestion flow limited to direct Ollama calls. |
-
-## 6. AI itinerary-suggestion agent loop
-
-### 6.1 Trigger and bounded goal
-
-- **Trigger:** `POST /api/trips/{tripId}/ai-suggestions` for exactly one trip and one planning date, with a user goal, optional prompt context, and explicit constraints.
-- **Bounded goal:** return a validated, normalised set of draft itinerary-item candidates for that single request, using stored trip data and the current itinerary as context, without mutating persisted data.
-- **Run controls:** each execution gets a `run_id`, shares a `correlation_id`, and is limited to `AI_SUGGESTION_MAX_ATTEMPTS=2`.
-
-The loop uses only the Student 1 backend, Student 1 database API, and direct Ollama calls. Release 1 MCP/RAG and Release 2 multi-agent behaviour remain out of scope.
-
-### 6.2 Stage definitions
-
-| Stage | What happens in Release 0 | Evidence captured | Exit criteria |
-| --- | --- | --- | --- |
-| Plan | The backend creates a structured proposed action plan from the user's goal, trip constraints, existing itinerary snapshot, prompt context, requested date, and expected output schema. | `run_id`, `correlation_id`, attempt number, planning inputs, and the structured plan object. | The plan is complete for the current attempt and ready for execution. |
-| Act | The backend retrieves the current trip and itinerary items through the database API, invokes Ollama, normalises candidate suggestions to the itinerary-item create shape, validates rules, and **never** persists AI output automatically. | Database API results, Ollama response, normalised candidates, and validation outcomes. | The backend has either validated candidate suggestions or classified a failure for this attempt. |
-| Observe | The backend records tool results, model output, dependency state, validation/constraint failures, latency, and stage-transition logs for the current attempt. | Structured per-run logs and a dependency snapshot. | The attempt is classified as success, retryable failure, or terminal failure. |
-| Adapt | The backend revises the plan, prompt context, or constraints and retries while attempts remain; otherwise it terminates with an explicit failure/manual-review outcome. | Retry reason, updated plan inputs, and final termination reason when applicable. | The run either loops back to Plan for another attempt or terminates. |
-
-### 6.3 Deterministic CRUD versus the agentic loop
-
-| Concern | Deterministic CRUD | AI itinerary-suggestion loop |
-| --- | --- | --- |
-| Trigger | Trip and itinerary create/read/update/delete endpoints. | `POST /api/trips/{tripId}/ai-suggestions`. |
-| Persistence | Writes trip or itinerary state immediately once validation passes. | Never persists suggestions automatically; returns drafts only. |
-| Retry model | Standard request/response handling only. | Internal Plan -> Act -> Observe -> Adapt retry loop bounded to two attempts. |
-| Audit trail | Standard request logs. | Per-run stage-transition logs with `run_id`, `correlation_id`, dependency state, and termination reason. |
-| Output | Stored trip or itinerary records. | Draft suggestion candidates that a user may later save through normal CRUD. |
-
-### 6.4 Termination and approval boundary
-
-- **Successful termination:** at least one candidate passes normalisation and hard-constraint validation, so the backend returns draft suggestions with `persisted = false` and `approval_required = true`.
-- **Retryable failure:** parsing, validation, or dependency issues that might be corrected within the same run cause the Adapt stage to revise inputs and retry.
-- **Terminal failure:** the backend returns an explicit error/manual-review outcome when a dependency is unavailable, the request is invalid, the final attempt still fails validation, or the run times out.
-- **Human approval boundary:** users review, edit, and persist any accepted suggestion later through the standard itinerary item CRUD endpoints. The agentic loop itself never writes itinerary items.
-
-```mermaid
-flowchart TD
-    A["Trigger: POST /api/trips/{tripId}/ai-suggestions"] --> B["Create run_id + correlation_id<br/>attempt = 1 of 2"]
-    B --> C["PLAN<br/>Build structured action plan from goal, constraints, trip, existing itinerary, and prompt context"]
-    C --> D["ACT<br/>Read current trip/items via the database API and invoke Ollama"]
-    D --> E["ACT<br/>Normalise candidates to the itinerary-item create shape and validate rules"]
-    E --> F["OBSERVE<br/>Record tool/model results, dependency state, validation failures, and stage logs"]
-    F --> G{"Valid candidates?"}
-    G -- Yes --> H["Terminate success<br/>Return draft suggestions only<br/>persisted = false, approval_required = true"]
-    G -- No, attempts remain --> I["ADAPT<br/>Revise plan/prompt/constraints and increment attempt"]
-    I --> C
-    G -- No, limit reached or dependency failed --> J["Terminate failure/manual-review outcome"]
-```
-
-## 7. Evidence boundary
-This issue produces design artefacts only. It intentionally does **not** claim that the three-service stack, APIs, or validations are already implemented or runtime-verified.
+[TG-ARCH]: ../../architecture/student-1-release-0-architecture.md
+[TG-README]: ../../../README.md
+[TG-COMPOSE]: ../../../docker-compose.yml
+[TG-CI]: ../../../.github/workflows/student-1-ci.yml
+[CFG]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/AI_Agent_Configuration_Guide.md
+[L1]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_01_DevOps_and_Agentic_AI_Foundations.md
+[L2]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_02_Environment_and_Multi_Model_Workflows.md
+[L3]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_03_Prompting_Specs_and_Context_Execution.md
+[L4]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_04_Architecture_and_Agentic_Design_Patterns.md
+[ASD-README]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/README.md
+[ASD-TREE]: https://github.com/Georges034302/asd-labs/tree/4777809f17f5e2ec681d6b727dc79acb0f55fc1d
