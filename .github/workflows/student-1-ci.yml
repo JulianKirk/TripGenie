@@ -3,21 +3,49 @@ name: Student 1 CI
 on:
   push:
     paths:
+      - 'student-1/backend/**'
       - 'student-1/database/**'
+      - 'student-1/tests/backend/**'
       - 'student-1/tests/database/**'
       - 'student-1/pyproject.toml'
       - '.github/workflows/student-1-ci.yml'
   pull_request:
     paths:
+      - 'student-1/backend/**'
       - 'student-1/database/**'
+      - 'student-1/tests/backend/**'
       - 'student-1/tests/database/**'
       - 'student-1/pyproject.toml'
       - '.github/workflows/student-1-ci.yml'
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: Detect Student 1 changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      database: ${{ steps.filter.outputs.database }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'student-1/backend/**'
+              - 'student-1/tests/backend/**'
+              - 'student-1/pyproject.toml'
+              - '.github/workflows/student-1-ci.yml'
+            database:
+              - 'student-1/database/**'
+              - 'student-1/tests/database/**'
+              - 'student-1/pyproject.toml'
+              - '.github/workflows/student-1-ci.yml'
   database:
     name: Build and Validate Student 1 Database
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.database == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +69,30 @@ jobs:
         run: python -m pytest tests/database
       - name: Build Student 1 database image
         run: docker build -f student-1/database/Dockerfile student-1
+  backend:
+    name: Build and Validate Student 1 Backend
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 1 backend dependencies
+        working-directory: student-1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Run Student 1 backend syntax checks
+        working-directory: student-1
+        run: python -m compileall backend/backend_service tests/backend
+      - name: Run Student 1 backend Ruff checks
+        working-directory: student-1
+        run: python -m ruff check backend/backend_service tests/backend
+      - name: Run Student 1 backend pytest suite
+        working-directory: student-1
+        run: python -m pytest tests/backend
+      - name: Build Student 1 backend image
+        run: docker build -f student-1/backend/Dockerfile student-1
