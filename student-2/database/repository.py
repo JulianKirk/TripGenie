@@ -6,10 +6,9 @@ methods -- callers work with these instead of touching Session/SQL directly.
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from database.models import (
     Accommodation,
@@ -17,6 +16,11 @@ from database.models import (
     AccommodationRating,
     RoomDetails,
 )
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy.orm import Session
 
 
 class AccommodationRepository:
@@ -70,6 +74,7 @@ class AccommodationBookingRepository:
             self.session.delete(booking)
             self.session.commit()
 
+
 class AccommodationRatingRepository:
     def __init__(self, session: Session):
         self.session = session
@@ -90,5 +95,3 @@ class AccommodationRatingRepository:
         if rating is not None:
             self.session.delete(rating)
             self.session.commit()
-
-

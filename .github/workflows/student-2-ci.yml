@@ -5,11 +5,13 @@ on:
     paths:
       - 'student-2/**'
       - 'shared/**'
+      - 'ruff.toml'
       - '.github/workflows/student-2-ci.yml'
   pull_request:
     paths:
       - 'student-2/**'
       - 'shared/**'
+      - 'ruff.toml'
       - '.github/workflows/student-2-ci.yml'
   workflow_dispatch:
 
@@ -27,5 +29,9 @@ jobs:
           cache-dependency-path: student-2/database/requirements.txt
       - name: Install dependencies
         run: pip install -r student-2/database/requirements.txt
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
       - name: Run tests
         run: pytest student-2/tests -q
