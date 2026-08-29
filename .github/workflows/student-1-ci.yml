@@ -28,20 +28,47 @@ jobs:
       database: ${{ steps.filter.outputs.database }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
         with:
-          filters: |
-            backend:
-              - 'student-1/backend/**'
-              - 'student-1/tests/backend/**'
-              - 'student-1/pyproject.toml'
-              - '.github/workflows/student-1-ci.yml'
-            database:
-              - 'student-1/database/**'
-              - 'student-1/tests/database/**'
-              - 'student-1/pyproject.toml'
-              - '.github/workflows/student-1-ci.yml'
+          fetch-depth: 0
+      - name: Detect changed Student 1 paths
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "database=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
+            diff_range="origin/${{ github.base_ref }}...HEAD"
+          else
+            before="${{ github.event.before }}"
+            if [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              git fetch --no-tags --prune --depth=1 origin main
+              diff_range="origin/main...HEAD"
+            else
+              diff_range="$before...${{ github.sha }}"
+            fi
+          fi
+
+          changed_files="$(git diff --name-only "$diff_range")"
+          printf '%s\n' "$changed_files"
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^(student-1/backend/|student-1/tests/backend/|student-1/pyproject\.toml$|\.github/workflows/student-1-ci\.yml$)'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^(student-1/database/|student-1/tests/database/|student-1/pyproject\.toml$|\.github/workflows/student-1-ci\.yml$)'; then
+            echo "database=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "database=false" >> "$GITHUB_OUTPUT"
+          fi
   database:
     name: Build and Validate Student 1 Database
     needs: changes
