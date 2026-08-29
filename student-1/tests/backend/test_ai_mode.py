@@ -158,6 +158,90 @@ def test_health_accepts_current_ollama_tags_metadata(
     assert ollama_api.tag_requests == 1
 
 
+def test_health_reports_invalid_response_when_tags_models_field_is_missing(
+    client_factory,
+    database_api,
+) -> None:
+    def missing_models_field(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags" and request.method.upper() == "GET":
+            return httpx.Response(200, json={})
+        return httpx.Response(404, json={"detail": "not found"})
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ollama_handler=missing_models_field,
+    ) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "degraded"
+    assert response.json()["data"]["dependencies"]["ollama"] == {
+        "status": "invalid_response",
+        "service": "ollama",
+        "detail": "Ollama returned a malformed model list response.",
+        "code": "BAD_GATEWAY",
+    }
+
+
+def test_health_reports_invalid_response_when_tags_body_is_not_json(
+    client_factory,
+    database_api,
+) -> None:
+    def non_json_tags_body(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags" and request.method.upper() == "GET":
+            return httpx.Response(
+                200,
+                content=b"not-json",
+                headers={"content-type": "text/plain"},
+            )
+        return httpx.Response(404, json={"detail": "not found"})
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ollama_handler=non_json_tags_body,
+    ) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "degraded"
+    assert response.json()["data"]["dependencies"]["ollama"] == {
+        "status": "invalid_response",
+        "service": "ollama",
+        "detail": "Ollama returned a malformed model list response.",
+        "code": "BAD_GATEWAY",
+    }
+
+
+def test_health_reports_model_unavailable_when_tags_list_is_empty(
+    client_factory,
+    database_api,
+    ollama_api,
+) -> None:
+    ollama_api.models = []
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ollama_handler=ollama_api.handle,
+    ) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "degraded"
+    assert response.json()["data"]["dependencies"]["ollama"] == {
+        "status": "degraded",
+        "service": "ollama",
+        "detail": (
+            "Ollama responded, but the configured model "
+            "'qwen2.5:0.5b' is not available."
+        ),
+        "code": "MODEL_UNAVAILABLE",
+    }
+    assert ollama_api.tag_requests == 1
+
+
 def test_ai_suggestions_accept_current_ollama_generate_metadata(
     client_factory,
     database_api,

@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from pydantic import ConfigDict, Field, ValidationError, model_validator
+from pydantic import ConfigDict, ValidationError, model_validator
 
 from .config import Settings
 from .errors import (
+    ApiError,
     bad_gateway,
     dependency_response_too_large,
     dependency_timeout,
@@ -35,7 +36,7 @@ class OllamaModelSummary(OllamaResponseModel):
 
 
 class OllamaTagsResponse(OllamaResponseModel):
-    models: list[OllamaModelSummary] = Field(default_factory=list)
+    models: list[OllamaModelSummary]
 
 
 class OllamaGenerateResponse(OllamaResponseModel):
@@ -140,8 +141,13 @@ class OllamaClient:
             return status
 
         try:
-            payload = OllamaTagsResponse.model_validate(self._decode_json(response))
-        except ValidationError:
+            payload = OllamaTagsResponse.model_validate(
+                self._decode_json(
+                    response,
+                    message="Ollama returned a malformed model list response.",
+                )
+            )
+        except (ApiError, ValidationError):
             status = DependencyStatus(
                 status="invalid_response",
                 service="ollama",
