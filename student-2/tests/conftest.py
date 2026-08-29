@@ -22,8 +22,8 @@ from database.models import (
 )
 from database.repository import (
     AccommodationBookingRepository,
-    AccommodationRatingRepository,
     AccommodationRepository,
+    AccommodationUserRatingRepository,
 )
 from shared.backend.models import Base, User
 
@@ -49,7 +49,7 @@ def bookings(session):
 
 @pytest.fixture
 def ratings(session):
-    return AccommodationRatingRepository(session)
+    return AccommodationUserRatingRepository(session)
 
 
 @pytest.fixture

@@ -32,7 +32,7 @@ The bookable listing (hotel, hostel, Airbnb, etc.).
 | address | str | street address, display only; no geo search until "within N km" is needed |
 | description | str | |
 | price_per_night | Decimal | |
-| rating | float | derived/cached avg of AccommodationRating |
+| rating | float | derived/cached avg of AccommodationUserRating |
 | amenities | list[str] | plain list until amenities need filtering at scale |
 | availability_status | AvailabilityStatus | enum: AVAILABLE, UNAVAILABLE, SOLD_OUT |
 | room_details | RoomDetails \| None | composed, not subclassed — see below |
@@ -59,13 +59,13 @@ A reservation made against an Accommodation for a trip.
 | owner_id | FK → User | who made the booking |
 | trip_id | FK (external) | owned by Student 1's Trip service |
 | accommodation_id | FK → Accommodation | |
-| check_in_date | date | |
-| check_out_date | date | |
+| check_in_date | datetime | naive UTC |
+| check_out_date | datetime | naive UTC; `> check_in_date` (DB check constraint) |
 | num_guests | int | |
 | cost | Decimal | |
 | status | AccommodationBookingStatus | enum: PENDING, CONFIRMED, CANCELLED, COMPLETED |
 
-### AccommodationRating
+### AccommodationUserRating
 A user's rating/review of an Accommodation.
 
 | Field | Type | Notes |
@@ -73,7 +73,7 @@ A user's rating/review of an Accommodation.
 | id | UUID/int | PK |
 | accommodation_id | FK → Accommodation | |
 | user_id | FK → User | |
-| score | int | e.g. 1–5 |
+| score | int | 1–5, enforced by a DB check constraint |
 | comment | str | optional |
 | created_at | datetime | |
 
@@ -82,12 +82,12 @@ All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
 - `../../shared/backend/models.py` — `Base`, `User`
 - `../database/models.py` — `Accommodation`, `RoomDetails`,
-  `AccommodationBooking`, `AccommodationRating`, plus the accommodation-local
+  `AccommodationBooking`, `AccommodationUserRating`, plus the accommodation-local
   enums
 - `../database/database.py` — engine/session, `DATABASE_URL` env var
   (SQLite by default)
 - `../database/repository.py` — `AccommodationRepository`,
-  `AccommodationBookingRepository`, `AccommodationRatingRepository`
+  `AccommodationBookingRepository`, `AccommodationUserRatingRepository`
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
 custom `TypeDecorator` (`BedTypesJSON`) — SQLAlchemy has no built-in "list of
@@ -137,8 +137,8 @@ erDiagram
         UUID owner_id FK
         UUID trip_id FK
         UUID accommodation_id FK
-        date check_in_date
-        date check_out_date
+        datetime check_in_date
+        datetime check_out_date
         int num_guests
         decimal cost
         string status

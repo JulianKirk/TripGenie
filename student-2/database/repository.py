@@ -13,7 +13,7 @@ from sqlalchemy import select
 from database.models import (
     Accommodation,
     AccommodationBooking,
-    AccommodationRating,
+    AccommodationUserRating,
     RoomDetails,
 )
 
@@ -91,23 +91,23 @@ class AccommodationBookingRepository:
             _commit(self.session)
 
 
-class AccommodationRatingRepository:
+class AccommodationUserRatingRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def add(self, rating: AccommodationRating) -> AccommodationRating:
+    def add(self, rating: AccommodationUserRating) -> AccommodationUserRating:
         self.session.add(rating)
         _commit(self.session)
         return rating
 
-    def get(self, id: UUID) -> AccommodationRating | None:
-        return self.session.get(AccommodationRating, id)
+    def get(self, id: UUID) -> AccommodationUserRating | None:
+        return self.session.get(AccommodationUserRating, id)
 
-    def list(self) -> list[AccommodationRating]:
-        return list(self.session.scalars(select(AccommodationRating)))
+    def list(self) -> list[AccommodationUserRating]:
+        return list(self.session.scalars(select(AccommodationUserRating)))
 
     def delete(self, id: UUID) -> None:
-        rating = self.session.get(AccommodationRating, id)
+        rating = self.session.get(AccommodationUserRating, id)
         if rating is not None:
             self.session.delete(rating)
             _commit(self.session)

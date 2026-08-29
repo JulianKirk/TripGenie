@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from shared.backend.models import Base
 
@@ -22,7 +22,3 @@ def create_all() -> None:
     import database.models  # noqa: F401  # registers accommodation tables on Base
 
     Base.metadata.create_all(engine)
-
-
-def get_session() -> Session:
-    return SessionLocal()

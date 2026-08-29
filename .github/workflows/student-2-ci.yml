@@ -26,9 +26,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: student-2/database/requirements.txt
+          cache-dependency-path: student-2/pyproject.toml
       - name: Install dependencies
-        run: pip install -r student-2/database/requirements.txt
+        run: pip install -e "./student-2[dev]"
       - name: Lint
         run: |
           ruff check shared student-2

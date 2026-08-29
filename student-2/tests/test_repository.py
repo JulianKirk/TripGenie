@@ -8,14 +8,14 @@ fixtures are still just method arguments.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
 from database.models import (
     AccommodationBooking,
     AccommodationBookingStatus,
-    AccommodationRating,
+    AccommodationUserRating,
     BedType,
 )
 
@@ -56,18 +56,18 @@ class TestAccommodationBookingRepository:
                 cost=Decimal("500.00"),
                 trip_id=uuid4(),
                 accommodation_id=hotel.id,
-                check_in_date=date(2026, 1, 1),
-                check_out_date=date(2026, 1, 3),
+                check_in_date=datetime(2026, 1, 1, 14, 0),
+                check_out_date=datetime(2026, 1, 3, 10, 0),
                 num_guests=2,
             )
         )
         assert bookings.get(booking.id).status is AccommodationBookingStatus.PENDING
 
 
-class TestAccommodationRatingRepository:
+class TestAccommodationUserRatingRepository:
     def test_rating(self, ratings, user, hotel):
         rating = ratings.add(
-            AccommodationRating(
+            AccommodationUserRating(
                 id=uuid4(), accommodation_id=hotel.id, user_id=user.id, score=5
             )
         )

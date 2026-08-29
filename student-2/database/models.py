@@ -5,7 +5,7 @@ See ../../docs/architecture/object-model.md for the design (entities + ERD).
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
@@ -128,7 +128,7 @@ class Accommodation(Base):
     # RESTRICT: delete the bookings/ratings first, the DB refuses otherwise.
     # passive_deletes="all" stops the ORM nulling the FK out from under it.
     bookings: Mapped[list[AccommodationBooking]] = relationship(passive_deletes="all")
-    ratings: Mapped[list[AccommodationRating]] = relationship(passive_deletes="all")
+    ratings: Mapped[list[AccommodationUserRating]] = relationship(passive_deletes="all")
 
 
 class AccommodationBooking(Base):
@@ -143,8 +143,10 @@ class AccommodationBooking(Base):
     accommodation_id: Mapped[UUID] = mapped_column(
         ForeignKey("accommodations.id", ondelete="RESTRICT")
     )
-    check_in_date: Mapped[date]
-    check_out_date: Mapped[date]
+    # ponytail: naive UTC like created_at -- convert at the API edge if the
+    # 2pm-local check-in time ever needs to survive a timezone change.
+    check_in_date: Mapped[datetime]
+    check_out_date: Mapped[datetime]
     num_guests: Mapped[int]
     cost: Mapped[Decimal]
     status: Mapped[AccommodationBookingStatus] = mapped_column(
@@ -153,8 +155,8 @@ class AccommodationBooking(Base):
     )
 
 
-class AccommodationRating(Base):
-    __tablename__ = "accommodation_ratings"
+class AccommodationUserRating(Base):
+    __tablename__ = "accommodation_user_ratings"
     __table_args__ = (CheckConstraint("score BETWEEN 1 AND 5", name="ck_rating_score"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
