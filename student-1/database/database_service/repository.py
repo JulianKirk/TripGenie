@@ -6,7 +6,14 @@ from pathlib import Path
 from uuid import uuid4
 
 from .config import Settings
-from .errors import ApiError, conflict, not_found, validation_error
+from .errors import (
+    ApiError,
+    conflict,
+    database_busy,
+    internal_error,
+    not_found,
+    validation_error,
+)
 from .models import (
     ItineraryCategory,
     ItineraryItemCreate,
@@ -42,7 +49,12 @@ ITEM_FIELDS = (
     "notes",
 )
 
-SCHEMA_SQL = """
+SEED_MARKER_KEY = "student1_demo_seed_v1"
+SEED_MARKER_COMPLETED = "completed"
+SEED_MARKER_SKIPPED_EXISTING_DATA = "skipped-existing-data"
+
+SCHEMA_STATEMENTS = (
+    """
 CREATE TABLE IF NOT EXISTS trips (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -55,8 +67,9 @@ CREATE TABLE IF NOT EXISTS trips (
     ),
     notes TEXT,
     CHECK (start_date <= end_date)
-);
-
+)
+""",
+    """
 CREATE TABLE IF NOT EXISTS itinerary_items (
     id TEXT PRIMARY KEY,
     trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -71,17 +84,28 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
     ),
     notes TEXT,
     CHECK (start_time IS NULL OR end_time IS NULL OR start_time < end_time)
-);
-
+)
+""",
+    """
+CREATE TABLE IF NOT EXISTS schema_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+""",
+    """
 CREATE INDEX IF NOT EXISTS idx_trips_status_start_date
-    ON trips (status, start_date);
-
+    ON trips (status, start_date)
+""",
+    """
 CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_date
-    ON itinerary_items (trip_id, date);
-
+    ON itinerary_items (trip_id, date)
+""",
+    """
 CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_category_date
-    ON itinerary_items (trip_id, category, date);
-"""
+    ON itinerary_items (trip_id, category, date)
+""",
+)
 
 INSERT_TRIP_SQL = """
 INSERT INTO trips (
@@ -144,17 +168,6 @@ INSERT INTO itinerary_items (
 )
 """
 
-INSERT_TRIP_SEED_SQL = INSERT_TRIP_SQL.replace(
-    "INSERT INTO",
-    "INSERT OR IGNORE INTO",
-    1,
-)
-INSERT_ITEM_SEED_SQL = INSERT_ITEM_SQL.replace(
-    "INSERT INTO",
-    "INSERT OR IGNORE INTO",
-    1,
-)
-
 UPDATE_ITEM_SQL = """
 UPDATE itinerary_items
 SET
@@ -193,13 +206,33 @@ class DatabaseService:
         finally:
             connection.close()
 
+    @contextmanager
+    def _write_transaction(self, connection: sqlite3.Connection):
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            raise self._translate_operational_error(exc) from exc
+
+        try:
+            yield
+        except Exception as exc:
+            connection.rollback()
+            if isinstance(exc, sqlite3.OperationalError):
+                raise self._translate_operational_error(exc) from exc
+            raise
+        else:
+            try:
+                connection.commit()
+            except sqlite3.OperationalError as exc:
+                connection.rollback()
+                raise self._translate_operational_error(exc) from exc
+
     def initialize(self) -> None:
         with self._connect() as connection:
-            with connection:
-                connection.executescript(SCHEMA_SQL)
+            with self._write_transaction(connection):
+                self._ensure_schema(connection)
                 if self.settings.seed_data:
-                    connection.executemany(INSERT_TRIP_SEED_SQL, SEED_TRIPS)
-                    connection.executemany(INSERT_ITEM_SEED_SQL, SEED_ITINERARY_ITEMS)
+                    self._ensure_seed_data(connection)
 
     def health(self) -> dict[str, str]:
         with self._connect() as connection:
@@ -247,12 +280,14 @@ class DatabaseService:
 
         with self._connect() as connection:
             try:
-                with connection:
+                with self._write_transaction(connection):
                     connection.execute(INSERT_TRIP_SQL, record)
             except sqlite3.IntegrityError as exc:
                 self._raise_integrity_error(exc, "trip", str(record["id"]))
 
-        return self.get_trip(str(record["id"]))
+            trip_row = self._get_trip_row(connection, str(record["id"]))
+
+        return self._serialise_trip(trip_row)
 
     def get_trip(self, trip_id: str) -> dict[str, object]:
         with self._connect() as connection:
@@ -269,7 +304,7 @@ class DatabaseService:
             )
 
         with self._connect() as connection:
-            with connection:
+            with self._write_transaction(connection):
                 existing = dict(self._get_trip_row(connection, trip_id))
                 merged = existing | updates
                 self._validate_trip_record(merged)
@@ -283,7 +318,7 @@ class DatabaseService:
 
     def delete_trip(self, trip_id: str) -> dict[str, object]:
         with self._connect() as connection:
-            with connection:
+            with self._write_transaction(connection):
                 self._get_trip_row(connection, trip_id)
                 connection.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
 
@@ -333,7 +368,7 @@ class DatabaseService:
         self._normalise_empty_payload(record)
 
         with self._connect() as connection:
-            with connection:
+            with self._write_transaction(connection):
                 trip = dict(self._get_trip_row(connection, trip_id))
                 self._validate_item_record(record, trip)
                 try:
@@ -368,7 +403,7 @@ class DatabaseService:
             )
 
         with self._connect() as connection:
-            with connection:
+            with self._write_transaction(connection):
                 existing = dict(self._get_item_row(connection, item_id))
                 trip = dict(self._get_trip_row(connection, existing["trip_id"]))
                 merged = existing | updates
@@ -382,7 +417,7 @@ class DatabaseService:
 
     def delete_itinerary_item(self, item_id: str) -> dict[str, object]:
         with self._connect() as connection:
-            with connection:
+            with self._write_transaction(connection):
                 self._get_item_row(connection, item_id)
                 connection.execute(
                     "DELETE FROM itinerary_items WHERE id = ?",
@@ -418,6 +453,69 @@ class DatabaseService:
             raise not_found("Itinerary item", item_id)
 
         return item_row
+
+    def _ensure_schema(self, connection: sqlite3.Connection) -> None:
+        for statement in SCHEMA_STATEMENTS:
+            connection.execute(statement)
+
+    def _ensure_seed_data(self, connection: sqlite3.Connection) -> None:
+        if self._get_schema_metadata(connection, SEED_MARKER_KEY) is not None:
+            return
+
+        if self._database_has_existing_rows(connection):
+            self._set_schema_metadata(
+                connection,
+                SEED_MARKER_KEY,
+                SEED_MARKER_SKIPPED_EXISTING_DATA,
+            )
+            return
+
+        self._seed_trips(connection)
+        self._seed_itinerary_items(connection)
+        self._set_schema_metadata(connection, SEED_MARKER_KEY, SEED_MARKER_COMPLETED)
+
+    def _seed_trips(self, connection: sqlite3.Connection) -> None:
+        connection.executemany(INSERT_TRIP_SQL, SEED_TRIPS)
+
+    def _seed_itinerary_items(self, connection: sqlite3.Connection) -> None:
+        connection.executemany(INSERT_ITEM_SQL, SEED_ITINERARY_ITEMS)
+
+    def _database_has_existing_rows(self, connection: sqlite3.Connection) -> bool:
+        trips_exist = connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM trips LIMIT 1)",
+        ).fetchone()[0]
+        items_exist = connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM itinerary_items LIMIT 1)",
+        ).fetchone()[0]
+        return bool(trips_exist or items_exist)
+
+    def _get_schema_metadata(
+        self,
+        connection: sqlite3.Connection,
+        key: str,
+    ) -> str | None:
+        row = connection.execute(
+            "SELECT value FROM schema_metadata WHERE key = ?",
+            (key,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        return str(row["value"])
+
+    def _set_schema_metadata(
+        self,
+        connection: sqlite3.Connection,
+        key: str,
+        value: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO schema_metadata (key, value)
+            VALUES (?, ?)
+            """,
+            (key, value),
+        )
 
     @staticmethod
     def _generate_id(prefix: str) -> str:
@@ -527,6 +625,16 @@ class DatabaseService:
             code="INTERNAL_ERROR",
             message="An unexpected database constraint failed.",
         ) from exc
+
+    @staticmethod
+    def _translate_operational_error(exc: sqlite3.OperationalError) -> ApiError:
+        message = str(exc).lower()
+        if "locked" in message or "busy" in message:
+            return database_busy(
+                "The database is busy processing another write request. Please retry.",
+            )
+
+        return internal_error("An unexpected database operation failed.")
 
     @staticmethod
     def _serialise_trip(row: sqlite3.Row) -> dict[str, object]:

@@ -40,11 +40,22 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
     database_path,
 ) -> None:
     service.initialize()
+
+    with sqlite3.connect(database_path) as connection:
+        first_trip_count = connection.execute(
+            "SELECT COUNT(*) FROM trips",
+        ).fetchone()[0]
+        first_item_count = connection.execute(
+            "SELECT COUNT(*) FROM itinerary_items",
+        ).fetchone()[0]
+
     service.initialize()
 
     with sqlite3.connect(database_path) as connection:
-        trip_count = connection.execute("SELECT COUNT(*) FROM trips").fetchone()[0]
-        item_count = connection.execute(
+        second_trip_count = connection.execute(
+            "SELECT COUNT(*) FROM trips",
+        ).fetchone()[0]
+        second_item_count = connection.execute(
             "SELECT COUNT(*) FROM itinerary_items",
         ).fetchone()[0]
         trip_indexes = set(
@@ -58,8 +69,10 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
             ).fetchall()
         }
 
-    assert trip_count == 10
-    assert item_count == 10
+    assert first_trip_count >= 10
+    assert first_item_count >= 10
+    assert second_trip_count == first_trip_count
+    assert second_item_count == first_item_count
     assert "idx_trips_status_start_date" in trip_indexes
     assert "idx_itinerary_items_trip_date" in item_indexes
     assert "idx_itinerary_items_trip_category_date" in item_indexes

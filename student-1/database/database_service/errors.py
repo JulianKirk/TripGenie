@@ -40,6 +40,24 @@ def conflict(message: str, details: ErrorDetails | None = None) -> ApiError:
     )
 
 
+def database_busy(message: str, details: ErrorDetails | None = None) -> ApiError:
+    return ApiError(
+        status_code=503,
+        code="DATABASE_BUSY",
+        message=message,
+        details=details or [],
+    )
+
+
+def internal_error(message: str, details: ErrorDetails | None = None) -> ApiError:
+    return ApiError(
+        status_code=500,
+        code="INTERNAL_ERROR",
+        message=message,
+        details=details or [],
+    )
+
+
 def validation_error(
     message: str,
     details: ErrorDetails | None = None,
