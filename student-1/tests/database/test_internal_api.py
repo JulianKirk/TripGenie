@@ -375,3 +375,64 @@ def test_rejects_unsupported_query_params_and_invalid_filters(client) -> None:
     )
     assert extra_field_response.status_code == 422
     assert extra_field_response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize(
+    ("path", "field"),
+    [
+        ("/internal/trips?destination=%20%20%20", "destination"),
+        ("/internal/trips?status=%20%20", "status"),
+        (
+            "/internal/trips/trip_2026_sydney_long_weekend/itinerary-items?date=%20%20",
+            "date",
+        ),
+        (
+            "/internal/trips/trip_2026_sydney_long_weekend/itinerary-items?category=%20%20",
+            "category",
+        ),
+    ],
+)
+def test_rejects_blank_after_trim_query_filters(
+    client,
+    path: str,
+    field: str,
+) -> None:
+    response = client.get(path)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "One or more fields failed validation.",
+            "details": [{"field": field, "issue": "must not be blank"}],
+        },
+    }
+
+
+def test_query_filters_trim_surrounding_whitespace(client) -> None:
+    destination_response = client.get("/internal/trips?destination=%20%20Sydney%20%20")
+
+    assert destination_response.status_code == 200
+    assert [trip["id"] for trip in destination_response.json()["data"]] == [
+        "trip_2026_sydney_long_weekend",
+    ]
+
+    status_response = client.get("/internal/trips?status=%20planned%20")
+
+    assert status_response.status_code == 200
+    assert [trip["id"] for trip in status_response.json()["data"]] == [
+        "trip_2026_sydney_long_weekend",
+        "trip_2027_adelaide_festival_week",
+        "trip_2027_tokyo_spring_visit",
+        "trip_2027_queenstown_ski_escape",
+    ]
+
+    item_response = client.get(
+        "/internal/trips/trip_2026_sydney_long_weekend/itinerary-items"
+        "?date=%202026-10-03%20&category=%20activity%20",
+    )
+
+    assert item_response.status_code == 200
+    assert [item["id"] for item in item_response.json()["data"]] == [
+        "item_2026_sydney_harbour_walk",
+    ]
