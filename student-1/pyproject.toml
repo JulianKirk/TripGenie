@@ -1,0 +1,42 @@
+[project]
+name = "tripgenie-student1-services"
+version = "0.1.0"
+description = "Student 1 backend and database Python packages for TripGenie."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "pydantic>=2.8,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "ruff>=0.6,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["backend", "database"]
+include = ["backend_service*", "database_service*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/database"]
+addopts = "-q"
+filterwarnings = [
+    'ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead\.',
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]

@@ -5,15 +5,29 @@ on:
     paths:
       - 'student-1/**'
       - '.github/workflows/student-1-ci.yml'
+      - 'README.md'
+      - 'docs/architecture/student-1-release-0-architecture.md'
+      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
+      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - 'docker-compose.yml'
   pull_request:
     paths:
       - 'student-1/**'
       - '.github/workflows/student-1-ci.yml'
+      - 'README.md'
+      - 'docs/architecture/student-1-release-0-architecture.md'
+      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
+      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - 'docker-compose.yml'
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Build and Validate Student 1
+  database:
+    name: Build and Validate Student 1 Database
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,5 +35,50 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run Tests Placeholder
-        run: echo "Validating Student 1 microservices..."
+      - name: Install Student 1 database dependencies
+        working-directory: student-1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate installed Student 1 packages
+        working-directory: student-1
+        run: python -c "import backend_service, database_service"
+      - name: Run Student 1 database syntax checks
+        working-directory: student-1
+        run: python -m compileall database/database_service tests/database
+      - name: Run Student 1 database Ruff checks
+        working-directory: student-1
+        run: python -m ruff check database/database_service tests/database
+      - name: Run Student 1 database pytest suite
+        working-directory: student-1
+        run: python -m pytest tests/database
+      - name: Build Student 1 database image
+        run: docker build -f student-1/database/Dockerfile student-1
+  backend:
+    name: Build and Validate Student 1 Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 1 backend dependencies
+        working-directory: student-1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate installed Student 1 packages
+        working-directory: student-1
+        run: python -c "import backend_service, database_service"
+      - name: Run Student 1 backend syntax checks
+        working-directory: student-1
+        run: python -m compileall backend/backend_service tests/backend
+      - name: Run Student 1 backend Ruff checks
+        working-directory: student-1
+        run: python -m ruff check backend/backend_service tests/backend
+      - name: Run Student 1 backend pytest suite
+        working-directory: student-1
+        run: python -m pytest tests/backend
+      - name: Build Student 1 backend image
+        run: docker build -f student-1/backend/Dockerfile student-1
