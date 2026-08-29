@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from shared.backend.models import Base
 
-DEFAULT_DATABASE_URL = "sqlite:///student-2/backend/accommodation.db"
+DEFAULT_DATABASE_URL = "sqlite:///student-2/database/accommodation.db"
 DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 
 engine = create_engine(DATABASE_URL)

@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.models import (
+from database.models import (
     Accommodation,
     AccommodationBooking,
     AccommodationRating,

@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'student-2/**'
+      - 'shared/**'
       - '.github/workflows/student-2-ci.yml'
   pull_request:
     paths:
       - 'student-2/**'
+      - 'shared/**'
       - '.github/workflows/student-2-ci.yml'
   workflow_dispatch:
 
@@ -21,5 +23,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run Tests Placeholder
-        run: echo "Validating Student 2 microservices..."
+          cache: pip
+          cache-dependency-path: student-2/database/requirements.txt
+      - name: Install dependencies
+        run: pip install -r student-2/database/requirements.txt
+      - name: Run tests
+        run: pytest student-2/tests -q

@@ -15,17 +15,6 @@ here.
 | name | str | |
 | email | str | |
 
-### Booking
-Base for any per-service booking (accommodation, transport, activity, ...).
-Each microservice's booking entity extends this.
-
-| Field | Type | Notes |
-|---|---|---|
-| id | UUID/int | PK |
-| owner_id | FK → User | who made the booking |
-| cost | Decimal | |
-| status | BookingStatus | enum: PENDING, CONFIRMED, CANCELLED, COMPLETED |
-
 ## Accommodation Microservice Entities
 
 **Owner**: Student 2 (Mark Ureta).
@@ -60,16 +49,19 @@ room counts don't apply (e.g. camping).
 | description | str | free-text extra details, optional |
 
 ### AccommodationBooking
-A reservation made against an Accommodation for a trip. Extends [Booking](#booking)
-(`id`, `owner_id`, `cost`, `status`).
+A reservation made against an Accommodation for a trip.
 
 | Field | Type | Notes |
 |---|---|---|
+| id | UUID/int | PK |
+| owner_id | FK → User | who made the booking |
 | trip_id | FK (external) | owned by Student 1's Trip service |
 | accommodation_id | FK → Accommodation | |
 | check_in_date | date | |
 | check_out_date | date | |
 | num_guests | int | |
+| cost | Decimal | |
+| status | AccommodationBookingStatus | enum: PENDING, CONFIRMED, CANCELLED, COMPLETED |
 
 ### AccommodationRating
 A user's rating/review of an Accommodation.
@@ -86,13 +78,13 @@ A user's rating/review of an Accommodation.
 ## Persistence
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
-- `shared/backend/models.py` — `Base`, `User`, `Booking` (mixin), `BookingStatus`
-- `student-2/backend/models.py` — `Accommodation`, `RoomDetails`,
+- `shared/backend/models.py` — `Base`, `User`
+- `student-2/database/models.py` — `Accommodation`, `RoomDetails`,
   `AccommodationBooking`, `AccommodationRating`, plus the accommodation-local
   enums
-- `student-2/backend/database.py` — engine/session, `DATABASE_URL` env var
+- `student-2/database/database.py` — engine/session, `DATABASE_URL` env var
   (SQLite by default)
-- `student-2/backend/repository.py` — `AccommodationRepository`,
+- `student-2/database/repository.py` — `AccommodationRepository`,
   `AccommodationBookingRepository`, `AccommodationRatingRepository`
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
@@ -110,19 +102,11 @@ erDiagram
     ACCOMMODATION ||--o{ ACCOMMODATION_BOOKING : "booked via"
     ACCOMMODATION ||--o{ ACCOMMODATION_RATING : "rated via"
     ACCOMMODATION |o--o| ROOM_DETAILS : has
-    BOOKING ||--|| ACCOMMODATION_BOOKING : extends
 
     USER {
         UUID id PK
         string name
         string email
-    }
-
-    BOOKING {
-        UUID id PK
-        UUID owner_id FK
-        decimal cost
-        string status
     }
 
     ACCOMMODATION {
@@ -145,11 +129,15 @@ erDiagram
     }
 
     ACCOMMODATION_BOOKING {
+        UUID id PK
+        UUID owner_id FK
         UUID trip_id FK
         UUID accommodation_id FK
         date check_in_date
         date check_out_date
         int num_guests
+        decimal cost
+        string status
     }
 
     ACCOMMODATION_RATING {

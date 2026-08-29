@@ -15,7 +15,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
-from shared.backend.models import Base, Booking
+from shared.backend.models import Base
 
 
 class AccommodationType(Enum):
@@ -25,6 +25,13 @@ class AccommodationType(Enum):
     RESORT = "resort"
     GUESTHOUSE = "guesthouse"
     CAMPING = "camping"
+
+
+class AccommodationBookingStatus(Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
 
 
 class AvailabilityStatus(Enum):
@@ -98,14 +105,21 @@ class Accommodation(Base):
     )
 
 
-class AccommodationBooking(Booking, Base):
+class AccommodationBooking(Base):
     __tablename__ = "accommodation_bookings"
 
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID]
     trip_id: Mapped[UUID]  # external FK, owned by Student 1's Trip service
     accommodation_id: Mapped[UUID] = mapped_column(ForeignKey("accommodations.id"))
     check_in_date: Mapped[date]
     check_out_date: Mapped[date]
     num_guests: Mapped[int]
+    cost: Mapped[Decimal]
+    status: Mapped[AccommodationBookingStatus] = mapped_column(
+        SAEnum(AccommodationBookingStatus),
+        default=AccommodationBookingStatus.PENDING,
+    )
 
 
 class AccommodationRating(Base):
