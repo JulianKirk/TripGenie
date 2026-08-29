@@ -3,7 +3,6 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app/backend \
     STUDENT1_BACKEND_API_PREFIX=/api \
     STUDENT1_BACKEND_DB_API_BASE_URL=http://student-1-database:8002 \
     STUDENT1_BACKEND_DB_API_PREFIX=/internal \
@@ -14,9 +13,8 @@ WORKDIR /app
 RUN addgroup --system tripgenie \
     && adduser --system --ingroup tripgenie --home /nonexistent tripgenie
 
-COPY pyproject.toml ./
-COPY backend ./backend
-COPY database ./database
+COPY backend/pyproject.toml ./pyproject.toml
+COPY backend/backend_service ./backend_service
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install .

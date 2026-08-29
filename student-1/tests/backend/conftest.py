@@ -1,24 +1,14 @@
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from collections.abc import Iterator
 from copy import deepcopy
-from pathlib import Path
 
 import httpx
 import pytest
+from backend_service.app import create_app
+from backend_service.config import Settings
 from fastapi.testclient import TestClient
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = PROJECT_ROOT / "backend"
-
-if str(BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(BACKEND_ROOT))
-
-create_app = importlib.import_module("backend_service.app").create_app
-Settings = importlib.import_module("backend_service.config").Settings
 
 
 def create_trip_payload(**overrides: object) -> dict[str, object]:
@@ -76,6 +66,9 @@ class FakeDatabaseApi:
     def __init__(self) -> None:
         self._trip_counter = 0
         self._item_counter = 0
+        self.trip_create_calls = 0
+        self.trip_update_calls = 0
+        self.itinerary_item_list_requests: list[tuple[str, dict[str, str]]] = []
         self.trips: dict[str, dict[str, object]] = {
             "trip_2027_sydney_getaway": {
                 "id": "trip_2027_sydney_getaway",
@@ -197,6 +190,7 @@ class FakeDatabaseApi:
         )
 
     def _create_trip(self, request: httpx.Request) -> httpx.Response:
+        self.trip_create_calls += 1
         payload = self._request_json(request)
         trip_id = str(payload.get("id") or self._next_trip_id())
         if trip_id in self.trips:
@@ -233,6 +227,7 @@ class FakeDatabaseApi:
         return data_response(200, deepcopy(record))
 
     def _update_trip(self, trip_id: str, request: httpx.Request) -> httpx.Response:
+        self.trip_update_calls += 1
         record = self.trips.get(trip_id)
         if record is None:
             return error_response(
@@ -267,6 +262,7 @@ class FakeDatabaseApi:
         trip_id: str,
         params: dict[str, str],
     ) -> httpx.Response:
+        self.itinerary_item_list_requests.append((trip_id, deepcopy(params)))
         if trip_id not in self.trips:
             return error_response(
                 404,

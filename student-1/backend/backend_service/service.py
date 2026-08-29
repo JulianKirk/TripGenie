@@ -21,6 +21,7 @@ from .models import (
     TripStatus,
     TripUpdate,
 )
+from .trip_rules import ensure_trip_detail_supported, validate_trip_window
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
 
@@ -40,12 +41,17 @@ class BackendService:
         return [trip.model_dump(mode="json") for trip in trips]
 
     def create_trip(self, payload: TripCreate) -> dict[str, object]:
-        self._ensure_trip_window(payload.start_date, payload.end_date)
+        validate_trip_window(
+            payload.start_date,
+            payload.end_date,
+            message=VALIDATION_ERROR_MESSAGE,
+        )
         created_trip = self._client.create_trip(payload)
         return self._build_trip_detail(created_trip, [])
 
     def get_trip(self, trip_id: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
+        ensure_trip_detail_supported(trip)
         items = self._client.list_itinerary_items(trip_id)
         return self._build_trip_detail(trip, items)
 
@@ -70,9 +76,10 @@ class BackendService:
         existing_trip = self._client.get_trip(trip_id)
         merged_trip = existing_trip.model_dump(mode="json") | updates
         TripRecord.model_validate(merged_trip)
-        self._ensure_trip_window(
+        validate_trip_window(
             str(merged_trip["start_date"]),
             str(merged_trip["end_date"]),
+            message=VALIDATION_ERROR_MESSAGE,
         )
         existing_items = self._client.list_itinerary_items(trip_id)
         self._ensure_trip_window_covers_items(merged_trip, existing_items)
@@ -81,6 +88,7 @@ class BackendService:
         # read-merge-write across services. Re-reading after the write reduces stale
         # responses while the database API remains the final validation guard.
         updated_trip = self._client.update_trip(trip_id, payload)
+        ensure_trip_detail_supported(updated_trip)
         refreshed_items = self._client.list_itinerary_items(trip_id)
         return self._build_trip_detail(updated_trip, refreshed_items)
 
@@ -170,16 +178,6 @@ class BackendService:
         )
 
     @staticmethod
-    def _ensure_trip_window(start_date: str, end_date: str) -> None:
-        if start_date <= end_date:
-            return
-
-        raise validation_error(
-            VALIDATION_ERROR_MESSAGE,
-            [{"field": "start_date", "issue": "must be on or before end_date"}],
-        )
-
-    @staticmethod
     def _ensure_date_within_trip(trip_day: str, trip: TripRecord) -> None:
         if trip.start_date <= trip_day <= trip.end_date:
             return
@@ -263,6 +261,7 @@ class BackendService:
         trip: TripRecord,
         items: list[ItineraryItemRecord],
     ) -> dict[str, object]:
+        ensure_trip_detail_supported(trip)
         items_by_date: dict[str, list[ItineraryItemRecord]] = {}
         for item in items:
             items_by_date.setdefault(item.date, []).append(item)

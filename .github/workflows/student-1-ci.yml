@@ -3,76 +3,31 @@ name: Student 1 CI
 on:
   push:
     paths:
-      - 'student-1/backend/**'
-      - 'student-1/database/**'
-      - 'student-1/tests/backend/**'
-      - 'student-1/tests/database/**'
-      - 'student-1/pyproject.toml'
+      - 'student-1/**'
       - '.github/workflows/student-1-ci.yml'
+      - 'README.md'
+      - 'docs/architecture/student-1-release-0-architecture.md'
+      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
+      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - 'docker-compose.yml'
   pull_request:
     paths:
-      - 'student-1/backend/**'
-      - 'student-1/database/**'
-      - 'student-1/tests/backend/**'
-      - 'student-1/tests/database/**'
-      - 'student-1/pyproject.toml'
+      - 'student-1/**'
       - '.github/workflows/student-1-ci.yml'
+      - 'README.md'
+      - 'docs/architecture/student-1-release-0-architecture.md'
+      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
+      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - 'docker-compose.yml'
   workflow_dispatch:
 
 jobs:
-  changes:
-    name: Detect Student 1 changes
-    runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      database: ${{ steps.filter.outputs.database }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect changed Student 1 paths
-        id: filter
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-            echo "database=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
-            diff_range="origin/${{ github.base_ref }}...HEAD"
-          else
-            before="${{ github.event.before }}"
-            if [ "$before" = "0000000000000000000000000000000000000000" ]; then
-              git fetch --no-tags --prune --depth=1 origin main
-              diff_range="origin/main...HEAD"
-            else
-              diff_range="$before...${{ github.sha }}"
-            fi
-          fi
-
-          changed_files="$(git diff --name-only "$diff_range")"
-          printf '%s\n' "$changed_files"
-
-          if printf '%s\n' "$changed_files" | grep -Eq '^(student-1/backend/|student-1/tests/backend/|student-1/pyproject\.toml$|\.github/workflows/student-1-ci\.yml$)'; then
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "backend=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if printf '%s\n' "$changed_files" | grep -Eq '^(student-1/database/|student-1/tests/database/|student-1/pyproject\.toml$|\.github/workflows/student-1-ci\.yml$)'; then
-            echo "database=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "database=false" >> "$GITHUB_OUTPUT"
-          fi
   database:
     name: Build and Validate Student 1 Database
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.database == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +40,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
+      - name: Validate installed Student 1 packages
+        working-directory: student-1
+        run: python -c "import backend_service, database_service"
       - name: Run Student 1 database syntax checks
         working-directory: student-1
         run: python -m compileall database/database_service tests/database
@@ -98,8 +56,6 @@ jobs:
         run: docker build -f student-1/database/Dockerfile student-1
   backend:
     name: Build and Validate Student 1 Backend
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,6 +68,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
+      - name: Validate installed Student 1 packages
+        working-directory: student-1
+        run: python -c "import backend_service, database_service"
       - name: Run Student 1 backend syntax checks
         working-directory: student-1
         run: python -m compileall backend/backend_service tests/backend

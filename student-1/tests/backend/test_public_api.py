@@ -5,6 +5,12 @@ from pathlib import Path
 
 import httpx
 import pytest
+from backend_service.trip_rules import (
+    MAX_TRIP_DURATION_DAYS,
+    MAX_TRIP_DURATION_DEPENDENCY_MESSAGE,
+    MAX_TRIP_DURATION_VALIDATION_ISSUE,
+    inclusive_trip_day_count,
+)
 
 
 def create_trip_payload(**overrides: object) -> dict[str, object]:
@@ -96,6 +102,115 @@ def test_trip_crud_and_day_by_day_detail(client) -> None:
     missing_response = client.get(f"/api/trips/{trip_id}")
     assert missing_response.status_code == 404
     assert missing_response.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_trip_duration_limit_applies_to_create_requests(client, database_api) -> None:
+    allowed_response = client.post(
+        "/api/trips",
+        json=create_trip_payload(
+            id="trip_duration_boundary_01",
+            start_date="2027-01-01",
+            end_date="2028-01-01",
+        ),
+    )
+
+    assert allowed_response.status_code == 201
+    allowed_trip = allowed_response.json()["data"]
+    assert len(allowed_trip["days"]) == MAX_TRIP_DURATION_DAYS
+    assert allowed_trip["days"][0]["date"] == "2027-01-01"
+    assert allowed_trip["days"][-1]["date"] == "2028-01-01"
+    assert database_api.trip_create_calls == 1
+
+    oversized_response = client.post(
+        "/api/trips",
+        json=create_trip_payload(
+            id="trip_duration_over_limit_01",
+            start_date="2027-01-01",
+            end_date="2028-01-02",
+        ),
+    )
+
+    assert oversized_response.status_code == 422
+    assert oversized_response.json()["error"]["details"] == [
+        {"field": "end_date", "issue": MAX_TRIP_DURATION_VALIDATION_ISSUE},
+    ]
+    assert database_api.trip_create_calls == 1
+
+
+def test_get_trip_rejects_oversized_upstream_trip_before_day_expansion(
+    client,
+    database_api,
+) -> None:
+    trip_id = "trip_legacy_duration_over_limit_01"
+    database_api.trips[trip_id] = {
+        "id": trip_id,
+        "name": "Legacy Long-Haul Journey",
+        "destination": "Everywhere",
+        "start_date": "2027-01-01",
+        "end_date": "2028-01-02",
+        "traveller_count": 2,
+        "status": "planned",
+        "notes": "Legacy data predates the backend duration guardrail.",
+    }
+
+    response = client.get(f"/api/trips/{trip_id}")
+    duration = inclusive_trip_day_count("2027-01-01", "2028-01-02")
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "error": {
+            "code": "BAD_GATEWAY",
+            "message": MAX_TRIP_DURATION_DEPENDENCY_MESSAGE,
+            "details": [
+                {
+                    "field": "database",
+                    "issue": (
+                        f"trip '{trip_id}' spans {duration} days; maximum supported "
+                        f"duration is {MAX_TRIP_DURATION_DAYS} days"
+                    ),
+                },
+            ],
+        },
+    }
+    assert database_api.itinerary_item_list_requests == []
+
+
+def test_trip_duration_limit_validates_effective_patch_state_before_write(
+    client,
+    database_api,
+) -> None:
+    trip_id = "trip_patch_duration_limit_01"
+    create_response = client.post(
+        "/api/trips",
+        json=create_trip_payload(
+            id=trip_id,
+            start_date="2027-01-01",
+            end_date="2027-01-03",
+        ),
+    )
+    assert create_response.status_code == 201
+
+    allowed_patch_response = client.patch(
+        f"/api/trips/{trip_id}",
+        json={"end_date": "2028-01-01"},
+    )
+
+    assert allowed_patch_response.status_code == 200
+    allowed_trip = allowed_patch_response.json()["data"]
+    assert len(allowed_trip["days"]) == MAX_TRIP_DURATION_DAYS
+    assert allowed_trip["days"][-1]["date"] == "2028-01-01"
+    assert database_api.trip_update_calls == 1
+
+    oversized_patch_response = client.patch(
+        f"/api/trips/{trip_id}",
+        json={"end_date": "2028-01-02"},
+    )
+
+    assert oversized_patch_response.status_code == 422
+    assert oversized_patch_response.json()["error"]["details"] == [
+        {"field": "end_date", "issue": MAX_TRIP_DURATION_VALIDATION_ISSUE},
+    ]
+    assert database_api.trip_update_calls == 1
 
 
 def test_trip_listing_filters_and_selected_day_route(client) -> None:
