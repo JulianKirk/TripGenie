@@ -26,21 +26,21 @@ class BackendApiClient:
         self,
         settings: Settings,
         *,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_prefix = settings.backend_api_prefix
-        self._client = httpx.Client(
+        self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
             transport=transport,
             follow_redirects=False,
         )
 
-    def close(self) -> None:
-        self._client.close()
+    async def close(self) -> None:
+        await self._client.aclose()
 
-    def health(self) -> BackendHealthPayload:
-        envelope = self._request_model(
+    async def health(self) -> BackendHealthPayload:
+        envelope = await self._request_model(
             "GET",
             "/health",
             expected_statuses={200},
@@ -49,8 +49,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def ready(self) -> BackendHealthPayload:
-        envelope = self._request_model(
+    async def ready(self) -> BackendHealthPayload:
+        envelope = await self._request_model(
             "GET",
             "/ready",
             expected_statuses={200, 503},
@@ -59,8 +59,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def list_trips(self) -> list[TripRecord]:
-        envelope = self._request_model(
+    async def list_trips(self) -> list[TripRecord]:
+        envelope = await self._request_model(
             "GET",
             f"{self._api_prefix}/trips",
             expected_statuses={200},
@@ -69,8 +69,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def create_trip(self, payload: dict[str, object]) -> TripDetail:
-        envelope = self._request_model(
+    async def create_trip(self, payload: dict[str, object]) -> TripDetail:
+        envelope = await self._request_model(
             "POST",
             f"{self._api_prefix}/trips",
             json=payload,
@@ -80,8 +80,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def get_trip(self, trip_id: str) -> TripDetail:
-        envelope = self._request_model(
+    async def get_trip(self, trip_id: str) -> TripDetail:
+        envelope = await self._request_model(
             "GET",
             f"{self._api_prefix}/trips/{trip_id}",
             expected_statuses={200},
@@ -90,8 +90,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def update_trip(self, trip_id: str, payload: dict[str, object]) -> TripDetail:
-        envelope = self._request_model(
+    async def update_trip(self, trip_id: str, payload: dict[str, object]) -> TripDetail:
+        envelope = await self._request_model(
             "PATCH",
             f"{self._api_prefix}/trips/{trip_id}",
             json=payload,
@@ -101,8 +101,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def delete_trip(self, trip_id: str) -> DeleteResponse:
-        envelope = self._request_model(
+    async def delete_trip(self, trip_id: str) -> DeleteResponse:
+        envelope = await self._request_model(
             "DELETE",
             f"{self._api_prefix}/trips/{trip_id}",
             expected_statuses={200},
@@ -111,12 +111,12 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def create_itinerary_item(
+    async def create_itinerary_item(
         self,
         trip_id: str,
         payload: dict[str, object],
     ) -> ItineraryItemRecord:
-        envelope = self._request_model(
+        envelope = await self._request_model(
             "POST",
             f"{self._api_prefix}/trips/{trip_id}/itinerary-items",
             json=payload,
@@ -128,8 +128,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def get_itinerary_item(self, item_id: str) -> ItineraryItemRecord:
-        envelope = self._request_model(
+    async def get_itinerary_item(self, item_id: str) -> ItineraryItemRecord:
+        envelope = await self._request_model(
             "GET",
             f"{self._api_prefix}/itinerary-items/{item_id}",
             expected_statuses={200},
@@ -138,12 +138,12 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def update_itinerary_item(
+    async def update_itinerary_item(
         self,
         item_id: str,
         payload: dict[str, object],
     ) -> ItineraryItemRecord:
-        envelope = self._request_model(
+        envelope = await self._request_model(
             "PATCH",
             f"{self._api_prefix}/itinerary-items/{item_id}",
             json=payload,
@@ -155,8 +155,8 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def delete_itinerary_item(self, item_id: str) -> DeleteResponse:
-        envelope = self._request_model(
+    async def delete_itinerary_item(self, item_id: str) -> DeleteResponse:
+        envelope = await self._request_model(
             "DELETE",
             f"{self._api_prefix}/itinerary-items/{item_id}",
             expected_statuses={200},
@@ -167,7 +167,7 @@ class BackendApiClient:
         )
         return envelope.data
 
-    def _request_model(
+    async def _request_model(
         self,
         method: str,
         path: str,
@@ -177,7 +177,7 @@ class BackendApiClient:
         response_type: Any,
         malformed_message: str,
     ) -> T:
-        response = self._send(method, path, json=json)
+        response = await self._send(method, path, json=json)
         if response.status_code not in expected_statuses:
             self._raise_error_response(response)
 
@@ -195,7 +195,7 @@ class BackendApiClient:
                 ],
             ) from exc
 
-    def _send(
+    async def _send(
         self,
         method: str,
         path: str,
@@ -203,7 +203,7 @@ class BackendApiClient:
         json: dict[str, object] | None = None,
     ) -> httpx.Response:
         try:
-            return self._client.request(method, path, json=json)
+            return await self._client.request(method, path, json=json)
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
                 "Backend API did not respond before the configured timeout.",

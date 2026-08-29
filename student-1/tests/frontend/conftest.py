@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import date, timedelta
 
@@ -583,6 +584,11 @@ def backend_api() -> FakeBackendApi:
 
 
 @pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.fixture
 def client_factory(backend_api: FakeBackendApi):
     def factory(handler=None) -> TestClient:
         app = create_app(
@@ -595,6 +601,30 @@ def client_factory(backend_api: FakeBackendApi):
             transport=httpx.MockTransport(handler or backend_api.handle),
         )
         return TestClient(app)
+
+    return factory
+
+
+@pytest.fixture
+def async_client_factory(backend_api: FakeBackendApi):
+    @asynccontextmanager
+    async def factory(handler=None) -> AsyncIterator[httpx.AsyncClient]:
+        app = create_app(
+            Settings(
+                backend_base_url="http://backend.test",
+                backend_api_prefix="/api",
+                backend_timeout_seconds=1,
+                service_name="student-1-frontend",
+            ),
+            transport=httpx.MockTransport(handler or backend_api.handle),
+        )
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                follow_redirects=False,
+            ) as async_client:
+                yield async_client
 
     return factory
 

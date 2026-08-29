@@ -55,7 +55,13 @@
       </div>
       <a class="button button--ghost" href="{{ request.url_for('view_trip', trip_id=trip.id) }}">Reset filters</a>
     </div>
-    <form class="filter-grid" action="{{ request.url_for('view_trip', trip_id=trip.id) }}" method="get" novalidate>
+    <form
+      class="filter-grid"
+      action="{{ request.url_for('view_trip', trip_id=trip.id) }}"
+      method="get"
+      hx-push-url="true"
+      novalidate
+    >
       {% set date_has_errors = filter_errors_by_field.get('date') %}
       {% set category_has_errors = filter_errors_by_field.get('category') %}
       <div class="form-field">

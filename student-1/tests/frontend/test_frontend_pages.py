@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 from pathlib import Path
 
 import httpx
+import pytest
 
 from .conftest import create_item_form_data, create_trip_form_data
 
@@ -305,6 +307,188 @@ def test_trip_detail_filters_by_date_and_category(client) -> None:
     assert "Lake Walk" not in response.text
     assert 'value="2027-06-02"' in response.text
     assert '<option value="meal" selected>' in response.text
+
+
+def test_htmx_filter_gets_push_history_url_and_refreshable_state(client) -> None:
+    client.post(
+        "/trips",
+        data=create_trip_form_data(
+            id="trip_history_trip_01",
+            name="History Trip",
+            start_date="2027-06-01",
+            end_date="2027-06-03",
+        ),
+    )
+    client.post(
+        "/trips/trip_history_trip_01/items",
+        data=create_item_form_data(
+            id="item_history_trip_01_breakfast",
+            date="2027-06-02",
+            start_time="08:00",
+            end_time="09:00",
+            title="Breakfast Booking",
+            category="meal",
+        ),
+    )
+    client.post(
+        "/trips/trip_history_trip_01/items",
+        data=create_item_form_data(
+            id="item_history_trip_01_walk",
+            date="2027-06-01",
+            start_time="10:00",
+            end_time="11:00",
+            title="Lake Walk",
+            category="activity",
+        ),
+    )
+
+    response = client.get(
+        "/trips/trip_history_trip_01?date=2027-06-02&category=meal",
+        headers=HTMX_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["HX-Push-Url"]
+        == "/trips/trip_history_trip_01?date=2027-06-02&category=meal"
+    )
+    assert "Breakfast Booking" in response.text
+    assert "Lake Walk" not in response.text
+    assert 'value="2027-06-02"' in response.text
+    assert '<option value="meal" selected>' in response.text
+
+    refresh_response = client.get(response.headers["HX-Push-Url"])
+    assert refresh_response.status_code == 200
+    assert "Breakfast Booking" in refresh_response.text
+    assert "Lake Walk" not in refresh_response.text
+    assert 'value="2027-06-02"' in refresh_response.text
+    assert '<option value="meal" selected>' in refresh_response.text
+
+
+def test_invalid_htmx_filter_keeps_history_state_but_uses_safe_add_item_link(
+    client,
+) -> None:
+    response = client.get(
+        "/trips/trip_2027_sydney_getaway?date=20270402&category=meal",
+        headers=HTMX_HEADERS,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.headers["HX-Push-Url"]
+        == "/trips/trip_2027_sydney_getaway?date=20270402&category=meal"
+    )
+    assert 'value="20270402"' in response.text
+    assert '<option value="meal" selected>' in response.text
+    assert "items/new?date=2027-04-01" in response.text
+    assert (
+        "20270402"
+        not in response.text.split("items/new?date=")[1].split('"', 1)[0]
+    )
+
+    refresh_response = client.get(response.headers["HX-Push-Url"])
+    assert refresh_response.status_code == 422
+    assert 'value="20270402"' in refresh_response.text
+    assert "items/new?date=2027-04-01" in refresh_response.text
+
+
+def test_new_item_form_defaults_invalid_query_date_to_trip_start(client) -> None:
+    response = client.get("/trips/trip_2027_sydney_getaway/items/new?date=20270402")
+
+    assert response.status_code == 422
+    assert "The requested itinerary date could not be applied." in response.text
+    assert "must be a valid ISO date in YYYY-MM-DD format" in response.text
+    assert 'id="item-date"' in response.text
+    assert 'value="2027-04-01"' in response.text
+    assert 'href="/trips/trip_2027_sydney_getaway"' in response.text
+    assert 'href="/trips/trip_2027_sydney_getaway/days/20270402"' not in response.text
+
+
+def test_new_item_form_defaults_out_of_range_query_date_to_trip_start(client) -> None:
+    response = client.get("/trips/trip_2027_sydney_getaway/items/new?date=2027-04-05")
+
+    assert response.status_code == 422
+    assert "The requested itinerary date could not be applied." in response.text
+    assert "must fall between 2027-04-01 and 2027-04-03" in response.text
+    assert 'value="2027-04-01"' in response.text
+    assert 'href="/trips/trip_2027_sydney_getaway"' in response.text
+    assert 'href="/trips/trip_2027_sydney_getaway/days/2027-04-05"' not in response.text
+
+
+def test_new_item_form_accepts_valid_boundary_query_date(client) -> None:
+    response = client.get("/trips/trip_2027_sydney_getaway/items/new?date=2027-04-03")
+
+    assert response.status_code == 200
+    assert "The requested itinerary date could not be applied." not in response.text
+    assert 'value="2027-04-03"' in response.text
+    assert 'href="/trips/trip_2027_sydney_getaway/days/2027-04-03"' in response.text
+
+
+@pytest.mark.anyio
+async def test_async_write_requests_overlap(async_client_factory, backend_api) -> None:
+    class OverlapHandler:
+        def __init__(self) -> None:
+            self.first_started = asyncio.Event()
+            self.second_started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.in_flight = 0
+            self.max_in_flight = 0
+
+        async def __call__(self, request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path == "/api/trips":
+                self.in_flight += 1
+                self.max_in_flight = max(self.max_in_flight, self.in_flight)
+                try:
+                    if not self.first_started.is_set():
+                        self.first_started.set()
+                        await asyncio.wait_for(self.second_started.wait(), timeout=1)
+                    else:
+                        self.second_started.set()
+
+                    await asyncio.wait_for(self.release.wait(), timeout=1)
+                    return backend_api.handle(request)
+                finally:
+                    self.in_flight -= 1
+
+            return backend_api.handle(request)
+
+    overlap_handler = OverlapHandler()
+
+    async with async_client_factory(overlap_handler) as client:
+        first_request = asyncio.create_task(
+            client.post(
+                "/trips",
+                data=create_trip_form_data(
+                    id="trip_async_overlap_01",
+                    name="Async Overlap One",
+                ),
+            )
+        )
+        await asyncio.wait_for(overlap_handler.first_started.wait(), timeout=1)
+
+        second_request = asyncio.create_task(
+            client.post(
+                "/trips",
+                data=create_trip_form_data(
+                    id="trip_async_overlap_02",
+                    name="Async Overlap Two",
+                ),
+            )
+        )
+
+        await asyncio.wait_for(overlap_handler.second_started.wait(), timeout=1)
+        assert overlap_handler.max_in_flight == 2
+
+        overlap_handler.release.set()
+        first_response, second_response = await asyncio.gather(
+            first_request,
+            second_request,
+        )
+
+    assert first_response.status_code == 303
+    assert second_response.status_code == 303
+    assert first_response.headers["location"] == "/trips/trip_async_overlap_01"
+    assert second_response.headers["location"] == "/trips/trip_async_overlap_02"
 
 
 def test_dependency_failures_and_malformed_backend_responses_are_explicit(

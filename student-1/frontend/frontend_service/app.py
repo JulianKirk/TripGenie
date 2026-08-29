@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import Depends, FastAPI, Request, Response
@@ -53,6 +56,19 @@ EDIT_ITEM_DESCRIPTION = (
 RECOVER_TRIP_AFTER_ITEM_ERROR = (
     "Unable to recover the trip after itinerary validation failed"
 )
+INVALID_DATE_ISSUE = "must be a valid ISO date in YYYY-MM-DD format"
+ITEM_FORM_DEFAULT_DATE_MESSAGE = (
+    "The requested itinerary date could not be applied. The form defaulted to "
+    "the trip start date."
+)
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+@dataclass(slots=True)
+class DateFilterResolution:
+    raw_value: str
+    selected_date: str | None
+    error: ApiError | None
 
 
 def get_backend_client(request: Request) -> BackendApiClient:
@@ -82,11 +98,11 @@ def error_details_by_field(error: ApiError | None) -> dict[str, list[str]]:
     return grouped
 
 
-def safe_list_trips(
+async def safe_list_trips(
     client: BackendApiClient,
 ) -> tuple[list[TripRecord], ApiError | None]:
     try:
-        return client.list_trips(), None
+        return await client.list_trips(), None
     except ApiError as exc:
         return [], exc
 
@@ -209,6 +225,8 @@ def iso_date_or_none(value: str | None) -> str | None:
         return None
 
     try:
+        if ISO_DATE_PATTERN.fullmatch(cleaned) is None:
+            raise ValueError
         date.fromisoformat(cleaned)
     except ValueError:
         return None
@@ -216,69 +234,144 @@ def iso_date_or_none(value: str | None) -> str | None:
     return cleaned
 
 
+def trip_date_range_issue(trip: TripDetail) -> str:
+    return f"must fall between {trip.start_date} and {trip.end_date}"
+
+
+def resolve_filter_date(
+    trip: TripDetail,
+    requested_date: str | None,
+) -> DateFilterResolution:
+    cleaned = normalise_optional_text(requested_date) or ""
+    if not cleaned:
+        return DateFilterResolution(raw_value="", selected_date=None, error=None)
+
+    try:
+        if ISO_DATE_PATTERN.fullmatch(cleaned) is None:
+            raise ValueError
+        date.fromisoformat(cleaned)
+    except ValueError:
+        return DateFilterResolution(
+            raw_value=cleaned,
+            selected_date=None,
+            error=validation_error(
+                "Select a valid trip date.",
+                [{"field": "date", "issue": INVALID_DATE_ISSUE}],
+            ),
+        )
+
+    if cleaned < trip.start_date or cleaned > trip.end_date:
+        return DateFilterResolution(
+            raw_value=cleaned,
+            selected_date=None,
+            error=validation_error(
+                "Select a date within the trip window.",
+                [{"field": "date", "issue": trip_date_range_issue(trip)}],
+            ),
+        )
+
+    return DateFilterResolution(raw_value=cleaned, selected_date=cleaned, error=None)
+
+
+def build_query_url(
+    base_url: str,
+    *,
+    date_value: str | None = None,
+    category_value: str | None = None,
+) -> str:
+    query_items: list[tuple[str, str]] = []
+    cleaned_date = normalise_optional_text(date_value)
+    cleaned_category = normalise_optional_text(category_value)
+
+    if cleaned_date:
+        query_items.append(("date", cleaned_date))
+    if cleaned_category:
+        query_items.append(("category", cleaned_category))
+
+    if not query_items:
+        return base_url
+
+    return f"{base_url}?{urlencode(query_items)}"
+
+
+def item_form_query_error(
+    *,
+    trip: TripDetail,
+    date_error: ApiError,
+) -> ApiError:
+    return validation_error(
+        (
+            f"{ITEM_FORM_DEFAULT_DATE_MESSAGE} Using {trip.start_date} until a "
+            "valid in-range date is selected."
+        ),
+        date_error.details,
+    )
+
+
+def item_cancel_url(
+    request: Request,
+    *,
+    trip_id: str,
+    trip: TripDetail,
+    requested_date: str | None,
+) -> str:
+    date_resolution = resolve_filter_date(trip, requested_date)
+    if date_resolution.selected_date is None:
+        return path_for(request, "view_trip", trip_id=trip_id)
+
+    return path_for(
+        request,
+        "view_trip_day",
+        trip_id=trip_id,
+        trip_day=date_resolution.selected_date,
+    )
+
+
 def validate_filter_state(
     trip: TripDetail,
     *,
     selected_date: str | None,
     category_value: str | None,
-) -> tuple[list[TripDay], ApiError | None]:
+) -> tuple[list[TripDay], ApiError | None, DateFilterResolution]:
+    date_resolution = resolve_filter_date(trip, selected_date)
     display_days = trip.days
-    if selected_date:
-        try:
-            date.fromisoformat(selected_date)
-        except ValueError:
-            return trip.days, validation_error(
-                "Select a valid trip date.",
-                [
-                    {
-                        "field": "date",
-                        "issue": "must be a valid ISO date in YYYY-MM-DD format",
-                    },
-                ],
-            )
-
-        if selected_date < trip.start_date or selected_date > trip.end_date:
-            return trip.days, validation_error(
-                "Select a date within the trip window.",
-                [
-                    {
-                        "field": "date",
-                        "issue": (
-                            f"must fall between {trip.start_date} and "
-                            f"{trip.end_date}"
-                        ),
-                    },
-                ],
-            )
-
-        matching_days = [day for day in trip.days if day.date == selected_date]
-        display_days = matching_days or [TripDay(date=selected_date, items=[])]
+    if date_resolution.selected_date is not None:
+        matching_days = [
+            day for day in trip.days if day.date == date_resolution.selected_date
+        ]
+        display_days = matching_days or [
+            TripDay(date=date_resolution.selected_date, items=[])
+        ]
 
     if category_value:
         try:
             category = ItineraryCategory(category_value)
         except ValueError:
-            return display_days, validation_error(
-                "Select a supported itinerary category.",
-                [
-                    {
-                        "field": "category",
-                        "issue": f"must be one of: {CATEGORY_VALUE_LIST}",
-                    },
-                ],
+            return (
+                display_days,
+                validation_error(
+                    "Select a supported itinerary category.",
+                    [
+                        {
+                            "field": "category",
+                            "issue": f"must be one of: {CATEGORY_VALUE_LIST}",
+                        },
+                    ],
+                ),
+                date_resolution,
             )
 
         filtered_days: list[TripDay] = []
         for day in display_days:
             filtered_items = [item for item in day.items if item.category == category]
-            if selected_date is not None:
+            if date_resolution.selected_date is not None:
                 filtered_days.append(TripDay(date=day.date, items=filtered_items))
             elif filtered_items:
                 filtered_days.append(TripDay(date=day.date, items=filtered_items))
 
         display_days = filtered_days
 
-    return display_days, None
+    return display_days, date_resolution.error, date_resolution
 
 
 def render_screen(
@@ -484,7 +577,7 @@ def render_trip_detail_screen(
     status_code: int = 200,
     push_url: str | None = None,
 ) -> Response:
-    display_days, filter_error = validate_filter_state(
+    display_days, filter_error, date_resolution = validate_filter_state(
         trip,
         selected_date=selected_date,
         category_value=category_value,
@@ -508,11 +601,11 @@ def render_trip_detail_screen(
         trip=trip,
         display_days=display_days,
         filter_state={
-            "date": selected_date or "",
+            "date": date_resolution.raw_value,
             "category": category_value or "",
         },
-        selected_date=selected_date,
-        add_item_date=selected_date or trip.start_date,
+        selected_date=date_resolution.selected_date,
+        add_item_date=date_resolution.selected_date or trip.start_date,
     )
 
 
@@ -555,18 +648,18 @@ def backend_dependency_from_payload(
     )
 
 
-def probe_backend_health(client: BackendApiClient) -> DependencyStatus:
+async def probe_backend_health(client: BackendApiClient) -> DependencyStatus:
     try:
-        payload = client.health()
+        payload = await client.health()
     except ApiError as exc:
         return backend_dependency_from_error(exc)
 
     return backend_dependency_from_payload(payload.status, payload.service)
 
 
-def probe_backend_ready(client: BackendApiClient) -> DependencyStatus:
+async def probe_backend_ready(client: BackendApiClient) -> DependencyStatus:
     try:
-        payload = client.ready()
+        payload = await client.ready()
     except ApiError as exc:
         return backend_dependency_from_error(exc)
 
@@ -590,7 +683,7 @@ def item_delete_description(item_title: str, item_date: str) -> str:
 def create_app(
     settings: Settings | None = None,
     *,
-    transport: httpx.BaseTransport | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -601,7 +694,7 @@ def create_app(
         try:
             yield
         finally:
-            client.close()
+            await client.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Frontend",
@@ -631,10 +724,10 @@ def create_app(
         "/health",
         response_model=DataEnvelope[HealthResponse],
     )
-    def health(
+    async def health(
         client: BackendApiClient = Depends(get_backend_client),
     ) -> dict[str, object]:
-        backend = probe_backend_health(client)
+        backend = await probe_backend_health(client)
         status = "ok" if backend.status == "ok" else "degraded"
         return envelope(
             HealthResponse(
@@ -649,11 +742,11 @@ def create_app(
         response_model=DataEnvelope[HealthResponse],
         responses={503: {"model": DataEnvelope[HealthResponse]}},
     )
-    def ready(
+    async def ready(
         response: Response,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> dict[str, object]:
-        backend = probe_backend_ready(client)
+        backend = await probe_backend_ready(client)
         is_ready = backend.status == "ok"
         if not is_ready:
             response.status_code = 503
@@ -666,11 +759,11 @@ def create_app(
         )
 
     @app.get("/", name="dashboard")
-    def dashboard(
+    async def dashboard(
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         if trip_list_error is not None:
             return render_error_screen(
                 request,
@@ -691,7 +784,7 @@ def create_app(
 
         selected_trip_id = trips[0].id
         try:
-            trip = client.get_trip(selected_trip_id)
+            trip = await client.get_trip(selected_trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -712,11 +805,11 @@ def create_app(
         )
 
     @app.get("/trips/new", name="new_trip_form")
-    def new_trip_form(
+    async def new_trip_form(
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         cancel_url = (
             path_for(request, "view_trip", trip_id=trips[0].id)
             if trips
@@ -756,9 +849,9 @@ def create_app(
         )
         payload = trip_payload_from_form(values, include_id=True)
         try:
-            trip = client.create_trip(payload)
+            trip = await client.create_trip(payload)
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
+            trips, trip_list_error = await safe_list_trips(client)
             cancel_url = (
                 path_for(request, "view_trip", trip_id=trips[0].id)
                 if trips
@@ -784,7 +877,7 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         return render_trip_detail_screen(
             request,
             trip=trip,
@@ -795,14 +888,16 @@ def create_app(
         )
 
     @app.get("/trips/{trip_id}", name="view_trip")
-    def view_trip(
+    async def view_trip(
         trip_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        selected_date = normalise_optional_text(request.query_params.get("date"))
+        category_value = normalise_optional_text(request.query_params.get("category"))
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -821,22 +916,26 @@ def create_app(
             trip=trip,
             trips=trips,
             trip_list_error=trip_list_error,
-            selected_date=normalise_optional_text(request.query_params.get("date")),
-            category_value=normalise_optional_text(
-                request.query_params.get("category")
+            selected_date=selected_date,
+            category_value=category_value,
+            push_url=build_query_url(
+                path_for(request, "view_trip", trip_id=trip_id),
+                date_value=selected_date,
+                category_value=category_value,
             ),
         )
 
     @app.get("/trips/{trip_id}/days/{trip_day}", name="view_trip_day")
-    def view_trip_day(
+    async def view_trip_day(
         trip_id: str,
         trip_day: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        category_value = normalise_optional_text(request.query_params.get("category"))
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -858,20 +957,27 @@ def create_app(
             trips=trips,
             trip_list_error=trip_list_error,
             selected_date=trip_day,
-            category_value=normalise_optional_text(
-                request.query_params.get("category")
+            category_value=category_value,
+            push_url=build_query_url(
+                path_for(
+                    request,
+                    "view_trip_day",
+                    trip_id=trip_id,
+                    trip_day=trip_day,
+                ),
+                category_value=category_value,
             ),
         )
 
     @app.get("/trips/{trip_id}/edit", name="edit_trip_form")
-    def edit_trip_form(
+    async def edit_trip_form(
         trip_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -917,11 +1023,11 @@ def create_app(
             ),
         )
         try:
-            trip = client.update_trip(
+            trip = await client.update_trip(
                 trip_id, trip_payload_from_form({"id": "", **values}, include_id=False)
             )
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
+            trips, trip_list_error = await safe_list_trips(client)
             return render_trip_form_screen(
                 request,
                 trips=trips,
@@ -941,7 +1047,7 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         return render_trip_detail_screen(
             request,
             trip=trip,
@@ -951,14 +1057,14 @@ def create_app(
         )
 
     @app.get("/trips/{trip_id}/delete", name="delete_trip_confirmation")
-    def delete_trip_confirmation(
+    async def delete_trip_confirmation(
         trip_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -995,9 +1101,9 @@ def create_app(
     ) -> Response:
         values = await read_form_values(request, ("trip_name",))
         try:
-            client.delete_trip(trip_id)
+            await client.delete_trip(trip_id)
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
+            trips, trip_list_error = await safe_list_trips(client)
             return render_confirmation_screen(
                 request,
                 trips=trips,
@@ -1013,14 +1119,14 @@ def create_app(
                 status_code=exc.status_code,
             )
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         if trips:
             destination_url = path_for(request, "view_trip", trip_id=trips[0].id)
             if not is_htmx_request(request):
                 return RedirectResponse(destination_url, status_code=303)
 
             try:
-                trip = client.get_trip(trips[0].id)
+                trip = await client.get_trip(trips[0].id)
             except ApiError as exc:
                 return render_error_screen(
                     request,
@@ -1054,14 +1160,14 @@ def create_app(
         )
 
     @app.get("/trips/{trip_id}/items/new", name="new_item_form")
-    def new_item_form(
+    async def new_item_form(
         trip_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -1076,11 +1182,11 @@ def create_app(
             )
 
         requested_date = normalise_optional_text(request.query_params.get("date"))
-        cancel_date = iso_date_or_none(requested_date)
-        cancel_url = (
-            path_for(request, "view_trip_day", trip_id=trip_id, trip_day=cancel_date)
-            if cancel_date is not None
-            else path_for(request, "view_trip", trip_id=trip_id)
+        date_resolution = resolve_filter_date(trip, requested_date)
+        form_error = (
+            item_form_query_error(trip=trip, date_error=date_resolution.error)
+            if date_resolution.error is not None
+            else None
         )
         return render_item_form_screen(
             request,
@@ -1092,9 +1198,16 @@ def create_app(
             form_description=CREATE_ITEM_DESCRIPTION,
             form_action=path_for(request, "create_item", trip_id=trip_id),
             submit_label="Add itinerary item",
-            cancel_url=cancel_url,
-            item_form=empty_item_form(requested_date or trip.start_date),
+            cancel_url=item_cancel_url(
+                request,
+                trip_id=trip_id,
+                trip=trip,
+                requested_date=requested_date,
+            ),
+            item_form=empty_item_form(date_resolution.selected_date or trip.start_date),
+            form_error=form_error,
             show_id_field=True,
+            status_code=form_error.status_code if form_error is not None else 200,
         )
 
     @app.post("/trips/{trip_id}/items", name="create_item")
@@ -1118,14 +1231,14 @@ def create_app(
             ),
         )
         try:
-            created_item = client.create_itinerary_item(
+            created_item = await client.create_itinerary_item(
                 trip_id,
                 item_payload_from_form(values, include_id=True),
             )
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
+            trips, trip_list_error = await safe_list_trips(client)
             try:
-                trip = client.get_trip(trip_id)
+                trip = await client.get_trip(trip_id)
             except ApiError as trip_exc:
                 return render_error_screen(
                     request,
@@ -1139,14 +1252,6 @@ def create_app(
                     fallback_url=path_for(request, "view_trip", trip_id=trip_id),
                 )
 
-            cancel_date = iso_date_or_none(values["date"])
-            cancel_url = (
-                path_for(
-                    request, "view_trip_day", trip_id=trip_id, trip_day=cancel_date
-                )
-                if cancel_date is not None
-                else path_for(request, "view_trip", trip_id=trip_id)
-            )
             return render_item_form_screen(
                 request,
                 trip=trip,
@@ -1157,7 +1262,12 @@ def create_app(
                 form_description=CREATE_ITEM_DESCRIPTION,
                 form_action=path_for(request, "create_item", trip_id=trip_id),
                 submit_label="Add itinerary item",
-                cancel_url=cancel_url,
+                cancel_url=item_cancel_url(
+                    request,
+                    trip_id=trip_id,
+                    trip=trip,
+                    requested_date=values["date"],
+                ),
                 item_form=values,
                 form_error=exc,
                 show_id_field=True,
@@ -1173,9 +1283,9 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -1199,15 +1309,15 @@ def create_app(
         )
 
     @app.get("/items/{item_id}/edit", name="edit_item_form")
-    def edit_item_form(
+    async def edit_item_form(
         item_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            item = client.get_itinerary_item(item_id)
-            trip = client.get_trip(item.trip_id)
+            item = await client.get_itinerary_item(item_id)
+            trip = await client.get_trip(item.trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -1269,14 +1379,14 @@ def create_app(
             "notes": values["notes"],
         }
         try:
-            updated_item = client.update_itinerary_item(
+            updated_item = await client.update_itinerary_item(
                 item_id,
                 item_payload_from_form(item_form, include_id=False),
             )
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
+            trips, trip_list_error = await safe_list_trips(client)
             try:
-                trip = client.get_trip(trip_id)
+                trip = await client.get_trip(trip_id)
             except ApiError as trip_exc:
                 return render_error_screen(
                     request,
@@ -1290,14 +1400,6 @@ def create_app(
                     fallback_url=path_for(request, "dashboard"),
                 )
 
-            cancel_date = iso_date_or_none(values["date"])
-            cancel_url = (
-                path_for(
-                    request, "view_trip_day", trip_id=trip_id, trip_day=cancel_date
-                )
-                if cancel_date is not None
-                else path_for(request, "view_trip", trip_id=trip_id)
-            )
             return render_item_form_screen(
                 request,
                 trip=trip,
@@ -1308,7 +1410,12 @@ def create_app(
                 form_description=EDIT_ITEM_DESCRIPTION,
                 form_action=path_for(request, "update_item", item_id=item_id),
                 submit_label="Save itinerary changes",
-                cancel_url=cancel_url,
+                cancel_url=item_cancel_url(
+                    request,
+                    trip_id=trip_id,
+                    trip=trip,
+                    requested_date=values["date"],
+                ),
                 item_form=item_form,
                 form_error=exc,
                 status_code=exc.status_code,
@@ -1323,9 +1430,9 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(updated_item.trip_id)
+            trip = await client.get_trip(updated_item.trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -1351,14 +1458,14 @@ def create_app(
         )
 
     @app.get("/items/{item_id}/delete", name="delete_item_confirmation")
-    def delete_item_confirmation(
+    async def delete_item_confirmation(
         item_id: str,
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            item = client.get_itinerary_item(item_id)
+            item = await client.get_itinerary_item(item_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
@@ -1402,14 +1509,22 @@ def create_app(
         trip_id = values["trip_id"].strip()
         item_date = values["item_date"].strip()
         try:
-            client.delete_itinerary_item(item_id)
+            await client.delete_itinerary_item(item_id)
         except ApiError as exc:
-            trips, trip_list_error = safe_list_trips(client)
-            cancel_url = (
-                path_for(request, "view_trip_day", trip_id=trip_id, trip_day=item_date)
-                if trip_id and item_date
-                else path_for(request, "dashboard")
-            )
+            trips, trip_list_error = await safe_list_trips(client)
+            cancel_url = path_for(request, "dashboard")
+            if trip_id:
+                try:
+                    trip = await client.get_trip(trip_id)
+                except ApiError:
+                    cancel_url = path_for(request, "view_trip", trip_id=trip_id)
+                else:
+                    cancel_url = item_cancel_url(
+                        request,
+                        trip_id=trip_id,
+                        trip=trip,
+                        requested_date=item_date,
+                    )
             return render_confirmation_screen(
                 request,
                 trips=trips,
@@ -1436,9 +1551,9 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        trips, trip_list_error = safe_list_trips(client)
+        trips, trip_list_error = await safe_list_trips(client)
         try:
-            trip = client.get_trip(trip_id)
+            trip = await client.get_trip(trip_id)
         except ApiError as exc:
             return render_error_screen(
                 request,
