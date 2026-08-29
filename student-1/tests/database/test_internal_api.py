@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 from database_service.repository import DatabaseService
+from database_service.seed_data import SEED_ITINERARY_ITEMS, SEED_TRIPS
 
 
 def create_trip_payload(**overrides: object) -> dict[str, object]:
@@ -69,8 +70,8 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
             ).fetchall()
         }
 
-    assert first_trip_count >= 10
-    assert first_item_count >= 10
+    assert first_trip_count == len(SEED_TRIPS)
+    assert first_item_count == len(SEED_ITINERARY_ITEMS)
     assert second_trip_count == first_trip_count
     assert second_item_count == first_item_count
     assert "idx_trips_status_start_date" in trip_indexes
