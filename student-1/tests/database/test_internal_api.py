@@ -369,6 +369,17 @@ def test_rejects_unsupported_query_params_and_invalid_filters(client) -> None:
     assert invalid_filter_response.status_code == 422
     assert invalid_filter_response.json()["error"]["code"] == "VALIDATION_ERROR"
 
+    invalid_date_response = client.get(
+        "/internal/trips/trip_2026_sydney_long_weekend/itinerary-items?date=20261003",
+    )
+    assert invalid_date_response.status_code == 422
+    assert invalid_date_response.json()["error"]["details"] == [
+        {
+            "field": "date",
+            "issue": "must be a valid ISO date in YYYY-MM-DD format",
+        },
+    ]
+
     extra_field_response = client.post(
         "/internal/trips",
         json=create_trip_payload(extra="forbidden"),

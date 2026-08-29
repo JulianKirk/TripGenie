@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Annotated
@@ -33,6 +34,7 @@ from .repository import DatabaseService
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
 TRIP_STATUS_VALUES = ", ".join(status.value for status in TripStatus)
 ITINERARY_CATEGORY_VALUES = ", ".join(category.value for category in ItineraryCategory)
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _error_response(exc: ApiError) -> JSONResponse:
@@ -154,6 +156,8 @@ def parse_date_filter(
         return None
 
     try:
+        if ISO_DATE_PATTERN.fullmatch(cleaned) is None:
+            raise ValueError
         date.fromisoformat(cleaned)
     except ValueError as exc:
         raise validation_error(
