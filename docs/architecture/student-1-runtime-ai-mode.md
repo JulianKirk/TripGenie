@@ -73,6 +73,11 @@ Existing itinerary context is deliberately capped so prompts do not grow without
 
 Ollama receives a JSON schema in the `format` parameter and is asked to return JSON only.
 
+The Ollama transport parser is forward-compatible with documented extra runtime metadata such as model `details`, `size`, `digest`, `modified_at`, `context`, and duration/token counters. Student 1 still validates the fields it actually consumes strictly:
+
+- `/api/tags` must expose `models[]` with a usable `name` (or accepted legacy `model`) for model matching
+- `/api/generate` must expose a terminal non-stream response with valid `response` text and `done=true`
+
 Returned suggestions are then normalised and validated against TripGenie rules:
 
 - requested date must remain inside the parent trip window
@@ -89,7 +94,7 @@ If validation succeeds, the suggestions are sorted and returned as reviewable dr
 
 The runtime retry path is a **robustness mechanism**, not the assessed course loop.
 
-- Retries are limited by `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` (default: `2` total attempts).
+- Retries are limited by `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` (default: `2` total attempts, allowed range: `1` to `10`).
 - Only correctable model-output failures are retried:
   - invalid JSON
   - schema mismatch
@@ -109,7 +114,7 @@ If the cap is exhausted, the endpoint returns `502 AI_OUTPUT_INVALID` with a sta
 | Oversized Ollama response | `502` | `DEPENDENCY_RESPONSE_TOO_LARGE` | Returned without retry. |
 | Retryable AI output still invalid after the cap | `502` | `AI_OUTPUT_INVALID` | Explicit runtime validation exhaustion. |
 
-`GET /health` may report a degraded Ollama dependency, but `GET /ready` still depends on the database API only so normal CRUD remains available when Ollama is down.
+`GET /health` may report a degraded Ollama dependency, but `GET /ready` still depends on the database API only so normal CRUD remains available when Ollama is down. If `/ready` includes an Ollama dependency status, it is cached/non-authoritative and never comes from a live readiness-path Ollama probe.
 
 ## 7. Human approval boundary
 
@@ -148,7 +153,7 @@ Instead, logs record bounded metadata such as:
 | `STUDENT1_BACKEND_OLLAMA_TIMEOUT_SECONDS` | `15` | Timeout for Ollama generate and health calls. |
 | `STUDENT1_BACKEND_OLLAMA_MAX_RESPONSE_BYTES` | `16384` | Maximum accepted Ollama response body size. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset name. |
-| `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. |
+| `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. Must stay between `1` and `10`. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
 
 ## 10. Frontend runtime notes

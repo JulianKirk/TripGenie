@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from pydantic import Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError, model_validator
 
 from .config import Settings
 from .errors import (
@@ -15,17 +15,31 @@ from .errors import (
 from .models import DependencyStatus, StrictModel
 
 
-class OllamaModelSummary(StrictModel):
+class OllamaResponseModel(StrictModel):
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+
+class OllamaModelSummary(OllamaResponseModel):
     model: str | None = None
     name: str | None = None
 
+    @model_validator(mode="after")
+    def ensure_identifier(self) -> "OllamaModelSummary":
+        if self.identifier is None:
+            raise ValueError("must include either 'name' or 'model'")
+        return self
 
-class OllamaTagsResponse(StrictModel):
+    @property
+    def identifier(self) -> str | None:
+        return self.name or self.model
+
+
+class OllamaTagsResponse(OllamaResponseModel):
     models: list[OllamaModelSummary] = Field(default_factory=list)
 
 
-class OllamaGenerateResponse(StrictModel):
-    model: str
+class OllamaGenerateResponse(OllamaResponseModel):
+    model: str | None = None
     response: str
     done: bool
     done_reason: str | None = None
@@ -44,6 +58,7 @@ class OllamaClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._settings = settings
+        self._cached_status: DependencyStatus | None = None
         self._client = (
             httpx.AsyncClient(
                 base_url=settings.ollama_base_url,
@@ -61,7 +76,7 @@ class OllamaClient:
 
     async def health(self) -> DependencyStatus:
         if self._client is None:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="not_configured",
                 service="ollama",
                 detail=(
@@ -69,40 +84,50 @@ class OllamaClient:
                     "configured."
                 ),
             )
+            self._cache_status(status)
+            return status
 
         try:
             response = await self._client.get("/api/tags")
         except httpx.TimeoutException:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="timeout",
                 service="ollama",
                 detail="Ollama did not respond before the configured timeout.",
                 code="DEPENDENCY_TIMEOUT",
             )
+            self._cache_status(status)
+            return status
         except httpx.ProtocolError:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="invalid_response",
                 service="ollama",
                 detail="Ollama returned an invalid HTTP response.",
                 code="BAD_GATEWAY",
             )
+            self._cache_status(status)
+            return status
         except httpx.NetworkError:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="unavailable",
                 service="ollama",
                 detail="Ollama is unavailable.",
                 code="DEPENDENCY_UNAVAILABLE",
             )
+            self._cache_status(status)
+            return status
         except httpx.RequestError:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="unavailable",
                 service="ollama",
                 detail="Ollama request failed.",
                 code="DEPENDENCY_UNAVAILABLE",
             )
+            self._cache_status(status)
+            return status
 
         if response.status_code != 200:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="degraded",
                 service="ollama",
                 detail=(
@@ -111,25 +136,26 @@ class OllamaClient:
                 ),
                 code="DEPENDENCY_UNAVAILABLE",
             )
+            self._cache_status(status)
+            return status
 
         try:
             payload = OllamaTagsResponse.model_validate(self._decode_json(response))
         except ValidationError:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="invalid_response",
                 service="ollama",
                 detail="Ollama returned a malformed model list response.",
                 code="BAD_GATEWAY",
             )
+            self._cache_status(status)
+            return status
 
         available_models = {
-            model_name
-            for model in payload.models
-            for model_name in (model.model, model.name)
-            if model_name
+            model.identifier for model in payload.models if model.identifier
         }
         if self._settings.ollama_model not in available_models:
-            return DependencyStatus(
+            status = DependencyStatus(
                 status="degraded",
                 service="ollama",
                 detail=(
@@ -138,14 +164,50 @@ class OllamaClient:
                 ),
                 code="MODEL_UNAVAILABLE",
             )
+            self._cache_status(status)
+            return status
 
-        return DependencyStatus(
+        status = DependencyStatus(
             status="ok",
             service="ollama",
             detail=(
                 "Ollama responded successfully and the configured model is "
                 "available."
             ),
+        )
+        self._cache_status(status)
+        return status
+
+    def readiness_status(self) -> DependencyStatus:
+        if self._settings.ollama_base_url is None:
+            return DependencyStatus(
+                status="not_configured",
+                service="ollama",
+                detail=(
+                    "Ollama AI mode is disabled because no runtime base URL is "
+                    "configured. Backend readiness is based on the database only."
+                ),
+            )
+
+        if self._cached_status is None:
+            return DependencyStatus(
+                status="not_checked",
+                service="ollama",
+                detail=(
+                    "Ollama was not probed during /ready. Backend readiness is "
+                    "based on the database only."
+                ),
+            )
+
+        detail = self._cached_status.detail or "Last known Ollama status is cached."
+        return DependencyStatus(
+            status=self._cached_status.status,
+            service=self._cached_status.service,
+            detail=(
+                f"{detail} This Ollama status is cached and non-authoritative for "
+                "backend readiness."
+            ),
+            code=self._cached_status.code,
         )
 
     async def generate(
@@ -184,6 +246,14 @@ class OllamaClient:
         try:
             generated = OllamaGenerateResponse.model_validate(payload)
         except ValidationError as exc:
+            self._cache_status(
+                DependencyStatus(
+                    status="invalid_response",
+                    service="ollama",
+                    detail="Ollama returned a malformed generate response.",
+                    code="BAD_GATEWAY",
+                ),
+            )
             raise bad_gateway(
                 "Ollama returned a malformed generate response.",
                 [
@@ -195,11 +265,29 @@ class OllamaClient:
             ) from exc
 
         if not generated.done:
+            self._cache_status(
+                DependencyStatus(
+                    status="invalid_response",
+                    service="ollama",
+                    detail="Ollama returned an incomplete generate response.",
+                    code="BAD_GATEWAY",
+                ),
+            )
             raise bad_gateway(
                 "Ollama returned an incomplete generate response.",
                 [{"field": "ollama", "issue": "generation did not finish"}],
             )
 
+        self._cache_status(
+            DependencyStatus(
+                status="ok",
+                service="ollama",
+                detail=(
+                    "Ollama responded successfully and returned a terminal "
+                    "non-stream generate response."
+                ),
+            ),
+        )
         return generated
 
     def _require_client(self) -> httpx.AsyncClient:
@@ -233,21 +321,53 @@ class OllamaClient:
                 },
             )
         except httpx.TimeoutException as exc:
+            self._cache_status(
+                DependencyStatus(
+                    status="timeout",
+                    service="ollama",
+                    detail="Ollama did not respond before the configured timeout.",
+                    code="DEPENDENCY_TIMEOUT",
+                ),
+            )
             raise dependency_timeout(
                 "Ollama did not respond before the configured timeout.",
                 [{"field": "ollama", "issue": "request timed out"}],
             ) from exc
         except httpx.ProtocolError as exc:
+            self._cache_status(
+                DependencyStatus(
+                    status="invalid_response",
+                    service="ollama",
+                    detail="Ollama returned an invalid HTTP response.",
+                    code="BAD_GATEWAY",
+                ),
+            )
             raise bad_gateway(
                 "Ollama returned an invalid HTTP response.",
                 [{"field": "ollama", "issue": "dependency returned invalid HTTP"}],
             ) from exc
         except httpx.NetworkError as exc:
+            self._cache_status(
+                DependencyStatus(
+                    status="unavailable",
+                    service="ollama",
+                    detail="Ollama is unavailable.",
+                    code="DEPENDENCY_UNAVAILABLE",
+                ),
+            )
             raise dependency_unavailable(
                 "Ollama is unavailable.",
                 [{"field": "ollama", "issue": "connection failed"}],
             ) from exc
         except httpx.RequestError:
+            self._cache_status(
+                DependencyStatus(
+                    status="unavailable",
+                    service="ollama",
+                    detail="Ollama request failed.",
+                    code="DEPENDENCY_UNAVAILABLE",
+                ),
+            )
             raise dependency_unavailable(
                 "Ollama request failed.",
                 [{"field": "ollama", "issue": "request could not be completed"}],
@@ -257,6 +377,17 @@ class OllamaClient:
         if len(response.content) <= self._settings.ollama_max_response_bytes:
             return
 
+        self._cache_status(
+            DependencyStatus(
+                status="invalid_response",
+                service="ollama",
+                detail=(
+                    "Ollama returned a response that exceeded the configured "
+                    "size limit."
+                ),
+                code="DEPENDENCY_RESPONSE_TOO_LARGE",
+            ),
+        )
         raise dependency_response_too_large(
             "Ollama returned a response that exceeded the configured size limit.",
             [
@@ -272,6 +403,14 @@ class OllamaClient:
 
     def _raise_generation_error(self, response: httpx.Response) -> None:
         error_message = _ollama_error_message(response)
+        self._cache_status(
+            DependencyStatus(
+                status="unavailable",
+                service="ollama",
+                detail="Ollama could not generate itinerary suggestions.",
+                code="DEPENDENCY_UNAVAILABLE",
+            ),
+        )
         raise dependency_unavailable(
             "Ollama could not generate itinerary suggestions.",
             [
@@ -296,6 +435,9 @@ class OllamaClient:
                 message,
                 [{"field": "ollama", "issue": "response body was not valid JSON"}],
             ) from exc
+
+    def _cache_status(self, status: DependencyStatus) -> None:
+        self._cached_status = status
 
 
 def _ollama_error_message(response: httpx.Response) -> str | None:

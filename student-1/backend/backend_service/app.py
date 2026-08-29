@@ -303,7 +303,7 @@ def create_app(
         response: Response,
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
-        status_code, payload = await service.ready()
+        status_code, payload = service.ready()
         response.status_code = status_code
         return envelope(payload.model_dump(mode="json"))
 

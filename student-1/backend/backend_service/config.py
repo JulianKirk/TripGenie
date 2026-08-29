@@ -4,6 +4,9 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+AI_MAX_ATTEMPTS_MIN = 1
+AI_MAX_ATTEMPTS_MAX = 10
+
 
 def _parse_timeout(
     value: str | None,
@@ -87,6 +90,31 @@ def _parse_positive_int(
     return parsed
 
 
+def _parse_int(
+    value: str | None,
+    *,
+    env_name: str,
+    default: int,
+) -> int:
+    if value is None:
+        return default
+
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{env_name} must be a valid integer.") from exc
+
+
+def _validate_ai_max_attempts(value: int) -> int:
+    if value < AI_MAX_ATTEMPTS_MIN or value > AI_MAX_ATTEMPTS_MAX:
+        raise ValueError(
+            "STUDENT1_BACKEND_AI_MAX_ATTEMPTS must be between "
+            f"{AI_MAX_ATTEMPTS_MIN} and {AI_MAX_ATTEMPTS_MAX}."
+        )
+
+    return value
+
+
 @dataclass(slots=True)
 class Settings:
     database_api_base_url: str
@@ -101,6 +129,9 @@ class Settings:
     ai_prompt_asset: str = "runtime_ai_suggestions_v1.md"
     ai_max_attempts: int = 2
     ai_max_context_items: int = 12
+
+    def __post_init__(self) -> None:
+        self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -162,7 +193,7 @@ class Settings:
                 "runtime_ai_suggestions_v1.md",
             ).strip()
             or "runtime_ai_suggestions_v1.md",
-            ai_max_attempts=_parse_positive_int(
+            ai_max_attempts=_parse_int(
                 os.getenv("STUDENT1_BACKEND_AI_MAX_ATTEMPTS"),
                 env_name="STUDENT1_BACKEND_AI_MAX_ATTEMPTS",
                 default=2,

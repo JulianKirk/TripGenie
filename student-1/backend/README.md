@@ -15,7 +15,7 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_OLLAMA_TIMEOUT_SECONDS` | `15` | Timeout for Ollama health and generate calls. |
 | `STUDENT1_BACKEND_OLLAMA_MAX_RESPONSE_BYTES` | `16384` | Maximum accepted Ollama response body size. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
-| `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. |
+| `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. Must stay between `1` and `10`. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
 | `STUDENT1_BACKEND_SERVICE_NAME` | `student-1-backend` | Service name reported by health endpoints. |
 
@@ -30,7 +30,8 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 ## Runtime AI-mode
 
 - `POST /api/trips/{tripId}/ai-suggestions` now calls Ollama asynchronously, requires structured output, validates returned drafts against the same itinerary rules, and never persists them automatically.
+- Ollama response parsing is forward-compatible with documented extra `/api/tags` and `/api/generate` metadata, while still validating the specific fields the backend actually consumes.
 - Returned suggestions always include `persisted=false` and `approval_required=true`.
 - Retry/adaptation is limited to correctable parse/schema/constraint failures only and is a TripGenie runtime robustness feature, **not** the assessed course `Plan -> Act -> Observe -> Adapt` workflow.
-- `GET /health` may report a degraded Ollama dependency while `GET /ready` still depends on database readiness only, so CRUD remains available when Ollama is down.
+- `GET /health` may report a degraded Ollama dependency, while `GET /ready` remains database-only. Any Ollama status returned by `/ready` is cached/non-authoritative so readiness never blocks on a live Ollama probe.
 - The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v1.md`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.

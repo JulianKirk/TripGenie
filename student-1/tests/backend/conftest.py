@@ -384,8 +384,25 @@ class FakeDatabaseApi:
 class FakeOllamaApi:
     def __init__(self) -> None:
         self.requests: list[dict[str, object]] = []
+        self.tag_requests = 0
         self._queued_responses: list[httpx.Response | Exception] = []
-        self.models = [{"model": "qwen2.5:0.5b"}]
+        self.models = [
+            {
+                "name": "qwen2.5:0.5b",
+                "model": "qwen2.5:0.5b",
+                "modified_at": "2026-08-29T09:00:00Z",
+                "size": 934348800,
+                "digest": "sha256:demo",
+                "details": {
+                    "parent_model": "",
+                    "format": "gguf",
+                    "family": "qwen2",
+                    "families": ["qwen2"],
+                    "parameter_size": "0.5B",
+                    "quantization_level": "Q4_K_M",
+                },
+            },
+        ]
 
     def queue_json_body(
         self,
@@ -399,9 +416,17 @@ class FakeOllamaApi:
                 status_code,
                 json={
                     "model": model,
+                    "created_at": "2026-08-29T09:00:00Z",
                     "response": response_body,
                     "done": True,
                     "done_reason": "stop",
+                    "context": [1, 2, 3],
+                    "total_duration": 123456789,
+                    "load_duration": 23456789,
+                    "prompt_eval_count": 321,
+                    "prompt_eval_duration": 3456789,
+                    "eval_count": 123,
+                    "eval_duration": 4567890,
                 },
             ),
         )
@@ -414,6 +439,7 @@ class FakeOllamaApi:
         method = request.method.upper()
 
         if path == "/api/tags" and method == "GET":
+            self.tag_requests += 1
             return httpx.Response(200, json={"models": deepcopy(self.models)})
 
         if path == "/api/generate" and method == "POST":
@@ -432,6 +458,8 @@ class FakeOllamaApi:
                     "response": '{"suggestions":[]}',
                     "done": True,
                     "done_reason": "stop",
+                    "context": [1, 2, 3],
+                    "total_duration": 123456789,
                 },
             )
 

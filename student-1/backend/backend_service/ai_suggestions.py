@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import Field, StringConstraints, ValidationError, field_validator
 
-from .config import Settings
+from .config import AI_MAX_ATTEMPTS_MAX, AI_MAX_ATTEMPTS_MIN, Settings
 from .errors import ai_output_invalid
 from .models import (
     DependencyStatus,
@@ -72,7 +72,10 @@ class AiSuggestionsResponse(StrictModel):
     prompt_asset: ShortText
     run_id: ShortText
     correlation_id: ShortText
-    attempt_count: int = Field(ge=1, le=10)
+    attempt_count: int = Field(
+        ge=AI_MAX_ATTEMPTS_MIN,
+        le=AI_MAX_ATTEMPTS_MAX,
+    )
     persisted: bool = False
     approval_required: bool = True
     suggestions: list[AiSuggestionDraft] = Field(default_factory=list, max_length=5)
@@ -205,6 +208,9 @@ class AiSuggestionService:
 
     async def dependency_status(self) -> DependencyStatus:
         return await self._client.health()
+
+    def readiness_dependency_status(self) -> DependencyStatus:
+        return self._client.readiness_status()
 
     async def generate(
         self,

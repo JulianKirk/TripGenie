@@ -196,9 +196,9 @@ class BackendService:
             dependencies=HealthDependencies(database=database, ollama=ollama),
         )
 
-    async def ready(self) -> tuple[int, HealthResponse]:
+    def ready(self) -> tuple[int, HealthResponse]:
         database = self._probe_database()
-        ollama = await self._ollama_status()
+        ollama = self._ai_suggestions.readiness_dependency_status()
         is_ready = database.status == "ok"
         return (
             200 if is_ready else 503,
