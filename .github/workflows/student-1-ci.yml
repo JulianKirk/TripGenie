@@ -2,27 +2,7 @@ name: Student 1 CI
 
 on:
   push:
-    paths:
-      - 'student-1/**'
-      - '.github/workflows/student-1-ci.yml'
-      - 'README.md'
-      - 'docs/architecture/student-1-release-0-architecture.md'
-      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
-      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
-      - 'docs/reports/release-0/student-1-release-0-plan.md'
-      - 'shared/configuration/**'
-      - 'docker-compose.yml'
   pull_request:
-    paths:
-      - 'student-1/**'
-      - '.github/workflows/student-1-ci.yml'
-      - 'README.md'
-      - 'docs/architecture/student-1-release-0-architecture.md'
-      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
-      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
-      - 'docs/reports/release-0/student-1-release-0-plan.md'
-      - 'shared/configuration/**'
-      - 'docker-compose.yml'
   workflow_dispatch:
 
 jobs:

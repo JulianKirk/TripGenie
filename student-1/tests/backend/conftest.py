@@ -69,6 +69,7 @@ class FakeDatabaseApi:
         self.trip_create_calls = 0
         self.trip_update_calls = 0
         self.itinerary_item_list_requests: list[tuple[str, dict[str, str]]] = []
+        self.requests: list[tuple[str, str]] = []
         self.trips: dict[str, dict[str, object]] = {
             "trip_2027_sydney_getaway": {
                 "id": "trip_2027_sydney_getaway",
@@ -126,6 +127,7 @@ class FakeDatabaseApi:
     def handle(self, request: httpx.Request) -> httpx.Response:
         path_parts = request.url.path.strip("/").split("/")
         method = request.method.upper()
+        self.requests.append((method, request.url.path))
 
         if path_parts == ["internal", "health"] and method == "GET":
             return httpx.Response(200, json=self.health_payload)
@@ -379,6 +381,69 @@ class FakeDatabaseApi:
         return json.loads(request.content.decode("utf-8"))
 
 
+class FakeOllamaApi:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, object]] = []
+        self._queued_responses: list[httpx.Response | Exception] = []
+        self.models = [{"model": "qwen2.5:0.5b"}]
+
+    def queue_json_body(
+        self,
+        response_body: str,
+        *,
+        model: str = "qwen2.5:0.5b",
+        status_code: int = 200,
+    ) -> None:
+        self._queued_responses.append(
+            httpx.Response(
+                status_code,
+                json={
+                    "model": model,
+                    "response": response_body,
+                    "done": True,
+                    "done_reason": "stop",
+                },
+            ),
+        )
+
+    def queue_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_responses.append(response)
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        method = request.method.upper()
+
+        if path == "/api/tags" and method == "GET":
+            return httpx.Response(200, json={"models": deepcopy(self.models)})
+
+        if path == "/api/generate" and method == "POST":
+            body = self._request_json(request)
+            self.requests.append(body)
+            if self._queued_responses:
+                queued = self._queued_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+
+            return httpx.Response(
+                200,
+                json={
+                    "model": "qwen2.5:0.5b",
+                    "response": '{"suggestions":[]}',
+                    "done": True,
+                    "done_reason": "stop",
+                },
+            )
+
+        return httpx.Response(404, json={"detail": "not found"})
+
+    @staticmethod
+    def _request_json(request: httpx.Request) -> dict[str, object]:
+        if not request.content:
+            return {}
+        return json.loads(request.content.decode("utf-8"))
+
+
 @pytest.fixture
 def database_api() -> FakeDatabaseApi:
     return FakeDatabaseApi()
@@ -390,15 +455,24 @@ def settings() -> Settings:
 
 
 @pytest.fixture
+def ollama_api() -> FakeOllamaApi:
+    return FakeOllamaApi()
+
+
+@pytest.fixture
 def client_factory():
     def _make(
         handler,
         *,
         settings_override: Settings | None = None,
+        ollama_handler=None,
     ) -> Iterator[TestClient]:
         app = create_app(
             settings_override or Settings(database_api_base_url="http://database.test"),
-            transport=httpx.MockTransport(handler),
+            database_transport=httpx.MockTransport(handler),
+            ollama_transport=(
+                httpx.MockTransport(ollama_handler) if ollama_handler else None
+            ),
         )
         return TestClient(app)
 

@@ -10,6 +10,11 @@ from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, Response,
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .ai_suggestions import (
+    AiSuggestionRequest,
+    AiSuggestionService,
+    AiSuggestionsResponse,
+)
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_request, validation_error
@@ -32,6 +37,7 @@ from .models import (
     TripStatus,
     TripUpdate,
 )
+from .ollama_client import OllamaClient
 from .service import BackendService
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
@@ -217,17 +223,29 @@ def create_app(
     settings: Settings | None = None,
     *,
     transport: httpx.BaseTransport | None = None,
+    database_transport: httpx.BaseTransport | None = None,
+    ollama_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
+    resolved_database_transport = database_transport or transport
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        client = DatabaseApiClient(app_settings, transport=transport)
-        app.state.backend_service = BackendService(client, app_settings)
+        client = DatabaseApiClient(
+            app_settings,
+            transport=resolved_database_transport,
+        )
+        ollama_client = OllamaClient(app_settings, transport=ollama_transport)
+        app.state.backend_service = BackendService(
+            client,
+            AiSuggestionService(ollama_client, app_settings),
+            app_settings,
+        )
         try:
             yield
         finally:
             client.close()
+            await ollama_client.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -270,10 +288,10 @@ def create_app(
         dependencies=[no_query_params],
         response_model=DataEnvelope[HealthResponse],
     )
-    def health(
+    async def health(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
-        return envelope(service.health().model_dump(mode="json"))
+        return envelope((await service.health()).model_dump(mode="json"))
 
     @app.get(
         "/ready",
@@ -281,11 +299,11 @@ def create_app(
         response_model=DataEnvelope[HealthResponse],
         responses={503: {"model": DataEnvelope[HealthResponse]}},
     )
-    def ready(
+    async def ready(
         response: Response,
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
-        status_code, payload = service.ready()
+        status_code, payload = await service.ready()
         response.status_code = status_code
         return envelope(payload.model_dump(mode="json"))
 
@@ -340,6 +358,29 @@ def create_app(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.get_trip_day(trip_id, trip_day))
+
+    @router.post(
+        "/trips/{trip_id}/ai-suggestions",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AiSuggestionsResponse],
+    )
+    async def create_ai_suggestions(
+        trip_id: TripIdentifier,
+        payload: AiSuggestionRequest,
+        request: Request,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        correlation_id = (
+            request.headers.get("X-Correlation-ID")
+            or request.headers.get("X-Request-ID")
+        )
+        return envelope(
+            await service.create_ai_suggestions(
+                trip_id,
+                payload,
+                correlation_id=correlation_id,
+            ),
+        )
 
     @router.patch(
         "/trips/{trip_id}",

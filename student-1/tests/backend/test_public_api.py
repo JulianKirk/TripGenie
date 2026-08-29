@@ -567,8 +567,8 @@ def test_health_and_ready_reflect_dependency_state(client) -> None:
                     "status": "not_configured",
                     "service": "ollama",
                     "detail": (
-                        "Ollama is not configured for issue #10; CRUD routes do not "
-                        "depend on it."
+                        "Ollama AI mode is disabled because no runtime base URL is "
+                        "configured."
                     ),
                     "code": None,
                 },

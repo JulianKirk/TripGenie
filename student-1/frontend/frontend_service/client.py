@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
+    AiSuggestionsResponse,
     BackendHealthPayload,
     DataEnvelope,
     DeleteResponse,
@@ -87,6 +88,23 @@ class BackendApiClient:
             expected_statuses={200},
             response_type=DataEnvelope[TripDetail],
             malformed_message="Backend API returned a malformed trip response.",
+        )
+        return envelope.data
+
+    async def generate_ai_suggestions(
+        self,
+        trip_id: str,
+        payload: dict[str, object],
+    ) -> AiSuggestionsResponse:
+        envelope = await self._request_model(
+            "POST",
+            f"{self._api_prefix}/trips/{trip_id}/ai-suggestions",
+            json=payload,
+            expected_statuses={200},
+            response_type=DataEnvelope[AiSuggestionsResponse],
+            malformed_message=(
+                "Backend API returned a malformed AI suggestion response."
+            ),
         )
         return envelope.data
 

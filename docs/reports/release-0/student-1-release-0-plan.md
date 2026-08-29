@@ -1,6 +1,7 @@
 # Student 1 Release 0 Scope, Assessed Workflow, and Evidence Plan
 
 Related architecture: [Student 1 Release 0 architecture, runtime modes, and decision traceability](../../architecture/student-1-release-0-architecture.md)
+Related runtime AI-mode notes: [Student 1 runtime AI-mode contract and implementation notes](../../architecture/student-1-runtime-ai-mode.md)
 Related ADRs: [ADR-0001](../../architecture/decisions/0001-student-1-service-mapping.md), [ADR-0002](../../architecture/decisions/0002-student-1-internal-api-and-observability.md)
 
 ## 1. Documentation stance
@@ -110,6 +111,8 @@ The bounded TripGenie itinerary-suggestion flow can remain in Release 0, but it 
 | Persistence | Adaptation changes docs/code, then reruns evidence checks. | Suggestions remain drafts until the user saves them through normal CRUD. |
 
 That distinction replaces the earlier wording that treated the runtime suggestion flow itself as `PLAN -> ACT -> OBSERVE -> ADAPT`.
+
+Issue #12 implements the bounded runtime path separately from the assessed workflow and adds report-friendly evidence hooks such as prompt asset version, run IDs, correlation IDs, model name, attempt count, and explicit degraded-health states. Those hooks support later live evidence capture, but they are not themselves fabricated execution proof.
 
 ## 8. Limitations and open points
 

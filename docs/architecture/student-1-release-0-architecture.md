@@ -2,6 +2,7 @@
 
 Related planning document: [Student 1 Release 0 scope, assessed workflow, and evidence plan](../reports/release-0/student-1-release-0-plan.md)
 Related ADRs: [ADR-0001](./decisions/0001-student-1-service-mapping.md), [ADR-0002](./decisions/0002-student-1-internal-api-and-observability.md)
+Implemented runtime AI-mode notes: [Student 1 runtime AI-mode contract and implementation notes](./student-1-runtime-ai-mode.md)
 
 ## 1. Architecture stance
 
@@ -87,7 +88,7 @@ These are **TripGenie Release 0 proposals**, not course-mandated paths:
 | `GET`, `PATCH`, `DELETE` | `/api/trips/{tripId}` | View, update, or delete a trip. |
 | `GET`, `POST` | `/api/trips/{tripId}/itinerary-items` | List/filter or create itinerary items for one trip. |
 | `GET`, `PATCH`, `DELETE` | `/api/itinerary-items/{itemId}` | View, update, or delete one itinerary item. |
-| `POST` | `/api/trips/{tripId}/ai-suggestions` | Return **draft** itinerary suggestions for human review. |
+| `POST` | `/api/trips/{tripId}/ai-suggestions` | Return **draft** itinerary suggestions for human review. Implementation details now live in the dedicated runtime AI-mode notes. |
 
 ### 6.3 Optional internal and operational conventions
 
@@ -108,6 +109,8 @@ The bounded itinerary suggestion flow remains valid as a Release 0 runtime desig
 3. backend loads the relevant prompt assets and calls local Ollama;
 4. backend returns draft suggestions only; and
 5. a human reviews/edits them before saving through standard CRUD.
+
+Issue #12 implements this bounded runtime flow. The detailed request/response contract, prompt asset, retry rules, privacy stance, and evidence hooks are documented in the dedicated [runtime AI-mode notes](./student-1-runtime-ai-mode.md).
 
 ### 7.1 Human approval boundary
 
