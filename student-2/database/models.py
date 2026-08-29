@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, event
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.mutable import MutableList
@@ -100,11 +100,18 @@ class RoomDetails(Base):
 
 class Accommodation(Base):
     __tablename__ = "accommodations"
+    # The itinerary service asks "what can I stay in at <place>", so city and
+    # country are the query keys and get the index; address is display-only.
+    # ponytail: no state/postcode/lat-lng and no Location table -- add coords
+    # only when "within N km" replaces "same city".
+    __table_args__ = (Index("ix_accommodations_city", "country", "city"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str]
     type: Mapped[AccommodationType] = mapped_column(SAEnum(AccommodationType))
-    location: Mapped[str]
+    country: Mapped[str]
+    city: Mapped[str]
+    address: Mapped[str] = mapped_column(default="")
     description: Mapped[str]
     price_per_night: Mapped[Decimal]
     availability_status: Mapped[AvailabilityStatus] = mapped_column(

@@ -53,6 +53,13 @@ class AccommodationRepository:
             self.session.delete(accommodation)
             _commit(self.session)
 
+    def list_by_city(self, city: str, country: str) -> list[Accommodation]:
+        """Everything bookable in one city -- what the itinerary service asks for."""
+        stmt = select(Accommodation).where(
+            Accommodation.country == country, Accommodation.city == city
+        )
+        return list(self.session.scalars(stmt))
+
     def list_by_min_room_count(self, min_room_count: int) -> list[Accommodation]:
         stmt = (
             select(Accommodation)

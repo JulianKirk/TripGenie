@@ -27,7 +27,9 @@ The bookable listing (hotel, hostel, Airbnb, etc.).
 | id | UUID/int | PK |
 | name | str | |
 | type | AccommodationType | enum: HOTEL, HOSTEL, APARTMENT, RESORT, GUESTHOUSE, CAMPING |
-| location | str | address/city; own class only if geo search is needed later |
+| country | str | indexed with `city` -- the itinerary service filters on these |
+| city | str | |
+| address | str | street address, display only; no geo search until "within N km" is needed |
 | description | str | |
 | price_per_night | Decimal | |
 | rating | float | derived/cached avg of AccommodationRating |
@@ -78,13 +80,13 @@ A user's rating/review of an Accommodation.
 ## Persistence
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
-- `shared/backend/models.py` — `Base`, `User`
-- `student-2/database/models.py` — `Accommodation`, `RoomDetails`,
+- `../../shared/backend/models.py` — `Base`, `User`
+- `../database/models.py` — `Accommodation`, `RoomDetails`,
   `AccommodationBooking`, `AccommodationRating`, plus the accommodation-local
   enums
-- `student-2/database/database.py` — engine/session, `DATABASE_URL` env var
+- `../database/database.py` — engine/session, `DATABASE_URL` env var
   (SQLite by default)
-- `student-2/database/repository.py` — `AccommodationRepository`,
+- `../database/repository.py` — `AccommodationRepository`,
   `AccommodationBookingRepository`, `AccommodationRatingRepository`
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
@@ -113,7 +115,9 @@ erDiagram
         UUID id PK
         string name
         string type
-        string location
+        string country
+        string city
+        string address
         string description
         decimal price_per_night
         float rating
