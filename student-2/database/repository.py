@@ -23,13 +23,22 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
+def _commit(session: Session) -> None:
+    """Commit, rolling back on failure so a shared Session stays usable."""
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+
 class AccommodationRepository:
     def __init__(self, session: Session):
         self.session = session
 
     def add(self, accommodation: Accommodation) -> Accommodation:
         self.session.add(accommodation)
-        self.session.commit()
+        _commit(self.session)
         return accommodation
 
     def get(self, id: UUID) -> Accommodation | None:
@@ -42,7 +51,7 @@ class AccommodationRepository:
         accommodation = self.get(id)
         if accommodation is not None:
             self.session.delete(accommodation)
-            self.session.commit()
+            _commit(self.session)
 
     def list_by_min_room_count(self, min_room_count: int) -> list[Accommodation]:
         stmt = (
@@ -59,7 +68,7 @@ class AccommodationBookingRepository:
 
     def add(self, booking: AccommodationBooking) -> AccommodationBooking:
         self.session.add(booking)
-        self.session.commit()
+        _commit(self.session)
         return booking
 
     def get(self, id: UUID) -> AccommodationBooking | None:
@@ -72,7 +81,7 @@ class AccommodationBookingRepository:
         booking = self.get(id)
         if booking is not None:
             self.session.delete(booking)
-            self.session.commit()
+            _commit(self.session)
 
 
 class AccommodationRatingRepository:
@@ -81,7 +90,7 @@ class AccommodationRatingRepository:
 
     def add(self, rating: AccommodationRating) -> AccommodationRating:
         self.session.add(rating)
-        self.session.commit()
+        _commit(self.session)
         return rating
 
     def get(self, id: UUID) -> AccommodationRating | None:
@@ -94,4 +103,4 @@ class AccommodationRatingRepository:
         rating = self.session.get(AccommodationRating, id)
         if rating is not None:
             self.session.delete(rating)
-            self.session.commit()
+            _commit(self.session)

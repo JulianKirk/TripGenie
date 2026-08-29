@@ -19,6 +19,8 @@ SessionLocal = sessionmaker(bind=engine)
 def create_all() -> None:
     """Create all tables. Dev/test convenience -- use Alembic once schema
     migrations are actually needed."""
+    import database.models  # noqa: F401  # registers accommodation tables on Base
+
     Base.metadata.create_all(engine)
 
 
