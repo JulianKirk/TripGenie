@@ -1,0 +1,28 @@
+<section class="panel panel--detail">
+  <p class="section-eyebrow">UI mode</p>
+  <h2 id="dashboard-heading" data-autofocus>Plan your first trip</h2>
+  <p class="lead-copy">
+    TripGenie keeps trip CRUD and itinerary CRUD reliable through the Student 1 backend. Create a trip to unlock day-by-day itinerary planning.
+  </p>
+  <div class="button-row">
+    <a class="button button--primary" href="{{ request.url_for('new_trip_form') }}">Create trip</a>
+  </div>
+
+  <section class="mode-panel mode-panel--ai" aria-labelledby="ai-mode-heading">
+    <p class="section-eyebrow">AI mode</p>
+    <h3 id="ai-mode-heading">Suggestion affordance is intentionally disabled</h3>
+    <p>
+      Issue #11 prepares the browser UI for future itinerary suggestions without pretending that live AI behaviour already exists. Issue #12 will wire this section to the backend AI contract.
+    </p>
+    <form class="stack-form" aria-describedby="ai-mode-note">
+      <fieldset disabled>
+        <label for="ai-brief">Suggestion brief</label>
+        <textarea id="ai-brief" name="ai_brief" rows="4" placeholder="Describe the kind of trip day you want."></textarea>
+        <button class="button button--secondary" type="button">Generate suggestions in issue #12</button>
+      </fieldset>
+      <p id="ai-mode-note" class="muted-copy">
+        Disabled by TripGenie design until live AI integration lands in the dedicated follow-up issue.
+      </p>
+    </form>
+  </section>
+</section>

@@ -82,3 +82,31 @@ jobs:
         run: python -m pytest tests/backend
       - name: Build Student 1 backend image
         run: docker build -f student-1/backend/Dockerfile student-1
+  frontend:
+    name: Build and Validate Student 1 Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 1 frontend dependencies
+        working-directory: student-1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate installed Student 1 frontend package
+        working-directory: student-1
+        run: python -c "import frontend_service"
+      - name: Run Student 1 frontend syntax checks
+        working-directory: student-1
+        run: python -m compileall frontend/frontend_service tests/frontend
+      - name: Run Student 1 frontend Ruff checks
+        working-directory: student-1
+        run: python -m ruff check frontend/frontend_service tests/frontend
+      - name: Run Student 1 frontend pytest suite
+        working-directory: student-1
+        run: python -m pytest tests/frontend
+      - name: Build Student 1 frontend image
+        run: docker build -f student-1/frontend/Dockerfile student-1

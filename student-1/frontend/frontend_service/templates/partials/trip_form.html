@@ -1,0 +1,137 @@
+{% import "macros/forms.html" as forms %}
+
+<section class="panel panel--detail">
+  <p class="section-eyebrow">UI mode</p>
+  <h2 id="trip-form-heading" data-autofocus>{{ form_title }}</h2>
+  <p class="lead-copy">{{ form_description }}</p>
+
+  {% if page_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ page_error.message }}</strong></p>
+      {% if page_error.details %}
+        <ul class="banner__list">
+          {% for detail in page_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="form-grid" action="{{ form_action }}" method="post" novalidate>
+    {% if show_id_field %}
+      {% set has_errors = form_errors_by_field.get('id') %}
+      <div class="form-field">
+        <label for="trip-id">Trip ID (optional)</label>
+        <input
+          id="trip-id"
+          name="id"
+          type="text"
+          value="{{ trip_form.id }}"
+          {% if has_errors %}aria-invalid="true" aria-describedby="id-errors"{% endif %}
+        >
+        <p class="hint-copy">Leave blank to let the backend generate a TripGenie identifier.</p>
+        {{ forms.field_errors('id', form_errors_by_field) }}
+      </div>
+    {% endif %}
+
+    {% set name_errors = form_errors_by_field.get('name') %}
+    <div class="form-field">
+      <label for="trip-name">Trip name</label>
+      <input
+        id="trip-name"
+        name="name"
+        type="text"
+        value="{{ trip_form.name }}"
+        {% if name_errors %}aria-invalid="true" aria-describedby="name-errors"{% endif %}
+      >
+      {{ forms.field_errors('name', form_errors_by_field) }}
+    </div>
+
+    {% set destination_errors = form_errors_by_field.get('destination') %}
+    <div class="form-field">
+      <label for="trip-destination">Destination</label>
+      <input
+        id="trip-destination"
+        name="destination"
+        type="text"
+        value="{{ trip_form.destination }}"
+        {% if destination_errors %}aria-invalid="true" aria-describedby="destination-errors"{% endif %}
+      >
+      {{ forms.field_errors('destination', form_errors_by_field) }}
+    </div>
+
+    {% set start_errors = form_errors_by_field.get('start_date') %}
+    <div class="form-field">
+      <label for="trip-start-date">Start date</label>
+      <input
+        id="trip-start-date"
+        name="start_date"
+        type="date"
+        value="{{ trip_form.start_date }}"
+        {% if start_errors %}aria-invalid="true" aria-describedby="start_date-errors"{% endif %}
+      >
+      {{ forms.field_errors('start_date', form_errors_by_field) }}
+    </div>
+
+    {% set end_errors = form_errors_by_field.get('end_date') %}
+    <div class="form-field">
+      <label for="trip-end-date">End date</label>
+      <input
+        id="trip-end-date"
+        name="end_date"
+        type="date"
+        value="{{ trip_form.end_date }}"
+        {% if end_errors %}aria-invalid="true" aria-describedby="end_date-errors"{% endif %}
+      >
+      {{ forms.field_errors('end_date', form_errors_by_field) }}
+    </div>
+
+    {% set traveller_errors = form_errors_by_field.get('traveller_count') %}
+    <div class="form-field">
+      <label for="trip-traveller-count">Traveller count</label>
+      <input
+        id="trip-traveller-count"
+        name="traveller_count"
+        type="number"
+        min="1"
+        max="1000"
+        value="{{ trip_form.traveller_count }}"
+        {% if traveller_errors %}aria-invalid="true" aria-describedby="traveller_count-errors"{% endif %}
+      >
+      {{ forms.field_errors('traveller_count', form_errors_by_field) }}
+    </div>
+
+    {% set status_errors = form_errors_by_field.get('status') %}
+    <div class="form-field">
+      <label for="trip-status">Status</label>
+      <select
+        id="trip-status"
+        name="status"
+        {% if status_errors %}aria-invalid="true" aria-describedby="status-errors"{% endif %}
+      >
+        {% for value, label in trip_status_options %}
+          <option value="{{ value }}"{% if trip_form.status == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {{ forms.field_errors('status', form_errors_by_field) }}
+    </div>
+
+    {% set note_errors = form_errors_by_field.get('notes') %}
+    <div class="form-field form-field--full">
+      <label for="trip-notes">Notes</label>
+      <textarea
+        id="trip-notes"
+        name="notes"
+        rows="5"
+        {% if note_errors %}aria-invalid="true" aria-describedby="notes-errors"{% endif %}
+      >{{ trip_form.notes }}</textarea>
+      {{ forms.field_errors('notes', form_errors_by_field) }}
+    </div>
+
+    <div class="button-row">
+      <button class="button button--primary" type="submit">{{ submit_label }}</button>
+      <a class="button button--ghost" href="{{ cancel_url }}">Cancel</a>
+    </div>
+  </form>
+</section>

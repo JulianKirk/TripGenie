@@ -1,0 +1,152 @@
+{% import "macros/forms.html" as forms %}
+
+<section class="panel panel--detail">
+  <p class="section-eyebrow">UI mode</p>
+  <h2 id="item-form-heading" data-autofocus>{{ form_title }}</h2>
+  <p class="lead-copy">{{ form_description }}</p>
+  <p class="muted-copy">
+    Trip: <strong>{{ trip.name }}</strong> · {{ trip.start_date }} to {{ trip.end_date }}
+  </p>
+
+  {% if page_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ page_error.message }}</strong></p>
+      {% if page_error.details %}
+        <ul class="banner__list">
+          {% for detail in page_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="form-grid" action="{{ form_action }}" method="post" novalidate>
+    <input type="hidden" name="trip_id" value="{{ trip.id }}">
+
+    {% if show_id_field %}
+      {% set has_errors = form_errors_by_field.get('id') %}
+      <div class="form-field">
+        <label for="item-id">Item ID (optional)</label>
+        <input
+          id="item-id"
+          name="id"
+          type="text"
+          value="{{ item_form.id }}"
+          {% if has_errors %}aria-invalid="true" aria-describedby="id-errors"{% endif %}
+        >
+        <p class="hint-copy">Leave blank to let the backend generate an itinerary identifier.</p>
+        {{ forms.field_errors('id', form_errors_by_field) }}
+      </div>
+    {% endif %}
+
+    {% set date_errors = form_errors_by_field.get('date') %}
+    <div class="form-field">
+      <label for="item-date">Date</label>
+      <input
+        id="item-date"
+        name="date"
+        type="date"
+        value="{{ item_form.date }}"
+        {% if date_errors %}aria-invalid="true" aria-describedby="date-errors"{% endif %}
+      >
+      {{ forms.field_errors('date', form_errors_by_field) }}
+    </div>
+
+    {% set start_errors = form_errors_by_field.get('start_time') %}
+    <div class="form-field">
+      <label for="item-start-time">Start time</label>
+      <input
+        id="item-start-time"
+        name="start_time"
+        type="time"
+        value="{{ item_form.start_time }}"
+        {% if start_errors %}aria-invalid="true" aria-describedby="start_time-errors"{% endif %}
+      >
+      {{ forms.field_errors('start_time', form_errors_by_field) }}
+    </div>
+
+    {% set end_errors = form_errors_by_field.get('end_time') %}
+    <div class="form-field">
+      <label for="item-end-time">End time</label>
+      <input
+        id="item-end-time"
+        name="end_time"
+        type="time"
+        value="{{ item_form.end_time }}"
+        {% if end_errors %}aria-invalid="true" aria-describedby="end_time-errors"{% endif %}
+      >
+      {{ forms.field_errors('end_time', form_errors_by_field) }}
+    </div>
+
+    {% set title_errors = form_errors_by_field.get('title') %}
+    <div class="form-field">
+      <label for="item-title">Title</label>
+      <input
+        id="item-title"
+        name="title"
+        type="text"
+        value="{{ item_form.title }}"
+        {% if title_errors %}aria-invalid="true" aria-describedby="title-errors"{% endif %}
+      >
+      {{ forms.field_errors('title', form_errors_by_field) }}
+    </div>
+
+    {% set location_errors = form_errors_by_field.get('location') %}
+    <div class="form-field">
+      <label for="item-location">Location</label>
+      <input
+        id="item-location"
+        name="location"
+        type="text"
+        value="{{ item_form.location }}"
+        {% if location_errors %}aria-invalid="true" aria-describedby="location-errors"{% endif %}
+      >
+      {{ forms.field_errors('location', form_errors_by_field) }}
+    </div>
+
+    {% set category_errors = form_errors_by_field.get('category') %}
+    <div class="form-field">
+      <label for="item-category">Category</label>
+      <select
+        id="item-category"
+        name="category"
+        {% if category_errors %}aria-invalid="true" aria-describedby="category-errors"{% endif %}
+      >
+        {% for value, label in itinerary_category_options %}
+          <option value="{{ value }}"{% if item_form.category == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {{ forms.field_errors('category', form_errors_by_field) }}
+    </div>
+
+    {% set description_errors = form_errors_by_field.get('description') %}
+    <div class="form-field form-field--full">
+      <label for="item-description">Description</label>
+      <textarea
+        id="item-description"
+        name="description"
+        rows="4"
+        {% if description_errors %}aria-invalid="true" aria-describedby="description-errors"{% endif %}
+      >{{ item_form.description }}</textarea>
+      {{ forms.field_errors('description', form_errors_by_field) }}
+    </div>
+
+    {% set notes_errors = form_errors_by_field.get('notes') %}
+    <div class="form-field form-field--full">
+      <label for="item-notes">Notes</label>
+      <textarea
+        id="item-notes"
+        name="notes"
+        rows="4"
+        {% if notes_errors %}aria-invalid="true" aria-describedby="notes-errors"{% endif %}
+      >{{ item_form.notes }}</textarea>
+      {{ forms.field_errors('notes', form_errors_by_field) }}
+    </div>
+
+    <div class="button-row">
+      <button class="button button--primary" type="submit">{{ submit_label }}</button>
+      <a class="button button--ghost" href="{{ cancel_url }}">Cancel</a>
+    </div>
+  </form>
+</section>
