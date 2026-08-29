@@ -12,8 +12,8 @@ RUN addgroup --system tripgenie \
     && adduser --system --ingroup tripgenie --home /nonexistent tripgenie \
     && mkdir -p /data/student-1
 
-COPY pyproject.toml ./
-COPY database ./database
+COPY database/pyproject.toml ./pyproject.toml
+COPY database/database_service ./database_service
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install .
