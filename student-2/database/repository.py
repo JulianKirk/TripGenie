@@ -14,6 +14,9 @@ from database.models import (
     Accommodation,
     AccommodationBooking,
     AccommodationUserRating,
+    City,
+    Country,
+    LocationDetails,
     RoomDetails,
 )
 
@@ -55,8 +58,12 @@ class AccommodationRepository:
 
     def list_by_city(self, city: str, country: str) -> list[Accommodation]:
         """Everything bookable in one city -- what the itinerary service asks for."""
-        stmt = select(Accommodation).where(
-            Accommodation.country == country, Accommodation.city == city
+        stmt = (
+            select(Accommodation)
+            .join(LocationDetails)
+            .join(Country, LocationDetails.country_id == Country.id)
+            .join(City, LocationDetails.city_id == City.id)
+            .where(Country.name == country, City.name == city)
         )
         return list(self.session.scalars(stmt))
 
@@ -67,6 +74,57 @@ class AccommodationRepository:
             .where(RoomDetails.room_count >= min_room_count)
         )
         return list(self.session.scalars(stmt))
+
+
+class CountryRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def add(self, country: Country) -> Country:
+        self.session.add(country)
+        _commit(self.session)
+        return country
+
+    def get(self, id: UUID) -> Country | None:
+        return self.session.get(Country, id)
+
+    def get_by_name(self, name: str) -> Country | None:
+        return self.session.scalar(select(Country).where(Country.name == name))
+
+    def list(self) -> list[Country]:
+        return list(self.session.scalars(select(Country)))
+
+    def delete(self, id: UUID) -> None:
+        country = self.get(id)
+        if country is not None:
+            self.session.delete(country)
+            _commit(self.session)
+
+
+class CityRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def add(self, city: City) -> City:
+        self.session.add(city)
+        _commit(self.session)
+        return city
+
+    def get(self, id: UUID) -> City | None:
+        return self.session.get(City, id)
+
+    def get_by_name(self, name: str, country_id: UUID) -> City | None:
+        stmt = select(City).where(City.name == name, City.country_id == country_id)
+        return self.session.scalar(stmt)
+
+    def list(self) -> list[City]:
+        return list(self.session.scalars(select(City)))
+
+    def delete(self, id: UUID) -> None:
+        city = self.get(id)
+        if city is not None:
+            self.session.delete(city)
+            _commit(self.session)
 
 
 class AccommodationBookingRepository:

@@ -18,6 +18,9 @@ from database.models import (
     AccommodationType,
     AvailabilityStatus,
     BedType,
+    City,
+    Country,
+    LocationDetails,
     RoomDetails,
 )
 from database.repository import (
@@ -25,7 +28,7 @@ from database.repository import (
     AccommodationRepository,
     AccommodationUserRatingRepository,
 )
-from shared.backend.models import Base, User
+from shared.database.models import Base, User
 
 
 @pytest.fixture
@@ -61,18 +64,45 @@ def user(session):
 
 
 @pytest.fixture
-def camping(accommodations):
+def australia(session):
+    country = Country(id=uuid4(), name="Australia")
+    session.add(country)
+    session.commit()
+    return country
+
+
+@pytest.fixture
+def katoomba(session, australia):
+    city = City(id=uuid4(), name="Katoomba", country_id=australia.id)
+    session.add(city)
+    session.commit()
+    return city
+
+
+@pytest.fixture
+def sydney(session, australia):
+    city = City(id=uuid4(), name="Sydney", country_id=australia.id)
+    session.add(city)
+    session.commit()
+    return city
+
+
+@pytest.fixture
+def camping(accommodations, australia, katoomba):
     return accommodations.add(
         Accommodation(
             id=uuid4(),
             name="Cosy Cabin",
             type=AccommodationType.CAMPING,
-            country="Australia",
-            city="Katoomba",
-            address="1 Cliff Dr",
             description="tent site",
             price_per_night=Decimal("20.00"),
             availability_status=AvailabilityStatus.AVAILABLE,
+            location_details=LocationDetails(
+                country_id=australia.id,
+                city_id=katoomba.id,
+                street="Cliff Dr",
+                street_number=1,
+            ),
             room_details=RoomDetails(
                 room_count=1, bed_count=1, bed_types=[BedType.SINGLE]
             ),
@@ -81,18 +111,21 @@ def camping(accommodations):
 
 
 @pytest.fixture
-def hotel(accommodations):
+def hotel(accommodations, australia, sydney):
     return accommodations.add(
         Accommodation(
             id=uuid4(),
             name="Grand Hotel",
             type=AccommodationType.HOTEL,
-            country="Australia",
-            city="Sydney",
-            address="1 George St",
             description="city hotel",
             price_per_night=Decimal("250.00"),
             availability_status=AvailabilityStatus.AVAILABLE,
+            location_details=LocationDetails(
+                country_id=australia.id,
+                city_id=sydney.id,
+                street="George St",
+                street_number=1,
+            ),
             room_details=RoomDetails(
                 room_count=40, bed_count=60, bed_types=[BedType.QUEEN, BedType.KING]
             ),

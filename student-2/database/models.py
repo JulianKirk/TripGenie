@@ -8,9 +8,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
+from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, event
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, UniqueConstraint, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.mutable import MutableList
@@ -81,6 +82,55 @@ class BedTypesJSON(TypeDecorator):
         return [BedType(v) for v in value]
 
 
+class Country(Base):
+    """Reference list of countries -- just a name, nothing else."""
+
+    __tablename__ = "countries"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
+class City(Base):
+    """Reference list of cities, scoped to a country (Sydney, Canada is a
+    different row to Sydney, Australia)."""
+
+    __tablename__ = "cities"
+    __table_args__ = (UniqueConstraint("name", "country_id", name="uq_city_country"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str]
+    country_id: Mapped[UUID] = mapped_column(
+        ForeignKey("countries.id", ondelete="RESTRICT")
+    )
+
+    country: Mapped[Country] = relationship()
+
+
+class LocationDetails(Base):
+    __tablename__ = "location_details"
+    # Same reason as the RoomDetails index: the itinerary service asks "what
+    # can I stay in at <place>", so country/city are the query keys.
+    __table_args__ = (Index("ix_location_details_city", "country_id", "city_id"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    accommodation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("accommodations.id", ondelete="CASCADE"), unique=True
+    )
+    country_id: Mapped[UUID] = mapped_column(
+        ForeignKey("countries.id", ondelete="RESTRICT")
+    )
+    city_id: Mapped[UUID] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"))
+    street: Mapped[str] = mapped_column(default="")
+    street_number: Mapped[Optional[int]] = mapped_column(default=None)
+
+    accommodation: Mapped[Accommodation] = relationship(
+        back_populates="location_details"
+    )
+    country: Mapped[Country] = relationship()
+    city: Mapped[City] = relationship()
+
+
 class RoomDetails(Base):
     __tablename__ = "room_details"
 
@@ -100,18 +150,12 @@ class RoomDetails(Base):
 
 class Accommodation(Base):
     __tablename__ = "accommodations"
-    # The itinerary service asks "what can I stay in at <place>", so city and
-    # country are the query keys and get the index; address is display-only.
-    # ponytail: no state/postcode/lat-lng and no Location table -- add coords
-    # only when "within N km" replaces "same city".
-    __table_args__ = (Index("ix_accommodations_city", "country", "city"),)
+    # ponytail: no lat/lng on LocationDetails -- add coords only when
+    # "within N km" replaces "same city".
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str]
     type: Mapped[AccommodationType] = mapped_column(SAEnum(AccommodationType))
-    country: Mapped[str]
-    city: Mapped[str]
-    address: Mapped[str] = mapped_column(default="")
     description: Mapped[str]
     price_per_night: Mapped[Decimal]
     availability_status: Mapped[AvailabilityStatus] = mapped_column(
@@ -122,6 +166,9 @@ class Accommodation(Base):
         MutableList.as_mutable(JSON), default=list
     )
 
+    location_details: Mapped[LocationDetails] = relationship(
+        back_populates="accommodation", uselist=False, cascade="all, delete-orphan"
+    )
     room_details: Mapped[RoomDetails | None] = relationship(
         back_populates="accommodation", uselist=False, cascade="all, delete-orphan"
     )

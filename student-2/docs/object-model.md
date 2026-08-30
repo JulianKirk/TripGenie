@@ -1,8 +1,8 @@
-Back to [README.md](../../README.md)
+← Back to [README.md](../../README.md)
 
-# TripGenie Object Model
+# Accommodation Service Object Model
 
-## General Entities
+## Shared Entities
 
 ### User
 The person doing the booking/rating. Kept minimal — full profile/auth is
@@ -14,6 +14,24 @@ here.
 | id | UUID/int | PK |
 | name | str | |
 | email | str | |
+
+### Country
+Reference list of countries - just a name.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/int | PK |
+| name | str | unique |
+
+### City
+Reference list of cities, each scoped to a Country (so "Sydney" can exist
+under both Australia and Canada without colliding).
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/int | PK |
+| name | str | unique with `country_id` |
+| country_id | FK → Country | |
 
 ## Accommodation Microservice Entities
 
@@ -27,15 +45,25 @@ The bookable listing (hotel, hostel, Airbnb, etc.).
 | id | UUID/int | PK |
 | name | str | |
 | type | AccommodationType | enum: HOTEL, HOSTEL, APARTMENT, RESORT, GUESTHOUSE, CAMPING |
-| country | str | indexed with `city` -- the itinerary service filters on these |
-| city | str | |
-| address | str | street address, display only; no geo search until "within N km" is needed |
 | description | str | |
 | price_per_night | Decimal | |
 | rating | float | derived/cached avg of AccommodationUserRating |
 | amenities | list[str] | plain list until amenities need filtering at scale |
 | availability_status | AvailabilityStatus | enum: AVAILABLE, UNAVAILABLE, SOLD_OUT |
+| location_details | LocationDetails | composed, not subclassed — see below |
 | room_details | RoomDetails \| None | composed, not subclassed — see below |
+
+### LocationDetails
+Where Accommodation is, kept as a composed value rather than flat columns
+so `country`/`city` can be reference tables instead of free-text duplicated
+on every row.
+
+| Field | Type | Notes |
+|---|---|---|
+| country_id | FK → Country | indexed with `city_id` -- the itinerary service filters on these |
+| city_id | FK → City | |
+| street | str | street name, display only |
+| street_number | int \| None | |
 
 ### RoomDetails
 Room-specific attributes, kept as a composed value on `Accommodation` rather
@@ -81,13 +109,14 @@ A user's rating/review of an Accommodation.
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
 - `../../shared/backend/models.py` — `Base`, `User`
-- `../database/models.py` — `Accommodation`, `RoomDetails`,
-  `AccommodationBooking`, `AccommodationUserRating`, plus the accommodation-local
-  enums
+- `../database/models.py` — `Accommodation`, `LocationDetails`, `Country`,
+  `City`, `RoomDetails`, `AccommodationBooking`, `AccommodationUserRating`,
+  plus the accommodation-local enums
 - `../database/database.py` — engine/session, `DATABASE_URL` env var
   (SQLite by default)
 - `../database/repository.py` — `AccommodationRepository`,
-  `AccommodationBookingRepository`, `AccommodationUserRatingRepository`
+  `CountryRepository`, `CityRepository`, `AccommodationBookingRepository`,
+  `AccommodationUserRatingRepository`
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
 custom `TypeDecorator` (`BedTypesJSON`) — SQLAlchemy has no built-in "list of
@@ -103,7 +132,11 @@ erDiagram
     USER ||--o{ ACCOMMODATION_RATING : writes
     ACCOMMODATION ||--o{ ACCOMMODATION_BOOKING : "booked via"
     ACCOMMODATION ||--o{ ACCOMMODATION_RATING : "rated via"
+    ACCOMMODATION |o--|| LOCATION_DETAILS : has
     ACCOMMODATION |o--o| ROOM_DETAILS : has
+    COUNTRY ||--o{ CITY : has
+    COUNTRY ||--o{ LOCATION_DETAILS : "located in"
+    CITY ||--o{ LOCATION_DETAILS : "located in"
 
     USER {
         UUID id PK
@@ -115,14 +148,29 @@ erDiagram
         UUID id PK
         string name
         string type
-        string country
-        string city
-        string address
         string description
         decimal price_per_night
         float rating
         string amenities
         string availability_status
+    }
+
+    LOCATION_DETAILS {
+        UUID country_id FK
+        UUID city_id FK
+        string street
+        int street_number
+    }
+
+    COUNTRY {
+        UUID id PK
+        string name
+    }
+
+    CITY {
+        UUID id PK
+        string name
+        UUID country_id FK
     }
 
     ROOM_DETAILS {
