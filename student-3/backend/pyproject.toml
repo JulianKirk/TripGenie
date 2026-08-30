@@ -15,5 +15,5 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = [".", ".."]
+where = ["."]  
 include = ["student3_backend_service*"]
