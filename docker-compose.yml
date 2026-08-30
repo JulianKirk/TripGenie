@@ -33,6 +33,21 @@ services:
     ports:
       - "8083:8083"
 
+  # Student 3: Transport database microservice (owns the Student 3 SQLite file)
+  student-3-database:
+    build:
+      context: ./student-3
+      dockerfile: database/Dockerfile
+    environment:
+      STUDENT3_SQLITE_PATH: /data/student-3/tripgenie.db
+      STUDENT3_SEED_DATA: "true"
+    volumes:
+      - student-3-data:/data/student-3
+    # Published only so the internal API can be demonstrated until the Student 3
+    # backend exists to front it.
+    ports:
+      - "8004:8004"
+
   # Student 4: Activities & Attractions Management
   student-4-service:
     build:
@@ -54,3 +69,6 @@ services:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
+
+volumes:
+  student-3-data:
