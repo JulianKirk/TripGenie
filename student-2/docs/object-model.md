@@ -4,10 +4,13 @@
 
 ## Shared Entities
 
+These are entities other services also care about. They live in this service's
+`models.py` because it is currently their only consumer.
+
 ### User
 The person doing the booking/rating. Kept minimal — full profile/auth is
-likely owned by a shared identity service; this is just enough to satisfy FKs
-here.
+likely owned by a shared identity service. Nothing points at it with a foreign
+key: ratings and bookings carry the identity service's ids directly.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -100,7 +103,7 @@ A user's rating/review of an Accommodation.
 |---|---|---|
 | id | UUID/int | PK |
 | accommodation_id | FK → Accommodation | |
-| user_id | FK → User | |
+| user_id | UUID | External — owned by the identity service, so no FK |
 | score | int | 1–5, enforced by a DB check constraint |
 | comment | str | optional |
 | created_at | datetime | |
@@ -108,20 +111,26 @@ A user's rating/review of an Accommodation.
 ## Persistence
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
-- `../../shared/backend/models.py` — `Base`, `User`
-- `../database/models.py` — `Accommodation`, `LocationDetails`, `Country`,
-  `City`, `RoomDetails`, `AccommodationBooking`, `AccommodationUserRating`,
-  plus the accommodation-local enums
-- `../database/database.py` — engine/session, `DATABASE_URL` env var
-  (SQLite by default)
-- `../database/repository.py` — `AccommodationRepository`,
+- `../database/database_service/models.py` — `Base`, `User`, `Accommodation`,
+  `LocationDetails`, `Country`, `City`, `RoomDetails`, `AccommodationBooking`,
+  `AccommodationUserRating`, plus the accommodation-local enums
+- `../database/database_service/database.py` — engine/session, `DATABASE_URL`
+  env var (SQLite by default)
+- `../database/database_service/repository.py` — `AccommodationRepository`,
   `CountryRepository`, `CityRepository`, `AccommodationBookingRepository`,
   `AccommodationUserRatingRepository`
+
+`Base` and `User` used to live in `shared/`, but this service was their only
+consumer, so they moved here and the shared copy was deleted. `User` is now
+referenced by nothing: `AccommodationUserRating.user_id`,
+`AccommodationBooking.owner_id` and `AccommodationBooking.trip_id` are all ids
+owned by other services, so none of them carries a foreign key — this database
+has no row to point at.
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
 custom `TypeDecorator` (`BedTypesJSON`) — SQLAlchemy has no built-in "list of
 enum" column type, so this is genuinely necessary rather than speculative.
-No Alembic/migrations yet — `database.create_all()` is enough while the
+No Alembic/migrations yet — `create_engine_and_session()` calls `create_all()`, which is enough while the
 schema is still moving; add Alembic once schema churn becomes a real problem.
 
 ## ERD
@@ -195,7 +204,7 @@ erDiagram
     ACCOMMODATION_RATING {
         UUID id PK
         UUID accommodation_id FK
-        UUID user_id FK
+        UUID user_id
         int score
         string comment
         datetime created_at

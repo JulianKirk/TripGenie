@@ -30,6 +30,11 @@ This service is integrated with Artificial Intelligence in order to provide acco
 This service is essentially a wrapper for all database queries so that other services such as the backend service can manage data within the accommodation database with ease through HTTP requests on the wire.
 This service is an internal service that is only exposed to the backend service for querying.
 
+Built with FastAPI over the SQLAlchemy models in `database/database_service/`.
+It runs as the `student-2-database` container on port `9001`, `expose`d on the
+compose network but not published to the host. Start it with
+`docker compose up student-2-database`.
+
 **API Documentation**: [database-service-api.md](./docs/database-service-api.md)
 
 ## Frontend Service

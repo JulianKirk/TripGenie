@@ -2,6 +2,8 @@
 
 ### Table of Contents
 
+- [Service Endpoints](#service-endpoints)
+  - [GET /health](#get-health)
 - [Accommodation Endpoints](#accommodation-endpoints)
   - [GET /accommodation/{id}](#get-accommodationid)
   - [QUERY /accommodation](#query-accommodation)
@@ -30,6 +32,66 @@ the service is run directly rather than inside the compose network.
 ponytail: no service-to-service auth while the database service is unpublished
 on the compose network and the backend is the sole caller. Add a shared bearer
 token when the service gains a published port or a second caller.
+
+### Running it
+
+```bash
+docker compose up student-2-database
+```
+
+Compose `expose`s port 9001 without publishing it, so the service is reachable
+by name from other containers but not from the host. To reach it from the host
+(to run the `curl` examples below), run the image directly:
+
+```bash
+docker build -f student-2/database/Dockerfile -t student-2-database student-2
+docker run --rm -p 9001:9001 student-2-database
+```
+
+The SQLite database lives at `$DATABASE_URL` (default `/data/accommodation.db`
+in the image, on the `student-2-db` volume). Tables are created on startup;
+there is no seed data.
+
+### Errors
+
+Validation failures return `400` with FastAPI's
+`{"detail": [...]}` body naming the offending fields. Missing rows return `404`.
+
+## Service Endpoints
+
+## GET /health
+
+Liveness check. Opens a database connection and closes it — this is what CI
+polls after starting the container.
+
+### Request
+
+**Method:** `GET`
+**Endpoint:** `/health`
+
+### Example Request
+
+```bash
+curl -X GET "http://localhost:9001/health"
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "status": "ok",
+  "service": "student-2-database"
+}
+```
+
+Returns `200` on an empty database — it reports that the service can reach its
+database, not that there is anything in it.
+
+### Error Responses
+
+| Status | Description                          |
+|--------|--------------------------------------|
+| 500    | Database could not be opened         |
 
 ## Accommodation Endpoints
 
@@ -108,7 +170,7 @@ of the query string.
 | city           | string  | No       | —       | Match accommodations in this city; requires `country`         |
 | country        | string  | No       | —       | Match accommodations in this country                          |
 | min_room_count | integer | No       | —       | Only accommodations whose room details meet this room count   |
-| limit          | integer | No       | 20      | Max number of results                                         |
+| limit          | integer | No       | 20      | Max number of results, 1-100                                  |
 | offset         | integer | No       | 0       | Number of results to skip                                     |
 
 Omitting every filter returns all accommodations, paginated.
@@ -275,12 +337,31 @@ curl -X PUT "http://localhost:9001/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9
 
 ### Example Response `200 OK`
 
+The full accommodation, in the same shape as `GET /accommodation/{id}` — not
+just the fields that changed.
+
 ```json
 {
   "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
   "name": "example accommodation",
+  "type": "hotel",
+  "description": "an exemplary hotel for all your travel adventures",
   "price_per_night": 250.00,
-  "availability_status": "sold_out"
+  "availability_status": "sold_out",
+  "rating": 4.5,
+  "amenities": ["wifi", "pool"],
+  "location_details": {
+    "country": "australia",
+    "city": "sydney",
+    "street": "example street avenue",
+    "street_number": 123
+  },
+  "room_details": {
+    "room_count": 3,
+    "bed_count": 2,
+    "bed_types": ["king", "queen"],
+    "description": "three bedroom hotel space with big beds"
+  }
 }
 ```
 
@@ -352,7 +433,7 @@ Retrieve a list of bookings.
 
 | Name   | Type    | Required | Default | Description               |
 |--------|---------|----------|---------|---------------------------|
-| limit  | integer | No       | 20      | Max number of results     |
+| limit  | integer | No       | 20      | Max number of results, 1-100 |
 | offset | integer | No       | 0       | Number of results to skip |
 
 ### Example Request
@@ -527,7 +608,7 @@ Retrieve a list of ratings.
 
 | Name   | Type    | Required | Default | Description               |
 |--------|---------|----------|---------|---------------------------|
-| limit  | integer | No       | 20      | Max number of results     |
+| limit  | integer | No       | 20      | Max number of results, 1-100 |
 | offset | integer | No       | 0       | Number of results to skip |
 
 ### Example Request
@@ -574,7 +655,7 @@ Create a new rating.
 | Field            | Type    | Required | Description                    |
 |------------------|---------|----------|--------------------------------|
 | accommodation_id | uuid    | Yes      | The accommodation being rated  |
-| user_id          | uuid    | Yes      | The user submitting the rating |
+| user_id          | uuid    | Yes      | The user submitting the rating; not validated — the identity service owns users |
 | score            | integer | Yes      | Rating score, between 1 and 5  |
 | comment          | string  | No       | Free-text comment              |
 

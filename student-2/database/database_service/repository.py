@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from database.models import (
+from database_service.models import (
     Accommodation,
     AccommodationBooking,
     AccommodationUserRating,
@@ -23,7 +23,21 @@ from database.models import (
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from sqlalchemy import Select
     from sqlalchemy.orm import Session
+
+
+def _paginate(
+    session: Session, stmt: Select, limit: int, offset: int
+) -> tuple[list, int]:
+    """Run `stmt` windowed, plus a COUNT over the same filters.
+
+    The count has to be a second query -- a window function would need one row
+    back to read the total from, and an empty page has none.
+    """
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(session.scalars(stmt.limit(limit).offset(offset)))
+    return rows, total
 
 
 def _commit(session: Session) -> None:
@@ -47,33 +61,43 @@ class AccommodationRepository:
     def get(self, id: UUID) -> Accommodation | None:
         return self.session.get(Accommodation, id)
 
-    def list(self) -> list[Accommodation]:
-        return list(self.session.scalars(select(Accommodation)))
-
     def delete(self, id: UUID) -> None:
         accommodation = self.get(id)
         if accommodation is not None:
             self.session.delete(accommodation)
             _commit(self.session)
 
-    def list_by_city(self, city: str, country: str) -> list[Accommodation]:
-        """Everything bookable in one city -- what the itinerary service asks for."""
-        stmt = (
-            select(Accommodation)
-            .join(LocationDetails)
-            .join(Country, LocationDetails.country_id == Country.id)
-            .join(City, LocationDetails.city_id == City.id)
-            .where(Country.name == country, City.name == city)
-        )
-        return list(self.session.scalars(stmt))
+    def search(
+        self,
+        *,
+        country: str | None = None,
+        city: str | None = None,
+        min_room_count: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Accommodation], int]:
+        """Backs QUERY /accommodation. Every filter is optional and they stack,
+        so "3+ rooms in Sydney, Australia" is one query rather than an
+        intersection done in Python.
 
-    def list_by_min_room_count(self, min_room_count: int) -> list[Accommodation]:
-        stmt = (
-            select(Accommodation)
-            .join(RoomDetails)
-            .where(RoomDetails.room_count >= min_room_count)
-        )
-        return list(self.session.scalars(stmt))
+        `city` without `country` is rejected at the API edge, not here -- Sydney
+        exists in more than one country.
+        """
+        stmt = select(Accommodation)
+        if country is not None:
+            stmt = stmt.join(LocationDetails).join(
+                Country, LocationDetails.country_id == Country.id
+            )
+            stmt = stmt.where(Country.name == country)
+            if city is not None:
+                stmt = stmt.join(City, LocationDetails.city_id == City.id).where(
+                    City.name == city
+                )
+        if min_room_count is not None:
+            stmt = stmt.join(RoomDetails).where(
+                RoomDetails.room_count >= min_room_count
+            )
+        return _paginate(self.session, stmt, limit, offset)
 
 
 class CountryRepository:
@@ -139,8 +163,10 @@ class AccommodationBookingRepository:
     def get(self, id: UUID) -> AccommodationBooking | None:
         return self.session.get(AccommodationBooking, id)
 
-    def list(self) -> list[AccommodationBooking]:
-        return list(self.session.scalars(select(AccommodationBooking)))
+    def list(
+        self, limit: int = 20, offset: int = 0
+    ) -> tuple[list[AccommodationBooking], int]:
+        return _paginate(self.session, select(AccommodationBooking), limit, offset)
 
     def delete(self, id: UUID) -> None:
         booking = self.get(id)
@@ -161,8 +187,10 @@ class AccommodationUserRatingRepository:
     def get(self, id: UUID) -> AccommodationUserRating | None:
         return self.session.get(AccommodationUserRating, id)
 
-    def list(self) -> list[AccommodationUserRating]:
-        return list(self.session.scalars(select(AccommodationUserRating)))
+    def list(
+        self, limit: int = 20, offset: int = 0
+    ) -> tuple[list[AccommodationUserRating], int]:
+        return _paginate(self.session, select(AccommodationUserRating), limit, offset)
 
     def delete(self, id: UUID) -> None:
         rating = self.session.get(AccommodationUserRating, id)

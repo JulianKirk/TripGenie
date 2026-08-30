@@ -1,6 +1,6 @@
 """Accommodation microservice ORM models.
 
-See ../../docs/architecture/object-model.md for the design (entities + ERD).
+See ../../docs/object-model.md for the design (entities + ERD).
 """
 
 from __future__ import annotations
@@ -8,17 +8,34 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, UniqueConstraint, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.mutable import MutableList
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
-from shared.backend.models import Base
+
+class Base(DeclarativeBase):
+    """Declarative base every ORM model in this service inherits from."""
+
+
+class User(Base):
+    """The person doing the booking/rating.
+
+    ponytail: no longer referenced by a FK -- see AccommodationUserRating.user_id.
+    Kept because the object model documents it and the identity service that
+    will own it does not exist yet. Delete this table if that service lands and
+    this one never grows a reason to store users.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str]
+    email: Mapped[str]
 
 
 @event.listens_for(Engine, "connect")
@@ -122,7 +139,7 @@ class LocationDetails(Base):
     )
     city_id: Mapped[UUID] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"))
     street: Mapped[str] = mapped_column(default="")
-    street_number: Mapped[Optional[int]] = mapped_column(default=None)
+    street_number: Mapped[int | None] = mapped_column(default=None)
 
     accommodation: Mapped[Accommodation] = relationship(
         back_populates="location_details"
@@ -210,7 +227,11 @@ class AccommodationUserRating(Base):
     accommodation_id: Mapped[UUID] = mapped_column(
         ForeignKey("accommodations.id", ondelete="RESTRICT")
     )
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    # No FK, for the same reason as AccommodationBooking.owner_id/trip_id: the
+    # id comes from an identity service that owns the users, and this database
+    # has no row to point at. The API doc agrees -- POST /accommodation/rating
+    # documents a 404 for a missing accommodation, but none for a missing user.
+    user_id: Mapped[UUID]
     score: Mapped[int]  # 1-5
     comment: Mapped[str] = mapped_column(default="")
     # ponytail: naive UTC -- SQLite's DATETIME drops the offset on the way

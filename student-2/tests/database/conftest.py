@@ -1,7 +1,7 @@
-"""Shared fixtures for the accommodation microservice tests.
+"""Shared fixtures for the accommodation database service tests.
 
-Import paths (repo root for `shared`, student-2 for `database`) come from
-`pythonpath` in the repo-root pytest.ini -- no PYTHONPATH needed.
+`database_service` is importable because student-2 is pip-installed (see
+student-2/pyproject.toml) -- no PYTHONPATH needed.
 """
 
 from __future__ import annotations
@@ -13,22 +13,23 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from database.models import (
+from database_service.models import (
     Accommodation,
     AccommodationType,
     AvailabilityStatus,
+    Base,
     BedType,
     City,
     Country,
     LocationDetails,
     RoomDetails,
+    User,
 )
-from database.repository import (
+from database_service.repository import (
     AccommodationBookingRepository,
     AccommodationRepository,
     AccommodationUserRatingRepository,
 )
-from shared.database.models import Base, User
 
 
 @pytest.fixture
