@@ -5,10 +5,12 @@ on:
     paths:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
+      - 'shared/configuration/**'
   pull_request:
     paths:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
+      - 'shared/configuration/**'
   workflow_dispatch:
 
 jobs:
