@@ -30,7 +30,8 @@ ignore = ["TID252"]
 # `id` shadowing the builtin is the natural name for a primary-key argument,
 # and for the {id} path parameter the API doc names.
 "**/repository.py" = ["A002"]
-"**/app.py" = ["A002"]
+"**/dependencies.py" = ["A002"]
+"**/routers/*.py" = ["A002"]
 # pytest passes every requested fixture in, used by the body or not.
 "**/tests/*" = ["ARG001", "ARG002"]
 

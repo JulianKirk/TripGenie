@@ -62,6 +62,19 @@ class TestHealth:
         assert response.json() == {"status": "ok", "service": "student-2-database"}
 
 
+class TestRouting:
+    """The `:uuid` convertor on /accommodation/{id} is what lets the router
+    modules be mounted in any order. Without it, "booking" and "rating" parse
+    as accommodation ids and those routes become unreachable."""
+
+    def test_sub_resource_paths_are_not_read_as_accommodation_ids(self, client):
+        assert client.get("/accommodation/booking").status_code == 200
+        assert client.get("/accommodation/rating").status_code == 200
+
+    def test_a_non_uuid_id_is_404_not_a_validation_error(self, client):
+        assert client.get("/accommodation/garbage").status_code == 404
+
+
 class TestAccommodation:
     def test_create_returns_201_with_id_and_name(self, client):
         response = client.post("/accommodation", json=HOTEL)
