@@ -57,7 +57,7 @@ jobs:
           python -m pip install -e .[dev]
       - name: Validate installed Student 3 packages
         working-directory: student-3
-        run: python -c "import backend_service, database_service"
+        run: python -c "import student3_backend_service, student3_database_service"
       - name: Run Student 3 backend syntax checks
         working-directory: student-3
         run: python -m compileall backend/student3_backend_service tests/backend
