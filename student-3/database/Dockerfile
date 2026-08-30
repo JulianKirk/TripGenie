@@ -13,7 +13,7 @@ RUN addgroup --system tripgenie \
     && mkdir -p /data/student-3
 
 COPY database/pyproject.toml ./pyproject.toml
-COPY database/database_service ./database_service
+COPY database/student3_database_service ./student3_database_service
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install .
@@ -24,4 +24,4 @@ EXPOSE 8004
 
 USER tripgenie
 
-CMD ["uvicorn", "database_service.app:app", "--host", "0.0.0.0", "--port", "8004"]
+CMD ["uvicorn", "student3_database_service.app:app", "--host", "0.0.0.0", "--port", "8004"]
