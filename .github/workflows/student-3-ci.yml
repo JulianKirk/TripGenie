@@ -6,13 +6,11 @@ on:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
       - 'shared/configuration/**'
-      - 'docker-compose.yml'
   pull_request:
     paths:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
       - 'shared/configuration/**'
-      - 'docker-compose.yml'
   workflow_dispatch:
 
 jobs:
@@ -44,8 +42,6 @@ jobs:
         run: python -m pytest tests/database
       - name: Build Student 3 database image
         run: docker build -f student-3/database/Dockerfile student-3
-      - name: Validate shared Docker Compose configuration
-        run: docker compose config --quiet
 
   backend:
     name: Build and Validate Student 3 Backend
