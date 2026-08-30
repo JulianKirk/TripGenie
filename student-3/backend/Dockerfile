@@ -14,7 +14,7 @@ RUN addgroup --system tripgenie \
     && adduser --system --ingroup tripgenie --home /nonexistent tripgenie
 
 COPY backend/pyproject.toml ./pyproject.toml
-COPY backend/backend_service ./backend_service
+COPY backend/student3_backend_service ./student3_backend_service
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install .
@@ -25,4 +25,4 @@ EXPOSE 8003
 
 USER tripgenie
 
-CMD ["uvicorn", "backend_service.app:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["uvicorn", "student3_backend_service.app:app", "--host", "0.0.0.0", "--port", "8003"]

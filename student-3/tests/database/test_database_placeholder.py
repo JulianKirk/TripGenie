@@ -1,4 +1,4 @@
-from database_service import __doc__
+from student3_database_service import __doc__
 
 
 def test_database_package_imports() -> None:

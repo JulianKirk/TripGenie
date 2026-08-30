@@ -22,7 +22,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["backend", "database"]
-include = ["backend_service*", "database_service*"]
+include = ["student3_backend_service*", "student3_database_service*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

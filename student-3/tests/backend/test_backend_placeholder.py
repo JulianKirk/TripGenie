@@ -1,4 +1,4 @@
-from backend_service import __doc__
+from student3_backend_service import __doc__
 
 
 def test_backend_package_imports() -> None:

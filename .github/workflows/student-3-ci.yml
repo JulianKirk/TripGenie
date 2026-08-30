@@ -28,13 +28,13 @@ jobs:
           python -m pip install -e .[dev]
       - name: Validate installed Student 3 packages
         working-directory: student-3
-        run: python -c "import backend_service, database_service"
+        run: python -c "import student3_backend_service, student3_database_service"
       - name: Run Student 3 database syntax checks
         working-directory: student-3
-        run: python -m compileall database/database_service tests/database
+        run: python -m compileall database/student3_database_service tests/database
       - name: Run Student 3 database Ruff checks
         working-directory: student-3
-        run: python -m ruff check database/database_service tests/database
+        run: python -m ruff check database/student3_database_service tests/database
       - name: Run Student 3 database pytest suite
         working-directory: student-3
         run: python -m pytest tests/database
@@ -57,13 +57,13 @@ jobs:
           python -m pip install -e .[dev]
       - name: Validate installed Student 3 packages
         working-directory: student-3
-        run: python -c "import backend_service, database_service"
+        run: python -c "import student3_backend_service, student3_database_service"
       - name: Run Student 3 backend syntax checks
         working-directory: student-3
-        run: python -m compileall backend/backend_service tests/backend
+        run: python -m compileall backend/student3_backend_service tests/backend
       - name: Run Student 3 backend Ruff checks
         working-directory: student-3
-        run: python -m ruff check backend/backend_service tests/backend
+        run: python -m ruff check backend/student3_backend_service tests/backend
       - name: Run Student 3 backend pytest suite
         working-directory: student-3
         run: python -m pytest tests/backend
