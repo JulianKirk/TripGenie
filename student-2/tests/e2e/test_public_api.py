@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import httpx
 import pytest
 
+from backend_service import enums as backend_enums
+from backend_service import schemas as backend_schemas
+from database_service import enums as database_enums
+from database_service import schemas as database_schemas
 from tests.database.test_internal_api import CABIN, HOTEL
-
-NO_ROUTE = "no route to the database service"
-TOO_SLOW = "slower than DB_TIMEOUT"
 
 
 @pytest.fixture
@@ -42,23 +42,6 @@ class TestHealth:
             "status": "ok",
             "service": "student-2-backend",
             "database": "ok",
-        }
-
-    def test_degraded_but_still_200_when_the_database_is_unreachable(self, mock_client):
-        """The question this endpoint answers is whether *this* service is
-        running, and it is -- so an unreachable database is a 200 that says
-        so, not a 503."""
-
-        def unreachable(request):
-            raise httpx.ConnectError(NO_ROUTE, request=request)
-
-        with mock_client(unreachable) as client:
-            response = client.get("/health")
-        assert response.status_code == 200
-        assert response.json() == {
-            "status": "degraded",
-            "service": "student-2-backend",
-            "database": "unreachable",
         }
 
 
@@ -159,34 +142,119 @@ class TestQueryAccommodation:
         assert query(client, limit=20).json()["total"] == 2
 
 
-class TestDatabaseFailures:
-    """The statuses that originate here: the request was fine, the data was
-    not reachable."""
+class TestContract:
+    """The two services declare the accommodation message separately, so the
+    tests above only catch drift in a field they happen to exercise. These
+    compare the declarations directly: every field, every enum value.
 
-    def test_a_timeout_is_503(self, mock_client):
-        def slow(request):
-            raise httpx.ReadTimeout(TOO_SLOW, request=request)
+    `AccommodationCreateRequest` and `HealthResponse` are deliberately absent
+    -- this service has no write path, and its health also reports the
+    database.
+    """
 
-        with mock_client(slow) as client:
-            response = client.get("/accommodation")
-        assert response.status_code == 503
-        assert response.json()["detail"] == "database service unavailable"
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Accommodation",
+            "Location",
+            "Room",
+            "AccommodationQueryRequest",
+            "AccommodationQueryResponse",
+        ],
+    )
+    def test_the_same_fields(self, name):
+        assert set(getattr(backend_schemas, name).model_fields) == set(
+            getattr(database_schemas, name).model_fields
+        )
 
-    def test_a_database_500_is_502(self, mock_client):
-        with mock_client(lambda _: httpx.Response(500, json={"detail": "boom"})) as c:
-            response = c.get("/accommodation")
-        assert response.status_code == 502
-        assert response.json()["detail"] == "bad response from database service"
+    @pytest.mark.parametrize(
+        "name", ["AccommodationType", "AvailabilityStatus", "BedType"]
+    )
+    def test_the_same_enum_values(self, name):
+        assert {m.name: m.value for m in getattr(backend_enums, name)} == {
+            m.name: m.value for m in getattr(database_enums, name)
+        }
 
-    def test_a_non_json_body_is_502(self, mock_client):
-        with mock_client(lambda _: httpx.Response(200, text="<html>nope")) as client:
-            response = client.get("/accommodation")
-        assert response.status_code == 502
 
-    def test_an_unexpected_shape_is_502(self, mock_client):
-        """This service declares the accommodation message itself, so a
-        database service that drifts fails loudly here rather than passing
-        something unusable through."""
-        with mock_client(lambda _: httpx.Response(200, json={"rows": []})) as client:
-            response = client.get("/accommodation")
-        assert response.status_code == 502
+class TestValuesSurviveBothHops:
+    """A row written to the database service, read back through this one."""
+
+    @pytest.mark.parametrize(
+        "type_", [t.value for t in backend_enums.AccommodationType]
+    )
+    def test_every_type_is_returned_and_filterable(self, client, database, type_):
+        row_id = database.post(
+            "/internal/accommodation", json={**HOTEL, "type": type_}
+        ).json()["id"]
+        assert client.get(f"/accommodation/{row_id}").json()["type"] == type_
+        body = query(client, accommodation={"type": type_}).json()
+        assert [a["id"] for a in body["accommodations"]] == [row_id]
+
+    @pytest.mark.parametrize(
+        "availability", [s.value for s in backend_enums.AvailabilityStatus]
+    )
+    def test_every_status_and_bed_type(self, client, database, availability):
+        beds = [b.value for b in backend_enums.BedType]
+        row_id = database.post(
+            "/internal/accommodation",
+            json={
+                **HOTEL,
+                "availability_status": availability,
+                "room_details": {**HOTEL["room_details"], "bed_types": beds},
+            },
+        ).json()["id"]
+        body = client.get(f"/accommodation/{row_id}").json()
+        assert body["availability_status"] == availability
+        assert body["room_details"]["bed_types"] == beds
+
+    def test_money_keeps_its_cents(self, client, database):
+        """`Decimal` in the database service, `float` here. A price that is not
+        a round number is where that difference would show."""
+        row_id = database.post(
+            "/internal/accommodation", json={**HOTEL, "price_per_night": 189.55}
+        ).json()["id"]
+        assert (
+            client.get(f"/accommodation/{row_id}").json()["price_per_night"] == 189.55
+        )
+        assert query(client, price_max=189.55).json()["total"] == 1
+        assert query(client, price_max=189.54).json()["total"] == 0
+
+    def test_an_update_written_to_the_database_is_visible_here(
+        self, client, database, hotel_id
+    ):
+        """This service has no write path and no cache, so an edit made
+        directly on the database service is the next read."""
+        database.put(f"/internal/accommodation/{hotel_id}", json={"name": "renamed"})
+        assert client.get(f"/accommodation/{hotel_id}").json()["name"] == "renamed"
+
+
+class TestFiltersReachTheDatabase:
+    """Each bound this service publishes, forwarded and actually applied. The
+    stacking case above only proves two of them arrive."""
+
+    @pytest.fixture
+    def rated(self, database):
+        for name, rating, beds in (("good", 4.5, 6), ("poor", 2.0, 1)):
+            database.post(
+                "/internal/accommodation",
+                json={
+                    **HOTEL,
+                    "name": name,
+                    "rating": rating,
+                    "room_details": {**HOTEL["room_details"], "bed_count": beds},
+                },
+            )
+
+    @pytest.mark.parametrize(
+        ("filters", "expected"),
+        [
+            ({"rating_min": 3}, ["good"]),
+            ({"rating_max": 3}, ["poor"]),
+            ({"price_min": 2}, []),
+            ({"bed_count_min": 6}, ["good"]),
+        ],
+    )
+    def test_a_bound_narrows_the_result(self, client, rated, filters, expected):
+        body = query(client, **filters).json()
+        assert [a["name"] for a in body["accommodations"]] == expected
+        assert body["total"] == len(expected)

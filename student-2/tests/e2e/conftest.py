@@ -1,4 +1,4 @@
-"""Fixtures for the accommodation backend service tests.
+"""Fixtures for the accommodation end-to-end tests.
 
 The default `client` wires the backend to the *real* database service over
 ASGI -- a genuine HTTP round trip with no socket. That is what makes these
@@ -6,8 +6,8 @@ end-to-end: the two services declare the accommodation message separately (see
 backend_service/schemas.py), so any drift between the two fails here rather
 than in production.
 
-`mock_client` is for the failures a working database service will not produce
-on demand -- a timeout, a 500, a body that is not JSON.
+The failures a working database service will not produce on demand -- a
+timeout, a 500, a body that is not JSON -- are unit tested in tests/backend.
 """
 
 from __future__ import annotations
@@ -45,17 +45,3 @@ def client(database):
     )
     with TestClient(app) as client:
         yield client
-
-
-@pytest.fixture
-def mock_client():
-    """Build a backend whose database service is the given handler."""
-
-    def factory(handler):
-        app = create_app(
-            Settings(database_url=DATABASE_URL),
-            transport=httpx.MockTransport(handler),
-        )
-        return TestClient(app)
-
-    return factory

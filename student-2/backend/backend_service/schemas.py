@@ -10,7 +10,7 @@ being independently deployable.
 The cost is a second representation. When the database service adds a field,
 `extra="forbid"` makes parsing its response fail and the route returns the
 documented 502 -- a loud failure, not a silent one, and the end-to-end tests in
-tests/backend run the real database app, so drift breaks CI immediately. Add
+tests/e2e run the real database app, so drift breaks CI immediately. Add
 the field here to fix it.
 
 One message, nullable fields -- the protobuf convention, same as the database

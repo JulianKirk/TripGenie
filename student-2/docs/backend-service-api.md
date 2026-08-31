@@ -45,7 +45,7 @@ ponytail: the cost is a second representation of the same message. It is
 bounded — only the read surface is duplicated, since `POST` and `PUT` are not
 exposed — and drift is loud rather than silent: a database response that no
 longer fits this service's contract is a `502`, and the end-to-end tests in
-`tests/backend/` run the real database service, so it fails CI immediately.
+`tests/e2e/` run the real database service, so it fails CI immediately.
 
 ponytail: no auth. The compose network is the trust boundary for Release 0,
 same as the database service. Add a shared bearer token when this service is
