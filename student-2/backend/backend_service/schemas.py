@@ -107,6 +107,24 @@ class AccommodationQueryResponse(BaseModel):
     total: int
 
 
+class ItinerarySelection(BaseModel):
+    """One of student 1's itineraries, and whether this accommodation is on it.
+
+    `selected` is what the picker draws as ticked or unticked; the frontend
+    needs no second call to work it out.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    itinerary_id: str
+    name: str
+    selected: bool
+
+
+class ItinerarySelectionResponse(BaseModel):
+    itineraries: list[ItinerarySelection]
+
+
 class HealthResponse(BaseModel):
     status: str
     service: str

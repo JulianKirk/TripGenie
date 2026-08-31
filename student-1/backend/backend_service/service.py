@@ -13,6 +13,7 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TripAccommodationRecord,
     TripCreate,
     TripDay,
     TripDaySelection,
@@ -47,13 +48,14 @@ class BackendService:
             message=VALIDATION_ERROR_MESSAGE,
         )
         created_trip = self._client.create_trip(payload)
-        return self._build_trip_detail(created_trip, [])
+        return self._build_trip_detail(created_trip, [], [])
 
     def get_trip(self, trip_id: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
         ensure_trip_detail_supported(trip)
         items = self._client.list_itinerary_items(trip_id)
-        return self._build_trip_detail(trip, items)
+        accommodations = self._client.list_trip_accommodations(trip_id)
+        return self._build_trip_detail(trip, items, accommodations)
 
     def get_trip_day(self, trip_id: str, trip_day: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
@@ -90,11 +92,52 @@ class BackendService:
         updated_trip = self._client.update_trip(trip_id, payload)
         ensure_trip_detail_supported(updated_trip)
         refreshed_items = self._client.list_itinerary_items(trip_id)
-        return self._build_trip_detail(updated_trip, refreshed_items)
+        accommodations = self._client.list_trip_accommodations(trip_id)
+        return self._build_trip_detail(updated_trip, refreshed_items, accommodations)
 
     def delete_trip(self, trip_id: str) -> dict[str, object]:
         deleted = self._client.delete_trip(trip_id)
         return deleted.model_dump(mode="json")
+
+    def list_trip_accommodations(self, trip_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trip_accommodations(trip_id)
+        return [record.model_dump(mode="json") for record in records]
+
+    def add_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> dict[str, object]:
+        """Pins an accommodation to a trip on the trip's first day.
+
+        An itinerary item must fall inside the trip window, and the accommodation
+        service has no opinion about which day, so the start date is the one
+        choice that is always valid. The user moves it from the trip page.
+        """
+        trip = self._client.get_trip(trip_id)
+        record = self._client.add_trip_accommodation(
+            trip_id,
+            accommodation_id,
+            trip.start_date,
+        )
+        return record.model_dump(mode="json")
+
+    def remove_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> dict[str, object]:
+        removed = self._client.remove_trip_accommodation(trip_id, accommodation_id)
+        return removed.model_dump(mode="json")
+
+    def list_trips_for_accommodation(
+        self,
+        accommodation_id: str,
+    ) -> list[dict[str, object]]:
+        """The reverse lookup. One query answers which boxes the accommodation
+        service's picker should show ticked, instead of one call per trip."""
+        trips = self._client.list_trips_for_accommodation(accommodation_id)
+        return [trip.model_dump(mode="json") for trip in trips]
 
     def list_itinerary_items(
         self,
@@ -260,6 +303,7 @@ class BackendService:
     def _build_trip_detail(
         trip: TripRecord,
         items: list[ItineraryItemRecord],
+        accommodations: list[TripAccommodationRecord],
     ) -> dict[str, object]:
         ensure_trip_detail_supported(trip)
         items_by_date: dict[str, list[ItineraryItemRecord]] = {}
@@ -277,6 +321,7 @@ class BackendService:
         return TripDetail(
             **trip.model_dump(mode="json"),
             days=days,
+            accommodations=accommodations,
         ).model_dump(mode="json")
 
     def _probe_database(self) -> DependencyStatus:

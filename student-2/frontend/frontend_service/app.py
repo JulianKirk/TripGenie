@@ -220,6 +220,63 @@ async def detail(request: Request, accommodation_id: UUID):
     return render(request, "partials/modal.html", {"accommodation": accommodation})
 
 
+@router.get(f"{PATH}/{{accommodation_id:uuid}}/itineraries")
+async def itineraries(request: Request, accommodation_id: UUID):
+    """The Add-to-Itinerary list, fetched when the user opens the disclosure."""
+    return await _picker(request, accommodation_id, "GET", "")
+
+
+@router.put(f"{PATH}/{{accommodation_id:uuid}}/itineraries/{{itinerary_id}}")
+@router.delete(f"{PATH}/{{accommodation_id:uuid}}/itineraries/{{itinerary_id}}")
+async def toggle_itinerary(request: Request, accommodation_id: UUID, itinerary_id: str):
+    """One handler for both verbs: the ticked box sends DELETE and the unticked
+    one sends PUT, and the backend answers both with the whole list."""
+    return await _picker(
+        request, accommodation_id, request.method, f"/{itinerary_id}", itinerary_id
+    )
+
+
+async def _picker(
+    request: Request,
+    accommodation_id: UUID,
+    method: str,
+    suffix: str,
+    itinerary_id: str = "",
+):
+    path = f"{PATH}/{accommodation_id}/itineraries{suffix}"
+    try:
+        body = await call(request, method, path)
+    except BackendError as exc:
+        return render(request, "partials/error.html", {"error": str(exc)})
+    return render(
+        request,
+        "partials/itinerary_picker.html",
+        {
+            "itineraries": body["itineraries"],
+            "accommodation_id": accommodation_id,
+            "toast": _added_message(method, itinerary_id, body["itineraries"]),
+        },
+    )
+
+
+def _added_message(
+    method: str, itinerary_id: str, itineraries: list[dict[str, Any]]
+) -> str:
+    """What the toast says, or "" for no toast.
+
+    Only an add announces itself. A removal already had the user confirm it, so
+    telling them it happened is a second interruption for the same decision.
+    The name comes from the repainted list rather than the request, so the toast
+    cannot name something the backend did not actually store.
+    """
+    if method != "PUT":
+        return ""
+    for itinerary in itineraries:
+        if itinerary["itinerary_id"] == itinerary_id and itinerary["selected"]:
+            return f"Added to {itinerary['name']}."
+    return ""
+
+
 def create_app(settings: Settings | None = None, *, transport: Any = None) -> FastAPI:
     settings = settings or Settings.from_env()
 

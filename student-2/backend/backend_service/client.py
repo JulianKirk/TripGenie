@@ -50,35 +50,50 @@ class DatabaseClient:
         return await self.request("QUERY", PATH, json=body)
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        """The decoded response body, or the documented 502/503.
+        return await request(
+            self._client, method, path, unavailable=UNAVAILABLE, **kwargs
+        )
 
-        A 4xx is the database service answering correctly about a bad request,
-        so it is re-raised unchanged -- body and all -- and reaches the caller
-        as the same 400 or 404. Anything else that is not a usable 2xx is this
-        service failing to reach its data, which is a 502 or a 503.
-        """
-        try:
-            response = await self._client.request(method, path, **kwargs)
-        except httpx.RequestError as exc:  # covers TimeoutException
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, UNAVAILABLE
-            ) from exc
 
-        if response.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
+async def request(
+    client: httpx.AsyncClient,
+    method: str,
+    path: str,
+    *,
+    unavailable: str = UNAVAILABLE,
+    **kwargs: Any,
+) -> Any:
+    """The decoded response body, or the documented 502/503.
 
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE) from exc
+    A 4xx is the upstream service answering correctly about a bad request, so
+    it is re-raised unchanged -- body and all -- and reaches the caller as the
+    same 400 or 404. Anything else that is not a usable 2xx is this service
+    failing to reach its data, which is a 502 or a 503.
 
-        if response.is_client_error:
-            # `detail` is what every documented error body carries; falling
-            # back to the whole body keeps an unexpected shape readable.
-            detail = body.get("detail", body) if isinstance(body, dict) else body
-            raise HTTPException(response.status_code, detail)
+    Module-level so every upstream this service calls -- the database service
+    and student 1's itinerary API -- fails the same documented way. There is
+    only ever one copy of this mapping.
+    """
+    try:
+        response = await client.request(method, path, **kwargs)
+    except httpx.RequestError as exc:  # covers TimeoutException
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, unavailable) from exc
 
-        return body
+    if response.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
+
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE) from exc
+
+    if response.is_client_error:
+        # `detail` is what every documented error body carries; falling back to
+        # the whole body keeps an unexpected shape readable.
+        detail = body.get("detail", body) if isinstance(body, dict) else body
+        raise HTTPException(response.status_code, detail)
+
+    return body
 
 
 def parse(model: type[T], body: Any) -> T:

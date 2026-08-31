@@ -22,6 +22,13 @@ ItemIdentifier = Annotated[
         pattern=r"^item_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$",
     ),
 ]
+# An accommodation id is minted by the accommodation service, not here. It is
+# a constrained string rather than a UUID on purpose: this service should not
+# have to change when another service changes how it mints identifiers.
+AccommodationIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -155,6 +162,34 @@ class TripUpdate(StrictModel):
     @classmethod
     def normalise_notes(cls, value: str | None) -> str | None:
         return _normalise_optional_text(value)
+
+
+
+class TripAccommodationRecord(StrictModel):
+    """One accommodation pinned to one trip -- the associative entity. A trip
+    holds many accommodations and an accommodation sits on many trips."""
+
+    trip_id: TripIdentifier
+    accommodation_id: AccommodationIdentifier
+    date: IsoDate
+
+    @field_validator("date")
+    @classmethod
+    def validate_trip_accommodation_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+
+
+class TripAccommodationCreate(StrictModel):
+    """The body of a PUT that pins an accommodation to a trip. Only the date is
+    supplied -- both ids are in the path."""
+
+    date: IsoDate
+
+    @field_validator("date")
+    @classmethod
+    def validate_trip_accommodation_create_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
 
 
 class TripRecord(TripFields):
