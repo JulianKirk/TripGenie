@@ -178,5 +178,21 @@
     {% endif %}
   </section>
 
-  {% include "partials/ai_mode_panel.html" %}
+  <section class="mode-panel mode-panel--ai" aria-labelledby="ai-detail-heading">
+    <p class="section-eyebrow">AI mode</p>
+    <h3 id="ai-detail-heading">Contract-ready AI planning placeholder</h3>
+    <p>
+      The browser flow is intentionally explicit: CRUD is live today, while AI itinerary suggestions remain disabled until issue #12 wires the real backend behaviour.
+    </p>
+    <form class="stack-form" aria-describedby="ai-detail-note">
+      <fieldset disabled>
+        <label for="ai-detail-request">Suggestion brief</label>
+        <textarea id="ai-detail-request" name="ai_request" rows="4" placeholder="For example: suggest a quieter afternoon after a busy morning."></textarea>
+        <button class="button button--secondary" type="button">Generate suggestions in issue #12</button>
+      </fieldset>
+      <p id="ai-detail-note" class="muted-copy">
+        Disabled by design so the UI does not overstate AI behaviour before the dedicated implementation lands.
+      </p>
+    </form>
+  </section>
 </article>

@@ -1,0 +1,37 @@
+# Lint config for the TripGenie repo. Rule selection follows the sample in
+# SharedSamples/pyproject.toml, minus that service's project-specific bits.
+target-version = "py310"
+line-length = 88
+# Import roots, same as pytest.ini's pythonpath -- lets isort tell our own
+# `database`/`shared` packages apart from third-party ones.
+src = [".", "student-1", "student-2", "student-3", "student-4", "student-5"]
+
+[lint]
+select = [
+    "E", "F", "W", "I", "UP", "B", "SIM",
+    "N", "C4", "PIE", "RET", "RSE", "RUF",
+    "PERF", "FURB", "A", "ISC", "T10", "FLY",
+    "C90", "BLE", "EM", "PGH", "TC", "TID",
+    "ARG", "PTH", "LOG", "ASYNC", "FA",
+]
+ignore = ["TID252"]
+
+[lint.per-file-ignores]
+# process_bind_param/process_result_value take `dialect` from SQLAlchemy's
+# TypeDecorator interface whether or not the implementation needs it.
+"**/models.py" = ["ARG002"]
+# `id` shadowing the builtin is the natural name for a primary-key argument.
+"**/repository.py" = ["A002"]
+# pytest passes every requested fixture in, used by the body or not.
+"**/tests/*" = ["ARG001", "ARG002"]
+
+[lint.flake8-type-checking]
+# SQLAlchemy resolves Mapped[...] annotations at runtime to build the mappers,
+# so the TC rules must not push those imports into a TYPE_CHECKING-only block.
+runtime-evaluated-base-classes = [
+    "sqlalchemy.orm.DeclarativeBase",
+    "shared.backend.models.Base",
+]
+
+[format]
+quote-style = "double"

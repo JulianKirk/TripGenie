@@ -10,12 +10,19 @@
 
   <section class="mode-panel mode-panel--ai" aria-labelledby="ai-mode-heading">
     <p class="section-eyebrow">AI mode</p>
-    <h3 id="ai-mode-heading">AI draft suggestions unlock after you create a trip</h3>
+    <h3 id="ai-mode-heading">Suggestion affordance is intentionally disabled</h3>
     <p>
-      Create a trip first, then request day-specific draft suggestions from the trip detail screen. AI output stays advisory until you review and save it through the normal CRUD flow.
+      Issue #11 prepares the browser UI for future itinerary suggestions without pretending that live AI behaviour already exists. Issue #12 will wire this section to the backend AI contract.
     </p>
-    <p id="ai-mode-note" class="muted-copy">
-      TripGenie returns drafts only: nothing is persisted until you confirm it in the itinerary form.
-    </p>
+    <form class="stack-form" aria-describedby="ai-mode-note">
+      <fieldset disabled>
+        <label for="ai-brief">Suggestion brief</label>
+        <textarea id="ai-brief" name="ai_brief" rows="4" placeholder="Describe the kind of trip day you want."></textarea>
+        <button class="button button--secondary" type="button">Generate suggestions in issue #12</button>
+      </fieldset>
+      <p id="ai-mode-note" class="muted-copy">
+        Disabled by TripGenie design until live AI integration lands in the dedicated follow-up issue.
+      </p>
+    </form>
   </section>
 </section>
