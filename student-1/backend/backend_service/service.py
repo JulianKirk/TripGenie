@@ -183,29 +183,29 @@ class BackendService:
 
     async def health(self) -> HealthResponse:
         database = self._probe_database()
-        ollama = await self._ollama_status()
+        ai_mode = await self._ai_mode_status()
         overall_status = (
             "ok"
             if database.status == "ok"
-            and ollama.status in {"ok", "not_configured"}
+            and ai_mode.status in {"ok", "not_configured"}
             else "degraded"
         )
         return HealthResponse(
             status=overall_status,
             service=self._settings.service_name,
-            dependencies=HealthDependencies(database=database, ollama=ollama),
+            dependencies=HealthDependencies(database=database, ai_mode=ai_mode),
         )
 
     def ready(self) -> tuple[int, HealthResponse]:
         database = self._probe_database()
-        ollama = self._ai_suggestions.readiness_dependency_status()
+        ai_mode = self._ai_suggestions.readiness_dependency_status()
         is_ready = database.status == "ok"
         return (
             200 if is_ready else 503,
             HealthResponse(
                 status="ok" if is_ready else "unavailable",
                 service=self._settings.service_name,
-                dependencies=HealthDependencies(database=database, ollama=ollama),
+                dependencies=HealthDependencies(database=database, ai_mode=ai_mode),
             ),
         )
 
@@ -331,7 +331,7 @@ class BackendService:
             detail=f"Database API reported status '{payload.status}'.",
         )
 
-    async def _ollama_status(self) -> DependencyStatus:
+    async def _ai_mode_status(self) -> DependencyStatus:
         return await self._ai_suggestions.dependency_status()
 
     @staticmethod

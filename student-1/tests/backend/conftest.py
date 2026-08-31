@@ -381,28 +381,31 @@ class FakeDatabaseApi:
         return json.loads(request.content.decode("utf-8"))
 
 
-class FakeOllamaApi:
+class FakeAiModeApi:
     def __init__(self) -> None:
         self.requests: list[dict[str, object]] = []
-        self.tag_requests = 0
-        self._queued_responses: list[httpx.Response | Exception] = []
-        self.models = [
-            {
-                "name": "qwen2.5:0.5b",
-                "model": "qwen2.5:0.5b",
-                "modified_at": "2026-08-29T09:00:00Z",
-                "size": 934348800,
-                "digest": "sha256:demo",
-                "details": {
-                    "parent_model": "",
-                    "format": "gguf",
-                    "family": "qwen2",
-                    "families": ["qwen2"],
-                    "parameter_size": "0.5B",
-                    "quantization_level": "Q4_K_M",
-                },
+        self.health_requests = 0
+        self.ready_requests = 0
+        self._queued_generate_responses: list[httpx.Response | Exception] = []
+        self._queued_health_responses: list[httpx.Response | Exception] = []
+        self._queued_ready_responses: list[httpx.Response | Exception] = []
+        self.health_payload = {
+            "status": "ok",
+            "service": "ai-mode",
+            "dependencies": {
+                "ollama": {
+                    "status": "ok",
+                    "service": "ollama",
+                    "detail": (
+                        "Ollama responded successfully and the configured model is "
+                        "available."
+                    ),
+                    "code": None,
+                }
             },
-        ]
+        }
+        self.ready_payload = deepcopy(self.health_payload)
+        self._response_counter = 0
 
     def queue_json_body(
         self,
@@ -411,55 +414,71 @@ class FakeOllamaApi:
         model: str = "qwen2.5:0.5b",
         status_code: int = 200,
     ) -> None:
-        self._queued_responses.append(
-            httpx.Response(
+        self._response_counter += 1
+        self._queued_generate_responses.append(
+            data_response(
                 status_code,
-                json={
+                {
+                    "run_id": f"aimode_run_{self._response_counter:02d}",
+                    "correlation_id": f"aimode_corr_{self._response_counter:02d}",
                     "model": model,
-                    "created_at": "2026-08-29T09:00:00Z",
+                    "provider": "ollama",
                     "response": response_body,
                     "done": True,
-                    "done_reason": "stop",
-                    "context": [1, 2, 3],
-                    "total_duration": 123456789,
-                    "load_duration": 23456789,
-                    "prompt_eval_count": 321,
-                    "prompt_eval_duration": 3456789,
-                    "eval_count": 123,
-                    "eval_duration": 4567890,
                 },
-            ),
+            )
         )
 
     def queue_response(self, response: httpx.Response | Exception) -> None:
-        self._queued_responses.append(response)
+        self._queued_generate_responses.append(response)
+
+    def queue_health_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_health_responses.append(response)
+
+    def queue_ready_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_ready_responses.append(response)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         method = request.method.upper()
 
-        if path == "/api/tags" and method == "GET":
-            self.tag_requests += 1
-            return httpx.Response(200, json={"models": deepcopy(self.models)})
+        if path == "/health" and method == "GET":
+            self.health_requests += 1
+            if self._queued_health_responses:
+                queued = self._queued_health_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+            return data_response(200, deepcopy(self.health_payload))
 
-        if path == "/api/generate" and method == "POST":
+        if path == "/ready" and method == "GET":
+            self.ready_requests += 1
+            if self._queued_ready_responses:
+                queued = self._queued_ready_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+            return data_response(200, deepcopy(self.ready_payload))
+
+        if path == "/generate" and method == "POST":
             body = self._request_json(request)
             self.requests.append(body)
-            if self._queued_responses:
-                queued = self._queued_responses.pop(0)
+            if self._queued_generate_responses:
+                queued = self._queued_generate_responses.pop(0)
                 if isinstance(queued, Exception):
                     raise queued
                 return queued
 
-            return httpx.Response(
+            self._response_counter += 1
+            return data_response(
                 200,
-                json={
+                {
+                    "run_id": f"aimode_run_{self._response_counter:02d}",
+                    "correlation_id": body.get("correlation_id", ""),
                     "model": "qwen2.5:0.5b",
+                    "provider": "ollama",
                     "response": '{"suggestions":[]}',
                     "done": True,
-                    "done_reason": "stop",
-                    "context": [1, 2, 3],
-                    "total_duration": 123456789,
                 },
             )
 
@@ -483,8 +502,8 @@ def settings() -> Settings:
 
 
 @pytest.fixture
-def ollama_api() -> FakeOllamaApi:
-    return FakeOllamaApi()
+def ai_mode_api() -> FakeAiModeApi:
+    return FakeAiModeApi()
 
 
 @pytest.fixture
@@ -493,13 +512,13 @@ def client_factory():
         handler,
         *,
         settings_override: Settings | None = None,
-        ollama_handler=None,
+        ai_mode_handler=None,
     ) -> Iterator[TestClient]:
         app = create_app(
             settings_override or Settings(database_api_base_url="http://database.test"),
             database_transport=httpx.MockTransport(handler),
-            ollama_transport=(
-                httpx.MockTransport(ollama_handler) if ollama_handler else None
+            ai_mode_transport=(
+                httpx.MockTransport(ai_mode_handler) if ai_mode_handler else None
             ),
         )
         return TestClient(app)

@@ -13,6 +13,8 @@ This FastAPI + Jinja + HTMX frontend renders TripGenie's Trip & Itinerary Manage
 
 ## Runtime notes
 
-- The UI keeps **UI mode** and **AI mode** visually distinct. Issue #11 ships a disabled AI suggestion affordance only; live itinerary suggestions stay deferred to issue #12.
+- The UI keeps **UI mode** and **AI mode** visually distinct. Issue #12 replaces the disabled placeholder with an accessible AI suggestion form and HTMX result states.
 - Form submissions preserve entered values and show backend field/general errors for both normal page loads and HTMX swaps.
+- AI results are always labelled as drafts and route users into the normal itinerary-item create form for review/edit/save. There is no silent bulk persistence path.
+- AI-mode preserves entered values on backend/model validation failures and keeps CRUD usable when the shared AI-Mode dependency is unavailable.
 - `GET /health` reports frontend health plus backend dependency status. `GET /ready` returns `503` until the backend dependency is ready. These operational endpoints are TripGenie service decisions for Release 0.

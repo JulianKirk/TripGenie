@@ -14,7 +14,7 @@ This update uses three labels consistently:
 
 Because the assignment handout is not committed in this repository snapshot, the traceability table below points the **Assignment / Group 07 requirement** column at the repository artefacts that currently carry that scope: README, Docker Compose, CI, and the paired Student 1 design docs.
 
-This issue updates design/reporting documentation only. It does **not** claim that the Student 1 three-service stack, timings, or AI behaviour are already implemented or verified. The current repository still exposes a placeholder `student-1-service` in [docker-compose.yml][TG-COMPOSE]; this plan describes the Release 0 target state, not executed proof.
+Issue #12 now implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan still stays evidence-oriented: it does **not** fabricate live Compose showcase proof, and final Compose wiring remains deferred to issue #13.
 
 ## 2. Course source pack used
 
@@ -31,11 +31,11 @@ This issue updates design/reporting documentation only. It does **not** claim th
 
 | Topic | Assignment / Group 07 requirement | Visible lab pattern/example | TripGenie Student 1 decision |
 | --- | --- | --- | --- |
-| Service decomposition | Student 1 Release 0 stays inside a three-service, independently containerised slice with local Ollama, shared home page navigation, Docker Compose, and CI continuity [TG-README][TG-COMPOSE][TG-CI]. | Lab 04 uses `frontend-service`, `enrolment-service`, and `database-service` as the microservice example [L4]. | Map that pattern onto Group 07's shared home page plus Student 1 frontend/backend/database target services; record naming and ports in [ADR-0001](../../architecture/decisions/0001-student-1-service-mapping.md). |
+| Service decomposition | Student 1 Release 0 keeps a three-service owned slice plus shared AI infrastructure, with shared home page navigation, Docker Compose continuity, and CI [TG-README][TG-COMPOSE][TG-CI]. | Lab 04 uses `frontend-service`, `enrolment-service`, and `database-service` as the microservice example [L4]. | Keep Student 1 frontend/backend/database as the owned slice, and route runtime generation through the shared `ai-mode` service recorded in [TG-ARCH]. |
 | CRUD and database ownership | Student 1 owns trip and itinerary CRUD while keeping one service as the only SQLite owner [TG-ARCH]. | Labs 01-04 keep SQLite ownership local to the data layer and use HTTP between services in Lab 04 [L1][L4]. | Student 1 database API remains the only SQLite owner; frontend and backend use HTTP instead of shared file access. |
-| Local Ollama baseline | Release 0 keeps Ollama local and out of Release 1/2 features [TG-ARCH]. | The AI guide and Labs 01-04 use local Ollama throughout [CFG][L1][L2][L3][L4]. | Treat `qwen2.5:0.5b` and `llama3.1:8b` as subject baselines/recommendations, not mandatory runtime claims; keep `deepseek-r1:8b` out of Release 0 because it is presented as later-lab reasoning support [CFG]. |
+| Local Ollama baseline | Release 0 keeps Ollama local and out of Release 1/2 features [TG-ARCH]. | The AI guide and Labs 01-04 use local Ollama throughout [CFG][L1][L2][L3][L4]. | Keep Ollama local, but centralize provider access in the shared `ai-mode` service so student backends do not import or configure Ollama directly. |
 | Assessed loop | Student 1 documentation must support the course-assessed evidence/review loop for reports and demos [TG-ARCH]. | Labs 01-04 define the loop as development/review work with evidence, prompts, human decision, rerun, and adaptation [L1][L2][L3][L4]. | Treat the assessed loop as the Student 1 development-and-validation workflow, not as the end-user itinerary suggestion runtime. |
-| UI-mode vs AI-mode | Student 1 still needs a clear runtime story for CRUD flows and Ollama-assisted suggestions [TG-ARCH]. | Lab 04 separates Normal UI from AI Mode in the frontend and backend routes [L4]. | Keep runtime CRUD in UI-mode and bounded suggestions in AI-mode, while documenting both separately from the assessed loop. |
+| UI-mode vs AI-mode | Student 1 still needs a clear runtime story for CRUD flows and AI-assisted suggestions [TG-ARCH]. | Lab 04 separates Normal UI from AI Mode in the frontend and backend routes [L4]. | Keep runtime CRUD in UI-mode and bounded suggestions in AI-mode, while documenting the shared AI-Mode dependency separately from the assessed loop. |
 | Prompt assets and review roles | Release 0 reporting must explain how prompts, evidence, and review outputs are retained [TG-ARCH]. | Lab 03 externalises prompt files; Labs 02-04 split implementation and review roles [L2][L3][L4]. | Keep prompt assets versioned and separate from service code or report prose; record which prompt text and model pair produced each review outcome. |
 | Later-lab scope | Release 0 excludes MCP, RAG, multi-agent runtime, and unverified showcase requirements [TG-ARCH]. | The visible snapshot does not expose Labs 05/06 content even though README lists them [ASD-README][ASD-TREE]. | Do not invent CI/showcase requirements from hidden later labs; keep Release 0 limited to what is visible and already agreed in Group 07 scope. |
 | Internal API / observability detail | Student 1 may still want health checks, internal routes, or richer logs for implementation [TG-ARCH]. | Visible labs require evidence and stage banners, but do not visibly mandate `/internal/*`, `/ready`, fixed retry counts, or exact log schemas [L1][L2][L3][L4]. | Treat `/internal/*`, `/health`, `/ready`, run IDs, correlation IDs, retry caps, and exact log schemas as TripGenie proposals only, tracked in [ADR-0002](../../architecture/decisions/0002-student-1-internal-api-and-observability.md). |
@@ -46,7 +46,7 @@ This issue updates design/reporting documentation only. It does **not** claim th
 
 - Trip CRUD and itinerary-item CRUD design for Student 1.
 - Filtering itinerary items by trip and date/category.
-- A local Ollama-assisted **draft suggestion** capability that stays inside Student 1 and requires human approval before persistence.
+- A shared-AI-Mode-backed **draft suggestion** capability that still requires human approval before persistence.
 - Documentation of a three-container Student 1 target architecture that preserves the Group 07 shared home page pattern.
 - Evidence-backed report guidance for prompts, live validation, review output, human decision, and rerun/adaptation.
 
@@ -106,7 +106,7 @@ The bounded TripGenie itinerary-suggestion flow can remain in Release 0, but it 
 | Concern | Assessed course loop | TripGenie runtime AI-mode |
 | --- | --- | --- |
 | Trigger | Student/team validates or improves the system. | A user requests itinerary help for a specific trip/day. |
-| Main evidence | DB checks, browser checks, `curl`, timing evidence, prompt outputs, and human review. | Current trip/itinerary context, prompt assets, and model output returned to the user. |
+| Main evidence | DB checks, browser checks, `curl`, timing evidence, prompt outputs, and human review. | Current trip/itinerary context, Student 1 prompt assets, shared AI-Mode responses, and model output returned to the user. |
 | Decision point | Human decides whether to accept, partially accept, or reject a recommended change. | Human user reviews/edit suggestions before any persistence. |
 | Persistence | Adaptation changes docs/code, then reruns evidence checks. | Suggestions remain drafts until the user saves them through normal CRUD. |
 
@@ -117,7 +117,7 @@ Issue #12 implements the bounded runtime path separately from the assessed workf
 ## 8. Limitations and open points
 
 - [asd-labs README][ASD-README] advertises Labs 05/06, but the visible repository snapshot used for this update exposes only Labs 01-04 plus the AI guide and README [ASD-TREE]. No later-lab requirement is asserted here.
-- Current Group 07 repository evidence still shows a placeholder Student 1 service in [docker-compose.yml][TG-COMPOSE]; service names, ports, internal API paths, and observability details remain proposed until implemented.
+- Current Group 07 repository evidence still leaves final shared-service wiring to [docker-compose.yml][TG-COMPOSE]; service names, ports, and runtime Compose connections remain pending issue #13.
 - `deepseek-r1:8b` appears in the AI guide only as a reasoning model for later labs [CFG], so it is intentionally kept out of Student 1 Release 0 scope.
 
 [TG-ARCH]: ../../architecture/student-1-release-0-architecture.md

@@ -563,11 +563,11 @@ def test_health_and_ready_reflect_dependency_state(client) -> None:
                     "detail": "Database API responded successfully.",
                     "code": None,
                 },
-                "ollama": {
+                "ai_mode": {
                     "status": "not_configured",
-                    "service": "ollama",
+                    "service": "ai-mode",
                     "detail": (
-                        "Ollama AI mode is disabled because no runtime base URL is "
+                        "Shared AI-Mode is disabled because no runtime base URL is "
                         "configured."
                     ),
                     "code": None,

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import Field, StringConstraints, ValidationError, field_validator
 
+from .ai_mode_client import AiModeClient
 from .config import AI_MAX_ATTEMPTS_MAX, AI_MAX_ATTEMPTS_MIN, Settings
 from .errors import ai_output_invalid
 from .models import (
@@ -28,7 +29,6 @@ from .models import (
     _normalise_optional_text,
     _validate_iso_date,
 )
-from .ollama_client import OllamaClient
 
 LOGGER = logging.getLogger(__name__)
 PROMPT_TEXT_LIMIT = 180
@@ -86,7 +86,7 @@ class AiSuggestionsResponse(StrictModel):
         return _validate_iso_date(value)
 
 
-class OllamaSuggestionDraft(ItineraryItemFields):
+class AiModeSuggestionDraft(ItineraryItemFields):
     rationale: LongText | None = None
 
     @field_validator("rationale")
@@ -95,8 +95,8 @@ class OllamaSuggestionDraft(ItineraryItemFields):
         return _normalise_optional_text(value)
 
 
-class OllamaSuggestionEnvelope(StrictModel):
-    suggestions: list[OllamaSuggestionDraft] = Field(default_factory=list, max_length=5)
+class AiModeSuggestionEnvelope(StrictModel):
+    suggestions: list[AiModeSuggestionDraft] = Field(default_factory=list, max_length=5)
 
 
 PromptText = Annotated[str, StringConstraints(max_length=PROMPT_TEXT_LIMIT + 1)]
@@ -202,7 +202,7 @@ def build_prompt_context(
 
 
 class AiSuggestionService:
-    def __init__(self, client: OllamaClient, settings: Settings) -> None:
+    def __init__(self, client: AiModeClient, settings: Settings) -> None:
         self._client = client
         self._settings = settings
 
@@ -229,7 +229,7 @@ class AiSuggestionService:
             request,
             self._settings,
         )
-        prompt_schema = OllamaSuggestionEnvelope.model_json_schema()
+        prompt_schema = AiModeSuggestionEnvelope.model_json_schema()
         prompt_asset = self._settings.ai_prompt_asset
 
         _log_stage(
@@ -251,7 +251,7 @@ class AiSuggestionService:
 
         for attempt in range(1, self._settings.ai_max_attempts + 1):
             _log_stage(
-                "ollama_attempt",
+                "ai_mode_attempt",
                 run_id=run_id,
                 correlation_id=resolved_correlation_id,
                 trip_id=trip_id,
@@ -266,9 +266,14 @@ class AiSuggestionService:
             generation = await self._client.generate(
                 prompt=prompt,
                 schema=prompt_schema,
-                run_id=run_id,
                 correlation_id=resolved_correlation_id,
-                attempt=attempt,
+                metadata={
+                    "feature": "student-1-trip-suggestions",
+                    "trip_id": trip_id,
+                    "requested_date": request.requested_date,
+                    "attempt": str(attempt),
+                    "prompt_asset": prompt_asset,
+                },
             )
             try:
                 suggestions = normalise_suggestions(
@@ -285,6 +290,7 @@ class AiSuggestionService:
                     correlation_id=resolved_correlation_id,
                     trip_id=trip_id,
                     attempt=attempt,
+                    ai_mode_run_id=generation.run_id,
                     failure_kind=exc.kind,
                     summary=exc.summary,
                 )
@@ -304,10 +310,10 @@ class AiSuggestionService:
             return AiSuggestionsResponse(
                 trip_id=trip_id,
                 requested_date=request.requested_date,
-                model=self._settings.ollama_model,
+                model=generation.model,
                 prompt_asset=prompt_asset,
-                run_id=run_id,
-                correlation_id=resolved_correlation_id,
+                run_id=generation.run_id,
+                correlation_id=generation.correlation_id,
                 attempt_count=attempt,
                 persisted=False,
                 approval_required=True,
@@ -330,7 +336,7 @@ class AiSuggestionService:
         )
         raise ai_output_invalid(
             (
-                "Ollama returned suggestions that could not be validated after "
+                "AI-generated suggestions could not be validated after "
                 f"{self._settings.ai_max_attempts} attempt(s)."
             ),
             [
@@ -365,7 +371,7 @@ def normalise_suggestions(
         ) from exc
 
     try:
-        envelope = OllamaSuggestionEnvelope.model_validate(payload)
+        envelope = AiModeSuggestionEnvelope.model_validate(payload)
     except ValidationError as exc:
         raise RetryableAiFailure(
             kind="schema",

@@ -92,7 +92,7 @@ def test_ai_error_preserves_form_values_and_shows_backend_validation(
             502,
             "AI_OUTPUT_INVALID",
             (
-                "Ollama returned suggestions that could not be validated "
+                "AI-generated suggestions could not be validated "
                 "after 2 attempt(s)."
             ),
             [
@@ -118,7 +118,11 @@ def test_ai_error_preserves_form_values_and_shows_backend_validation(
     )
 
     assert response.status_code == 502
-    assert "Ollama returned suggestions that could not be validated" in response.text
+    assert (
+        response.headers["HX-Push-Url"]
+        == "/trips/trip_2027_sydney_getaway?date=2027-04-02&category=meal"
+    )
+    assert "AI-generated suggestions could not be validated" in response.text
     assert "runtime validation retries were exhausted" in response.text
     assert "Keep this goal visible." in response.text
     assert "Keep these interests visible." in response.text
@@ -184,7 +188,7 @@ def test_ai_review_link_prefills_item_form_and_requires_manual_save(
     assert "item_generated_01" in backend_api.items
 
 
-def test_ollama_absence_error_does_not_break_normal_trip_pages(
+def test_ai_mode_absence_error_does_not_break_normal_trip_pages(
     client,
     backend_api,
 ) -> None:
@@ -192,8 +196,8 @@ def test_ollama_absence_error_does_not_break_normal_trip_pages(
         error_response(
             503,
             "DEPENDENCY_UNAVAILABLE",
-            "Ollama is unavailable.",
-            [{"field": "ollama", "issue": "connection failed"}],
+            "Shared AI-Mode service is unavailable.",
+            [{"field": "ai_mode", "issue": "connection failed"}],
         ),
     )
 
@@ -213,7 +217,7 @@ def test_ollama_absence_error_does_not_break_normal_trip_pages(
     edit_response = client.get("/trips/trip_2027_sydney_getaway/edit")
 
     assert ai_response.status_code == 503
-    assert "Ollama is unavailable." in ai_response.text
+    assert "Shared AI-Mode service is unavailable." in ai_response.text
     assert detail_response.status_code == 200
     assert "Sydney Getaway" in detail_response.text
     assert edit_response.status_code == 200

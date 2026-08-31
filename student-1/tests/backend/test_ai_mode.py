@@ -14,10 +14,8 @@ from backend_service.config import (
 def ai_settings(**overrides: object) -> Settings:
     settings_kwargs: dict[str, object] = {
         "database_api_base_url": "http://database.test",
-        "ollama_base_url": "http://ollama.test",
-        "ollama_model": "qwen2.5:0.5b",
-        "ollama_timeout_seconds": 1,
-        "ollama_max_response_bytes": 16384,
+        "ai_mode_base_url": "http://ai-mode.test",
+        "ai_mode_timeout_seconds": 1,
         "ai_max_attempts": 2,
         "ai_max_context_items": 2,
     }
@@ -28,7 +26,7 @@ def ai_settings(**overrides: object) -> Settings:
 def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
     database_api.items["item_2027_sydney_breakfast"] = {
         "id": "item_2027_sydney_breakfast",
@@ -42,7 +40,7 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
         "category": "meal",
         "notes": "Avoid peak queues if possible.",
     }
-    ollama_api.queue_json_body(
+    ai_mode_api.queue_json_body(
         """
         {
           "suggestions": [
@@ -76,7 +74,7 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(ai_max_context_items=2),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -110,160 +108,94 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
         ("GET", "/internal/trips/trip_2027_sydney_getaway"),
         ("GET", "/internal/trips/trip_2027_sydney_getaway/itinerary-items"),
     ]
-    assert len(ollama_api.requests) == 1
-    ollama_request = ollama_api.requests[0]
-    assert ollama_request["model"] == "qwen2.5:0.5b"
-    assert ollama_request["stream"] is False
-    assert ollama_request["options"] == {"temperature": 0}
-    assert '"requested_date": "2027-04-02"' in ollama_request["prompt"]
-    assert "Plan a gentle waterside afternoon." in ollama_request["prompt"]
-    assert '"total_existing_items": 3' in ollama_request["prompt"]
-    assert '"omitted_existing_items": 1' in ollama_request["prompt"]
-    assert "Harbour Breakfast" in ollama_request["prompt"]
-    assert "Harbour Walk" in ollama_request["prompt"]
-    assert "Waterside Dinner" not in ollama_request["prompt"]
-    assert ollama_request["format"]["type"] == "object"
+    assert len(ai_mode_api.requests) == 1
+    ai_mode_request = ai_mode_api.requests[0]
+    assert '"requested_date": "2027-04-02"' in ai_mode_request["prompt"]
+    assert "Plan a gentle waterside afternoon." in ai_mode_request["prompt"]
+    assert '"total_existing_items": 3' in ai_mode_request["prompt"]
+    assert '"omitted_existing_items": 1' in ai_mode_request["prompt"]
+    assert "Harbour Breakfast" in ai_mode_request["prompt"]
+    assert "Harbour Walk" in ai_mode_request["prompt"]
+    assert "Waterside Dinner" not in ai_mode_request["prompt"]
+    assert ai_mode_request["schema"]["type"] == "object"
+    assert ai_mode_request["correlation_id"].startswith("ai_")
+    assert ai_mode_request["metadata"] == {
+        "feature": "student-1-trip-suggestions",
+        "trip_id": "trip_2027_sydney_getaway",
+        "requested_date": "2027-04-02",
+        "attempt": "1",
+        "prompt_asset": "runtime_ai_suggestions_v1.md",
+    }
+    assert payload["run_id"] == "aimode_run_01"
+    assert payload["correlation_id"] == "aimode_corr_01"
 
 
-def test_health_accepts_current_ollama_tags_metadata(
+def test_health_reports_shared_ai_mode_status(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
-    ollama_api.models = [
-        {
-            "name": "qwen2.5:0.5b",
-            "modified_at": "2026-08-29T09:00:00Z",
-            "size": 934348800,
-            "digest": "sha256:qwen-demo",
-            "details": {
-                "family": "qwen2",
-                "families": ["qwen2"],
-                "parameter_size": "0.5B",
-                "quantization_level": "Q4_K_M",
-            },
-            "expires_at": "2026-08-29T10:00:00Z",
-        },
-    ]
-
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json()["data"]["dependencies"]["ollama"]["status"] == "ok"
-    assert ollama_api.tag_requests == 1
+    assert response.json()["data"]["dependencies"]["ai_mode"] == {
+        "status": "ok",
+        "service": "ai-mode",
+        "detail": "AI-Mode service responded successfully.",
+        "code": None,
+    }
+    assert ai_mode_api.health_requests == 1
 
 
-def test_health_reports_invalid_response_when_tags_models_field_is_missing(
+def test_health_reports_invalid_response_when_shared_ai_mode_health_is_malformed(
     client_factory,
     database_api,
 ) -> None:
-    def missing_models_field(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/tags" and request.method.upper() == "GET":
+    def malformed_health(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health" and request.method.upper() == "GET":
             return httpx.Response(200, json={})
         return httpx.Response(404, json={"detail": "not found"})
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=missing_models_field,
+        ai_mode_handler=malformed_health,
     ) as client:
         response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "degraded"
-    assert response.json()["data"]["dependencies"]["ollama"] == {
+    assert response.json()["data"]["dependencies"]["ai_mode"] == {
         "status": "invalid_response",
-        "service": "ollama",
-        "detail": "Ollama returned a malformed model list response.",
+        "service": "ai-mode",
+        "detail": "AI-Mode service returned a malformed health response.",
         "code": "BAD_GATEWAY",
     }
 
 
-def test_health_reports_invalid_response_when_tags_body_is_not_json(
+def test_ai_suggestions_accept_shared_ai_mode_response_with_extra_fields(
     client_factory,
     database_api,
+    ai_mode_api,
 ) -> None:
-    def non_json_tags_body(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/tags" and request.method.upper() == "GET":
-            return httpx.Response(
-                200,
-                content=b"not-json",
-                headers={"content-type": "text/plain"},
-            )
-        return httpx.Response(404, json={"detail": "not found"})
-
-    with client_factory(
-        database_api.handle,
-        settings_override=ai_settings(),
-        ollama_handler=non_json_tags_body,
-    ) as client:
-        response = client.get("/health")
-
-    assert response.status_code == 200
-    assert response.json()["data"]["status"] == "degraded"
-    assert response.json()["data"]["dependencies"]["ollama"] == {
-        "status": "invalid_response",
-        "service": "ollama",
-        "detail": "Ollama returned a malformed model list response.",
-        "code": "BAD_GATEWAY",
-    }
-
-
-def test_health_reports_model_unavailable_when_tags_list_is_empty(
-    client_factory,
-    database_api,
-    ollama_api,
-) -> None:
-    ollama_api.models = []
-
-    with client_factory(
-        database_api.handle,
-        settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
-    ) as client:
-        response = client.get("/health")
-
-    assert response.status_code == 200
-    assert response.json()["data"]["status"] == "degraded"
-    assert response.json()["data"]["dependencies"]["ollama"] == {
-        "status": "degraded",
-        "service": "ollama",
-        "detail": (
-            "Ollama responded, but the configured model "
-            "'qwen2.5:0.5b' is not available."
-        ),
-        "code": "MODEL_UNAVAILABLE",
-    }
-    assert ollama_api.tag_requests == 1
-
-
-def test_ai_suggestions_accept_current_ollama_generate_metadata(
-    client_factory,
-    database_api,
-    ollama_api,
-) -> None:
-    ollama_api.queue_response(
+    ai_mode_api.queue_response(
         httpx.Response(
             200,
             json={
-                "model": "qwen2.5:0.5b",
-                "created_at": "2026-08-29T09:00:00Z",
-                "response": '{"suggestions":[]}',
-                "done": True,
-                "done_reason": "stop",
-                "context": [101, 202, 303],
-                "total_duration": 879685763,
-                "load_duration": 22342342,
-                "prompt_eval_count": 219,
-                "prompt_eval_duration": 8134242,
-                "eval_count": 48,
-                "eval_duration": 5294187,
-                "extra_metadata": {"ignored": True},
+                "data": {
+                    "run_id": "aimode_live_run_01",
+                    "correlation_id": "student1-corr-01",
+                    "model": "qwen2.5:0.5b",
+                    "provider": "ollama",
+                    "response": '{"suggestions":[]}',
+                    "done": True,
+                    "extra_metadata": {"ignored": True},
+                }
             },
         ),
     )
@@ -271,28 +203,29 @@ def test_ai_suggestions_accept_current_ollama_generate_metadata(
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
             json={
                 "requested_date": "2027-04-02",
-                "goal": "Return an empty draft set with current Ollama metadata.",
+                "goal": "Return an empty draft set with shared AI-Mode metadata.",
             },
         )
 
     assert response.status_code == 200
     assert response.json()["data"]["suggestions"] == []
-    assert len(ollama_api.requests) == 1
+    assert len(ai_mode_api.requests) == 1
+    assert response.json()["data"]["run_id"] == "aimode_live_run_01"
 
 
 def test_ai_suggestions_retries_once_then_succeeds(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
-    ollama_api.queue_json_body("{not valid json")
-    ollama_api.queue_json_body(
+    ai_mode_api.queue_json_body("{not valid json")
+    ai_mode_api.queue_json_body(
         """
         {
           "suggestions": [
@@ -315,7 +248,7 @@ def test_ai_suggestions_retries_once_then_succeeds(
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -327,12 +260,12 @@ def test_ai_suggestions_retries_once_then_succeeds(
 
     assert response.status_code == 200
     assert response.json()["data"]["attempt_count"] == 2
-    assert len(ollama_api.requests) == 2
+    assert len(ai_mode_api.requests) == 2
     assert (
         "The previous response could not be used."
-        in ollama_api.requests[1]["prompt"]
+        in ai_mode_api.requests[1]["prompt"]
     )
-    assert "response body was not valid JSON" in ollama_api.requests[1]["prompt"]
+    assert "response body was not valid JSON" in ai_mode_api.requests[1]["prompt"]
 
 
 @pytest.mark.parametrize(
@@ -451,16 +384,16 @@ def test_ai_suggestions_retries_once_then_succeeds(
 def test_ai_suggestions_invalid_outputs_fail_explicitly(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
     queued_body: str,
     expected_fragment: str,
 ) -> None:
-    ollama_api.queue_json_body(queued_body)
+    ai_mode_api.queue_json_body(queued_body)
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(ai_max_attempts=1),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -478,7 +411,7 @@ def test_ai_suggestions_invalid_outputs_fail_explicitly(
 def test_ai_suggestions_retry_exhaustion_is_deterministic(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
     duplicate_body = """
     {
@@ -495,13 +428,13 @@ def test_ai_suggestions_retry_exhaustion_is_deterministic(
       ]
     }
     """
-    ollama_api.queue_json_body(duplicate_body)
-    ollama_api.queue_json_body(duplicate_body)
+    ai_mode_api.queue_json_body(duplicate_body)
+    ai_mode_api.queue_json_body(duplicate_body)
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(ai_max_attempts=2),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -513,13 +446,13 @@ def test_ai_suggestions_retry_exhaustion_is_deterministic(
 
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "AI_OUTPUT_INVALID"
-    assert len(ollama_api.requests) == 2
+    assert len(ai_mode_api.requests) == 2
 
 
 def test_ai_suggestions_honour_retry_upper_boundary(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
     invalid_body = """
     {
@@ -537,12 +470,12 @@ def test_ai_suggestions_honour_retry_upper_boundary(
     }
     """
     for _ in range(AI_MAX_ATTEMPTS_MAX):
-        ollama_api.queue_json_body(invalid_body)
+        ai_mode_api.queue_json_body(invalid_body)
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(ai_max_attempts=AI_MAX_ATTEMPTS_MAX),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -554,7 +487,7 @@ def test_ai_suggestions_honour_retry_upper_boundary(
 
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "AI_OUTPUT_INVALID"
-    assert len(ollama_api.requests) == AI_MAX_ATTEMPTS_MAX
+    assert len(ai_mode_api.requests) == AI_MAX_ATTEMPTS_MAX
 
 
 @pytest.mark.parametrize(
@@ -569,63 +502,71 @@ def test_ai_suggestions_honour_retry_upper_boundary(
         (
             httpx.ReadTimeout(
                 "slow",
-                request=httpx.Request("POST", "http://ollama.test/api/generate"),
+                request=httpx.Request("POST", "http://ai-mode.test/generate"),
             ),
             ai_settings(),
             504,
             "DEPENDENCY_TIMEOUT",
-            "Ollama did not respond before the configured timeout.",
+            "Shared AI-Mode service did not respond before the configured timeout.",
         ),
         (
             httpx.ConnectError(
                 "boom",
-                request=httpx.Request("POST", "http://ollama.test/api/generate"),
+                request=httpx.Request("POST", "http://ai-mode.test/generate"),
             ),
             ai_settings(),
             503,
             "DEPENDENCY_UNAVAILABLE",
-            "Ollama is unavailable.",
+            "Shared AI-Mode service is unavailable.",
         ),
         (
             httpx.Response(200, text="{not json"),
             ai_settings(),
             502,
             "BAD_GATEWAY",
-            "Ollama returned a malformed generate response.",
+            "AI-Mode service returned a malformed generate response.",
         ),
         (
             httpx.Response(
-                200,
+                503,
                 json={
-                    "model": "qwen2.5:0.5b",
-                    "response": "x" * 200,
-                    "done": True,
-                    "done_reason": "stop",
+                    "error": {
+                        "code": "MODEL_UNAVAILABLE",
+                        "message": "Requested AI model is not available.",
+                        "details": [
+                            {
+                                "field": "model",
+                                "issue": (
+                                    "model 'qwen2.5:0.5b' is not available in Ollama"
+                                ),
+                            }
+                        ],
+                    }
                 },
             ),
-            ai_settings(ollama_max_response_bytes=80),
-            502,
-            "DEPENDENCY_RESPONSE_TOO_LARGE",
-            "Ollama returned a response that exceeded the configured size limit.",
+            ai_settings(),
+            503,
+            "MODEL_UNAVAILABLE",
+            "Requested AI model is not available.",
         ),
     ],
 )
 def test_ai_suggestions_dependency_failures_are_explicit(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
     queued_response: httpx.Response | Exception,
     settings_override: Settings,
     status_code: int,
     error_code: str,
     message_fragment: str,
 ) -> None:
-    ollama_api.queue_response(queued_response)
+    ai_mode_api.queue_response(queued_response)
 
     with client_factory(
         database_api.handle,
         settings_override=settings_override,
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
@@ -638,20 +579,20 @@ def test_ai_suggestions_dependency_failures_are_explicit(
     assert response.status_code == status_code
     assert response.json()["error"]["code"] == error_code
     assert message_fragment in response.json()["error"]["message"]
-    assert len(ollama_api.requests) == 1
+    assert len(ai_mode_api.requests) == 1
 
 
-def test_health_is_degraded_when_ollama_is_unavailable_but_crud_still_works(
+def test_health_is_degraded_when_ai_mode_is_unavailable_but_crud_still_works(
     client_factory,
     database_api,
 ) -> None:
-    def failing_ollama(request: httpx.Request) -> httpx.Response:
+    def failing_ai_mode(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom", request=request)
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=failing_ollama,
+        ai_mode_handler=failing_ai_mode,
     ) as client:
         health_response = client.get("/health")
         ready_response = client.get("/ready")
@@ -660,7 +601,7 @@ def test_health_is_degraded_when_ollama_is_unavailable_but_crud_still_works(
     assert health_response.status_code == 200
     assert health_response.json()["data"]["status"] == "degraded"
     assert (
-        health_response.json()["data"]["dependencies"]["ollama"]["status"]
+        health_response.json()["data"]["dependencies"]["ai_mode"]["status"]
         == "unavailable"
     )
     assert ready_response.status_code == 200
@@ -669,61 +610,61 @@ def test_health_is_degraded_when_ollama_is_unavailable_but_crud_still_works(
     assert trips_response.json()["data"][0]["id"] == "trip_2027_sydney_getaway"
 
 
-def test_ready_skips_live_ollama_probe_and_reports_non_authoritative_status(
+def test_ready_skips_live_ai_mode_probe_and_reports_non_authoritative_status(
     client_factory,
     database_api,
 ) -> None:
-    ollama_calls = 0
+    ai_mode_calls = 0
 
-    def timing_out_ollama(request: httpx.Request) -> httpx.Response:
-        nonlocal ollama_calls
-        ollama_calls += 1
+    def timing_out_ai_mode(request: httpx.Request) -> httpx.Response:
+        nonlocal ai_mode_calls
+        ai_mode_calls += 1
         raise httpx.ReadTimeout("slow", request=request)
 
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=timing_out_ollama,
+        ai_mode_handler=timing_out_ai_mode,
     ) as client:
         response = client.get("/ready")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "ok"
-    assert response.json()["data"]["dependencies"]["ollama"] == {
+    assert response.json()["data"]["dependencies"]["ai_mode"] == {
         "status": "not_checked",
-        "service": "ollama",
+        "service": "ai-mode",
         "detail": (
-            "Ollama was not probed during /ready. Backend readiness is based "
-            "on the database only."
+            "Shared AI-Mode was not probed during /ready. Backend readiness is "
+            "based on the database only."
         ),
         "code": None,
     }
-    assert ollama_calls == 0
+    assert ai_mode_calls == 0
 
 
-def test_ready_reuses_cached_ollama_status_without_reprobing(
+def test_ready_reuses_cached_ai_mode_status_without_reprobing(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
 ) -> None:
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         health_response = client.get("/health")
         ready_response = client.get("/ready")
 
     assert health_response.status_code == 200
     assert ready_response.status_code == 200
-    assert ollama_api.tag_requests == 1
-    assert ready_response.json()["data"]["dependencies"]["ollama"] == {
+    assert ai_mode_api.health_requests == 1
+    assert ai_mode_api.ready_requests == 0
+    assert ready_response.json()["data"]["dependencies"]["ai_mode"] == {
         "status": "ok",
-        "service": "ollama",
+        "service": "ai-mode",
         "detail": (
-            "Ollama responded successfully and the configured model is "
-            "available. This Ollama status is cached and non-authoritative for "
-            "backend readiness."
+            "AI-Mode service responded successfully. This AI-Mode status is "
+            "cached and non-authoritative for backend readiness."
         ),
         "code": None,
     }
@@ -743,7 +684,7 @@ def test_ready_reuses_cached_ollama_status_without_reprobing(
 def test_ai_max_attempt_settings_validation(ai_max_attempts: int) -> None:
     settings_kwargs = {
         "database_api_base_url": "http://database.test",
-        "ollama_base_url": "http://ollama.test",
+        "ai_mode_base_url": "http://ai-mode.test",
         "ai_max_attempts": ai_max_attempts,
     }
 
@@ -783,19 +724,19 @@ def test_ai_max_attempt_env_validation(monkeypatch, raw_value: str) -> None:
 def test_ai_suggestion_logs_redact_free_text_and_prompt_body(
     client_factory,
     database_api,
-    ollama_api,
+    ai_mode_api,
     caplog,
 ) -> None:
     database_api.trips["trip_2027_sydney_getaway"]["notes"] = (
         "SENSITIVE_TRIP_NOTE_SHOULD_NOT_BE_LOGGED"
     )
-    ollama_api.queue_json_body('{"suggestions":[]}')
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
 
     caplog.set_level(logging.INFO, logger="backend_service.ai_suggestions")
     with client_factory(
         database_api.handle,
         settings_override=ai_settings(),
-        ollama_handler=ollama_api.handle,
+        ai_mode_handler=ai_mode_api.handle,
     ) as client:
         response = client.post(
             "/api/trips/trip_2027_sydney_getaway/ai-suggestions",

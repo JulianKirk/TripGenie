@@ -122,10 +122,8 @@ class Settings:
     api_prefix: str = "/api"
     database_api_timeout_seconds: float = 5.0
     service_name: str = "student-1-backend"
-    ollama_base_url: str | None = None
-    ollama_model: str = "qwen2.5:0.5b"
-    ollama_timeout_seconds: float = 15.0
-    ollama_max_response_bytes: int = 16384
+    ai_mode_base_url: str | None = None
+    ai_mode_timeout_seconds: float = 15.0
     ai_prompt_asset: str = "runtime_ai_suggestions_v1.md"
     ai_max_attempts: int = 2
     ai_max_context_items: int = 12
@@ -135,7 +133,6 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        raw_ollama_base_url = os.getenv("STUDENT1_BACKEND_OLLAMA_BASE_URL")
         return cls(
             database_api_base_url=_normalise_base_url(
                 os.getenv(
@@ -165,28 +162,14 @@ class Settings:
                 "student-1-backend",
             ).strip()
             or "student-1-backend",
-            ollama_base_url=_normalise_optional_base_url(
-                (
-                    "http://ollama:11434"
-                    if raw_ollama_base_url is None
-                    else raw_ollama_base_url
-                ),
-                env_name="STUDENT1_BACKEND_OLLAMA_BASE_URL",
+            ai_mode_base_url=_normalise_optional_base_url(
+                os.getenv("STUDENT1_BACKEND_AI_MODE_BASE_URL"),
+                env_name="STUDENT1_BACKEND_AI_MODE_BASE_URL",
             ),
-            ollama_model=os.getenv(
-                "STUDENT1_BACKEND_OLLAMA_MODEL",
-                "qwen2.5:0.5b",
-            ).strip()
-            or "qwen2.5:0.5b",
-            ollama_timeout_seconds=_parse_timeout(
-                os.getenv("STUDENT1_BACKEND_OLLAMA_TIMEOUT_SECONDS"),
-                env_name="STUDENT1_BACKEND_OLLAMA_TIMEOUT_SECONDS",
+            ai_mode_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS",
                 default=15.0,
-            ),
-            ollama_max_response_bytes=_parse_positive_int(
-                os.getenv("STUDENT1_BACKEND_OLLAMA_MAX_RESPONSE_BYTES"),
-                env_name="STUDENT1_BACKEND_OLLAMA_MAX_RESPONSE_BYTES",
-                default=16384,
             ),
             ai_prompt_asset=os.getenv(
                 "STUDENT1_BACKEND_AI_PROMPT_ASSET",

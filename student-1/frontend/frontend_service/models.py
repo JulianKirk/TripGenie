@@ -158,6 +158,25 @@ class DeleteResponse(StrictModel):
     deleted: bool = True
 
 
+class AiSuggestionDraft(ItineraryItemFields):
+    rationale: LongText | None = None
+    persisted: bool = False
+    approval_required: bool = True
+
+
+class AiSuggestionsResponse(StrictModel):
+    trip_id: TripIdentifier
+    requested_date: IsoDate
+    model: ShortText
+    prompt_asset: ShortText
+    run_id: ShortText
+    correlation_id: ShortText
+    attempt_count: int = Field(ge=1, le=10)
+    persisted: bool = False
+    approval_required: bool = True
+    suggestions: list[AiSuggestionDraft] = Field(default_factory=list, max_length=5)
+
+
 class BackendDependencyPayload(StrictModel):
     status: ShortText
     service: ShortText
@@ -167,7 +186,7 @@ class BackendDependencyPayload(StrictModel):
 
 class BackendHealthDependencies(StrictModel):
     database: BackendDependencyPayload
-    ollama: BackendDependencyPayload
+    ai_mode: BackendDependencyPayload
 
 
 class BackendHealthPayload(StrictModel):

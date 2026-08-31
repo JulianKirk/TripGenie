@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, Response,
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .ai_mode_client import AiModeClient
 from .ai_suggestions import (
     AiSuggestionRequest,
     AiSuggestionService,
@@ -37,7 +38,6 @@ from .models import (
     TripStatus,
     TripUpdate,
 )
-from .ollama_client import OllamaClient
 from .service import BackendService
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
@@ -224,7 +224,7 @@ def create_app(
     *,
     transport: httpx.BaseTransport | None = None,
     database_transport: httpx.BaseTransport | None = None,
-    ollama_transport: httpx.AsyncBaseTransport | None = None,
+    ai_mode_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     resolved_database_transport = database_transport or transport
@@ -235,17 +235,17 @@ def create_app(
             app_settings,
             transport=resolved_database_transport,
         )
-        ollama_client = OllamaClient(app_settings, transport=ollama_transport)
+        ai_mode_client = AiModeClient(app_settings, transport=ai_mode_transport)
         app.state.backend_service = BackendService(
             client,
-            AiSuggestionService(ollama_client, app_settings),
+            AiSuggestionService(ai_mode_client, app_settings),
             app_settings,
         )
         try:
             yield
         finally:
             client.close()
-            await ollama_client.close()
+            await ai_mode_client.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",

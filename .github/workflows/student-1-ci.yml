@@ -2,7 +2,25 @@ name: Student 1 CI
 
 on:
   push:
+    paths:
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
+      - 'ruff.toml'
   pull_request:
+    paths:
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
+      - 'ruff.toml'
   workflow_dispatch:
 
 jobs:
@@ -34,6 +52,7 @@ jobs:
         run: python -m pytest tests/database
       - name: Build Student 1 database image
         run: docker build -f student-1/database/Dockerfile student-1
+
   backend:
     name: Build and Validate Student 1 Backend
     runs-on: ubuntu-latest
@@ -62,6 +81,7 @@ jobs:
         run: python -m pytest tests/backend
       - name: Build Student 1 backend image
         run: docker build -f student-1/backend/Dockerfile student-1
+
   frontend:
     name: Build and Validate Student 1 Frontend
     runs-on: ubuntu-latest
