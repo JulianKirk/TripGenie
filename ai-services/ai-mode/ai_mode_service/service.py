@@ -16,6 +16,7 @@ from .provider import OllamaProviderAdapter
 
 LOGGER = logging.getLogger(__name__)
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
+LOG_VALUE_MAX_CHARS = 160
 
 
 class AiModeService:
@@ -147,9 +148,28 @@ def _json_char_count(payload: object | None) -> int:
 
 def _normalise_correlation_id(correlation_id: str | None, fallback: str) -> str:
     cleaned = (correlation_id or "").strip()
-    return cleaned[:64] or fallback
+    return cleaned or fallback
 
 
 def _log_stage(stage: str, **payload: object) -> None:
-    serialised = " ".join(f"{key}={payload[key]}" for key in sorted(payload))
+    serialised = " ".join(
+        f"{key}={_sanitise_log_value(payload[key])}" for key in sorted(payload)
+    )
     LOGGER.info("ai_mode stage=%s %s", stage, serialised)
+
+
+def _sanitise_log_value(value: object) -> str:
+    text = "None" if value is None else str(value)
+    cleaned = "".join(
+        character
+        if (
+            character not in {"\u2028", "\u2029"}
+            and ord(character) >= 32
+            and ord(character) != 127
+        )
+        else "?"
+        for character in text
+    )
+    if len(cleaned) <= LOG_VALUE_MAX_CHARS:
+        return cleaned
+    return f"{cleaned[: LOG_VALUE_MAX_CHARS - 1]}…"

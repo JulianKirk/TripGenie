@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Annotated, Any, TypeVar
 
 import httpx
-from pydantic import ConfigDict, TypeAdapter, ValidationError
+from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError
 
+from .ai_contract import CORRELATION_ID_PATTERN
 from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
@@ -16,6 +17,14 @@ from .models import (
 )
 
 T = TypeVar("T")
+CorrelationId = Annotated[
+    str,
+    StringConstraints(
+        min_length=1,
+        max_length=64,
+        pattern=CORRELATION_ID_PATTERN.pattern,
+    ),
+]
 
 HANDLED_ERROR_STATUSES = {422, 502, 503, 504}
 
@@ -36,7 +45,7 @@ class AiModeHealthPayload(AiModeResponseModel):
 
 class AiModeGeneratePayload(AiModeResponseModel):
     run_id: ShortText
-    correlation_id: ShortText
+    correlation_id: CorrelationId
     model: ShortText
     provider: ShortText | None = None
     response: str

@@ -68,6 +68,12 @@ def _validation_detail_field(location: tuple[object, ...]) -> str:
     return str(location[-1]) if location else "body"
 
 
+def _validation_detail_issue(message: str) -> str:
+    if message.startswith("Value error, "):
+        return message.removeprefix("Value error, ")
+    return message
+
+
 def _ensure_allowed_query_params(request: Request, allowed: set[str]) -> None:
     extras = sorted(set(request.query_params) - allowed)
     if not extras:
@@ -265,7 +271,7 @@ def create_app(
         details = [
             {
                 "field": _validation_detail_field(tuple(error["loc"])),
-                "issue": error["msg"],
+                "issue": _validation_detail_issue(str(error["msg"])),
             }
             for error in exc.errors()
         ]

@@ -27,6 +27,9 @@ where = ["backend", "database", "frontend"]
 include = ["backend_service*", "database_service*", "frontend_service*"]
 
 [tool.setuptools.package-data]
+backend_service = [
+    "prompts/*.md",
+]
 frontend_service = [
     "templates/*.html",
     "templates/macros/*.html",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -13,6 +14,13 @@ from .config import (
 )
 
 T = TypeVar("T")
+CORRELATION_ID_PATTERN = re.compile(
+    rf"^[A-Za-z0-9][A-Za-z0-9._:-]{{0,{MAX_CORRELATION_ID_CHARS - 1}}}$"
+)
+CORRELATION_ID_ISSUE = (
+    "must start with a letter or digit, contain only letters, digits, '.', "
+    f"'_', ':', or '-', and be at most {MAX_CORRELATION_ID_CHARS} characters"
+)
 
 ModelName = Annotated[
     str,
@@ -42,7 +50,11 @@ PromptText = Annotated[
 ]
 CorrelationId = Annotated[
     str,
-    StringConstraints(min_length=1, max_length=MAX_CORRELATION_ID_CHARS),
+    StringConstraints(
+        min_length=1,
+        max_length=MAX_CORRELATION_ID_CHARS,
+        pattern=CORRELATION_ID_PATTERN.pattern,
+    ),
 ]
 
 
@@ -96,7 +108,7 @@ class GenerateRequest(StrictModel):
     prompt: PromptText
     model: ModelName | None = None
     output_schema: dict[str, Any] | None = Field(default=None, alias="schema")
-    correlation_id: CorrelationId | None = None
+    correlation_id: str | None = None
     metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict)
 
     @field_validator("prompt")
@@ -105,6 +117,21 @@ class GenerateRequest(StrictModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("must not be blank")
+        return cleaned
+
+    @field_validator("correlation_id")
+    @classmethod
+    def validate_correlation_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must not be blank")
+        if len(cleaned) > MAX_CORRELATION_ID_CHARS:
+            raise ValueError(CORRELATION_ID_ISSUE)
+        if CORRELATION_ID_PATTERN.fullmatch(cleaned) is None:
+            raise ValueError(CORRELATION_ID_ISSUE)
         return cleaned
 
     @field_validator("metadata")

@@ -12,6 +12,7 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_DB_API_TIMEOUT_SECONDS` | `5` | Timeout for backend-to-database HTTP calls. |
 | `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Set to `http://ai-mode:8006` once issue #13 wires Compose. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for backend-to-shared-AI-Mode HTTP calls. |
+| `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Consumer-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
 | `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. Must stay between `1` and `10`. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
@@ -29,8 +30,10 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 
 - `POST /api/trips/{tripId}/ai-suggestions` now calls the shared `ai-mode` service asynchronously, validates returned drafts against the same itinerary rules, and never persists them automatically.
 - Student 1 still owns prompt rendering, bounded trip/itinerary context, domain retry/adaptation, draft-only responses, and the human approval boundary.
+- Student 1 pre-budgets prompts against the shared 12,000-character contract, compacts JSON rendering, drops optional context deterministically when needed, and fails with a Student 1 validation error before calling shared AI-Mode if the irreducible context still cannot fit.
 - The shared AI-Mode service owns the official `ollama==0.6.2` client, provider configuration, approved model allowlist, provider health/readiness, safe output bounds, and normalized provider errors.
 - Returned suggestions always include `persisted=false` and `approval_required=true`.
 - Retry/adaptation is limited to correctable parse/schema/constraint failures only and is a TripGenie runtime robustness feature, **not** the assessed course `Plan -> Act -> Observe -> Adapt` workflow.
 - `GET /health` may report a degraded shared AI-Mode dependency, while `GET /ready` remains database-only and never waits on AI-mode.
-- The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v1.md`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.
+- Correlation IDs are validated to safe single-line values before they are echoed or logged.
+- The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v1.md`, validated at startup, and must stay inside `backend_service/prompts/`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.

@@ -18,7 +18,7 @@ Student backends must render their own prompts, own domain retries/validation, a
 | `AI_MODE_DEFAULT_MODEL` | `qwen2.5:0.5b` | Default approved model used when callers do not request an override. |
 | `AI_MODE_ALLOWED_MODELS` | `qwen2.5:0.5b,llama3.1:8b` | Allowlist of approved runtime models. Arbitrary provider model names are rejected. |
 | `AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Ollama list/generate calls. |
-| `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max accepted rendered prompt length. |
+| `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max accepted rendered prompt length. Student backends should pre-budget prompts to this same contract. |
 | `AI_MODE_MAX_SCHEMA_CHARS` | `8000` | Max accepted JSON-schema serialized length. |
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
 
@@ -57,6 +57,8 @@ Example:
 ### `POST /generate`
 
 Single-shot non-stream generation only.
+
+`correlation_id` must be a safe single-line value that starts with a letter or digit, uses only letters, digits, `.`, `_`, `:`, or `-`, and stays within 64 characters.
 
 Request:
 
@@ -167,6 +169,8 @@ The service normalizes provider failures into bounded envelopes.
 }
 ```
 
+Generic provider `404` responses that do **not** explicitly describe a missing model are treated as provider/base-path failures, not as `MODEL_UNAVAILABLE`.
+
 ### Malformed or oversized provider response
 
 ```json
@@ -238,6 +242,7 @@ The service logs safe metadata only:
 - error code
 
 It must not log full prompts, raw user context, or raw provider output.
+Correlation IDs and other logged fields are sanitized defensively to stay single-line.
 
 ## Docker and Compose expectation
 

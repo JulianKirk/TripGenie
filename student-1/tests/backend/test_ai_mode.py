@@ -4,11 +4,18 @@ import logging
 
 import httpx
 import pytest
+from backend_service.ai_contract import (
+    AI_MODE_PROMPT_MAX_CHARS_DEFAULT,
+    AI_MODE_PROMPT_MAX_CHARS_MAX,
+    CORRELATION_ID_ISSUE,
+    sanitise_log_value,
+)
 from backend_service.config import (
     AI_MAX_ATTEMPTS_MAX,
     AI_MAX_ATTEMPTS_MIN,
     Settings,
 )
+from backend_service.prompt_assets import load_prompt_asset
 
 
 def ai_settings(**overrides: object) -> Settings:
@@ -16,6 +23,7 @@ def ai_settings(**overrides: object) -> Settings:
         "database_api_base_url": "http://database.test",
         "ai_mode_base_url": "http://ai-mode.test",
         "ai_mode_timeout_seconds": 1,
+        "ai_mode_max_prompt_chars": AI_MODE_PROMPT_MAX_CHARS_DEFAULT,
         "ai_max_attempts": 2,
         "ai_max_context_items": 2,
     }
@@ -110,10 +118,10 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
     ]
     assert len(ai_mode_api.requests) == 1
     ai_mode_request = ai_mode_api.requests[0]
-    assert '"requested_date": "2027-04-02"' in ai_mode_request["prompt"]
+    assert '"requested_date":"2027-04-02"' in ai_mode_request["prompt"]
     assert "Plan a gentle waterside afternoon." in ai_mode_request["prompt"]
-    assert '"total_existing_items": 3' in ai_mode_request["prompt"]
-    assert '"omitted_existing_items": 1' in ai_mode_request["prompt"]
+    assert '"total_existing_items":3' in ai_mode_request["prompt"]
+    assert '"omitted_existing_items":1' in ai_mode_request["prompt"]
     assert "Harbour Breakfast" in ai_mode_request["prompt"]
     assert "Harbour Walk" in ai_mode_request["prompt"]
     assert "Waterside Dinner" not in ai_mode_request["prompt"]
@@ -719,6 +727,103 @@ def test_ai_max_attempt_env_validation(monkeypatch, raw_value: str) -> None:
         ),
     ):
         Settings.from_env()
+
+
+def test_ai_prompt_budget_settings_validation() -> None:
+    assert ai_settings(ai_mode_max_prompt_chars=AI_MODE_PROMPT_MAX_CHARS_MAX)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS must be between "
+            f"1 and {AI_MODE_PROMPT_MAX_CHARS_MAX}"
+        ),
+    ):
+        ai_settings(ai_mode_max_prompt_chars=AI_MODE_PROMPT_MAX_CHARS_MAX + 1)
+
+
+def test_ai_prompt_asset_allows_valid_custom_asset() -> None:
+    settings = ai_settings(ai_prompt_asset="runtime_ai_suggestions_test.md")
+
+    assert settings.ai_prompt_asset == "runtime_ai_suggestions_test.md"
+    assert "prompt asset test variant" in load_prompt_asset(settings.ai_prompt_asset)
+
+
+def test_ai_prompt_asset_from_env_allows_valid_custom_asset(monkeypatch) -> None:
+    monkeypatch.setenv("STUDENT1_BACKEND_DB_API_BASE_URL", "http://database.test")
+    monkeypatch.setenv(
+        "STUDENT1_BACKEND_AI_PROMPT_ASSET",
+        "runtime_ai_suggestions_test.md",
+    )
+
+    settings = Settings.from_env()
+
+    assert settings.ai_prompt_asset == "runtime_ai_suggestions_test.md"
+
+
+@pytest.mark.parametrize(
+    ("asset_name", "expected_message"),
+    [
+        ("..\\secret.md", "without path separators or traversal"),
+        ("../secret.md", "without path separators or traversal"),
+        ("missing_asset.md", "was not found in backend_service/prompts"),
+    ],
+)
+def test_ai_prompt_asset_validation_fails_fast(
+    asset_name: str,
+    expected_message: str,
+) -> None:
+    with pytest.raises(ValueError, match=expected_message):
+        ai_settings(ai_prompt_asset=asset_name)
+
+
+@pytest.mark.parametrize(
+    ("asset_name", "expected_message"),
+    [
+        ("..\\secret.md", "without path separators or traversal"),
+        ("missing_asset.md", "was not found in backend_service/prompts"),
+    ],
+)
+def test_ai_prompt_asset_env_validation_fails_fast(
+    monkeypatch,
+    asset_name: str,
+    expected_message: str,
+) -> None:
+    monkeypatch.setenv("STUDENT1_BACKEND_DB_API_BASE_URL", "http://database.test")
+    monkeypatch.setenv("STUDENT1_BACKEND_AI_PROMPT_ASSET", asset_name)
+
+    with pytest.raises(ValueError, match=expected_message):
+        Settings.from_env()
+
+
+def test_ai_suggestions_reject_invalid_correlation_id_header(
+    client_factory,
+    database_api,
+) -> None:
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+    ) as client:
+        response = client.post(
+            "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Use a safe correlation identifier.",
+            },
+            headers={"X-Correlation-ID": "unsafe value"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        {"field": "correlation_id", "issue": CORRELATION_ID_ISSUE}
+    ]
+
+
+def test_log_sanitiser_replaces_control_characters() -> None:
+    assert (
+        sanitise_log_value("safe\nvalue\twith\rcontrols")
+        == "safe?value?with?controls"
+    )
 
 
 def test_ai_suggestion_logs_redact_free_text_and_prompt_body(

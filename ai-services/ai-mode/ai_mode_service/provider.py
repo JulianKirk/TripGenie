@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -223,10 +224,44 @@ class OllamaProviderAdapter:
 
 
 def _is_model_unavailable(exc: ResponseError) -> bool:
-    if exc.status_code == 404:
-        return True
-
-    lowered = exc.error.casefold()
+    error_text = _response_error_text(exc)
+    lowered = error_text.casefold()
     return "model" in lowered and any(
         fragment in lowered for fragment in ("not found", "pull", "missing")
     )
+
+
+def _response_error_text(exc: ResponseError) -> str:
+    raw_error = exc.error if isinstance(exc.error, str) else str(exc.error)
+    try:
+        payload = json.loads(raw_error)
+    except ValueError:
+        return raw_error
+
+    extracted = _extract_error_message(payload)
+    if extracted is not None:
+        return extracted
+    return raw_error
+
+
+def _extract_error_message(payload: object) -> str | None:
+    if isinstance(payload, str):
+        return payload
+    if not isinstance(payload, dict):
+        return None
+
+    error_value = payload.get("error")
+    if isinstance(error_value, str):
+        return error_value
+    if isinstance(error_value, dict):
+        for key in ("message", "detail", "error"):
+            candidate = error_value.get(key)
+            if isinstance(candidate, str):
+                return candidate
+
+    for key in ("message", "detail"):
+        candidate = payload.get(key)
+        if isinstance(candidate, str):
+            return candidate
+
+    return None

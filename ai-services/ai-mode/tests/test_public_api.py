@@ -5,6 +5,9 @@ import logging
 import httpx
 import pytest
 
+from ai_mode_service.models import CORRELATION_ID_ISSUE
+from ai_mode_service.service import _sanitise_log_value
+
 
 def success_generate_response(
     *,
@@ -118,6 +121,7 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
     client_factory,
     ollama_api,
 ) -> None:
+    correlation_id = "student1-run-01"
     with client_factory(ollama_handler=ollama_api.handle) as client:
         response = client.post(
             "/generate",
@@ -128,7 +132,7 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
                     "properties": {"suggestions": {"type": "array"}},
                     "required": ["suggestions"],
                 },
-                "correlation_id": "student1-run-01",
+                "correlation_id": correlation_id,
                 "metadata": {
                     "feature": "student-1-trip-suggestions",
                     "trip_id": "trip_2027_sydney_getaway",
@@ -138,7 +142,7 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
 
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["correlation_id"] == "student1-run-01"
+    assert payload["correlation_id"] == correlation_id
     assert payload["model"] == "qwen2.5:0.5b"
     assert payload["provider"] == "ollama"
     assert payload["done"] is True
@@ -152,6 +156,47 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
     assert ollama_request["stream"] is False
     assert ollama_request["options"] == {"temperature": 0}
     assert ollama_request["format"]["type"] == "object"
+
+
+def test_generate_accepts_max_length_correlation_id(client_factory, ollama_api) -> None:
+    correlation_id = "A" + ("1" * 63)
+
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={
+                "prompt": "Return JSON only.",
+                "correlation_id": correlation_id,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["correlation_id"] == correlation_id
+
+
+@pytest.mark.parametrize(
+    "correlation_id",
+    ["bad\nvalue", "bad\rvalue", "bad value", "A" * 65],
+)
+def test_generate_rejects_unsafe_correlation_id(
+    client_factory,
+    ollama_api,
+    correlation_id: str,
+) -> None:
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={
+                "prompt": "Return JSON only.",
+                "correlation_id": correlation_id,
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        {"field": "correlation_id", "issue": CORRELATION_ID_ISSUE}
+    ]
+    assert ollama_api.generate_requests == []
 
 
 def test_generate_allows_approved_model_override(
@@ -258,6 +303,21 @@ def test_generate_validates_prompt_and_schema_bounds(
             "Requested AI model is not available.",
         ),
         (
+            httpx.Response(
+                404,
+                json={"error": {"message": "model 'llama3.1:8b' not found"}},
+            ),
+            503,
+            "MODEL_UNAVAILABLE",
+            "Requested AI model is not available.",
+        ),
+        (
+            httpx.Response(404, json={"error": "not found"}),
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+            "The AI provider could not generate a response.",
+        ),
+        (
             httpx.Response(200, text="{not json"),
             502,
             "BAD_GATEWAY",
@@ -334,3 +394,10 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
     assert "SENSITIVE_PROMPT_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "SENSITIVE_OUTPUT_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "trip_2027_sydney_getaway" not in caplog.text
+
+
+def test_log_sanitiser_replaces_control_characters() -> None:
+    assert (
+        _sanitise_log_value("safe\nvalue\twith\rcontrols")
+        == "safe?value?with?controls"
+    )

@@ -70,6 +70,9 @@ Existing itinerary context stays bounded:
 - only the configured maximum number of items is embedded in the prompt
 - `total_existing_items` and `omitted_existing_items` remain visible in the context payload
 - descriptions and notes are truncated before prompt assembly
+- prompt JSON is rendered compactly rather than prettified
+- if the rendered prompt would exceed the shared `AI_MODE_MAX_PROMPT_CHARS` contract, Student 1 deterministically drops optional existing-item notes/descriptions, optional trip notes, optional interests/constraints, then lower-priority context items while recording explicit `budget_adjustments`
+- if the irreducible required context still does not fit, Student 1 returns a `422 VALIDATION_ERROR` before calling the shared AI-Mode service
 
 ## 4. Shared AI-Mode consumer contract used by Student 1
 
@@ -82,7 +85,7 @@ Student 1 sends:
 - a bounded fully rendered `prompt`
 - an optional approved `model` override when needed
 - an optional JSON `schema`
-- `correlation_id`
+- `correlation_id` constrained to a safe single-line identifier (`[A-Za-z0-9][A-Za-z0-9._:-]{0,63}`)
 - bounded metadata such as feature name, trip ID, requested date, attempt number, and prompt asset
 
 The shared service:
@@ -125,6 +128,7 @@ The retry path is a **Student 1 domain robustness mechanism**, not the assessed 
   - itinerary-rule/constraint failures
 - Adaptation notes describe the prior failure class without logging raw prompts, full free-text notes, or raw model output.
 - Shared service unavailability, timeouts, malformed dependency HTTP, model absence, and oversized provider responses are terminal and do not trigger Student 1 retries.
+- Missing or unreadable prompt assets fail fast during backend startup/configuration rather than surfacing later as endpoint 500s.
 
 If the retry cap is exhausted, Student 1 returns `502 AI_OUTPUT_INVALID`.
 
@@ -177,6 +181,7 @@ Instead, logs record safe metadata such as:
 | --- | --- | --- |
 | `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Compose wiring is deferred to issue #13; expected container URL is `http://ai-mode:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Student 1 calls to the shared AI-Mode service. |
+| `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Student-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset. |
 | `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |

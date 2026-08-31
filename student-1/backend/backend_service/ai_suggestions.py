@@ -4,16 +4,19 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, time
-from functools import lru_cache
-from importlib import resources
 from typing import Annotated
 from uuid import uuid4
 
 from pydantic import Field, StringConstraints, ValidationError, field_validator
 
+from .ai_contract import (
+    CORRELATION_ID_PATTERN,
+    sanitise_log_value,
+    validate_correlation_id_value,
+)
 from .ai_mode_client import AiModeClient
 from .config import AI_MAX_ATTEMPTS_MAX, AI_MAX_ATTEMPTS_MIN, Settings
-from .errors import ai_output_invalid
+from .errors import ai_output_invalid, validation_error
 from .models import (
     DependencyStatus,
     IsoDate,
@@ -29,12 +32,24 @@ from .models import (
     _normalise_optional_text,
     _validate_iso_date,
 )
+from .prompt_assets import load_prompt_asset
 
 LOGGER = logging.getLogger(__name__)
 PROMPT_TEXT_LIMIT = 180
+PROMPT_TRUNCATED_SUFFIX = "… [truncated]"
+PROMPT_BUDGET_ERROR_FIELD = "ai_suggestions"
+PROMPT_JSON_SORT_KEYS = True
 
 AiGoalText = Annotated[str, StringConstraints(min_length=1, max_length=800)]
 AiOptionalText = Annotated[str, StringConstraints(max_length=1000)]
+CorrelationId = Annotated[
+    str,
+    StringConstraints(
+        min_length=1,
+        max_length=64,
+        pattern=CORRELATION_ID_PATTERN.pattern,
+    ),
+]
 
 
 class AiSuggestionRequest(StrictModel):
@@ -71,7 +86,7 @@ class AiSuggestionsResponse(StrictModel):
     model: ShortText
     prompt_asset: ShortText
     run_id: ShortText
-    correlation_id: ShortText
+    correlation_id: CorrelationId
     attempt_count: int = Field(
         ge=AI_MAX_ATTEMPTS_MIN,
         le=AI_MAX_ATTEMPTS_MAX,
@@ -99,7 +114,17 @@ class AiModeSuggestionEnvelope(StrictModel):
     suggestions: list[AiModeSuggestionDraft] = Field(default_factory=list, max_length=5)
 
 
-PromptText = Annotated[str, StringConstraints(max_length=PROMPT_TEXT_LIMIT + 1)]
+PromptText = Annotated[str, StringConstraints(max_length=PROMPT_TEXT_LIMIT)]
+
+
+class PromptBudgetAdjustments(StrictModel):
+    item_notes: int | None = Field(default=None, ge=1)
+    item_descriptions: int | None = Field(default=None, ge=1)
+    item_locations: int | None = Field(default=None, ge=1)
+    trip_notes: bool | None = None
+    interests: bool | None = None
+    constraints: bool | None = None
+    dropped_items: int | None = Field(default=None, ge=1)
 
 
 class PromptContextItem(StrictModel):
@@ -131,6 +156,7 @@ class PromptContext(StrictModel):
     total_existing_items: int = Field(ge=0)
     omitted_existing_items: int = Field(ge=0)
     existing_items: list[PromptContextItem] = Field(default_factory=list)
+    budget_adjustments: PromptBudgetAdjustments | None = None
 
     @field_validator("start_date", "end_date", "requested_date")
     @classmethod
@@ -143,6 +169,23 @@ class RetryableAiFailure(Exception):
     kind: str
     summary: str
     details: list[dict[str, str]]
+
+
+@dataclass(slots=True)
+class PreparedPrompt:
+    prompt: str
+    prompt_context: PromptContext
+
+
+@dataclass(slots=True)
+class PromptBudgetState:
+    item_notes: int = 0
+    item_descriptions: int = 0
+    item_locations: int = 0
+    trip_notes: bool = False
+    interests: bool = False
+    constraints: bool = False
+    dropped_items: int = 0
 
 
 def build_prompt_context(
@@ -223,7 +266,7 @@ class AiSuggestionService:
     ) -> AiSuggestionsResponse:
         run_id = f"ai_{uuid4().hex[:12]}"
         resolved_correlation_id = _normalise_correlation_id(correlation_id, run_id)
-        prompt_context = build_prompt_context(
+        base_prompt_context = build_prompt_context(
             trip,
             existing_items,
             request,
@@ -242,29 +285,34 @@ class AiSuggestionService:
             goal_chars=len(request.goal),
             interests_chars=len(request.interests or ""),
             constraints_chars=len(request.constraints or ""),
-            context_items=len(prompt_context.existing_items),
-            omitted_items=prompt_context.omitted_existing_items,
+            context_items=len(base_prompt_context.existing_items),
+            omitted_items=base_prompt_context.omitted_existing_items,
         )
 
         failure_note: str | None = None
         last_failure: RetryableAiFailure | None = None
 
         for attempt in range(1, self._settings.ai_max_attempts + 1):
+            prepared_prompt = build_budgeted_prompt(
+                prompt_asset=prompt_asset,
+                prompt_context=base_prompt_context,
+                output_schema=prompt_schema,
+                failure_note=failure_note,
+                max_prompt_chars=self._settings.ai_mode_max_prompt_chars,
+            )
             _log_stage(
                 "ai_mode_attempt",
                 run_id=run_id,
                 correlation_id=resolved_correlation_id,
                 trip_id=trip_id,
                 attempt=attempt,
-            )
-            prompt = render_prompt(
-                prompt_asset=prompt_asset,
-                prompt_context=prompt_context,
-                output_schema=prompt_schema,
-                failure_note=failure_note,
+                prompt_chars=len(prepared_prompt.prompt),
+                context_items=len(prepared_prompt.prompt_context.existing_items),
+                omitted_items=prepared_prompt.prompt_context.omitted_existing_items,
+                budgeted=prepared_prompt.prompt_context.budget_adjustments is not None,
             )
             generation = await self._client.generate(
-                prompt=prompt,
+                prompt=prepared_prompt.prompt,
                 schema=prompt_schema,
                 correlation_id=resolved_correlation_id,
                 metadata={
@@ -528,22 +576,175 @@ def render_prompt(
     failure_note: str | None,
 ) -> str:
     template = load_prompt_asset(prompt_asset)
-    rendered = template.replace(
-        "{{TRIP_CONTEXT_JSON}}",
-        prompt_context.model_dump_json(indent=2),
-    ).replace(
-        "{{OUTPUT_SCHEMA_JSON}}",
-        json.dumps(output_schema, indent=2, ensure_ascii=False),
+    return _render_prompt_with_context_data(
+        template=template,
+        context_data=prompt_context.model_dump(mode="json", exclude_none=True),
+        output_schema_json=_dump_compact_json(output_schema),
+        failure_note=failure_note,
     )
 
-    adaptation_block = failure_note or "None. This is the first attempt."
-    return rendered.replace("{{ADAPTATION_NOTES}}", adaptation_block)
+
+def build_budgeted_prompt(
+    *,
+    prompt_asset: str,
+    prompt_context: PromptContext,
+    output_schema: dict[str, object],
+    failure_note: str | None,
+    max_prompt_chars: int,
+) -> PreparedPrompt:
+    template = load_prompt_asset(prompt_asset)
+    output_schema_json = _dump_compact_json(output_schema)
+    context_data = prompt_context.model_dump(mode="json", exclude_none=True)
+    budget_state = PromptBudgetState()
+
+    while True:
+        _apply_budget_adjustments(context_data, budget_state)
+        rendered_prompt = _render_prompt_with_context_data(
+            template=template,
+            context_data=context_data,
+            output_schema_json=output_schema_json,
+            failure_note=failure_note,
+        )
+        if len(rendered_prompt) <= max_prompt_chars:
+            return PreparedPrompt(
+                prompt=rendered_prompt,
+                prompt_context=PromptContext.model_validate(context_data),
+            )
+
+        if _omit_item_field(context_data, field_name="notes_excerpt"):
+            budget_state.item_notes += 1
+            continue
+        if _omit_item_field(context_data, field_name="description_excerpt"):
+            budget_state.item_descriptions += 1
+            continue
+        if _omit_top_level_field(context_data, field_name="trip_notes_excerpt"):
+            budget_state.trip_notes = True
+            continue
+        if _omit_top_level_field(context_data, field_name="interests"):
+            budget_state.interests = True
+            continue
+        if _omit_top_level_field(context_data, field_name="constraints"):
+            budget_state.constraints = True
+            continue
+        if _omit_item_field(context_data, field_name="location"):
+            budget_state.item_locations += 1
+            continue
+        if _drop_low_priority_item(context_data):
+            budget_state.dropped_items += 1
+            continue
+
+        raise validation_error(
+            "One or more fields failed validation.",
+            [
+                {
+                    "field": PROMPT_BUDGET_ERROR_FIELD,
+                    "issue": (
+                        "required trip context exceeds the configured AI prompt "
+                        f"budget of {max_prompt_chars} characters"
+                    ),
+                },
+            ],
+        )
 
 
-@lru_cache(maxsize=8)
-def load_prompt_asset(prompt_asset: str) -> str:
-    prompt_path = resources.files("backend_service").joinpath("prompts", prompt_asset)
-    return prompt_path.read_text(encoding="utf-8")
+def _render_prompt_with_context_data(
+    *,
+    template: str,
+    context_data: dict[str, object],
+    output_schema_json: str,
+    failure_note: str | None,
+) -> str:
+    rendered = template.replace(
+        "{{TRIP_CONTEXT_JSON}}",
+        _dump_compact_json(context_data),
+    ).replace(
+        "{{OUTPUT_SCHEMA_JSON}}",
+        output_schema_json,
+    )
+    adaptation_block = failure_note or "None."
+    return rendered.replace("{{ADAPTATION_NOTES}}", adaptation_block).strip()
+
+
+def _dump_compact_json(payload: object) -> str:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=PROMPT_JSON_SORT_KEYS,
+    )
+
+
+def _apply_budget_adjustments(
+    context_data: dict[str, object],
+    budget_state: PromptBudgetState,
+) -> None:
+    adjustments: dict[str, object] = {}
+    if budget_state.item_notes:
+        adjustments["item_notes"] = budget_state.item_notes
+    if budget_state.item_descriptions:
+        adjustments["item_descriptions"] = budget_state.item_descriptions
+    if budget_state.item_locations:
+        adjustments["item_locations"] = budget_state.item_locations
+    if budget_state.trip_notes:
+        adjustments["trip_notes"] = True
+    if budget_state.interests:
+        adjustments["interests"] = True
+    if budget_state.constraints:
+        adjustments["constraints"] = True
+    if budget_state.dropped_items:
+        adjustments["dropped_items"] = budget_state.dropped_items
+
+    if adjustments:
+        context_data["budget_adjustments"] = adjustments
+        return
+
+    context_data.pop("budget_adjustments", None)
+
+
+def _omit_top_level_field(
+    context_data: dict[str, object],
+    *,
+    field_name: str,
+) -> bool:
+    if field_name not in context_data:
+        return False
+    del context_data[field_name]
+    return True
+
+
+def _omit_item_field(
+    context_data: dict[str, object],
+    *,
+    field_name: str,
+) -> bool:
+    items = _context_items(context_data)
+    for item in reversed(items):
+        if field_name in item:
+            del item[field_name]
+            return True
+    return False
+
+
+def _drop_low_priority_item(context_data: dict[str, object]) -> bool:
+    items = _context_items(context_data)
+    if not items:
+        return False
+    items.pop()
+    if items:
+        context_data["existing_items"] = items
+    else:
+        context_data.pop("existing_items", None)
+    context_data["omitted_existing_items"] = int(
+        context_data.get("omitted_existing_items", 0)
+    ) + 1
+    return True
+
+
+def _context_items(context_data: dict[str, object]) -> list[dict[str, object]]:
+    existing_items = context_data.get("existing_items")
+    if not isinstance(existing_items, list):
+        return []
+    return existing_items
 
 
 def _validation_details_from_error(
@@ -619,14 +820,25 @@ def _truncate_prompt_text(value: str | None) -> str | None:
         return None
     if len(cleaned) <= PROMPT_TEXT_LIMIT:
         return cleaned
-    return f"{cleaned[: PROMPT_TEXT_LIMIT - 1].rstrip()}…"
+    truncated_limit = PROMPT_TEXT_LIMIT - len(PROMPT_TRUNCATED_SUFFIX)
+    return f"{cleaned[:truncated_limit].rstrip()}{PROMPT_TRUNCATED_SUFFIX}"
 
 
 def _normalise_correlation_id(correlation_id: str | None, fallback: str) -> str:
-    cleaned = (correlation_id or "").strip()
-    return cleaned[:64] or fallback
+    if correlation_id is None or not correlation_id.strip():
+        return fallback
+
+    try:
+        return validate_correlation_id_value(correlation_id)
+    except ValueError as exc:
+        raise validation_error(
+            "One or more fields failed validation.",
+            [{"field": "correlation_id", "issue": str(exc)}],
+        ) from exc
 
 
 def _log_stage(stage: str, **payload: object) -> None:
-    serialised = " ".join(f"{key}={payload[key]}" for key in sorted(payload))
+    serialised = " ".join(
+        f"{key}={sanitise_log_value(payload[key])}" for key in sorted(payload)
+    )
     LOGGER.info("student1.ai_suggestions stage=%s %s", stage, serialised)

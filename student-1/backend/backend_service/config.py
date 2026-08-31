@@ -4,6 +4,12 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from .ai_contract import (
+    AI_MODE_PROMPT_MAX_CHARS_DEFAULT,
+    AI_MODE_PROMPT_MAX_CHARS_MAX,
+)
+from .prompt_assets import validate_prompt_asset
+
 AI_MAX_ATTEMPTS_MIN = 1
 AI_MAX_ATTEMPTS_MAX = 10
 
@@ -115,6 +121,16 @@ def _validate_ai_max_attempts(value: int) -> int:
     return value
 
 
+def _validate_ai_prompt_budget(value: int) -> int:
+    if value < 1 or value > AI_MODE_PROMPT_MAX_CHARS_MAX:
+        raise ValueError(
+            "STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS must be between "
+            f"1 and {AI_MODE_PROMPT_MAX_CHARS_MAX}."
+        )
+
+    return value
+
+
 @dataclass(slots=True)
 class Settings:
     database_api_base_url: str
@@ -125,11 +141,16 @@ class Settings:
     ai_mode_base_url: str | None = None
     ai_mode_timeout_seconds: float = 15.0
     ai_prompt_asset: str = "runtime_ai_suggestions_v1.md"
+    ai_mode_max_prompt_chars: int = AI_MODE_PROMPT_MAX_CHARS_DEFAULT
     ai_max_attempts: int = 2
     ai_max_context_items: int = 12
 
     def __post_init__(self) -> None:
         self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
+        self.ai_mode_max_prompt_chars = _validate_ai_prompt_budget(
+            self.ai_mode_max_prompt_chars
+        )
+        self.ai_prompt_asset = validate_prompt_asset(self.ai_prompt_asset)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -176,6 +197,11 @@ class Settings:
                 "runtime_ai_suggestions_v1.md",
             ).strip()
             or "runtime_ai_suggestions_v1.md",
+            ai_mode_max_prompt_chars=_parse_int(
+                os.getenv("STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS"),
+                env_name="STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS",
+                default=AI_MODE_PROMPT_MAX_CHARS_DEFAULT,
+            ),
             ai_max_attempts=_parse_int(
                 os.getenv("STUDENT1_BACKEND_AI_MAX_ATTEMPTS"),
                 env_name="STUDENT1_BACKEND_AI_MAX_ATTEMPTS",

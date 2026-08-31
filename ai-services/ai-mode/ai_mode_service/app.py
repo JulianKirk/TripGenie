@@ -44,6 +44,12 @@ def _validation_detail_field(location: tuple[object, ...]) -> str:
     return str(location[-1]) if location else "body"
 
 
+def _validation_detail_issue(message: str) -> str:
+    if message.startswith("Value error, "):
+        return message.removeprefix("Value error, ")
+    return message
+
+
 def envelope(payload: object) -> dict[str, object]:
     return {"data": payload}
 
@@ -86,7 +92,7 @@ def create_app(
         details = [
             {
                 "field": _validation_detail_field(tuple(error["loc"])),
-                "issue": error["msg"],
+                "issue": _validation_detail_issue(str(error["msg"])),
             }
             for error in exc.errors()
         ]
