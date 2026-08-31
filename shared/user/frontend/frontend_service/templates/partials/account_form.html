@@ -1,0 +1,24 @@
+{#
+  The edit form, and what the last save said about it. Rendered inside
+  account.html on first load and swapped back in on its own after every save,
+  so the message and the field values always agree with what the backend
+  actually stored.
+#}
+{% if saved %}<p class="notice notice--ok" role="status">Saved.</p>{% endif %}
+{% if error %}<p class="notice notice--error" role="alert">{{ error }}</p>{% endif %}
+
+<form class="stack"
+      hx-post="/account/{{ user.id }}"
+      hx-target="#account"
+      hx-swap="innerHTML">
+  <label>Username
+    <input name="username" autocomplete="username" value="{{ user.username }}">
+  </label>
+  <label>New password
+    {# Blank means "leave it alone" -- app.py drops empty fields rather than
+       sending them, so there is nothing to prefill here. #}
+    <input name="password" type="password" autocomplete="new-password"
+           placeholder="Leave blank to keep the current one">
+  </label>
+  <button type="submit">Save changes</button>
+</form>

@@ -21,6 +21,10 @@ TripGenie is an AI Smart Travel Companion microservices application built with D
 | **Student 4** | Julian Kirk (Lead) | Activities & Attractions Management | `.github/workflows/student-4-ci.yml` |
 | **Student 5** | Caleb Huynh | Budget & Expense Management | `.github/workflows/student-5-ci.yml` |
 
+User accounts are cross-cutting rather than one student's feature, so they live
+in [`shared/user/`](shared/user/user-service.md) with their own CI workflow,
+`.github/workflows/shared-user-ci.yml`.
+
 ---
 
 ## 3. Project Repository Structure
@@ -51,6 +55,12 @@ TripGenie/
 │   │   ├── css/
 │   │   ├── js/
 │   │   └── assets/
+│   ├── user/                  # cross-cutting account service
+│   │   ├── frontend/
+│   │   ├── backend/
+│   │   ├── database/
+│   │   ├── docs/
+│   │   └── tests/
 │   └── configuration/
 ├── student-1/
 │   ├── frontend/

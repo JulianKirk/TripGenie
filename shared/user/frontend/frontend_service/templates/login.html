@@ -1,0 +1,55 @@
+{#
+  Sign in and sign up, side by side on one page. Both are plain form posts --
+  a successful one redirects to the account page, so there is no fragment for
+  HTMX to swap and no reason to load it here.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · TripGenie</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+</head>
+<body>
+  <header class="masthead">
+    <p class="masthead__eyebrow">TripGenie</p>
+    <h1 class="masthead__title">Your account</h1>
+    <p class="masthead__subtitle">Sign in to pick up where you left off, or make an account.</p>
+  </header>
+
+  <main class="layout layout--split">
+    <section class="card">
+      <h2>Sign in</h2>
+      {% if error %}<p class="notice notice--error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="/login" class="stack">
+        <label>Username
+          <input name="username" autocomplete="username" required
+                 value="{{ username | default('', true) }}">
+        </label>
+        <label>Password
+          {# Never repopulated: a failed sign-in should not leave the password
+             sitting in the page it came back on. #}
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Create an account</h2>
+      {% if signup_error %}<p class="notice notice--error" role="alert">{{ signup_error }}</p>{% endif %}
+      <form method="post" action="/signup" class="stack">
+        <label>Username
+          <input name="username" autocomplete="username" required
+                 value="{{ signup_username | default('', true) }}">
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="new-password" required>
+        </label>
+        <button type="submit">Sign up</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{#
+  The account page. Everything that changes on a save lives in the
+  account_form partial, so a save repaints that and leaves the rest alone --
+  the only HTMX on the site.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ user.username }} · TripGenie</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <p class="masthead__eyebrow">TripGenie</p>
+    <h1 class="masthead__title">{{ user.username }}</h1>
+    <p class="masthead__subtitle">Signed in. Change your details below, or sign out.</p>
+  </header>
+
+  <main class="layout">
+    {% if error %}<p class="notice notice--error" role="alert">{{ error }}</p>{% endif %}
+
+    <section class="card">
+      <h2>Your details</h2>
+      <div id="account">
+        {% include "partials/account_form.html" %}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Leaving</h2>
+      <div class="row">
+        {# Signing out is just going back: there is no session to end. #}
+        <a class="button button--quiet" href="/">Sign out</a>
+        <form method="post" action="/account/{{ user.id }}/delete"
+              onsubmit="return confirm('Delete this account? This cannot be undone.')">
+          <button type="submit" class="button--danger">Delete account</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

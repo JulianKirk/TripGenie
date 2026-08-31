@@ -7,6 +7,50 @@ services:
     ports:
       - "8080:80"
 
+  # Shared User Accounts
+  # Not one student's feature -- accounts are cross-cutting, so the service
+  # lives under shared/ rather than a student-N folder. Same three-service
+  # shape as student-2 below, and the same grouping-entry trick: bring the
+  # whole thing up with `docker compose up --build shared-user`.
+  shared-user:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - shared-user-frontend
+
+  # The public face of the user service, and the only caller of the database
+  # service behind it. The other students' backends can call it too.
+  shared-user-backend:
+    build:
+      context: ./shared/user
+      dockerfile: backend/Dockerfile
+    ports:
+      - "9100:9100"
+    depends_on:
+      - shared-user-database
+
+  # The sign-in and account pages. Talks to the backend service and nothing
+  # else.
+  shared-user-frontend:
+    build:
+      context: ./shared/user
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "9103:9103"
+    depends_on:
+      - shared-user-backend
+
+  # Internal only -- no published port. The backend service is the sole caller
+  # and reaches it as http://shared-user-database:9101 on the compose network.
+  shared-user-database:
+    build:
+      context: ./shared/user
+      dockerfile: database/Dockerfile
+    expose:
+      - "9101"
+    volumes:
+      - shared-user-db:/data
+
   # Student 1: Trip & Itinerary Management
   # Same shape as student-2 below: a grouping container, a public backend, a
   # webpage, and an internal-only database service.
@@ -130,5 +174,6 @@ services:
       - "11434:11434"
 
 volumes:
+  shared-user-db:
   student-1-db:
   student-2-db:

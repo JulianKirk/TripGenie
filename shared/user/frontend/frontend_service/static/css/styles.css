@@ -1,0 +1,88 @@
+/* One stylesheet, custom properties at the top -- the same approach and the
+   same tokens as student 2's frontend, so the two pages look like one product.
+   Only what these two pages use: no table, no dialog, no filter grid. */
+:root {
+  --page-bg: #f5f6f8;
+  --surface: #ffffff;
+  --border: #d8dce3;
+  --text: #1c2430;
+  --muted: #5d6875;
+  --primary: #1f5fa8;
+  --ok: #1c7c4a;
+  --danger: #a33b3b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.masthead {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem clamp(1rem, 5vw, 3rem);
+}
+.masthead__eyebrow { margin: 0; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.masthead__title { margin: 0.2rem 0; font-size: 1.6rem; }
+.masthead__subtitle { margin: 0; color: var(--muted); }
+
+.layout { padding: 1.5rem clamp(1rem, 5vw, 3rem); max-width: 60rem; }
+/* Two cards side by side where there is room, stacked where there is not.
+   auto-fit does the whole media query. */
+.layout--split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.card h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+
+.stack { display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+.stack label { display: flex; flex-direction: column; gap: 0.25rem; color: var(--muted); font-size: 0.9rem; width: 100%; }
+
+.row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+input {
+  font: inherit;
+  color: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  width: 100%;
+}
+
+button, .button {
+  font: inherit;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--primary);
+  color: var(--surface);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.button--quiet { background: var(--surface); color: var(--text); }
+.button--danger { background: var(--danger); border-color: var(--danger); }
+
+.notice {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+.notice--error { border-color: var(--danger); color: var(--danger); }
+.notice--ok { border-color: var(--ok); color: var(--ok); }
