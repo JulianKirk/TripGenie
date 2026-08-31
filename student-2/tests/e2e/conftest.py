@@ -31,7 +31,9 @@ def database(tmp_path):
     """The real database service, on a temporary SQLite file. Entering the
     TestClient runs its lifespan, which creates the schema."""
     app = create_database_app(
-        DatabaseSettings(database_url=f"sqlite:///{tmp_path / 'accommodation.db'}")
+        DatabaseSettings(
+            database_url=f"sqlite:///{tmp_path / 'accommodation.db'}", seed=False
+        )
     )
     with TestClient(app) as client:
         yield client

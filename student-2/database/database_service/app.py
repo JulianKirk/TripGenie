@@ -18,6 +18,7 @@ from database_service import errors
 from database_service.config import Settings
 from database_service.database import create_engine_and_session
 from database_service.routers import accommodation, health
+from database_service.seed_data import seed
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -29,6 +30,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine, session_factory = create_engine_and_session(settings)
+        if settings.seed:
+            with session_factory() as session:
+                seed(session)
         app.state.settings = settings
         app.state.engine = engine
         app.state.session_factory = session_factory
