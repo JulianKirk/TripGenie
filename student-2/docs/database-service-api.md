@@ -5,10 +5,10 @@
 - [Service Endpoints](#service-endpoints)
   - [GET /health](#get-health)
 - [Accommodation Endpoints](#accommodation-endpoints)
-  - [GET /accommodation/{id}](#get-accommodationid)
-  - [QUERY /accommodation](#query-accommodation)
-  - [POST /accommodation](#post-accommodation)
-  - [PUT /accommodation/{id}](#put-accommodationid)
+  - [GET /internal/accommodation/{id}](#get-internalaccommodationid)
+  - [QUERY /internal/accommodation](#query-internalaccommodation)
+  - [POST /internal/accommodation](#post-internalaccommodation)
+  - [PUT /internal/accommodation/{id}](#put-internalaccommodationid)
 
 # Accommodation Database Service API
 
@@ -54,7 +54,11 @@ Two consequences worth knowing before you write a client:
 - **Responses omit what they did not set.** A field that is not populated is
   absent from the JSON rather than present as `null`. `POST` returns an
   accommodation carrying only `id` and `name`; `GET` returns one carrying
-  everything. Read a missing key as "not supplied", never as "empty".
+  everything. Read a missing key as "not supplied", never as "empty" -- the
+  optional columns are nullable, so an omitted `rating` stays absent rather
+  than being stored as `0.0`, and an explicit `0.0` or `[]` is kept as the
+  real answer it is. A field the row does not carry matches no filter or
+  bound.
 - **`POST` is the exception that stays strict.** Create re-declares its six
   required fields, so `POST {}` is a `400` naming each one rather than a row
   with no name.
@@ -104,14 +108,14 @@ database, not that there is anything in it.
 
 ## Accommodation Endpoints
 
-## GET /accommodation/{id}
+## GET /internal/accommodation/{id}
 
 Retrieve a single accommodation.
 
 ### Request
 
 **Method:** `GET`
-**Endpoint:** `/accommodation/{id}`
+**Endpoint:** `/internal/accommodation/{id}`
 
 ### Path Parameters
 
@@ -122,7 +126,7 @@ Retrieve a single accommodation.
 ### Example Request
 
 ```bash
-curl -X GET "http://localhost:9001/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11"
+curl -X GET "http://localhost:9001/internal/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11"
 ```
 
 ### Example Response `200 OK`
@@ -160,7 +164,7 @@ curl -X GET "http://localhost:9001/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9
 | 500    | Internal server error      |
 
 
-## QUERY /accommodation
+## QUERY /internal/accommodation
 
 Search accommodations. Uses the [HTTP QUERY method](https://datatracker.ietf.org/doc/draft-ietf-httpbis-safe-method-w-body/):
 safe and idempotent like `GET`, but the filters travel in a request body instead
@@ -169,7 +173,7 @@ of the query string.
 ### Request
 
 **Method:** `QUERY`
-**Endpoint:** `/accommodation`
+**Endpoint:** `/internal/accommodation`
 **Content-Type:** `application/json`
 
 ### Request Body
@@ -189,7 +193,7 @@ it carry the comparisons a template cannot express.
 | limit                 | integer | Max number of results, 1-100 (default 20)                     |
 | offset                | integer | Number of results to skip (default 0)                         |
 
-Inside `accommodation`, any field from [POST /accommodation](#post-accommodation)
+Inside `accommodation`, any field from [POST /internal/accommodation](#post-internalaccommodation)
 can be used as an exact match, including the nested `location_details` and
 `room_details` objects. `city` still requires `country` — Sydney exists in more
 than one.
@@ -205,7 +209,7 @@ result list is for choosing which one to `GET` in full.
 ### Example Request
 
 ```bash
-curl -X QUERY "http://localhost:9001/accommodation" \
+curl -X QUERY "http://localhost:9001/internal/accommodation" \
   -H "Content-Type: application/json" \
   -d '{
     "accommodation": {
@@ -248,14 +252,14 @@ curl -X QUERY "http://localhost:9001/accommodation" \
 | 500    | Internal server error                        |
 
 
-## POST /accommodation
+## POST /internal/accommodation
 
 Create a new accommodation.
 
 ### Request
 
 **Method:** `POST`
-**Endpoint:** `/accommodation`
+**Endpoint:** `/internal/accommodation`
 **Content-Type:** `application/json`
 
 ### Request Body
@@ -267,7 +271,7 @@ Create a new accommodation.
 | description         | string  | Yes      | Free-text description of the accommodation                               |
 | price_per_night     | decimal | Yes      | Price of the accommodation per night (AUD)                               |
 | availability_status | enum    | Yes      | `available`, `unavailable`, `sold_out`                                   |
-| rating              | float   | No       | Aggregate rating, defaults to `0.0`                                      |
+| rating              | float   | No       | Aggregate rating; absent until one is recorded, never `0.0` as a stand-in |
 | amenities           | array   | No       | List of amenity strings                                                  |
 | location_details    | object  | Yes      | Country, city, street name, and street number                            |
 | room_details        | object  | No       | Room counts, bed counts, bed types, and a free-text description          |
@@ -285,15 +289,15 @@ Create a new accommodation.
 
 | Field       | Type    | Required | Description                                                                 |
 |-------------|---------|----------|-----------------------------------------------------------------------------|
-| room_count  | integer | Yes      | Number of rooms                                                             |
-| bed_count   | integer | Yes      | Number of beds                                                              |
+| room_count  | integer | No       | Number of rooms                                                             |
+| bed_count   | integer | No       | Number of beds                                                              |
 | bed_types   | array   | No       | Any of `single`, `double`, `queen`, `king`, `bunk`, `sofa_bed`              |
 | description | string  | No       | Free-text description of the rooms                                          |
 
 ### Example Request
 
 ```bash
-curl -X POST "http://localhost:9001/accommodation" \
+curl -X POST "http://localhost:9001/internal/accommodation" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "example accommodation",
@@ -337,14 +341,14 @@ again; the rest are unset and therefore absent.
 | 500    | Internal server error            |
 
 
-## PUT /accommodation/{id}
+## PUT /internal/accommodation/{id}
 
 Update an existing accommodation.
 
 ### Request
 
 **Method:** `PUT`
-**Endpoint:** `/accommodation/{id}`
+**Endpoint:** `/internal/accommodation/{id}`
 **Content-Type:** `application/json`
 
 ### Path Parameters
@@ -363,7 +367,7 @@ field by field, not replaced wholesale.
 ### Example Request
 
 ```bash
-curl -X PUT "http://localhost:9001/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11" \
+curl -X PUT "http://localhost:9001/internal/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11" \
   -H "Content-Type: application/json" \
   -d '{
     "price_per_night": 250.00,
@@ -373,7 +377,7 @@ curl -X PUT "http://localhost:9001/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9
 
 ### Example Response `200 OK`
 
-The full accommodation, in the same shape as `GET /accommodation/{id}` — not
+The full accommodation, in the same shape as `GET /internal/accommodation/{id}` — not
 just the fields that changed.
 
 ```json

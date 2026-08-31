@@ -57,7 +57,7 @@ class BedTypesJSON(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         if value is None:
-            return []
+            return None
         return [BedType(v) for v in value]
 
 
@@ -124,7 +124,7 @@ class LocationDetails(Base):
         ForeignKey("countries.id", ondelete="RESTRICT")
     )
     city_id: Mapped[UUID] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"))
-    street: Mapped[str] = mapped_column(default="")
+    street: Mapped[str | None] = mapped_column(default=None)
     street_number: Mapped[int | None] = mapped_column(default=None)
 
     accommodation: Mapped[Accommodation] = relationship(
@@ -142,7 +142,7 @@ class LocationDetails(Base):
         return cls(
             country_id=country.id,
             city_id=city.id,
-            street=message.street or "",
+            street=message.street,
             street_number=message.street_number,
         )
 
@@ -180,22 +180,22 @@ class RoomDetails(Base):
     accommodation_id: Mapped[UUID] = mapped_column(
         ForeignKey("accommodations.id", ondelete="CASCADE"), unique=True
     )
-    room_count: Mapped[int]
-    bed_count: Mapped[int]
-    bed_types: Mapped[list[BedType]] = mapped_column(
-        MutableList.as_mutable(BedTypesJSON), default=list
+    room_count: Mapped[int | None] = mapped_column(default=None)
+    bed_count: Mapped[int | None] = mapped_column(default=None)
+    bed_types: Mapped[list[BedType] | None] = mapped_column(
+        MutableList.as_mutable(BedTypesJSON), default=None
     )
-    description: Mapped[str] = mapped_column(default="")
+    description: Mapped[str | None] = mapped_column(default=None)
 
     accommodation: Mapped[Accommodation] = relationship(back_populates="room_details")
 
     @classmethod
     def from_message(cls, message: schemas.Room) -> RoomDetails:
         return cls(
-            room_count=message.room_count or 0,
-            bed_count=message.bed_count or 0,
-            bed_types=list(message.bed_types or []),
-            description=message.description or "",
+            room_count=message.room_count,
+            bed_count=message.bed_count,
+            bed_types=message.bed_types,
+            description=message.description,
         )
 
     def update_from(self, message: schemas.Room) -> None:
@@ -222,9 +222,14 @@ class Accommodation(Base):
     availability_status: Mapped[AvailabilityStatus] = mapped_column(
         SAEnum(AvailabilityStatus)
     )
-    rating: Mapped[float] = mapped_column(default=0.0)
-    amenities: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), default=list
+    # Nullable, not zero/empty-defaulted: `exclude_none` is what makes an
+    # unset field absent from a response, so a sentinel here would report
+    # "unrated" as the real rating 0.0 and "no amenities recorded" as a
+    # confirmed empty list. See the API doc's "responses omit what they did
+    # not set".
+    rating: Mapped[float | None] = mapped_column(default=None)
+    amenities: Mapped[list[str] | None] = mapped_column(
+        MutableList.as_mutable(JSON), default=None
     )
 
     location_details: Mapped[LocationDetails] = relationship(
@@ -252,8 +257,8 @@ class Accommodation(Base):
             description=message.description,
             price_per_night=message.price_per_night,
             availability_status=message.availability_status,
-            rating=message.rating or 0.0,
-            amenities=list(message.amenities or []),
+            rating=message.rating,
+            amenities=message.amenities,
             location_details=LocationDetails.from_message(
                 session, message.location_details
             ),
@@ -266,8 +271,9 @@ class Accommodation(Base):
 
     def update_from(self, session: Session, message: schemas.Accommodation) -> None:
         """Apply an edit. Only fields the caller actually sent are touched, so
-        an omitted field is left alone -- and an explicit `null` cannot clear
-        one, since there is no column here that accepts null."""
+        an omitted field is left alone. An explicit `null` does not clear a
+        field either: PUT is documented as a merge, and there is no documented
+        way to unset one."""
         nested = {"id", "location_details", "room_details"}
         for field in message.model_fields_set - nested:
             value = getattr(message, field)
@@ -289,7 +295,7 @@ class Accommodation(Base):
             price_per_night=self.price_per_night,
             availability_status=self.availability_status,
             rating=self.rating,
-            amenities=list(self.amenities),
+            amenities=self.amenities,
             location_details=self.location_details.to_message(),
             room_details=(
                 None if self.room_details is None else self.room_details.to_message()

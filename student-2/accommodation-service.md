@@ -21,7 +21,10 @@ This service is the main entry point for queries coming in from the frontend.
 This is responsible for managing data models in the accommodation database via the database service.
 This service is integrated with Artificial Intelligence in order to provide accommodation suggestions from user queries.
 
-**API Documentation**:
+It runs as the `student-2-backend` container on port `9000`, published to the
+host, and is the only service permitted to call the database service.
+
+**API Documentation**: [backend-service-api.md](./docs/backend-service-api.md)
 
 ## Database Service
 

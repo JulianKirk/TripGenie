@@ -22,9 +22,9 @@ from database_service.schemas import (
     AccommodationQueryResponse,
 )
 
-# The `:uuid` convertor keeps /accommodation/{id} matching only well-formed
+# The `:uuid` convertor keeps /internal/accommodation/{id} matching only well-formed
 # UUIDs, so a future sub-resource path cannot be swallowed by it.
-router = APIRouter(prefix="/accommodation", tags=["accommodation"])
+router = APIRouter(prefix="/internal/accommodation", tags=["accommodation"])
 
 
 @router.get(

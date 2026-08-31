@@ -123,7 +123,7 @@ class AccommodationRepository:
     def search(
         self, query: AccommodationQueryRequest
     ) -> tuple[list[Accommodation], int]:
-        """Backs QUERY /accommodation.
+        """Backs QUERY /internal/accommodation.
 
         `query.accommodation` is a match template -- any field set on it has to
         match exactly. The `*_min`/`*_max` fields carry the comparisons a
