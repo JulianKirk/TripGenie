@@ -91,6 +91,9 @@ class FakeDatabaseApi:
                 "notes": "Prioritise Asakusa and Shibuya.",
             },
         }
+        # (trip_id, accommodation_id) -> date, the associative entity as the
+        # database service stores it.
+        self.trip_accommodations: dict[tuple[str, str], str] = {}
         self.items: dict[str, dict[str, object]] = {
             "item_2027_sydney_harbour_walk": {
                 "id": "item_2027_sydney_harbour_walk",
@@ -156,6 +159,33 @@ class FakeDatabaseApi:
             if method == "POST":
                 return self._create_item(trip_id, request)
 
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["internal", "trips"]
+            and path_parts[3] == "accommodations"
+            and method == "GET"
+        ):
+            return self._list_trip_accommodations(path_parts[2])
+
+        if (
+            len(path_parts) == 5
+            and path_parts[:2] == ["internal", "trips"]
+            and path_parts[3] == "accommodations"
+        ):
+            trip_id, accommodation_id = path_parts[2], path_parts[4]
+            if method == "PUT":
+                return self._add_trip_accommodation(trip_id, accommodation_id, request)
+            if method == "DELETE":
+                return self._remove_trip_accommodation(trip_id, accommodation_id)
+
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["internal", "accommodations"]
+            and path_parts[3] == "trips"
+            and method == "GET"
+        ):
+            return self._list_trips_for_accommodation(path_parts[2])
+
         if len(path_parts) == 3 and path_parts[:2] == ["internal", "itinerary-items"]:
             item_id = path_parts[2]
             if method == "GET":
@@ -166,6 +196,89 @@ class FakeDatabaseApi:
                 return self._delete_item(item_id)
 
         return httpx.Response(404, json={"detail": "not found"})
+
+    def _list_trip_accommodations(self, trip_id: str) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+
+        return data_response(200, self._trip_accommodation_records(trip_id))
+
+    def _add_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+
+        key = (trip_id, accommodation_id)
+        # Idempotent, like the real service: the first date wins.
+        self.trip_accommodations.setdefault(
+            key,
+            str(self._request_json(request)["date"]),
+        )
+        return data_response(
+            200,
+            {
+                "trip_id": trip_id,
+                "accommodation_id": accommodation_id,
+                "date": self.trip_accommodations[key],
+            },
+        )
+
+    def _remove_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+
+        if self.trip_accommodations.pop((trip_id, accommodation_id), None) is None:
+            return error_response(
+                404,
+                "NOT_FOUND",
+                f"Trip accommodation '{accommodation_id}' was not found.",
+                [{"field": "id", "issue": "resource does not exist"}],
+            )
+
+        return data_response(200, {"id": accommodation_id, "deleted": True})
+
+    def _list_trips_for_accommodation(self, accommodation_id: str) -> httpx.Response:
+        trip_ids = {
+            trip_id
+            for trip_id, pinned_id in self.trip_accommodations
+            if pinned_id == accommodation_id
+        }
+        return data_response(
+            200,
+            [trip for trip in self._list_trips({}) if trip["id"] in trip_ids],
+        )
+
+    def _trip_accommodation_records(self, trip_id: str) -> list[dict[str, object]]:
+        return sorted(
+            (
+                {
+                    "trip_id": pinned_trip,
+                    "accommodation_id": accommodation_id,
+                    "date": date,
+                }
+                for (pinned_trip, accommodation_id), date in (
+                    self.trip_accommodations.items()
+                )
+                if pinned_trip == trip_id
+            ),
+            key=lambda record: (record["date"], record["accommodation_id"]),
+        )
+
+    def _trip_not_found(self, trip_id: str) -> httpx.Response:
+        return error_response(
+            404,
+            "NOT_FOUND",
+            f"Trip '{trip_id}' was not found.",
+            [{"field": "id", "issue": "resource does not exist"}],
+        )
 
     def _list_trips(self, params: dict[str, str]) -> list[dict[str, object]]:
         trips = list(self.trips.values())

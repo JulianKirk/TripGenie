@@ -45,12 +45,21 @@ DETAIL = {
 }
 
 
+ITINERARIES = [
+    {"itinerary_id": "trip_sydney", "name": "Sydney Getaway", "selected": False},
+    {"itinerary_id": "trip_tokyo", "name": "Tokyo City Break", "selected": True},
+]
+
+
 class FakeBackend:
     """Records the last QUERY body so a test can assert on what was sent, and
     answers with whatever `response` is set to."""
 
     def __init__(self):
         self.body = None
+        self.itineraries = [dict(itinerary) for itinerary in ITINERARIES]
+        self.itinerary_calls: list[tuple[str, str]] = []
+        self.itinerary_response: httpx.Response | None = None
         self.response = httpx.Response(
             200, json={"accommodations": [LISTING], "total": 1}
         )
@@ -58,11 +67,30 @@ class FakeBackend:
     def handle(self, request: httpx.Request) -> httpx.Response:
         if request.method == "QUERY":
             self.body = json.loads(request.content)
+        if "/itineraries" in request.url.path:
+            return self._itineraries(request)
         if request.url.path.startswith("/accommodation/"):
             return httpx.Response(200, json=DETAIL)
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok"})
         return self.response
+
+    def _itineraries(self, request: httpx.Request) -> httpx.Response:
+        """The real backend answers PUT and DELETE with the whole list, so the
+        fake toggles its own state and does the same."""
+        self.itinerary_calls.append((request.method, request.url.path))
+        if self.itinerary_response is not None:
+            return self.itinerary_response
+
+        itinerary_id = request.url.path.rsplit("/", 1)[-1]
+        for itinerary in self.itineraries:
+            if itinerary["itinerary_id"] == itinerary_id:
+                if request.method == "PUT":
+                    itinerary["selected"] = True
+                elif request.method == "DELETE":
+                    itinerary["selected"] = False
+
+        return httpx.Response(200, json={"itineraries": self.itineraries})
 
 
 @pytest.fixture

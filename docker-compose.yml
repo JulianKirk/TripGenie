@@ -8,12 +8,45 @@ services:
       - "8080:80"
 
   # Student 1: Trip & Itinerary Management
-  student-1-service:
+  # Same shape as student-2 below: a grouping container, a public backend, a
+  # webpage, and an internal-only database service.
+  student-1:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - student-1-frontend
+
+  # The public face of the trip service. Student 2's backend calls it to pin
+  # accommodations to trips.
+  student-1-backend:
     build:
       context: ./student-1
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8001:8001"
+    depends_on:
+      - student-1-database
+
+  # The trip and itinerary webpage.
+  student-1-frontend:
+    build:
+      context: ./student-1
+      dockerfile: frontend/Dockerfile
     ports:
       - "8081:8081"
+    depends_on:
+      - student-1-backend
+
+  # Internal only -- the backend service is the sole caller and reaches it as
+  # http://student-1-database:8002 on the compose network.
+  student-1-database:
+    build:
+      context: ./student-1
+      dockerfile: database/Dockerfile
+    expose:
+      - "8002"
+    volumes:
+      - student-1-db:/data
 
   # Student 2: Accommodation Management
   # Not a service -- the name you type to bring the whole accommodation
@@ -36,8 +69,14 @@ services:
       dockerfile: backend/Dockerfile
     ports:
       - "9000:9000"
+    environment:
+      # The one cross-student dependency: adding an accommodation to an
+      # itinerary is a call to student 1's public API from here, never from
+      # the frontend.
+      ITINERARY_URL: http://student-1-backend:8001
     depends_on:
       - student-2-database
+      - student-1-backend
 
   # The accommodation webpage. Talks to the backend service and nothing else.
   student-2-frontend:
@@ -91,4 +130,5 @@ services:
       - "11434:11434"
 
 volumes:
+  student-1-db:
   student-2-db:

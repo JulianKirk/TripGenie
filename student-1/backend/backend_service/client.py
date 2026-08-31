@@ -16,6 +16,7 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TripAccommodationRecord,
     TripCreate,
     TripRecord,
     TripStatus,
@@ -195,6 +196,69 @@ class DatabaseApiClient:
             response_type=DataEnvelope[DeleteResponse],
             malformed_message=(
                 "Database API returned a malformed itinerary delete response."
+            ),
+        )
+        return envelope.data
+
+    def list_trip_accommodations(self, trip_id: str) -> list[TripAccommodationRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/trips/{trip_id}/accommodations",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripAccommodationRecord]],
+            malformed_message=(
+                "Database API returned a malformed trip accommodation list response."
+            ),
+        )
+        return envelope.data
+
+    def add_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+        date: str,
+    ) -> TripAccommodationRecord:
+        envelope = self._request_model(
+            "PUT",
+            f"{self._api_prefix}/trips/{trip_id}/accommodations/{accommodation_id}",
+            json={"date": date},
+            expected_statuses={200},
+            response_type=DataEnvelope[TripAccommodationRecord],
+            malformed_message=(
+                "Database API returned a malformed trip accommodation response."
+            ),
+        )
+        return envelope.data
+
+    def remove_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> DeleteResponse:
+        envelope = self._request_model(
+            "DELETE",
+            f"{self._api_prefix}/trips/{trip_id}/accommodations/{accommodation_id}",
+            expected_statuses={200},
+            response_type=DataEnvelope[DeleteResponse],
+            malformed_message=(
+                "Database API returned a malformed trip accommodation "
+                "delete response."
+            ),
+        )
+        return envelope.data
+
+    def list_trips_for_accommodation(
+        self,
+        accommodation_id: str,
+    ) -> list[TripRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/accommodations/{accommodation_id}/trips",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripRecord]],
+            malformed_message=(
+                "Database API returned a malformed accommodation trip "
+                "list response."
             ),
         )
         return envelope.data

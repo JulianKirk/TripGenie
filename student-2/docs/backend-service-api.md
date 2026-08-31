@@ -9,6 +9,10 @@
   - [GET /accommodation/{id}](#get-accommodationid)
   - [GET /accommodation](#get-accommodation)
   - [QUERY /accommodation](#query-accommodation)
+- [Itinerary Endpoints](#itinerary-endpoints)
+  - [GET /accommodation/{id}/itineraries](#get-accommodationiditineraries)
+  - [PUT /accommodation/{id}/itineraries/{itinerary_id}](#put-accommodationiditinerariesitinerary_id)
+  - [DELETE /accommodation/{id}/itineraries/{itinerary_id}](#delete-accommodationiditinerariesitinerary_id)
 
 # Accommodation Backend Service API
 
@@ -28,11 +32,16 @@ on the compose network. The backend is its only caller.
 frontend / other students' backends
             │  :9000  /accommodation
             ▼
-      student-2-backend
-            │  :9001  /internal/accommodation
+      student-2-backend ──────────────▶ student-1-backend  :8001  /api
+            │  :9001  /internal/accommodation   (itineraries)
             ▼
       student-2-database ── SQLite
 ```
+
+The arrow to the right is the itinerary integration. Adding an accommodation to
+an itinerary is student 1's data, so this service does not store it; it calls
+student 1's public API. The call is made *here* rather than in the frontend so
+that the frontend keeps talking to exactly one backend.
 
 This service declares the accommodation message itself, in
 `backend/backend_service/schemas.py`, rather than importing the database
@@ -57,6 +66,9 @@ published beyond it.
 |----------------|----------------------------------|--------------------------------------------|
 | `DATABASE_URL` | `http://student-2-database:9001` | Base URL of the database service           |
 | `DB_TIMEOUT`   | `5`                              | Seconds to wait on a database service call |
+| `ITINERARY_URL` | `http://student-1-backend:8001` | Base URL of student 1's trip/itinerary service |
+| `ITINERARY_PREFIX` | `/api`                      | Path prefix that service serves its API under |
+| `ITINERARY_TIMEOUT` | `5`                        | Seconds to wait on an itinerary service call |
 
 ### Running it
 
@@ -85,6 +97,11 @@ reached:
 |--------|------------------------------------------------------------------|
 | 502    | Database service answered, but with something unusable            |
 | 503    | Database service unreachable or slower than `DB_TIMEOUT`          |
+
+The itinerary endpoints below fail the same way against student 1's service: a
+`503` when it cannot be reached, a `502` when it answers with something that
+does not fit this contract. One mapping covers both upstreams
+(`backend_service/client.py`).
 
 Both carry `{"detail": "..."}`. A caller should treat them as retryable and a
 `400`/`404` as not.
@@ -335,3 +352,100 @@ curl -X QUERY "http://localhost:9000/accommodation" \
 | 400    | Unknown field / `city` given without `country` |
 | 502    | Bad response from database service             |
 | 503    | Database service unavailable                   |
+
+## Itinerary Endpoints
+
+Adding an accommodation to one of student 1's itineraries, and taking it off
+again. The link itself is stored by student 1 — a trip holds many
+accommodations and an accommodation sits on many trips — so this service owns
+none of it; it relays and merges.
+
+All three endpoints answer with the **whole** picker state rather than just the
+row that changed. One response repaints the dropdown, and a tick can never
+disagree with what student 1 actually stored.
+
+```json
+{
+  "itineraries": [
+    { "itinerary_id": "trip_2026_sydney_long_weekend", "name": "Sydney Long Weekend", "selected": true },
+    { "itinerary_id": "trip_2027_tokyo_spring_visit", "name": "Tokyo Spring Visit", "selected": false }
+  ]
+}
+```
+
+`selected` is whether this accommodation is already on that itinerary — what
+the caller draws as ticked or unticked. It is computed from two calls to
+student 1 (every itinerary, plus the reverse lookup of the ones holding this
+accommodation), never one call per itinerary.
+
+## GET /accommodation/{id}/itineraries
+
+Every itinerary, ticked where this accommodation already sits on it.
+
+### Path Parameters
+
+| Name | Type | Required | Description                     |
+|------|------|----------|---------------------------------|
+| id   | uuid | Yes      | Identifier of the accommodation |
+
+### Example Request
+
+```bash
+curl localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itineraries
+```
+
+### Error Responses
+
+| Status | Description                        |
+|--------|------------------------------------|
+| 404    | Malformed accommodation id         |
+| 502    | Bad response from itinerary service |
+| 503    | Itinerary service unavailable      |
+
+## PUT /accommodation/{id}/itineraries/{itinerary_id}
+
+Adds the accommodation to that itinerary and returns the repainted list.
+
+`PUT`, not `POST`: it is idempotent. A user clicking an already-ticked box must
+not get a conflict, and student 1 pins the accommodation to the itinerary's
+start date, so a second call does not move it.
+
+### Path Parameters
+
+| Name         | Type   | Required | Description                     |
+|--------------|--------|----------|---------------------------------|
+| id           | uuid   | Yes      | Identifier of the accommodation |
+| itinerary_id | string | Yes      | Student 1's trip id             |
+
+### Example Request
+
+```bash
+curl -X PUT localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itineraries/trip_2026_sydney_long_weekend
+```
+
+### Error Responses
+
+| Status | Description                        |
+|--------|------------------------------------|
+| 404    | Unknown itinerary, or a malformed id |
+| 502    | Bad response from itinerary service |
+| 503    | Itinerary service unavailable      |
+
+## DELETE /accommodation/{id}/itineraries/{itinerary_id}
+
+Takes the accommodation off that itinerary and returns the repainted list. The
+untick half of the toggle; the same path and parameters as the `PUT`.
+
+### Example Request
+
+```bash
+curl -X DELETE localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itineraries/trip_2026_sydney_long_weekend
+```
+
+### Error Responses
+
+| Status | Description                                        |
+|--------|----------------------------------------------------|
+| 404    | The accommodation is not on that itinerary, or a malformed id |
+| 502    | Bad response from itinerary service                |
+| 503    | Itinerary service unavailable                      |

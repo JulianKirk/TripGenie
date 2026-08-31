@@ -146,6 +146,63 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 .modal__facts dt { color: var(--muted); }
 .modal__facts dd { margin: 0; }
 
+.picker { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
+.picker__summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.picker__list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.6rem; }
+.picker__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.picker__option:hover { background: var(--page-bg); }
+.picker__option[aria-checked="true"] { color: var(--available); font-weight: 600; }
+/* Reserves the tick's width so the labels do not shift when one is toggled. */
+.picker__tick { display: inline-block; width: 1rem; }
+.picker__empty { color: var(--muted); margin: 0.6rem 0 0; }
+
+/* Fixed inside the modal <dialog>, so it paints in the top layer above the
+   backdrop while still positioning against the viewport. */
+.toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  margin: 0;
+  max-width: min(22rem, calc(100vw - 2.5rem));
+  padding: 0.7rem 1rem;
+  background: var(--text);
+  color: var(--surface);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  animation: toast-life 4s ease forwards;
+}
+
+/* Fades itself out and stops taking clicks. Pure CSS so there is no timer to
+   clear when the modal closes mid-flight. */
+@keyframes toast-life {
+  0% { opacity: 0; transform: translateY(0.5rem); }
+  6% { opacity: 1; transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(0.5rem); visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still leaves on its own -- it just stops sliding to do it. */
+  .toast { animation-name: toast-life-still; }
+  @keyframes toast-life-still {
+    0%, 80% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+  }
+}
+
 .error {
   background: #fdecec;
   border: 1px solid var(--sold_out);

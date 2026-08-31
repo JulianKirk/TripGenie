@@ -40,6 +40,20 @@
         <dt>Rooms</dt><dd>Not applicable for this accommodation.</dd>
       {% endif %}
     </dl>
+
+    {# Native <details> -- the disclosure, the keyboard handling and the open
+       state are the browser's, so this needs no dropdown library and no JS.
+       The list is fetched on first open rather than with the modal, because
+       most opens are a read of the facts above. #}
+    <details class="picker">
+      <summary class="picker__summary">Add to Itinerary</summary>
+      <div id="itinerary-picker" class="picker__list"
+           hx-get="{{ request.url_for('itineraries', accommodation_id=accommodation.id) }}"
+           hx-trigger="toggle once from:closest details"
+           hx-swap="outerHTML">
+        Loading itineraries…
+      </div>
+    </details>
   </article>
 </dialog>
 <script>document.querySelector("#modal dialog").showModal();</script>
