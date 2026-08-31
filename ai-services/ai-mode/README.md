@@ -279,7 +279,9 @@ The Docker image is built from [`Dockerfile`](./Dockerfile) and exposes port `80
 PR #29 / issue #13 owns final Compose wiring. The expected runtime contract is:
 
 - service name: `ai-mode`
-- backend-to-service URL: `http://ai-mode:8006`
+- backend-to-service URL:
+  - native runs: leave `STUDENT1_BACKEND_AI_MODE_BASE_URL` unset unless you are pointing at a manually started reachable `ai-mode` endpoint
+  - Compose/container deployment: `http://ai-mode:8006`
 - service-to-provider URL:
   - native `ai-mode`: `http://127.0.0.1:11434`
   - containerized `ai-mode`: `http://host.docker.internal:11434`
