@@ -1,0 +1,65 @@
+<section class="panel" aria-labelledby="trip-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">Trip plan</p>
+      <h2 id="trip-heading">Transport for {{ summary.trip_id }}</h2>
+    </div>
+    <a class="button button--primary" href="{{ request.url_for('new_entry_form') }}?trip_id={{ summary.trip_id }}">Add transport</a>
+  </div>
+
+  <dl class="detail-grid">
+    <div><dt>Planned entries</dt><dd>{{ summary.entry_count }}</dd></div>
+    <div><dt>Counting toward the trip</dt><dd>{{ summary.active_entry_count }}</dd></div>
+    <div><dt>Estimated total</dt><dd>${{ "%.2f" | format(summary.estimated_cost_total) }}</dd></div>
+  </dl>
+
+  <p class="footnote">
+    The total covers shortlisted, itinerary and completed entries. Removed
+    entries are listed but excluded. These are planning estimates, not amounts
+    charged.
+  </p>
+
+  {% if summary.planned %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Departs</th>
+            <th scope="col">Route</th>
+            <th scope="col">Type</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Travellers</th>
+            <th scope="col">Estimated cost</th>
+            <th scope="col">Plan state</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for planned in summary.planned %}
+            <tr {% if not planned.entry.is_active %}class="row--muted"{% endif %}>
+              <td>{{ planned.option.departure_time }}</td>
+              <th scope="row">
+                <a href="{{ request.url_for('view_option', transport_id=planned.option.id) }}">
+                  {{ planned.option.origin }} &rarr; {{ planned.option.destination }}
+                </a>
+              </th>
+              <td>{{ planned.option.type_label }} · {{ planned.option.provider }}</td>
+              <td>{{ planned.option.duration_label }}</td>
+              <td>{{ planned.entry.traveller_count }}</td>
+              <td>${{ "%.2f" | format(planned.entry.estimated_cost) }}</td>
+              <td><span class="status status--{{ planned.entry.booking_status.value }}">{{ planned.entry.status_label }}</span></td>
+              <td class="actions-cell">
+                <a href="{{ request.url_for('edit_entry_form', booking_id=planned.entry.id) }}">Edit</a>
+                <a href="{{ request.url_for('delete_entry_confirmation', booking_id=planned.entry.id) }}">Remove</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty-copy">
+      No transport planned for this trip yet. Browse options and add one.
+    </p>
+  {% endif %}
+</section>

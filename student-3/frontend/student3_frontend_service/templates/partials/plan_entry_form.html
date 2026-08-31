@@ -1,0 +1,37 @@
+{% import "macros/forms.html" as forms %}
+<section class="panel" aria-labelledby="entry-form-heading">
+  <div class="panel__header">
+    <h2 id="entry-form-heading">{{ form_title }}</h2>
+  </div>
+
+  {% if error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ error.code }}</strong></p>
+      <p>{{ error.message }}</p>
+    </div>
+  {% endif %}
+
+  <p class="helper-copy">
+    This saves transport into a trip plan. No reservation is made and no payment
+    is taken.
+  </p>
+
+  <form method="post" action="{{ form_action }}">
+    {{ forms.text_field("trip_id", "Trip identifier", form.get("trip_id", ""), errors_by_field, hint="A Student 1 trip, for example trip_2026_sydney_long_weekend.") }}
+    {{ forms.text_field("transport_id", "Transport identifier", form.get("transport_id", ""), errors_by_field) }}
+    {{ forms.text_field("traveller_count", "Travellers", form.get("traveller_count", ""), errors_by_field) }}
+    {{ forms.text_field("booking_date", "Date added to the plan", form.get("booking_date", ""), errors_by_field, hint="YYYY-MM-DD, on or before departure.") }}
+    {{ forms.select_field("booking_status", "Plan state", plan_status_options, form.get("booking_status", ""), errors_by_field) }}
+    {{ forms.text_field("estimated_cost", "Estimated cost (optional)", form.get("estimated_cost", ""), errors_by_field, hint="Leave blank to use price x travellers. Set it for whole-vehicle hire.") }}
+    <p class="field">
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="3">{{ form.get("notes", "") }}</textarea>
+      {{ forms.field_errors("notes", errors_by_field) }}
+    </p>
+    {{ forms.field_errors("body", errors_by_field) }}
+    <p class="actions">
+      <button class="button button--primary" type="submit">{{ submit_label }}</button>
+      <a class="button" href="{{ cancel_url if cancel_url else request.url_for('browse') }}">Cancel</a>
+    </p>
+  </form>
+</section>

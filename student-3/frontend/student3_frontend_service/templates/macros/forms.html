@@ -1,0 +1,30 @@
+{% macro field_errors(field_name, errors_by_field) -%}
+  {% if errors_by_field.get(field_name) %}
+    <ul class="field-errors" id="{{ field_name }}-errors">
+      {% for issue in errors_by_field[field_name] %}
+        <li>{{ issue }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{%- endmacro %}
+
+{% macro select_field(name, label, choices, selected, errors_by_field) -%}
+  <p class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <select id="{{ name }}" name="{{ name }}">
+      {% for value, text in choices %}
+        <option value="{{ value }}" {% if value == selected %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+    {{ field_errors(name, errors_by_field) }}
+  </p>
+{%- endmacro %}
+
+{% macro text_field(name, label, value, errors_by_field, hint="", input_type="text") -%}
+  <p class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <input id="{{ name }}" name="{{ name }}" type="{{ input_type }}" value="{{ value }}">
+    {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
+    {{ field_errors(name, errors_by_field) }}
+  </p>
+{%- endmacro %}

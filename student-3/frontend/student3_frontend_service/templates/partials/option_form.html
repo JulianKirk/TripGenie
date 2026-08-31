@@ -1,0 +1,43 @@
+{% import "macros/forms.html" as forms %}
+<section class="panel" aria-labelledby="option-form-heading">
+  <div class="panel__header">
+    <h2 id="option-form-heading">{{ form_title }}</h2>
+  </div>
+
+  {% if error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ error.code }}</strong></p>
+      <p>{{ error.message }}</p>
+    </div>
+  {% endif %}
+
+  <form method="post" action="{{ form_action }}">
+    {% if not is_edit %}
+      {{ forms.text_field("id", "Identifier (optional)", form.get("id", ""), errors_by_field, hint="Leave blank to generate one, or use transport_my_route.") }}
+    {% endif %}
+    {{ forms.select_field("type", "Transport type", type_options, form.get("type", ""), errors_by_field) }}
+    {{ forms.text_field("provider", "Provider", form.get("provider", ""), errors_by_field) }}
+    {{ forms.text_field("origin", "Origin", form.get("origin", ""), errors_by_field) }}
+    {{ forms.text_field("destination", "Destination", form.get("destination", ""), errors_by_field, hint="Must differ from origin, except for car hire.") }}
+    {{ forms.text_field("departure_time", "Departure", form.get("departure_time", ""), errors_by_field, hint="Local wall-clock time, YYYY-MM-DDTHH:MM.") }}
+    {{ forms.text_field("arrival_time", "Arrival", form.get("arrival_time", ""), errors_by_field, hint="Local time at the destination.") }}
+    {{ forms.text_field("departure_utc_offset", "Departure UTC offset (minutes)", form.get("departure_utc_offset", ""), errors_by_field, hint="Optional. Supply both offsets or neither; needed for cross-timezone legs.") }}
+    {{ forms.text_field("arrival_utc_offset", "Arrival UTC offset (minutes)", form.get("arrival_utc_offset", ""), errors_by_field) }}
+    {{ forms.text_field("price", "Price per traveller", form.get("price", ""), errors_by_field, hint="At most 2 decimal places.") }}
+    {{ forms.text_field("capacity", "Capacity", form.get("capacity", ""), errors_by_field) }}
+    {{ forms.select_field("availability_status", "Availability", availability_options, form.get("availability_status", ""), errors_by_field) }}
+    <p class="field">
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="3">{{ form.get("notes", "") }}</textarea>
+      {{ forms.field_errors("notes", errors_by_field) }}
+    </p>
+    {{ forms.field_errors("body", errors_by_field) }}
+    <p class="footnote">
+      Duration is calculated from the times you enter, so it is not a field here.
+    </p>
+    <p class="actions">
+      <button class="button button--primary" type="submit">{{ submit_label }}</button>
+      <a class="button" href="{{ request.url_for('browse') }}">Cancel</a>
+    </p>
+  </form>
+</section>

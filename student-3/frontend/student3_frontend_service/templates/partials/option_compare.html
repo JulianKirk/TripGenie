@@ -1,0 +1,91 @@
+<section class="panel" aria-labelledby="compare-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">Compare</p>
+      <h2 id="compare-heading">Side-by-side comparison</h2>
+    </div>
+  </div>
+
+  <p class="helper-copy">
+    Pick up to {{ compare_limit }} options to compare duration, price and seats.
+  </p>
+
+  {% if compare_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ compare_error.code }}</strong></p>
+      <p>{{ compare_error.message }}</p>
+      {% if compare_error.details %}
+        <ul class="field-errors">
+          {% for detail in compare_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="compare-form" method="get" action="{{ request.url_for('compare') }}">
+    <fieldset>
+      <legend>Choose transport options</legend>
+      {% if options %}
+        <ul class="checkbox-list">
+          {% for option in options %}
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  name="ids"
+                  value="{{ option.id }}"
+                  {% if option.id in selected_ids %}checked{% endif %}
+                >
+                {{ option.origin }} &rarr; {{ option.destination }}
+                <span class="checkbox-list__meta">{{ option.type_label }} · {{ option.provider }} · ${{ '%.2f' | format(option.price) }}</span>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-copy">No transport options available to compare.</p>
+      {% endif %}
+    </fieldset>
+    <p class="actions">
+      <button class="button button--primary" type="submit">Compare selected</button>
+      <a class="button" href="{{ request.url_for('compare') }}">Reset</a>
+    </p>
+  </form>
+
+  {% if compared %}
+    <h3>Comparison</h3>
+    <div class="table-scroll">
+      <table class="data-table data-table--compare">
+        <thead>
+          <tr>
+            <th scope="col">Attribute</th>
+            {% for option in compared %}
+              <th scope="col">{{ option.origin }} &rarr; {{ option.destination }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Type</th>{% for o in compared %}<td>{{ o.type_label }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Provider</th>{% for o in compared %}<td>{{ o.provider }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Departs</th>{% for o in compared %}<td>{{ o.departure_time }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Arrives</th>{% for o in compared %}<td>{{ o.arrival_time }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Duration</th>{% for o in compared %}<td>{{ o.duration_label }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Price per traveller</th>{% for o in compared %}<td>${{ '%.2f' | format(o.price) }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Seats remaining</th>{% for o in compared %}<td>{{ o.seats_remaining }} / {{ o.capacity }}</td>{% endfor %}</tr>
+          <tr><th scope="row">Availability</th>{% for o in compared %}<td><span class="status status--{{ o.availability_status.value }}">{{ o.availability_label }}</span></td>{% endfor %}</tr>
+          <tr>
+            <th scope="row">Actions</th>
+            {% for o in compared %}
+              <td class="actions-cell">
+                <a href="{{ request.url_for('view_option', transport_id=o.id) }}">View</a>
+                <a href="{{ request.url_for('new_entry_form') }}?transport_id={{ o.id }}">Add to trip</a>
+              </td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>

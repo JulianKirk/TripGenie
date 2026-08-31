@@ -1,0 +1,111 @@
+<section class="panel" aria-labelledby="browse-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">Browse</p>
+      <h2 id="browse-heading">Transport options</h2>
+    </div>
+  </div>
+
+  <form class="filter-form" method="get" action="{{ request.url_for('browse') }}">
+    <div class="filter-grid">
+      <p class="field">
+        <label for="type">Type</label>
+        <select id="type" name="type">
+          {% for value, text in type_options %}
+            <option value="{{ value }}" {% if filters.get('type') == value %}selected{% endif %}>{{ text }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p class="field">
+        <label for="availability_status">Availability</label>
+        <select id="availability_status" name="availability_status">
+          {% for value, text in availability_options %}
+            <option value="{{ value }}" {% if filters.get('availability_status') == value %}selected{% endif %}>{{ text }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p class="field">
+        <label for="origin">Origin</label>
+        <input id="origin" name="origin" type="text" value="{{ filters.get('origin', '') }}">
+      </p>
+      <p class="field">
+        <label for="destination">Destination</label>
+        <input id="destination" name="destination" type="text" value="{{ filters.get('destination', '') }}">
+      </p>
+      <p class="field">
+        <label for="provider">Provider</label>
+        <input id="provider" name="provider" type="text" value="{{ filters.get('provider', '') }}">
+      </p>
+      <p class="field">
+        <label for="min_price">Min price</label>
+        <input id="min_price" name="min_price" type="text" value="{{ filters.get('min_price', '') }}">
+      </p>
+      <p class="field">
+        <label for="max_price">Max price</label>
+        <input id="max_price" name="max_price" type="text" value="{{ filters.get('max_price', '') }}">
+      </p>
+      <p class="field">
+        <label for="departure_from">Departs from</label>
+        <input id="departure_from" name="departure_from" type="text" placeholder="2026-10-01T00:00" value="{{ filters.get('departure_from', '') }}">
+      </p>
+      <p class="field">
+        <label for="departure_to">Departs before</label>
+        <input id="departure_to" name="departure_to" type="text" placeholder="2026-10-31T23:59" value="{{ filters.get('departure_to', '') }}">
+      </p>
+    </div>
+    <p class="actions">
+      <button class="button button--primary" type="submit">Apply filters</button>
+      <a class="button" href="{{ request.url_for('browse') }}">Clear</a>
+    </p>
+  </form>
+
+  {% if options %}
+    <p class="result-count">{{ options | length }} option(s){% if is_filtered %} matching your filters{% endif %}.</p>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Route</th>
+            <th scope="col">Type</th>
+            <th scope="col">Provider</th>
+            <th scope="col">Departs</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Price</th>
+            <th scope="col">Seats left</th>
+            <th scope="col">Availability</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for option in options %}
+            <tr>
+              <th scope="row">{{ option.origin }} &rarr; {{ option.destination }}</th>
+              <td>{{ option.type_label }}</td>
+              <td>{{ option.provider }}</td>
+              <td>{{ option.departure_time }}</td>
+              <td>
+                {{ option.duration_label }}
+                {% if option.crosses_time_zones %}<span class="tag" title="Measured in UTC across time zones">TZ</span>{% endif %}
+              </td>
+              <td>${{ '%.2f' | format(option.price) }}</td>
+              <td>{{ option.seats_remaining }} / {{ option.capacity }}</td>
+              <td><span class="status status--{{ option.availability_status.value }}">{{ option.availability_label }}</span></td>
+              <td class="actions-cell">
+                <a href="{{ request.url_for('view_option', transport_id=option.id) }}">View</a>
+                <a href="{{ request.url_for('new_entry_form') }}?transport_id={{ option.id }}">Add to trip</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty-copy">
+      {% if is_filtered %}
+        No transport options match those filters. Try widening the price range or clearing the route.
+      {% else %}
+        No transport options yet. Add one to start comparing routes.
+      {% endif %}
+    </p>
+  {% endif %}
+</section>

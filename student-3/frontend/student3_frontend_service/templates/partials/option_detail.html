@@ -1,0 +1,69 @@
+<section class="panel" aria-labelledby="option-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">{{ option.type_label }} · {{ option.provider }}</p>
+      <h2 id="option-heading">{{ option.origin }} &rarr; {{ option.destination }}</h2>
+    </div>
+    <div class="actions">
+      <a class="button" href="{{ request.url_for('edit_option_form', transport_id=option.id) }}">Edit</a>
+      <a class="button button--danger" href="{{ request.url_for('delete_option_confirmation', transport_id=option.id) }}">Remove</a>
+    </div>
+  </div>
+
+  <dl class="detail-grid">
+    <div><dt>Departs</dt><dd>{{ option.departure_time }}{% if option.departure_utc_offset is not none %} (UTC{{ '%+d' | format(option.departure_utc_offset // 60) }}){% endif %}</dd></div>
+    <div><dt>Arrives</dt><dd>{{ option.arrival_time }}{% if option.arrival_utc_offset is not none %} (UTC{{ '%+d' | format(option.arrival_utc_offset // 60) }}){% endif %}</dd></div>
+    <div><dt>Duration</dt><dd>{{ option.duration_label }}{% if option.crosses_time_zones %} <span class="tag">measured in UTC</span>{% endif %}</dd></div>
+    <div><dt>Price per traveller</dt><dd>${{ '%.2f' | format(option.price) }}</dd></div>
+    <div><dt>Seats remaining</dt><dd>{{ option.seats_remaining }} of {{ option.capacity }}</dd></div>
+    <div><dt>Availability</dt><dd><span class="status status--{{ option.availability_status.value }}">{{ option.availability_label }}</span></dd></div>
+  </dl>
+
+  {% if option.notes %}
+    <p class="notes">{{ option.notes }}</p>
+  {% endif %}
+
+  <p class="footnote">
+    Availability is declared by the operator and is not derived from the seat
+    count, so read both together.
+  </p>
+
+  <div class="panel__header panel__header--compact">
+    <h3>Trips planning this transport</h3>
+    <a class="button button--primary" href="{{ request.url_for('new_entry_form') }}?transport_id={{ option.id }}">Add to a trip</a>
+  </div>
+
+  {% if entries %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Trip</th>
+            <th scope="col">Travellers</th>
+            <th scope="col">Added</th>
+            <th scope="col">Estimated cost</th>
+            <th scope="col">Plan state</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <th scope="row"><a href="{{ request.url_for('trip_transport', trip_id=entry.trip_id) }}">{{ entry.trip_id }}</a></th>
+              <td>{{ entry.traveller_count }}</td>
+              <td>{{ entry.booking_date }}</td>
+              <td>${{ '%.2f' | format(entry.estimated_cost) }}</td>
+              <td><span class="status status--{{ entry.booking_status.value }}">{{ entry.status_label }}</span></td>
+              <td class="actions-cell">
+                <a href="{{ request.url_for('edit_entry_form', booking_id=entry.id) }}">Edit</a>
+                <a href="{{ request.url_for('delete_entry_confirmation', booking_id=entry.id) }}">Remove</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty-copy">No trip plans reference this transport yet.</p>
+  {% endif %}
+</section>
