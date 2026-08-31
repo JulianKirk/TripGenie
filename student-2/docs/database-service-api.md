@@ -39,8 +39,19 @@ docker run --rm -p 9001:9001 student-2-database
 ```
 
 The SQLite database lives at `$DATABASE_URL` (default `/data/accommodation.db`
-in the image, on the `student-2-db` volume). Tables are created on startup;
-there is no seed data.
+in the image, on the `student-2-db` volume). Tables are created on startup, and
+an *empty* database is then filled with the starter accommodations in
+`database_service/seed_data.py` — otherwise a fresh container has nothing to
+serve and the frontend's list, filters and pager have nothing to show. A
+database that already has rows is left alone. Set `SEED_DATA=0` to skip it
+entirely; the tests do.
+
+### Configuration
+
+| Variable       | Default                                    | Purpose                                    |
+|----------------|--------------------------------------------|--------------------------------------------|
+| `DATABASE_URL` | `sqlite:///student-2/database/accommodation.db` | SQLite path (`/data/accommodation.db` in the image) |
+| `SEED_DATA`    | `1`                                        | Seed an empty database on startup; `0` to skip |
 
 ### The accommodation message
 
@@ -179,13 +190,14 @@ of the query string.
 ### Request Body
 
 A query is a **match template** plus **bounds**. `accommodation` is an
-accommodation message: every field you set on it must match exactly, and every
-field you leave out is not filtered on. The `*_min` / `*_max` fields alongside
-it carry the comparisons a template cannot express.
+accommodation message: every field you set on it must match, and every field
+you leave out is not filtered on. Most fields match exactly; the three
+exceptions are in the table below. The `*_min` / `*_max` fields alongside it
+carry the comparisons a template cannot express.
 
 | Field                 | Type   | Description                                                    |
 |-----------------------|--------|----------------------------------------------------------------|
-| accommodation         | object | Match template; any field set on it must match exactly         |
+| accommodation         | object | Match template; see the matching rules below                   |
 | price_min / price_max | float  | Bounds on `price_per_night`, inclusive                         |
 | rating_min / rating_max | float | Bounds on `rating`, inclusive                                  |
 | room_count_min        | integer | Minimum `room_details.room_count`                             |
@@ -194,13 +206,26 @@ it carry the comparisons a template cannot express.
 | offset                | integer | Number of results to skip (default 0)                         |
 
 Inside `accommodation`, any field from [POST /internal/accommodation](#post-internalaccommodation)
-can be used as an exact match, including the nested `location_details` and
+can be used as a filter, including the nested `location_details` and
 `room_details` objects. `city` still requires `country` — Sydney exists in more
 than one.
 
-Omitting everything returns all accommodations, paginated. `amenities` and
-`room_details.bed_types` cannot be filtered on: they are JSON columns SQLite
-cannot search or index.
+How each field matches:
+
+| Field                          | Matching                                                                 |
+|--------------------------------|--------------------------------------------------------------------------|
+| `name`, `description`          | Case-insensitive **substring**: `"har"` matches `"Harbour View Hotel"`     |
+| `amenities`                    | The row must carry **every** amenity listed; an amenity matches whole, so `wifi` does not match `wifi6` |
+| everything else                | Exact                                                                     |
+
+`name` and `description` are substring matches because they are what a search
+box types into, and an exact match on either is no use to someone mid-word.
+
+`room_details.bed_types` still cannot be filtered on.
+
+Omitting everything returns all accommodations, paginated. Results are ordered
+by `name` (then `id` to break ties) — without an `ORDER BY`, `limit`/`offset`
+is free to hand the same row back on two different pages.
 
 Results are trimmed — each row carries `id`, `name`, `type`, `price_per_night`,
 `availability_status`, `rating` and `location_details.country`/`city`, since a

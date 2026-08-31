@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from database_service.models import BedType
 from database_service.schemas import AccommodationQueryRequest
+from database_service.seed_data import SEED_ACCOMMODATIONS, seed
 
 
 class TestAccommodationRepository:
@@ -91,6 +92,51 @@ class TestAccommodationRepository:
         assert len(rows) == 1
         assert total == 2
 
+    def test_search_by_name_matches_a_substring_case_insensitively(
+        self, accommodations, camping, hotel
+    ):
+        """What the frontend's search box sends -- half a word, any case."""
+        rows, total = accommodations.search(
+            AccommodationQueryRequest(accommodation={"name": "and hot"})
+        )
+        assert [a.name for a in rows] == ["Grand Hotel"]
+        assert total == 1
+
+    def test_search_by_description_matches_a_substring(
+        self, accommodations, camping, hotel
+    ):
+        rows, _ = accommodations.search(
+            AccommodationQueryRequest(accommodation={"description": "TENT"})
+        )
+        assert [a.name for a in rows] == ["Cosy Cabin"]
+
+    def test_search_by_amenities_wants_every_one_of_them(
+        self, session, accommodations, camping, hotel
+    ):
+        hotel.amenities = ["wifi", "pool"]
+        camping.amenities = ["wifi"]
+        session.commit()
+
+        both = AccommodationQueryRequest(accommodation={"amenities": ["wifi", "pool"]})
+        one = AccommodationQueryRequest(accommodation={"amenities": ["wifi"]})
+        assert [a.name for a in accommodations.search(both)[0]] == ["Grand Hotel"]
+        assert accommodations.search(one)[1] == 2
+
+    def test_an_amenity_is_matched_whole_not_as_a_prefix(
+        self, session, accommodations, hotel
+    ):
+        hotel.amenities = ["wifi6"]
+        session.commit()
+        query = AccommodationQueryRequest(accommodation={"amenities": ["wifi"]})
+        assert accommodations.search(query)[1] == 0
+
+    def test_pages_do_not_repeat_a_row(self, accommodations, camping, hotel):
+        """Without an ORDER BY, LIMIT/OFFSET may hand back the same row twice."""
+        first, _ = accommodations.search(AccommodationQueryRequest(limit=1))
+        second, _ = accommodations.search(AccommodationQueryRequest(limit=1, offset=1))
+        assert [a.name for a in first] == ["Cosy Cabin"]
+        assert [a.name for a in second] == ["Grand Hotel"]
+
     def test_delete(self, accommodations, camping, hotel):
         accommodations.delete(camping.id)
         assert accommodations.get(camping.id) is None
@@ -98,4 +144,16 @@ class TestAccommodationRepository:
 
     def test_delete_missing_id_is_a_noop(self, accommodations, hotel):
         accommodations.delete(uuid4())
+        assert accommodations.search(AccommodationQueryRequest())[1] == 1
+
+
+class TestSeedData:
+    def test_seeds_an_empty_database_once(self, session, accommodations):
+        assert seed(session) == len(SEED_ACCOMMODATIONS)
+        assert accommodations.search(AccommodationQueryRequest(limit=100))[1] == len(
+            SEED_ACCOMMODATIONS
+        )
+
+    def test_a_database_with_rows_is_left_alone(self, session, accommodations, hotel):
+        assert seed(session) == 0
         assert accommodations.search(AccommodationQueryRequest())[1] == 1

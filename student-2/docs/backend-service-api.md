@@ -193,7 +193,7 @@ than `null`.
 
 ## GET /accommodation
 
-List accommodations, newest first, paginated. This is the no-filter case of
+List accommodations, by name, paginated. This is the no-filter case of
 [QUERY /accommodation](#query-accommodation) — the same call with an empty
 match template — offered as a plain `GET` so a browser, a link, or an `hx-get`
 can reach it without a request body.
@@ -271,7 +271,7 @@ body instead of the query string.
 
 | Field                   | Type    | Description                                            |
 |-------------------------|---------|--------------------------------------------------------|
-| accommodation           | object  | Match template; any field set on it must match exactly |
+| accommodation           | object  | Match template; see the matching rules below           |
 | price_min / price_max   | float   | Bounds on `price_per_night`, inclusive                 |
 | rating_min / rating_max | float   | Bounds on `rating`, inclusive                          |
 | room_count_min          | integer | Minimum `room_details.room_count`                      |
@@ -280,9 +280,15 @@ body instead of the query string.
 | offset                  | integer | Number of results to skip (default 0)                  |
 
 The [database service's QUERY](./database-service-api.md#query-internalaccommodation)
-documents the template in full. Its constraints hold here unchanged: `city`
-requires `country`, `amenities` and `room_details.bed_types` cannot be filtered
-on, and an unrecognised field is a `400` rather than a silently ignored one.
+documents the template in full. Its rules hold here unchanged:
+
+- `name` and `description` match as **case-insensitive substrings**, so a search
+  box can filter on a half-typed word.
+- `amenities` matches when the accommodation carries **every** amenity listed.
+- Everything else matches exactly.
+- `city` requires `country`, `room_details.bed_types` cannot be filtered on, and
+  an unrecognised field is a `400` rather than a silently ignored one.
+- Results come back ordered by name, so `limit`/`offset` pages do not overlap.
 
 ### Example Request
 
