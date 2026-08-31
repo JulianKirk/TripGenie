@@ -1,6 +1,6 @@
 # TripGenie shared AI-Mode service
 
-This service provides the shared Release 0 runtime boundary between TripGenie student backends and Ollama.
+This service provides the shared Release 0 runtime boundary between TripGenie student backends and a host-managed Ollama runtime.
 
 - Runtime: FastAPI on Python 3.11
 - Official provider dependency: `ollama==0.6.2`
@@ -14,13 +14,39 @@ Student backends must render their own prompts, own domain retries/validation, a
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `AI_MODE_SERVICE_NAME` | `ai-mode` | Service name reported by health endpoints. |
-| `AI_MODE_OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama base URL used only by this shared service. |
+| `AI_MODE_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Host Ollama base URL used only by this shared service. Container deployments must override this to `http://host.docker.internal:11434`. |
 | `AI_MODE_DEFAULT_MODEL` | `qwen2.5:0.5b` | Default approved model used when callers do not request an override. |
 | `AI_MODE_ALLOWED_MODELS` | `qwen2.5:0.5b,llama3.1:8b` | Allowlist of approved runtime models. Arbitrary provider model names are rejected. |
 | `AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Ollama list/generate calls. |
 | `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max accepted rendered prompt length. Student backends should pre-budget prompts to this same contract. |
 | `AI_MODE_MAX_SCHEMA_CHARS` | `8000` | Max accepted JSON-schema serialized length. |
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
+
+## Host Ollama prerequisite
+
+Release 0 assumes Ollama is installed and managed on the **host machine**, not inside Docker.
+
+1. Install Ollama on the host OS using the official installer/package for that platform.
+2. Start Ollama so the shared AI-Mode service can reach its HTTP API.
+   - Native `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
+   - Containerized `ai-mode` runs must receive `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434` from Compose. PR #29 / issue #13 owns that wiring.
+3. Pull the approved Release 0 model on the host:
+
+   ```bash
+   ollama pull qwen2.5:0.5b
+   ```
+
+4. Verify the host runtime before exercising the shared service:
+
+   ```bash
+   curl http://127.0.0.1:11434/api/tags
+   ```
+
+Platform notes:
+
+- Windows/macOS native runs can use the loopback default above.
+- When `ai-mode` itself runs in Docker, Compose must bridge the container to the host Ollama runtime with `host.docker.internal`; the application code does not bootstrap that alias.
+- Tests and CI in this repository use mocked provider transports only. They do **not** install, start, or download Ollama/models.
 
 ## Public API
 
@@ -250,10 +276,12 @@ Correlation IDs and other logged fields are sanitized defensively to stay single
 
 The Docker image is built from [`Dockerfile`](./Dockerfile) and exposes port `8006`.
 
-Issue #13 owns final Compose wiring. The expected runtime contract is:
+PR #29 / issue #13 owns final Compose wiring. The expected runtime contract is:
 
 - service name: `ai-mode`
 - backend-to-service URL: `http://ai-mode:8006`
-- service-to-provider URL: `http://ollama:11434`
+- service-to-provider URL:
+  - native `ai-mode`: `http://127.0.0.1:11434`
+  - containerized `ai-mode`: `http://host.docker.internal:11434`
 
-This README documents the contract only; it does not require Compose changes in this PR.
+This README documents the contract only; it does not require Compose changes or any Ollama installation/bootstrap steps in this PR or CI.

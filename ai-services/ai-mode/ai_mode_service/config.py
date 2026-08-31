@@ -12,6 +12,7 @@ MAX_METADATA_ITEMS = 8
 MAX_METADATA_VALUE_CHARS = 160
 MAX_CORRELATION_ID_CHARS = 64
 MAX_MODEL_NAME_CHARS = 120
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 
 def _parse_timeout(
@@ -107,7 +108,7 @@ def _validate_limit(
 @dataclass(slots=True)
 class Settings:
     service_name: str = "ai-mode"
-    ollama_base_url: str = "http://ollama:11434"
+    ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     default_model: str = "qwen2.5:0.5b"
     allowed_models: tuple[str, ...] = ("qwen2.5:0.5b", "llama3.1:8b")
     ollama_timeout_seconds: float = 15.0
@@ -147,9 +148,9 @@ class Settings:
             service_name=os.getenv("AI_MODE_SERVICE_NAME", "ai-mode").strip()
             or "ai-mode",
             ollama_base_url=_normalise_base_url(
-                os.getenv("AI_MODE_OLLAMA_BASE_URL", "http://ollama:11434"),
+                os.getenv("AI_MODE_OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL),
                 env_name="AI_MODE_OLLAMA_BASE_URL",
-                default="http://ollama:11434",
+                default=DEFAULT_OLLAMA_BASE_URL,
             ),
             default_model=default_model,
             allowed_models=allowed_models,

@@ -7,7 +7,7 @@
 ---
 
 ## 1. Project Overview
-TripGenie is an AI Smart Travel Companion microservices application built with Docker, HTMX, Python, SQLite, and Ollama.
+TripGenie is an AI Smart Travel Companion microservices application built with Docker-hosted app services, HTMX, Python, SQLite, and a host-managed Ollama runtime.
 
 ---
 

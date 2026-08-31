@@ -14,7 +14,7 @@ This update uses three labels consistently:
 
 Because the assignment handout is not committed in this repository snapshot, the traceability table below points the **Assignment / Group 07 requirement** column at the repository artefacts that currently carry that scope: README, Docker Compose, CI, and the paired Student 1 design docs.
 
-Issue #12 now implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan still stays evidence-oriented: it does **not** fabricate live Compose showcase proof, and final Compose wiring remains deferred to issue #13.
+Issue #12 now implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan still stays evidence-oriented: it does **not** fabricate live Compose showcase proof, and final Compose wiring remains deferred to PR #29 / issue #13.
 
 ## 2. Course source pack used
 
@@ -33,7 +33,7 @@ Issue #12 now implements the Student 1 runtime AI-mode and the shared AI-Mode se
 | --- | --- | --- | --- |
 | Service decomposition | Student 1 Release 0 keeps a three-service owned slice plus shared AI infrastructure, with shared home page navigation, Docker Compose continuity, and CI [TG-README][TG-COMPOSE][TG-CI]. | Lab 04 uses `frontend-service`, `enrolment-service`, and `database-service` as the microservice example [L4]. | Keep Student 1 frontend/backend/database as the owned slice, and route runtime generation through the shared `ai-mode` service recorded in [TG-ARCH]. |
 | CRUD and database ownership | Student 1 owns trip and itinerary CRUD while keeping one service as the only SQLite owner [TG-ARCH]. | Labs 01-04 keep SQLite ownership local to the data layer and use HTTP between services in Lab 04 [L1][L4]. | Student 1 database API remains the only SQLite owner; frontend and backend use HTTP instead of shared file access. |
-| Local Ollama baseline | Release 0 keeps Ollama local and out of Release 1/2 features [TG-ARCH]. | The AI guide and Labs 01-04 use local Ollama throughout [CFG][L1][L2][L3][L4]. | Keep Ollama local, but centralize provider access in the shared `ai-mode` service so student backends do not import or configure Ollama directly. |
+| Local Ollama baseline | Release 0 keeps Ollama host-managed and out of Release 1/2 features [TG-ARCH]. | The AI guide and Labs 01-04 use local Ollama throughout [CFG][L1][L2][L3][L4]. | Keep Ollama host-managed, but centralize provider access in the shared `ai-mode` service so student backends do not import or configure Ollama directly. |
 | Assessed loop | Student 1 documentation must support the course-assessed evidence/review loop for reports and demos [TG-ARCH]. | Labs 01-04 define the loop as development/review work with evidence, prompts, human decision, rerun, and adaptation [L1][L2][L3][L4]. | Treat the assessed loop as the Student 1 development-and-validation workflow, not as the end-user itinerary suggestion runtime. |
 | UI-mode vs AI-mode | Student 1 still needs a clear runtime story for CRUD flows and AI-assisted suggestions [TG-ARCH]. | Lab 04 separates Normal UI from AI Mode in the frontend and backend routes [L4]. | Keep runtime CRUD in UI-mode and bounded suggestions in AI-mode, while documenting the shared AI-Mode dependency separately from the assessed loop. |
 | Prompt assets and review roles | Release 0 reporting must explain how prompts, evidence, and review outputs are retained [TG-ARCH]. | Lab 03 externalises prompt files; Labs 02-04 split implementation and review roles [L2][L3][L4]. | Keep prompt assets versioned and separate from service code or report prose; record which prompt text and model pair produced each review outcome. |
@@ -117,7 +117,7 @@ Issue #12 implements the bounded runtime path separately from the assessed workf
 ## 8. Limitations and open points
 
 - [asd-labs README][ASD-README] advertises Labs 05/06, but the visible repository snapshot used for this update exposes only Labs 01-04 plus the AI guide and README [ASD-TREE]. No later-lab requirement is asserted here.
-- Current Group 07 repository evidence still leaves final shared-service wiring to [docker-compose.yml][TG-COMPOSE]; service names, ports, and runtime Compose connections remain pending issue #13.
+- Current Group 07 repository evidence still leaves final shared-service wiring to [docker-compose.yml][TG-COMPOSE]; service names, ports, and runtime Compose host-bridge connections remain pending PR #29 / issue #13.
 - `deepseek-r1:8b` appears in the AI guide only as a reasoning model for later labs [CFG], so it is intentionally kept out of Student 1 Release 0 scope.
 
 [TG-ARCH]: ../../architecture/student-1-release-0-architecture.md

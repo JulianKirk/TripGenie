@@ -11,14 +11,14 @@ This document describes the **Student 1 Release 0 runtime target**.
 - The assessed course workflow remains the evidence-driven development/review loop documented in the paired plan, not the end-user AI suggestion runtime.
 - Student 1 still owns a three-service application slice: frontend, backend, and database API.
 - Issue #12 adds a **shared Release 0 AI-Mode service** between Student 1 backends and Ollama, so Student 1 no longer talks to Ollama directly.
-- Final Compose wiring stays out of scope here and is deferred to issue #13.
+- Final Compose wiring stays out of scope here and is deferred to PR #29 / issue #13.
 
 ## 2. Traceability summary
 
 | Topic | Visible baseline | TripGenie Student 1 decision |
 | --- | --- | --- |
 | Student-owned service split | Labs show separated frontend/service/database responsibilities. | Keep Student 1 frontend, backend, and database API as the owned slice. |
-| Shared AI dependency | Labs and the AI guide use local Ollama as the model runtime baseline. | Insert a shared `ai-mode` FastAPI service between Student backends and Ollama so provider concerns are centralized. |
+| Shared AI dependency | Labs and the AI guide use local Ollama as the model runtime baseline. | Insert a shared `ai-mode` FastAPI service between Student backends and the host Ollama runtime so provider concerns are centralized. |
 | UI-mode vs AI-mode | Lab 04 separates normal UI and AI-assisted flows. | Keep CRUD/filtering in UI-mode and day-planning suggestions in AI-mode, without relabelling AI-mode as the assessed loop. |
 | Database ownership | Visible labs keep persistence in the data-owning layer. | Student 1 database API remains the only SQLite owner. |
 | Prompt assets | Lab 03 externalises prompt files. | Student 1 keeps its domain prompt asset in `student-1/backend/backend_service/prompts/`. |
@@ -35,7 +35,7 @@ flowchart LR
     Back -->|CRUD/filter HTTP| Db["Student 1 database API\ninternal 8002"]
     Db --> Sqlite[("Student 1 SQLite")]
     Back -->|bounded /generate HTTP| AiMode["Shared ai-mode service\ninternal 8006"]
-    AiMode -->|official ollama client| Ollama["Local Ollama\nhost 11434"]
+    AiMode -->|official ollama client| Ollama["Host-managed Ollama\n127.0.0.1:11434"]
 ```
 
 ## 4. Release 0 service responsibilities
@@ -92,12 +92,16 @@ flowchart LR
 
 ## 9. Compose and deployment boundary
 
-Issue #13 owns final Compose wiring. This issue only establishes the service expectations:
+PR #29 / issue #13 owns final Compose wiring. This issue only establishes the service expectations:
 
 - shared service name: `ai-mode`
 - expected internal port: `8006`
 - backend consumer URL: `http://ai-mode:8006`
-- provider URL from the shared service: `http://ollama:11434`
+- provider URL from the shared service:
+  - native `ai-mode`: `http://127.0.0.1:11434`
+  - containerized `ai-mode`: `http://host.docker.internal:11434`
+
+Ollama itself remains a host prerequisite for Release 0 rather than a Compose service.
 
 No Compose changes are required in this refactor PR.
 

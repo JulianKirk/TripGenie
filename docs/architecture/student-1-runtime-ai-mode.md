@@ -9,7 +9,7 @@ Runtime prompt asset: [`student-1/backend/backend_service/prompts/runtime_ai_sug
 
 This document describes the implemented **Student 1 runtime AI-mode** for issue #12.
 
-- End-user flow is **frontend -> Student 1 backend -> shared AI-Mode service -> Ollama -> approved local model**.
+- End-user flow is **frontend -> Student 1 backend -> shared AI-Mode service -> host Ollama runtime -> approved local model**.
 - Student 1 owns the public `/api/trips/{tripId}/ai-suggestions` endpoint, prompt asset, bounded trip context, itinerary validation, domain retry/adaptation, and the draft-only approval boundary.
 - The shared `ai-mode` service owns the official `ollama==0.6.2` dependency, provider configuration, approved model allowlist, provider timeouts, response-size limits, request IDs, and normalized provider errors.
 - Runtime retries are a robustness feature only; they are **not** the assessed course `Plan -> Act -> Observe -> Adapt` workflow.
@@ -180,7 +180,7 @@ Instead, logs record safe metadata such as:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Compose wiring is deferred to issue #13; expected container URL is `http://ai-mode:8006`. |
+| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Compose wiring is deferred to PR #29 / issue #13; expected container URL is `http://ai-mode:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Student 1 calls to the shared AI-Mode service. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Student-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset. |
@@ -198,6 +198,8 @@ Provider/runtime configuration now lives in [`ai-services/ai-mode/README.md`](..
 - `AI_MODE_MAX_PROMPT_CHARS`
 - `AI_MODE_MAX_SCHEMA_CHARS`
 - `AI_MODE_MAX_RESPONSE_BYTES`
+
+Release 0 expects Ollama to run on the host machine. Native shared-service runs default to `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`; containerized shared-service runs must receive `http://host.docker.internal:11434` from PR #29 / issue #13.
 
 ## 11. Frontend runtime notes
 

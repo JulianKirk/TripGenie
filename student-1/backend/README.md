@@ -10,7 +10,7 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_DB_API_BASE_URL` | `http://student-1-database:8002` | Base URL for the internal Student 1 database API. |
 | `STUDENT1_BACKEND_DB_API_PREFIX` | `/internal` | Internal Student 1 database API prefix. |
 | `STUDENT1_BACKEND_DB_API_TIMEOUT_SECONDS` | `5` | Timeout for backend-to-database HTTP calls. |
-| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Set to `http://ai-mode:8006` once issue #13 wires Compose. |
+| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Set to `http://ai-mode:8006` once PR #29 / issue #13 wires Compose. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for backend-to-shared-AI-Mode HTTP calls. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Consumer-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
@@ -31,7 +31,7 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 - `POST /api/trips/{tripId}/ai-suggestions` now calls the shared `ai-mode` service asynchronously, validates returned drafts against the same itinerary rules, and never persists them automatically.
 - Student 1 still owns prompt rendering, bounded trip/itinerary context, domain retry/adaptation, draft-only responses, and the human approval boundary.
 - Student 1 pre-budgets prompts against the shared 12,000-character contract, compacts JSON rendering, drops optional context deterministically when needed, and fails with a Student 1 validation error before calling shared AI-Mode if the irreducible context still cannot fit.
-- The shared AI-Mode service owns the official `ollama==0.6.2` client, provider configuration, approved model allowlist, provider health/readiness, safe output bounds, and normalized provider errors.
+- The shared AI-Mode service owns the official `ollama==0.6.2` client, provider configuration, approved model allowlist, provider health/readiness, safe output bounds, and normalized provider errors while targeting a host-managed Ollama runtime (`http://127.0.0.1:11434` natively or `http://host.docker.internal:11434` when the shared service runs in Docker).
 - Returned suggestions always include `persisted=false` and `approval_required=true`.
 - Retry/adaptation is limited to correctable parse/schema/constraint failures only and is a TripGenie runtime robustness feature, **not** the assessed course `Plan -> Act -> Observe -> Adapt` workflow.
 - `GET /health` may report a degraded shared AI-Mode dependency, while `GET /ready` remains database-only and never waits on AI-mode.
