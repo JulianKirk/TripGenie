@@ -2,9 +2,16 @@
 # SharedSamples/pyproject.toml, minus that service's project-specific bits.
 target-version = "py310"
 line-length = 88
-# Import roots, same as pytest.ini's pythonpath -- lets isort tell our own
-# `database`/`shared` packages apart from third-party ones.
-src = [".", "student-1", "student-2", "student-3", "student-4", "student-5"]
+# Import roots -- lets isort tell each service's own packages (student-2's
+# `database_service`, and so on) apart from third-party ones.
+src = [
+    ".",
+    "student-1/database",
+    "student-2/database",
+    "student-3/database",
+    "student-4",
+    "student-5",
+]
 
 [lint]
 select = [
@@ -20,18 +27,25 @@ ignore = ["TID252"]
 # process_bind_param/process_result_value take `dialect` from SQLAlchemy's
 # TypeDecorator interface whether or not the implementation needs it.
 "**/models.py" = ["ARG002"]
-# `id` shadowing the builtin is the natural name for a primary-key argument.
+# `id` shadowing the builtin is the natural name for a primary-key argument,
+# and for the {id} path parameter the API doc names.
 "**/repository.py" = ["A002"]
+"**/dependencies.py" = ["A002"]
+"**/routers/*.py" = ["A002"]
 # pytest passes every requested fixture in, used by the body or not.
 "**/tests/*" = ["ARG001", "ARG002"]
 
 [lint.flake8-type-checking]
 # SQLAlchemy resolves Mapped[...] annotations at runtime to build the mappers,
-# so the TC rules must not push those imports into a TYPE_CHECKING-only block.
+# and pydantic does the same to build its validators, so the TC rules must not
+# push those imports into a TYPE_CHECKING-only block.
 runtime-evaluated-base-classes = [
     "sqlalchemy.orm.DeclarativeBase",
-    "shared.backend.models.Base",
+    "pydantic.BaseModel",
 ]
+# FastAPI evaluates endpoint annotations at runtime to build the request model,
+# so imports used only in a route signature must stay out of TYPE_CHECKING.
+runtime-evaluated-decorators = ["fastapi.Depends", "fastapi.Query"]
 
 [format]
 quote-style = "double"

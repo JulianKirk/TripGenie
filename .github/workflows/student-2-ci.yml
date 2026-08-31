@@ -4,20 +4,20 @@ on:
   push:
     paths:
       - 'student-2/**'
-      - 'shared/**'
       - 'ruff.toml'
+      - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'
   pull_request:
     paths:
       - 'student-2/**'
-      - 'shared/**'
       - 'ruff.toml'
+      - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Build and Validate Student 2
+  database:
+    name: Build and Validate Student 2 Database
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,22 @@ jobs:
         run: pip install -e "./student-2[dev]"
       - name: Lint
         run: |
-          ruff check shared student-2
-          ruff format --check shared student-2
+          ruff check student-2
+          ruff format --check student-2
       - name: Run tests
         run: pytest student-2/tests -q
+      - name: Build database service image
+        run: docker build -f student-2/database/Dockerfile -t student-2-database student-2
+      - name: Health check database service
+        run: |
+          docker run -d --name student-2-database -p 9001:9001 student-2-database
+          for _ in $(seq 1 8); do
+            if curl -fsS http://localhost:9001/health; then
+              echo "database service healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service did not become healthy after 8 attempts"
+          docker logs student-2-database
+          exit 1

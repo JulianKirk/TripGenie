@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Shared Frontend Portal
   shared-ui:
@@ -18,12 +16,16 @@ services:
       - "8081:8081"
 
   # Student 2: Accommodation Management
-  student-2-service:
+  # Internal only -- no published port. The backend service is the sole caller
+  # and reaches it as http://student-2-database:9001 on the compose network.
+  student-2-database:
     build:
       context: ./student-2
-      dockerfile: Dockerfile
-    ports:
-      - "8082:8082"
+      dockerfile: database/Dockerfile
+    expose:
+      - "9001"
+    volumes:
+      - student-2-db:/data
 
   # Student 3: Transport Management
   student-3-service:
@@ -54,3 +56,6 @@ services:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
+
+volumes:
+  student-2-db:
