@@ -1,0 +1,28 @@
+<section class="panel panel--detail panel--danger">
+  <p class="section-eyebrow">Confirmation</p>
+  <h2 id="delete-confirmation-heading" data-autofocus>{{ title }}</h2>
+  <p class="lead-copy">{{ description }}</p>
+
+  {% if page_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ page_error.message }}</strong></p>
+      {% if page_error.details %}
+        <ul class="banner__list">
+          {% for detail in page_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="stack-form" action="{{ confirm_action }}" method="post">
+    {% for field_name, value in hidden_fields.items() %}
+      <input type="hidden" name="{{ field_name }}" value="{{ value }}">
+    {% endfor %}
+    <div class="button-row">
+      <button class="button button--danger" type="submit">{{ confirm_label }}</button>
+      <a class="button button--ghost" href="{{ cancel_url }}">Cancel</a>
+    </div>
+  </form>
+</section>

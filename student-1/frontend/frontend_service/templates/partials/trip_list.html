@@ -1,0 +1,37 @@
+<section class="panel panel--sidebar">
+  <div class="panel__header panel__header--compact">
+    <div>
+      <p class="section-eyebrow">UI mode</p>
+      <h2 id="trip-list-heading">Trips</h2>
+    </div>
+    <a class="button button--primary" href="{{ request.url_for('new_trip_form') }}">Create trip</a>
+  </div>
+
+  {% if trip_list_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>Trip list unavailable.</strong></p>
+      <p>{{ trip_list_error.message }}</p>
+    </div>
+  {% elif trips %}
+    <ul class="trip-list">
+      {% for trip in trips %}
+        <li>
+          <a
+            class="trip-list__link{% if trip.id == selected_trip_id %} is-active{% endif %}"
+            href="{{ request.url_for('view_trip', trip_id=trip.id) }}"
+            {% if trip.id == selected_trip_id %}aria-current="page"{% endif %}
+          >
+            <span class="trip-list__title">{{ trip.name }}</span>
+            <span class="trip-list__meta">
+              {{ trip.destination }} · {{ trip.start_date }} to {{ trip.end_date }}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-copy">
+      No trips yet. Create your first trip to start planning day-by-day travel.
+    </p>
+  {% endif %}
+</section>

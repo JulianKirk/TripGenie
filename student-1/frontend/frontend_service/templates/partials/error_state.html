@@ -1,0 +1,22 @@
+<section class="panel panel--detail">
+  <p class="section-eyebrow">Dependency state</p>
+  <h2 id="error-state-heading" data-autofocus>{{ error_title }}</h2>
+  <p class="lead-copy">{{ page_error.message }}</p>
+
+  {% if page_error.details %}
+    <ul class="banner__list">
+      {% for detail in page_error.details %}
+        <li>{{ detail.field }}: {{ detail.issue }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <div class="button-row">
+    {% if retry_url %}
+      <a class="button button--primary" href="{{ retry_url }}">Retry</a>
+    {% endif %}
+    {% if fallback_url %}
+      <a class="button button--ghost" href="{{ fallback_url }}">Back to trips</a>
+    {% endif %}
+  </div>
+</section>

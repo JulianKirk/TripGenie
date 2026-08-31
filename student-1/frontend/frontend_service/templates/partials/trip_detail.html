@@ -1,0 +1,198 @@
+{% import "macros/forms.html" as forms %}
+
+<article class="panel panel--detail">
+  <header class="panel__header panel__header--stacked">
+    <div>
+      <p class="section-eyebrow">UI mode</p>
+      <h2 id="trip-detail-heading" data-autofocus>{{ trip.name }}</h2>
+      <p class="lead-copy">
+        {{ trip.destination }} · {{ trip.start_date }} to {{ trip.end_date }}
+      </p>
+    </div>
+    <div class="button-row">
+      <a class="button button--secondary" href="{{ request.url_for('edit_trip_form', trip_id=trip.id) }}">Edit trip</a>
+      <a class="button button--danger" href="{{ request.url_for('delete_trip_confirmation', trip_id=trip.id) }}">Delete trip</a>
+    </div>
+  </header>
+
+  {% if page_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ page_error.message }}</strong></p>
+      {% if page_error.details %}
+        <ul class="banner__list">
+          {% for detail in page_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <dl class="summary-grid">
+    <div>
+      <dt>Status</dt>
+      <dd>{{ trip.status.value.title() }}</dd>
+    </div>
+    <div>
+      <dt>Travellers</dt>
+      <dd>{{ trip.traveller_count }}</dd>
+    </div>
+    <div>
+      <dt>Trip identifier</dt>
+      <dd>{{ trip.id }}</dd>
+    </div>
+    <div>
+      <dt>Notes</dt>
+      <dd>{{ trip.notes or "No trip notes yet." }}</dd>
+    </div>
+  </dl>
+
+  <section class="panel panel--nested" aria-labelledby="filter-heading">
+    <div class="panel__header panel__header--compact">
+      <div>
+        <h3 id="filter-heading">Filter itinerary items</h3>
+        <p class="muted-copy">Limit the selected trip by day or itinerary category.</p>
+      </div>
+      <a class="button button--ghost" href="{{ request.url_for('view_trip', trip_id=trip.id) }}">Reset filters</a>
+    </div>
+    <form
+      class="filter-grid"
+      action="{{ request.url_for('view_trip', trip_id=trip.id) }}"
+      method="get"
+      hx-push-url="true"
+      novalidate
+    >
+      {% set date_has_errors = filter_errors_by_field.get('date') %}
+      {% set category_has_errors = filter_errors_by_field.get('category') %}
+      <div class="form-field">
+        <label for="filter-date">Date</label>
+        <input
+          id="filter-date"
+          name="date"
+          type="date"
+          value="{{ filter_state.date }}"
+          {% if date_has_errors %}aria-invalid="true" aria-describedby="date-errors"{% endif %}
+        >
+        {{ forms.field_errors('date', filter_errors_by_field) }}
+      </div>
+      <div class="form-field">
+        <label for="filter-category">Category</label>
+        <select
+          id="filter-category"
+          name="category"
+          {% if category_has_errors %}aria-invalid="true" aria-describedby="category-errors"{% endif %}
+        >
+          {% for value, label in filter_category_options %}
+            <option value="{{ value }}"{% if filter_state.category == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        {{ forms.field_errors('category', filter_errors_by_field) }}
+      </div>
+      <div class="form-field form-field--actions">
+        <button class="button button--primary" type="submit">Apply filters</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel panel--nested" aria-labelledby="days-heading">
+    <div class="panel__header panel__header--compact">
+      <div>
+        <h3 id="days-heading">View by day</h3>
+        <p class="muted-copy">Select a specific day or return to the whole trip timeline.</p>
+      </div>
+      <a class="button button--primary" href="{{ request.url_for('new_item_form', trip_id=trip.id) }}?date={{ add_item_date }}">Add itinerary item</a>
+    </div>
+    <ul class="day-selector" role="list">
+      <li>
+        <a
+          class="pill{% if not selected_date %} pill--active{% endif %}"
+          href="{{ request.url_for('view_trip', trip_id=trip.id) }}{% if filter_state.category %}?category={{ filter_state.category }}{% endif %}"
+          {% if not selected_date %}aria-current="page"{% endif %}
+        >
+          All days
+        </a>
+      </li>
+      {% for day in trip.days %}
+        <li>
+          <a
+            class="pill{% if selected_date == day.date %} pill--active{% endif %}"
+            href="{{ request.url_for('view_trip_day', trip_id=trip.id, trip_day=day.date) }}{% if filter_state.category %}?category={{ filter_state.category }}{% endif %}"
+            {% if selected_date == day.date %}aria-current="page"{% endif %}
+          >
+            {{ day.date }}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if display_days %}
+      <div class="day-list">
+        {% for day in display_days %}
+          <section class="day-card" aria-labelledby="day-{{ loop.index }}-heading">
+            <div class="day-card__header">
+              <div>
+                <h4 id="day-{{ loop.index }}-heading">{{ day.date }}</h4>
+                <p class="muted-copy">Day-by-day itinerary ordered by time, then title.</p>
+              </div>
+              <a class="button button--ghost" href="{{ request.url_for('new_item_form', trip_id=trip.id) }}?date={{ day.date }}">Add item for this day</a>
+            </div>
+            {% if day.items %}
+              <ol class="item-list">
+                {% for item in day.items %}
+                  <li class="item-card">
+                    <div class="item-card__content">
+                      <h5>{{ item.title }}</h5>
+                      <p class="item-card__meta">
+                        {% if item.start_time %}
+                          {{ item.start_time }}{% if item.end_time %} – {{ item.end_time }}{% endif %}
+                        {% else %}
+                          Any time
+                        {% endif %}
+                        · {{ item.category.value.title() }}
+                      </p>
+                      {% if item.location %}
+                        <p><strong>Location:</strong> {{ item.location }}</p>
+                      {% endif %}
+                      {% if item.description %}
+                        <p>{{ item.description }}</p>
+                      {% endif %}
+                      {% if item.notes %}
+                        <p class="muted-copy"><strong>Notes:</strong> {{ item.notes }}</p>
+                      {% endif %}
+                    </div>
+                    <div class="button-row">
+                      <a class="button button--secondary" href="{{ request.url_for('edit_item_form', item_id=item.id) }}">Edit item</a>
+                      <a class="button button--danger" href="{{ request.url_for('delete_item_confirmation', item_id=item.id) }}">Delete item</a>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ol>
+            {% else %}
+              <p class="empty-copy">No itinerary items match the current filters for this day.</p>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-copy">No itinerary items match the selected trip filters yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="mode-panel mode-panel--ai" aria-labelledby="ai-detail-heading">
+    <p class="section-eyebrow">AI mode</p>
+    <h3 id="ai-detail-heading">Contract-ready AI planning placeholder</h3>
+    <p>
+      The browser flow is intentionally explicit: CRUD is live today, while AI itinerary suggestions remain disabled until issue #12 wires the real backend behaviour.
+    </p>
+    <form class="stack-form" aria-describedby="ai-detail-note">
+      <fieldset disabled>
+        <label for="ai-detail-request">Suggestion brief</label>
+        <textarea id="ai-detail-request" name="ai_request" rows="4" placeholder="For example: suggest a quieter afternoon after a busy morning."></textarea>
+        <button class="button button--secondary" type="button">Generate suggestions in issue #12</button>
+      </fieldset>
+      <p id="ai-detail-note" class="muted-copy">
+        Disabled by design so the UI does not overstate AI behaviour before the dedicated implementation lands.
+      </p>
+    </form>
+  </section>
+</article>
