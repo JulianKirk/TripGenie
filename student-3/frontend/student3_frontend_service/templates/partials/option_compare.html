@@ -78,9 +78,11 @@
           <tr>
             <th scope="row">Actions</th>
             {% for o in compared %}
-              <td class="actions-cell">
+              <td>
+                <div class="actions-cell">
                 <a href="{{ request.url_for('view_option', transport_id=o.id) }}">View</a>
                 <a href="{{ request.url_for('new_entry_form') }}?transport_id={{ o.id }}">Add to trip</a>
+              </div>
               </td>
             {% endfor %}
           </tr>

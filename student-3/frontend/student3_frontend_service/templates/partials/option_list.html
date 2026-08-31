@@ -38,19 +38,19 @@
       </p>
       <p class="field">
         <label for="min_price">Min price</label>
-        <input id="min_price" name="min_price" type="text" value="{{ filters.get('min_price', '') }}">
+        <input id="min_price" name="min_price" type="number" min="0" step="0.01" inputmode="decimal" value="{{ filters.get('min_price', '') }}">
       </p>
       <p class="field">
         <label for="max_price">Max price</label>
-        <input id="max_price" name="max_price" type="text" value="{{ filters.get('max_price', '') }}">
+        <input id="max_price" name="max_price" type="number" min="0" step="0.01" inputmode="decimal" value="{{ filters.get('max_price', '') }}">
       </p>
       <p class="field">
         <label for="departure_from">Departs from</label>
-        <input id="departure_from" name="departure_from" type="text" placeholder="2026-10-01T00:00" value="{{ filters.get('departure_from', '') }}">
+        <input id="departure_from" name="departure_from" type="datetime-local" value="{{ filters.get('departure_from', '') }}">
       </p>
       <p class="field">
         <label for="departure_to">Departs before</label>
-        <input id="departure_to" name="departure_to" type="text" placeholder="2026-10-31T23:59" value="{{ filters.get('departure_to', '') }}">
+        <input id="departure_to" name="departure_to" type="datetime-local" value="{{ filters.get('departure_to', '') }}">
       </p>
     </div>
     <p class="actions">
@@ -90,9 +90,11 @@
               <td>${{ '%.2f' | format(option.price) }}</td>
               <td>{{ option.seats_remaining }} / {{ option.capacity }}</td>
               <td><span class="status status--{{ option.availability_status.value }}">{{ option.availability_label }}</span></td>
-              <td class="actions-cell">
+              <td>
+                <div class="actions-cell">
                 <a href="{{ request.url_for('view_option', transport_id=option.id) }}">View</a>
                 <a href="{{ request.url_for('new_entry_form') }}?transport_id={{ option.id }}">Add to trip</a>
+              </div>
               </td>
             </tr>
           {% endfor %}

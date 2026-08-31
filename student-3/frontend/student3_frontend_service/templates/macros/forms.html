@@ -8,7 +8,7 @@
   {% endif %}
 {%- endmacro %}
 
-{% macro select_field(name, label, choices, selected, errors_by_field) -%}
+{% macro select_field(name, label, choices, selected, errors_by_field, hint="") -%}
   <p class="field">
     <label for="{{ name }}">{{ label }}</label>
     <select id="{{ name }}" name="{{ name }}">
@@ -16,6 +16,7 @@
         <option value="{{ value }}" {% if value == selected %}selected{% endif %}>{{ text }}</option>
       {% endfor %}
     </select>
+    {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
     {{ field_errors(name, errors_by_field) }}
   </p>
 {%- endmacro %}
@@ -27,4 +28,66 @@
     {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
     {{ field_errors(name, errors_by_field) }}
   </p>
+{%- endmacro %}
+
+{#
+  A native date picker. The control's value format is already YYYY-MM-DD, which
+  is exactly what the API expects, so no conversion is needed either way.
+#}
+{% macro date_field(name, label, value, errors_by_field, hint="") -%}
+  <p class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <input id="{{ name }}" name="{{ name }}" type="date" value="{{ value }}">
+    {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
+    {{ field_errors(name, errors_by_field) }}
+  </p>
+{%- endmacro %}
+
+{#
+  A native date-and-time picker. Its value format is YYYY-MM-DDTHH:MM, which
+  matches the API's timestamp format exactly.
+#}
+{% macro datetime_field(name, label, value, errors_by_field, hint="") -%}
+  <p class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <input id="{{ name }}" name="{{ name }}" type="datetime-local" value="{{ value }}">
+    {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
+    {{ field_errors(name, errors_by_field) }}
+  </p>
+{%- endmacro %}
+
+{% macro number_field(name, label, value, errors_by_field, hint="", min="", max="", step="1") -%}
+  <p class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <input
+      id="{{ name }}"
+      name="{{ name }}"
+      type="number"
+      value="{{ value }}"
+      step="{{ step }}"
+      {% if min != "" %}min="{{ min }}"{% endif %}
+      {% if max != "" %}max="{{ max }}"{% endif %}
+      inputmode="{{ 'decimal' if step != '1' else 'numeric' }}"
+    >
+    {% if hint %}<span class="field__hint">{{ hint }}</span>{% endif %}
+    {{ field_errors(name, errors_by_field) }}
+  </p>
+{%- endmacro %}
+
+{#
+  Falls back to a text input when the choice list could not be loaded, so a
+  dependency outage degrades to something still usable rather than an empty
+  picker that looks like "you have nothing to choose from".
+#}
+{% macro select_or_text_field(name, label, choices, selected, errors_by_field, available, unavailable_hint, hint="") -%}
+  {% if available %}
+    {{ select_field(name, label, choices, selected, errors_by_field, hint) }}
+  {% else %}
+    <p class="field">
+      <label for="{{ name }}">{{ label }}</label>
+      <input id="{{ name }}" name="{{ name }}" type="text" value="{{ selected }}">
+      <span class="field__hint field__hint--warning">{{ unavailable_hint }}</span>
+      {{ field_errors(name, errors_by_field) }}
+    </p>
+  {% endif %}
 {%- endmacro %}

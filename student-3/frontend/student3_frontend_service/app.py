@@ -23,6 +23,7 @@ from .models import (
     TransportOptionRecord,
     TransportPlanEntryRecord,
     TransportType,
+    TripDirectory,
 )
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -42,6 +43,26 @@ PLAN_STATUS_OPTIONS = [
     (PlanStatus.COMPLETED.value, "Journey taken"),
     (PlanStatus.CANCELLED.value, "Removed"),
 ]
+# Real civil UTC offsets, including the half and quarter hour ones, so the
+# field is a pick rather than a number of minutes the user has to work out.
+_UTC_OFFSET_MINUTES = (
+    -720, -660, -600, -570, -540, -480, -420, -360, -300, -240, -210, -180,
+    -120, -60, 0, 60, 120, 180, 210, 240, 270, 300, 330, 345, 360, 390, 420,
+    480, 525, 540, 570, 600, 630, 660, 690, 720, 765, 780, 840,
+)
+
+
+def _offset_label(minutes: int) -> str:
+    sign = "-" if minutes < 0 else "+"
+    hours, remainder = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours:02d}:{remainder:02d}"
+
+
+UTC_OFFSET_OPTIONS = [
+    ("", "Not specified"),
+    *[(str(minutes), _offset_label(minutes)) for minutes in _UTC_OFFSET_MINUTES],
+]
+
 FILTER_TYPE_OPTIONS = [("", "All transport types"), *TYPE_OPTIONS]
 FILTER_AVAILABILITY_OPTIONS = [("", "Any availability"), *AVAILABILITY_OPTIONS]
 
@@ -80,6 +101,38 @@ INTEGER_OPTION_FIELDS = frozenset(
 FLOAT_OPTION_FIELDS = frozenset({"price"})
 
 
+def transport_choices(
+    options: list[TransportOptionRecord],
+) -> list[tuple[str, str]]:
+    """Readable labels for the transport picker, ordered as the list is."""
+    return [
+        ("", "Select a transport option"),
+        *[
+            (
+                option.id,
+                f"{option.origin} to {option.destination} - {option.provider}"
+                f" - {option.type_label} - {option.departure_time}"
+                f" - ${option.price:.2f}",
+            )
+            for option in options
+        ],
+    ]
+
+
+def trip_choices(directory: TripDirectory) -> list[tuple[str, str]]:
+    return [
+        ("", "Select a trip"),
+        *[(trip.id, trip.label) for trip in directory.trips],
+    ]
+
+
+TRIPS_UNAVAILABLE_HINT = (
+    "The Student 1 trips service is unavailable, so the trip list could not be "
+    "loaded. Enter the trip identifier directly, for example "
+    "trip_2026_sydney_long_weekend."
+)
+
+
 def get_backend_client(request: Request) -> BackendApiClient:
     return request.app.state.backend_client
 
@@ -93,6 +146,10 @@ def envelope(payload: object) -> dict[str, object]:
 
 def path_for(request: Request, route_name: str, **path_params: str) -> str:
     return str(request.app.url_path_for(route_name, **path_params))
+
+
+def is_htmx_request(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").lower() == "true"
 
 
 def error_details_by_field(error: ApiError | None) -> dict[str, list[str]]:
@@ -276,9 +333,21 @@ def create_app(
         status_code: int = 200,
         **context: object,
     ) -> Response:
+        """Render a screen, as a fragment for HTMX and a full page otherwise.
+
+        The shell sets hx-target="#app-shell" with hx-swap="outerHTML", so a
+        boosted request that answered with the whole document would nest a
+        second <head> and site header inside the shell, and they would stack up
+        with every navigation. Answering with the shell alone keeps the swap to
+        the region HTMX is replacing, while a normal request still gets a
+        complete, independently viewable page.
+        """
+        template = (
+            "partials/app_shell.html" if is_htmx_request(request) else "page.html"
+        )
         return TEMPLATES.TemplateResponse(
             request,
-            "page.html",
+            template,
             {
                 "page_title": page_title,
                 "content_template": content_template,
@@ -479,6 +548,7 @@ def create_app(
             error=None,
             type_options=TYPE_OPTIONS,
             availability_options=AVAILABILITY_OPTIONS,
+            utc_offset_options=UTC_OFFSET_OPTIONS,
         )
 
     @app.post("/options", name="create_option", response_model=None)
@@ -506,6 +576,7 @@ def create_app(
                 error=exc,
                 type_options=TYPE_OPTIONS,
                 availability_options=AVAILABILITY_OPTIONS,
+                utc_offset_options=UTC_OFFSET_OPTIONS,
             )
 
         return RedirectResponse(
@@ -584,6 +655,7 @@ def create_app(
             error=None,
             type_options=TYPE_OPTIONS,
             availability_options=AVAILABILITY_OPTIONS,
+            utc_offset_options=UTC_OFFSET_OPTIONS,
             is_edit=True,
         )
 
@@ -626,6 +698,7 @@ def create_app(
                 error=exc,
                 type_options=TYPE_OPTIONS,
                 availability_options=AVAILABILITY_OPTIONS,
+                utc_offset_options=UTC_OFFSET_OPTIONS,
                 is_edit=True,
             )
 
@@ -757,6 +830,19 @@ def create_app(
 
     # ---------------------------------------------------------- plan entries
 
+    def entry_form_context(
+        options: list[TransportOptionRecord],
+        directory: TripDirectory,
+    ) -> dict[str, object]:
+        """Shared picker context for every plan-entry form render."""
+        return {
+            "plan_status_options": PLAN_STATUS_OPTIONS,
+            "trip_options": trip_choices(directory),
+            "trips_available": directory.available,
+            "trips_unavailable_hint": TRIPS_UNAVAILABLE_HINT,
+            "transport_options_choices": transport_choices(options),
+        }
+
     @app.get("/plan/new", name="new_entry_form", response_model=None)
     async def new_entry_form(
         request: Request,
@@ -765,6 +851,7 @@ def create_app(
         trip_id: Annotated[str | None, Query()] = None,
     ) -> Response:
         options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
         form = {
             "id": "",
             "trip_id": (trip_id or "").strip(),
@@ -789,7 +876,7 @@ def create_app(
             submit_label="Add to trip",
             errors_by_field={},
             error=None,
-            plan_status_options=PLAN_STATUS_OPTIONS,
+            **entry_form_context(options, directory),
         )
 
     @app.post("/plan", name="create_entry", response_model=None)
@@ -800,6 +887,7 @@ def create_app(
             created = await client.create_plan_entry(_entry_payload(submitted))
         except ApiError as exc:
             options, list_error = await safe_list_options(client)
+            directory = await client.trip_directory()
             return render(
                 request,
                 "partials/plan_entry_form.html",
@@ -814,7 +902,7 @@ def create_app(
                 submit_label="Add to trip",
                 errors_by_field=error_details_by_field(exc),
                 error=exc,
-                plan_status_options=PLAN_STATUS_OPTIONS,
+                **entry_form_context(options, directory),
             )
 
         return RedirectResponse(
@@ -829,6 +917,7 @@ def create_app(
         client: ClientDep,
     ) -> Response:
         options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
         try:
             entry = await client.get_plan_entry(booking_id)
         except ApiError as exc:
@@ -855,9 +944,9 @@ def create_app(
             submit_label="Save changes",
             errors_by_field={},
             error=None,
-            plan_status_options=PLAN_STATUS_OPTIONS,
             is_edit=True,
             cancel_url=path_for(request, "trip_transport", trip_id=entry.trip_id),
+            **entry_form_context(options, directory),
         )
 
     @app.post("/plan/{booking_id}/edit", name="update_entry", response_model=None)
@@ -874,6 +963,7 @@ def create_app(
             updated = await client.update_plan_entry(booking_id, payload)
         except ApiError as exc:
             options, list_error = await safe_list_options(client)
+            directory = await client.trip_directory()
             return render(
                 request,
                 "partials/plan_entry_form.html",
@@ -888,8 +978,8 @@ def create_app(
                 submit_label="Save changes",
                 errors_by_field=error_details_by_field(exc),
                 error=exc,
-                plan_status_options=PLAN_STATUS_OPTIONS,
                 is_edit=True,
+                **entry_form_context(options, directory),
             )
 
         return RedirectResponse(
@@ -963,6 +1053,7 @@ def create_app(
             path_for(request, "trip_transport", trip_id=entry.trip_id),
             status_code=303,
         )
+
 
     return app
 

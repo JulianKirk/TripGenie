@@ -18,6 +18,7 @@ from .models import (
     TransportPlanEntryRecord,
     TransportPlanEntryUpdate,
     TransportType,
+    TripDirectory,
     TripTransportSummary,
 )
 from .transport_rules import (
@@ -221,6 +222,21 @@ class BackendService:
             self._ensure_trip_is_known(payload.trip_id)
 
         return self._client.update_plan_entry(booking_id, payload)
+
+    def trip_directory(self) -> TripDirectory:
+        """Trips offered for selection, read through from Student 1.
+
+        Read-only and best effort. Student 3 does not own trips; this exists so
+        the UI can show trip names rather than requiring a typed identifier.
+        """
+        if self._trips_client is None:
+            return TripDirectory(available=False, trips=[])
+
+        trips = self._trips_client.list_trips()
+        if trips is None:
+            return TripDirectory(available=False, trips=[])
+
+        return TripDirectory(available=True, trips=trips)
 
     def _ensure_trip_is_known(self, trip_id: str) -> None:
         """Reject a plan entry for a trip Student 1 says does not exist.

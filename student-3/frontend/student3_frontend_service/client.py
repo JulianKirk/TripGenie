@@ -14,6 +14,7 @@ from .models import (
     ErrorEnvelope,
     TransportOptionRecord,
     TransportPlanEntryRecord,
+    TripDirectory,
     TripTransportSummary,
 )
 
@@ -214,6 +215,28 @@ class BackendApiClient:
             response_type=DataEnvelope[DeleteResponse],
             malformed_message="Backend API returned a malformed entry delete response.",
         )
+        return envelope.data
+
+    async def trip_directory(self) -> TripDirectory:
+        """Trips available for selection. Never raises.
+
+        A picker is a convenience: if the lookup fails the form should fall back
+        to free text, not refuse to render, so the failure is folded into the
+        returned value instead of an exception.
+        """
+        try:
+            envelope = await self._request_model(
+                "GET",
+                f"{self._api_prefix}/trip-directory",
+                expected_statuses={200},
+                response_type=DataEnvelope[TripDirectory],
+                malformed_message=(
+                    "Backend API returned a malformed trip directory response."
+                ),
+            )
+        except ApiError:
+            return TripDirectory(available=False, trips=[])
+
         return envelope.data
 
     async def trip_transport(self, trip_id: str) -> TripTransportSummary:

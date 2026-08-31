@@ -58,6 +58,25 @@ Filters cover type, provider, origin, destination, availability, price range,
 and departure window. Blank fields are dropped rather than forwarded, because
 the backend treats a blank query value as invalid rather than unset.
 
+## Input controls
+
+Free-text identifiers are unreliable and give no clue what to type, so the forms
+use real controls wherever the value allows one:
+
+| Field | Control |
+| --- | --- |
+| Trip | Picker of trip names read through from Student 1, falling back to text if that service is down |
+| Transport option | Picker labelled by route, provider, type, departure and price |
+| Dates | Native date picker. Its value format is already `YYYY-MM-DD` |
+| Departure / arrival | Native date-and-time picker, value format already `YYYY-MM-DDTHH:MM` |
+| Time zones | Picker of real UTC offsets, submitting the minutes the API expects |
+| Price, capacity, travellers, cost | Number inputs with sensible min, max and step |
+| Type, availability, plan state | Pickers |
+
+The trip picker is the only one with an external dependency. If Student 1's
+service is unreachable the field degrades to a text input with a note, so
+transport planning still works during their outage.
+
 ## Design notes
 
 - **The backend owns validation.** Forms post whatever was typed; when the

@@ -615,3 +615,208 @@ def test_pages_share_the_navigation_shell(client: TestClient) -> None:
         response = client.get(path)
         assert 'id="app-shell"' in response.text, path
         assert "Browse &amp; filter" in response.text, path
+
+
+# ------------------------------------------------------------ swap regressions
+
+HTMX_HEADERS = {"HX-Request": "true", "HX-Boosted": "true"}
+
+
+def test_htmx_request_returns_only_the_shell(client: TestClient) -> None:
+    """A boosted request must not answer with a whole document.
+
+    The shell swaps itself with hx-swap="outerHTML", so a full page response
+    nests a second <head> and site header inside it, and they accumulate with
+    every button press.
+    """
+    response = client.get("/compare", headers=HTMX_HEADERS)
+
+    assert response.status_code == 200
+    assert "<!DOCTYPE" not in response.text
+    assert "<head>" not in response.text
+    assert "site-header" not in response.text
+    assert 'id="app-shell"' in response.text
+
+
+def test_plain_request_still_returns_a_full_page(client: TestClient) -> None:
+    response = client.get("/compare")
+
+    assert "<!DOCTYPE" in response.text
+    assert response.text.count("site-header") >= 1
+    assert 'id="app-shell"' in response.text
+
+
+def test_no_screen_duplicates_the_site_header_over_htmx(
+    client: TestClient,
+) -> None:
+    paths = [
+        "/",
+        "/compare",
+        "/options/new",
+        "/plan/new",
+        f"/options/{SHUTTLE_ID}",
+        f"/trips/{SYDNEY_TRIP}/transport",
+    ]
+    for path in paths:
+        response = client.get(path, headers=HTMX_HEADERS)
+        assert response.status_code == 200, path
+        assert 'class="site-header"' not in response.text, path
+        assert response.text.count('id="app-shell"') == 1, path
+
+
+def test_table_action_cells_stay_real_table_cells(client: TestClient) -> None:
+    """display:flex on a <td> drops it out of the table layout.
+
+    The cell then stops lining up under its own column, which is most obvious
+    in the comparison table where the Actions row has one cell per option.
+    """
+    for path in (
+        "/",
+        f"/options/{SHUTTLE_ID}",
+        f"/trips/{SYDNEY_TRIP}/transport",
+        f"/compare?ids={FLIGHT_ID}&ids={TOKYO_ID}",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert '<td class="actions-cell"' not in response.text, path
+
+
+def test_compare_actions_row_has_one_cell_per_option(client: TestClient) -> None:
+    response = client.get("/compare", params={"ids": [FLIGHT_ID, TOKYO_ID]})
+
+    assert response.status_code == 200
+    actions_row = response.text.split('<th scope="row">Actions</th>')[1]
+    actions_row = actions_row.split("</tr>")[0]
+    assert actions_row.count("<td>") == 2
+    assert actions_row.count("Add to trip") == 2
+    assert actions_row.count(">View<") == 2
+
+
+# --------------------------------------------------------------- input controls
+
+
+def test_trip_field_is_a_picker_when_student_1_is_reachable(
+    client_with_trips: TestClient,
+) -> None:
+    response = client_with_trips.get("/plan/new")
+
+    assert response.status_code == 200
+    assert '<select id="trip_id" name="trip_id">' in response.text
+    # Readable label, not a raw identifier.
+    assert "Sydney Long Weekend" in response.text
+    assert "Sydney, 2026-10-02 to 2026-10-05" in response.text
+    assert "Queenstown Ski Escape" in response.text
+
+
+def test_trip_picker_preselects_the_trip_from_the_query(
+    client_with_trips: TestClient,
+) -> None:
+    response = client_with_trips.get("/plan/new", params={"trip_id": SYDNEY_TRIP})
+
+    assert f'value="{SYDNEY_TRIP}" selected' in response.text
+
+
+def test_trip_field_degrades_to_text_when_student_1_is_down(
+    client: TestClient,
+) -> None:
+    """A dependency outage must not make the form unusable.
+
+    The default fixture has Student 1 unreachable, so this is the degraded path.
+    """
+    response = client.get("/plan/new")
+
+    assert response.status_code == 200
+    assert '<select id="trip_id"' not in response.text
+    assert '<input id="trip_id" name="trip_id" type="text"' in response.text
+    assert "trips service is unavailable" in response.text
+
+
+def test_transport_field_is_always_a_picker(client: TestClient) -> None:
+    """Transport options are Student 3's own data, so the picker never degrades."""
+    response = client.get("/plan/new")
+
+    assert '<select id="transport_id" name="transport_id">' in response.text
+    assert "Queenstown Airport to Queenstown Town Centre" in response.text
+    assert "Queenstown Snow Shuttle" in response.text
+
+
+def test_transport_picker_preselects_from_the_query(client: TestClient) -> None:
+    response = client.get("/plan/new", params={"transport_id": SHUTTLE_ID})
+
+    assert f'value="{SHUTTLE_ID}" selected' in response.text
+
+
+def test_plan_form_uses_native_date_and_number_controls(
+    client: TestClient,
+) -> None:
+    response = client.get("/plan/new")
+
+    assert '<input id="booking_date" name="booking_date" type="date"' in response.text
+    assert 'id="traveller_count"' in response.text
+    assert 'type="number"' in response.text
+    assert 'min="1"' in response.text
+
+
+def test_option_form_uses_datetime_and_number_controls(client: TestClient) -> None:
+    response = client.get("/options/new")
+
+    assert 'name="departure_time" type="datetime-local"' in response.text
+    assert 'name="arrival_time" type="datetime-local"' in response.text
+    assert 'name="price"' in response.text
+    assert 'step="0.01"' in response.text
+    assert 'name="capacity"' in response.text
+
+
+def test_option_form_offers_time_zones_as_a_picker(client: TestClient) -> None:
+    """A raw offset in minutes is not something a user should have to work out."""
+    response = client.get("/options/new")
+
+    assert '<select id="departure_utc_offset"' in response.text
+    assert '<select id="arrival_utc_offset"' in response.text
+    assert "UTC+10:00" in response.text
+    assert "UTC+05:30" in response.text
+    assert "UTC-12:00" in response.text
+    assert "Not specified" in response.text
+    # The submitted value stays the minutes the API expects.
+    assert 'value="600"' in response.text
+
+
+def test_edit_option_form_preselects_the_stored_time_zones(
+    client: TestClient,
+) -> None:
+    response = client.get("/options/transport_2027_jl772_syd_hnd/edit")
+
+    assert response.status_code == 200
+    assert 'value="660" selected' in response.text
+    assert 'value="540" selected' in response.text
+
+
+def test_browse_filters_use_native_controls(client: TestClient) -> None:
+    response = client.get("/")
+
+    assert 'id="min_price" name="min_price" type="number"' in response.text
+    assert 'id="departure_from" name="departure_from" type="datetime-local"' in (
+        response.text
+    )
+
+
+def test_picking_from_the_dropdowns_creates_a_plan_entry(
+    client_with_trips: TestClient,
+) -> None:
+    """End to end with picker values, which are the plain identifiers."""
+    response = _post(
+        client_with_trips,
+        "/plan",
+        {
+            "trip_id": QUEENSTOWN_TRIP,
+            "transport_id": SHUTTLE_ID,
+            "traveller_count": "2",
+            "booking_date": "2027-05-03",
+            "estimated_cost": "",
+            "booking_status": "pending",
+            "notes": "",
+        },
+    )
+
+    assert response.status_code == 303, response.text
+    assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"

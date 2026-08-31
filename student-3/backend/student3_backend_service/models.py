@@ -312,6 +312,35 @@ class TransportPlanEntryRecord(TransportPlanEntryFields):
     estimated_cost: Price
 
 
+class TripSummary(BaseModel):
+    """A trip as Student 1 reports it. Extra fields are tolerated on purpose.
+
+    Student 1 owns trips; this exists only so pickers can show a readable label
+    instead of asking a traveller to type a raw identifier.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: TripIdentifier
+    name: ShortText
+    destination: ShortText
+    start_date: IsoDate
+    end_date: IsoDate
+    status: str | None = None
+
+
+class TripDirectory(StrictModel):
+    """Trips available for selection, and whether the lookup succeeded.
+
+    ``available`` is false when Student 1's service could not be reached, which
+    lets a caller fall back to free text instead of showing an empty picker that
+    looks like "you have no trips".
+    """
+
+    available: bool
+    trips: list[TripSummary]
+
+
 class PlannedTransport(StrictModel):
     """A plan entry joined to the transport option it refers to."""
 

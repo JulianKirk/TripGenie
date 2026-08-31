@@ -103,6 +103,26 @@ def known_trips_transport() -> httpx.MockTransport:
     """Stand in for Student 1's trips API, answering for KNOWN_TRIP_IDS."""
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/trips"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": trip_id,
+                            "name": "Queenstown Ski Escape",
+                            "destination": "Queenstown",
+                            "start_date": "2027-07-10",
+                            "end_date": "2027-07-16",
+                            "traveller_count": 3,
+                            "status": "planned",
+                            "notes": None,
+                        }
+                        for trip_id in sorted(KNOWN_TRIP_IDS)
+                    ],
+                },
+            )
+
         trip_id = request.url.path.rsplit("/", 1)[-1]
         if trip_id in KNOWN_TRIP_IDS:
             return httpx.Response(200, json={"data": {"id": trip_id}})

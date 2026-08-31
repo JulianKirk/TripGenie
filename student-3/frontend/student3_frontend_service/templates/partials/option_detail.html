@@ -54,9 +54,11 @@
               <td>{{ entry.booking_date }}</td>
               <td>${{ '%.2f' | format(entry.estimated_cost) }}</td>
               <td><span class="status status--{{ entry.booking_status.value }}">{{ entry.status_label }}</span></td>
-              <td class="actions-cell">
+              <td>
+                <div class="actions-cell">
                 <a href="{{ request.url_for('edit_entry_form', booking_id=entry.id) }}">Edit</a>
                 <a href="{{ request.url_for('delete_entry_confirmation', booking_id=entry.id) }}">Remove</a>
+              </div>
               </td>
             </tr>
           {% endfor %}

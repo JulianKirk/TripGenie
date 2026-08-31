@@ -19,12 +19,12 @@
     {{ forms.text_field("provider", "Provider", form.get("provider", ""), errors_by_field) }}
     {{ forms.text_field("origin", "Origin", form.get("origin", ""), errors_by_field) }}
     {{ forms.text_field("destination", "Destination", form.get("destination", ""), errors_by_field, hint="Must differ from origin, except for car hire.") }}
-    {{ forms.text_field("departure_time", "Departure", form.get("departure_time", ""), errors_by_field, hint="Local wall-clock time, YYYY-MM-DDTHH:MM.") }}
-    {{ forms.text_field("arrival_time", "Arrival", form.get("arrival_time", ""), errors_by_field, hint="Local time at the destination.") }}
-    {{ forms.text_field("departure_utc_offset", "Departure UTC offset (minutes)", form.get("departure_utc_offset", ""), errors_by_field, hint="Optional. Supply both offsets or neither; needed for cross-timezone legs.") }}
-    {{ forms.text_field("arrival_utc_offset", "Arrival UTC offset (minutes)", form.get("arrival_utc_offset", ""), errors_by_field) }}
-    {{ forms.text_field("price", "Price per traveller", form.get("price", ""), errors_by_field, hint="At most 2 decimal places.") }}
-    {{ forms.text_field("capacity", "Capacity", form.get("capacity", ""), errors_by_field) }}
+    {{ forms.datetime_field("departure_time", "Departure", form.get("departure_time", ""), errors_by_field, hint="Local time where the journey starts.") }}
+    {{ forms.datetime_field("arrival_time", "Arrival", form.get("arrival_time", ""), errors_by_field, hint="Local time at the destination.") }}
+    {{ forms.select_field("departure_utc_offset", "Departure time zone", utc_offset_options, form.get("departure_utc_offset", ""), errors_by_field, hint="Set both time zones for a leg that crosses them, so the duration is measured correctly.") }}
+    {{ forms.select_field("arrival_utc_offset", "Arrival time zone", utc_offset_options, form.get("arrival_utc_offset", ""), errors_by_field) }}
+    {{ forms.number_field("price", "Price per traveller", form.get("price", ""), errors_by_field, hint="At most 2 decimal places.", min="0", step="0.01") }}
+    {{ forms.number_field("capacity", "Capacity", form.get("capacity", ""), errors_by_field, min="1", max="10000") }}
     {{ forms.select_field("availability_status", "Availability", availability_options, form.get("availability_status", ""), errors_by_field) }}
     <p class="field">
       <label for="notes">Notes</label>

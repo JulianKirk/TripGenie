@@ -167,6 +167,25 @@ class TransportPlanEntryRecord(LenientModel):
         return self.booking_status in ACTIVE_PLAN_STATUSES
 
 
+class TripSummary(LenientModel):
+    id: str
+    name: str
+    destination: str
+    start_date: str
+    end_date: str
+    status: str | None = None
+
+    @property
+    def label(self) -> str:
+        """What a traveller reads in the picker, instead of a raw identifier."""
+        return f"{self.name} — {self.destination}, {self.start_date} to {self.end_date}"
+
+
+class TripDirectory(LenientModel):
+    available: bool
+    trips: list[TripSummary] = Field(default_factory=list)
+
+
 class PlannedTransport(LenientModel):
     entry: TransportPlanEntryRecord
     option: TransportOptionRecord

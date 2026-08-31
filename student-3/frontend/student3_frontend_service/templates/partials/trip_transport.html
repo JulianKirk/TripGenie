@@ -48,9 +48,11 @@
               <td>{{ planned.entry.traveller_count }}</td>
               <td>${{ "%.2f" | format(planned.entry.estimated_cost) }}</td>
               <td><span class="status status--{{ planned.entry.booking_status.value }}">{{ planned.entry.status_label }}</span></td>
-              <td class="actions-cell">
+              <td>
+                <div class="actions-cell">
                 <a href="{{ request.url_for('edit_entry_form', booking_id=planned.entry.id) }}">Edit</a>
                 <a href="{{ request.url_for('delete_entry_confirmation', booking_id=planned.entry.id) }}">Remove</a>
+              </div>
               </td>
             </tr>
           {% endfor %}

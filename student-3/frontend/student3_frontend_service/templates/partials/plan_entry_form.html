@@ -17,12 +17,12 @@
   </p>
 
   <form method="post" action="{{ form_action }}">
-    {{ forms.text_field("trip_id", "Trip identifier", form.get("trip_id", ""), errors_by_field, hint="A Student 1 trip, for example trip_2026_sydney_long_weekend.") }}
-    {{ forms.text_field("transport_id", "Transport identifier", form.get("transport_id", ""), errors_by_field) }}
-    {{ forms.text_field("traveller_count", "Travellers", form.get("traveller_count", ""), errors_by_field) }}
-    {{ forms.text_field("booking_date", "Date added to the plan", form.get("booking_date", ""), errors_by_field, hint="YYYY-MM-DD, on or before departure.") }}
+    {{ forms.select_or_text_field("trip_id", "Trip", trip_options, form.get("trip_id", ""), errors_by_field, trips_available, trips_unavailable_hint) }}
+    {{ forms.select_field("transport_id", "Transport option", transport_options_choices, form.get("transport_id", ""), errors_by_field) }}
+    {{ forms.number_field("traveller_count", "Travellers", form.get("traveller_count", ""), errors_by_field, min="1", max="1000") }}
+    {{ forms.date_field("booking_date", "Date added to the plan", form.get("booking_date", ""), errors_by_field, hint="Must be on or before the transport departs.") }}
     {{ forms.select_field("booking_status", "Plan state", plan_status_options, form.get("booking_status", ""), errors_by_field) }}
-    {{ forms.text_field("estimated_cost", "Estimated cost (optional)", form.get("estimated_cost", ""), errors_by_field, hint="Leave blank to use price x travellers. Set it for whole-vehicle hire.") }}
+    {{ forms.number_field("estimated_cost", "Estimated cost (optional)", form.get("estimated_cost", ""), errors_by_field, hint="Leave blank to use price x travellers. Set it for whole-vehicle hire.", min="0", step="0.01") }}
     <p class="field">
       <label for="notes">Notes</label>
       <textarea id="notes" name="notes" rows="3">{{ form.get("notes", "") }}</textarea>
