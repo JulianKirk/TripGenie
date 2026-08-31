@@ -73,16 +73,26 @@ room counts don't apply (e.g. camping).
 ## Persistence
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
+- `../database/database_service/enums.py` — `AccommodationType`,
+  `AvailabilityStatus`, `BedType`, shared by the tables and the wire format
 - `../database/database_service/models.py` — `Base`, `Accommodation`,
-  `LocationDetails`, `Country`, `City`, `RoomDetails`, plus the
-  accommodation-local enums
+  `LocationDetails`, `Country`, `City`, `RoomDetails`
+- `../database/database_service/schemas.py` — the wire messages
 - `../database/database_service/database.py` — engine/session, `DATABASE_URL`
   env var (SQLite by default)
-- `../database/database_service/repository.py` — `AccommodationRepository`,
-  `CountryRepository`, `CityRepository`
+- `../database/database_service/repository.py` — `AccommodationRepository`
 
 `Base` used to live in `shared/`, but this service was its only consumer, so it
 moved here and the shared copy was deleted.
+
+The tables also own the translation to and from the API's wire messages:
+`Accommodation.to_message()`, `Accommodation.from_message()` and
+`.update_from()`, plus `Country.get_or_create()` / `City.get_or_create()` for
+the look-up-or-insert the API doc promises on `location_details`. A row knows
+how to describe itself, so the routers are a handful of lines each and there is
+no separate mapping layer. The enums sit in their own module because
+`models.py` imports `schemas.py` for the message types — a leaf both can import
+keeps that a one-way dependency.
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
 custom `TypeDecorator` (`BedTypesJSON`) — SQLAlchemy has no built-in "list of

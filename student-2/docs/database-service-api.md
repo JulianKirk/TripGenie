@@ -42,10 +42,29 @@ The SQLite database lives at `$DATABASE_URL` (default `/data/accommodation.db`
 in the image, on the `student-2-db` volume). Tables are created on startup;
 there is no seed data.
 
+### The accommodation message
+
+There is one accommodation shape, and every field on it is nullable — the
+protobuf convention. The same message is the `PUT` body, the match template
+inside a `QUERY`, and the response body of every endpoint; what differs is
+which fields are filled in.
+
+Two consequences worth knowing before you write a client:
+
+- **Responses omit what they did not set.** A field that is not populated is
+  absent from the JSON rather than present as `null`. `POST` returns an
+  accommodation carrying only `id` and `name`; `GET` returns one carrying
+  everything. Read a missing key as "not supplied", never as "empty".
+- **`POST` is the exception that stays strict.** Create re-declares its six
+  required fields, so `POST {}` is a `400` naming each one rather than a row
+  with no name.
+
 ### Errors
 
 Validation failures return `400` with FastAPI's
 `{"detail": [...]}` body naming the offending fields. Missing rows return `404`.
+An unrecognised field anywhere in a request body is also a `400` — no request
+field is silently ignored.
 
 ## Service Endpoints
 
@@ -155,15 +174,33 @@ of the query string.
 
 ### Request Body
 
-| Field          | Type    | Required | Default | Description                                                   |
-|----------------|---------|----------|---------|---------------------------------------------------------------|
-| city           | string  | No       | —       | Match accommodations in this city; requires `country`         |
-| country        | string  | No       | —       | Match accommodations in this country                          |
-| min_room_count | integer | No       | —       | Only accommodations whose room details meet this room count   |
-| limit          | integer | No       | 20      | Max number of results, 1-100                                  |
-| offset         | integer | No       | 0       | Number of results to skip                                     |
+A query is a **match template** plus **bounds**. `accommodation` is an
+accommodation message: every field you set on it must match exactly, and every
+field you leave out is not filtered on. The `*_min` / `*_max` fields alongside
+it carry the comparisons a template cannot express.
 
-Omitting every filter returns all accommodations, paginated.
+| Field                 | Type   | Description                                                    |
+|-----------------------|--------|----------------------------------------------------------------|
+| accommodation         | object | Match template; any field set on it must match exactly         |
+| price_min / price_max | float  | Bounds on `price_per_night`, inclusive                         |
+| rating_min / rating_max | float | Bounds on `rating`, inclusive                                  |
+| room_count_min        | integer | Minimum `room_details.room_count`                             |
+| bed_count_min         | integer | Minimum `room_details.bed_count`                              |
+| limit                 | integer | Max number of results, 1-100 (default 20)                     |
+| offset                | integer | Number of results to skip (default 0)                         |
+
+Inside `accommodation`, any field from [POST /accommodation](#post-accommodation)
+can be used as an exact match, including the nested `location_details` and
+`room_details` objects. `city` still requires `country` — Sydney exists in more
+than one.
+
+Omitting everything returns all accommodations, paginated. `amenities` and
+`room_details.bed_types` cannot be filtered on: they are JSON columns SQLite
+cannot search or index.
+
+Results are trimmed — each row carries `id`, `name`, `type`, `price_per_night`,
+`availability_status`, `rating` and `location_details.country`/`city`, since a
+result list is for choosing which one to `GET` in full.
 
 ### Example Request
 
@@ -171,9 +208,12 @@ Omitting every filter returns all accommodations, paginated.
 curl -X QUERY "http://localhost:9001/accommodation" \
   -H "Content-Type: application/json" \
   -d '{
-    "city": "sydney",
-    "country": "australia",
-    "min_room_count": 2,
+    "accommodation": {
+      "type": "hotel",
+      "location_details": {"country": "australia", "city": "sydney"}
+    },
+    "price_max": 250,
+    "room_count_min": 2,
     "limit": 10
   }'
 ```
@@ -204,7 +244,7 @@ curl -X QUERY "http://localhost:9001/accommodation" \
 
 | Status | Description                                  |
 |--------|----------------------------------------------|
-| 400    | Invalid filter / `city` given without `country` |
+| 400    | Unknown field / `city` given without `country` |
 | 500    | Internal server error                        |
 
 
@@ -279,6 +319,9 @@ curl -X POST "http://localhost:9001/accommodation" \
 
 ### Example Response `201 Created`
 
+An accommodation message with only the fields the caller needs to find the row
+again; the rest are unset and therefore absent.
+
 ```json
 {
   "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
@@ -312,7 +355,10 @@ Update an existing accommodation.
 
 ### Request Body
 
-Same fields as `POST /accommodation`, minus `id`. Omitted fields are left unchanged.
+An accommodation message. Every field is optional here — an omitted field is
+left unchanged, and sending `null` does not clear a field (there is no nullable
+column behind one). Nested `location_details` and `room_details` are merged
+field by field, not replaced wholesale.
 
 ### Example Request
 

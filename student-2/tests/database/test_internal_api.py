@@ -89,6 +89,28 @@ class TestAccommodation:
     def test_unknown_id_is_404(self, client):
         assert client.get(f"/accommodation/{uuid4()}").status_code == 404
 
+    def test_a_missing_required_field_is_400(self, client):
+        """Every field on the message is nullable, so the strict create
+        subclass is the only thing standing between POST {} and a row with no
+        name. It has to name each field it rejected."""
+        response = client.post("/accommodation", json={})
+        assert response.status_code == 400
+        missing = {tuple(e["loc"])[-1] for e in response.json()["detail"]}
+        assert missing == {
+            "name",
+            "type",
+            "description",
+            "price_per_night",
+            "availability_status",
+            "location_details",
+        }
+
+    def test_the_create_response_carries_only_what_it_populated(self, client):
+        """One nullable message serves every endpoint, so a response says what
+        it means by which fields are present -- not by sending nulls."""
+        body = client.post("/accommodation", json=HOTEL).json()
+        assert set(body) == {"id", "name"}
+
     def test_malformed_enum_is_400_not_422(self, client):
         response = client.post("/accommodation", json={**HOTEL, "type": "igloo"})
         assert response.status_code == 400
@@ -107,7 +129,13 @@ class TestAccommodation:
         assert cities == {"sydney"}
 
         rows = client.request(
-            "QUERY", "/accommodation", json={"country": "australia", "city": "sydney"}
+            "QUERY",
+            "/accommodation",
+            json={
+                "accommodation": {
+                    "location_details": {"country": "australia", "city": "sydney"}
+                }
+            },
         ).json()
         assert rows["total"] == 2
 
@@ -126,15 +154,22 @@ class TestAccommodationQuery:
 
     def test_filters_stack(self, client):
         body = self.query(
-            client, country="australia", city="sydney", min_room_count=2
+            client,
+            accommodation={
+                "location_details": {"country": "australia", "city": "sydney"}
+            },
+            room_count_min=2,
         ).json()
         assert [a["name"] for a in body["accommodations"]] == ["example accommodation"]
         assert body["total"] == 1
 
     def test_summary_omits_the_heavy_fields(self, client):
-        row = self.query(client, city="sydney", country="australia").json()[
-            "accommodations"
-        ][0]
+        row = self.query(
+            client,
+            accommodation={
+                "location_details": {"country": "australia", "city": "sydney"}
+            },
+        ).json()["accommodations"][0]
         assert set(row["location_details"]) == {"country", "city"}
         assert "amenities" not in row
 
@@ -143,8 +178,20 @@ class TestAccommodationQuery:
         assert len(body["accommodations"]) == 1
         assert body["total"] == 2
 
+    def test_matches_a_range_and_the_template_together(self, client):
+        body = self.query(client, accommodation={"type": "hotel"}, price_max=250).json()
+        assert [a["name"] for a in body["accommodations"]] == ["example accommodation"]
+
     def test_city_without_country_is_400(self, client):
-        assert self.query(client, city="sydney").status_code == 400
+        response = self.query(
+            client, accommodation={"location_details": {"city": "sydney"}}
+        )
+        assert response.status_code == 400
+
+    def test_an_unknown_filter_is_400_not_silently_ignored(self, client):
+        assert self.query(client, room_count_minimum=2).status_code == 400
+        nested = self.query(client, accommodation={"contry": "australia"})
+        assert nested.status_code == 400
 
 
 class TestAccommodationUpdate:

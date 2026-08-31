@@ -10,7 +10,7 @@ from collections.abc import Iterator  # noqa: TC003  (FastAPI reads this at runt
 from typing import Annotated
 from uuid import UUID  # noqa: TC003  (same)
 
-from fastapi import Depends, HTTPException, Query, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 NOT_FOUND = "not found"
@@ -24,10 +24,6 @@ def get_session(request: Request) -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
-
-# The pagination pair every list endpoint takes, declared once.
-LimitDep = Annotated[int, Query(ge=1, le=100)]
-OffsetDep = Annotated[int, Query(ge=0)]
 
 
 def get_or_404(repository, id: UUID, what: str):
