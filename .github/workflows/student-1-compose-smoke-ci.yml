@@ -1,0 +1,66 @@
+name: Student 1 Compose Smoke CI
+
+on:
+  push:
+    paths:
+      - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
+      - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
+      - 'ruff.toml'
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
+      - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
+      - 'ruff.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-smoke:
+    name: Validate Student 1 Compose Smoke
+    runs-on: ubuntu-latest
+    env:
+      TRIPGENIE_COMPOSE_PROJECT: tripgenie14-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install smoke validation dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "ruff>=0.6,<1.0"
+      - name: Run smoke script syntax checks
+        run: python -m compileall scripts/test
+      - name: Run smoke script Ruff checks
+        run: python -m ruff check scripts/test
+      - name: Resolve Docker Compose configuration
+        run: docker compose -p "$TRIPGENIE_COMPOSE_PROJECT" --env-file shared/configuration/.env.example config --format json > compose-config.json
+      - name: Validate Student 1 Compose contract
+        run: python scripts/test/validate_compose_config.py compose-config.json
+      - name: Build Student 1 and shared AI images through Compose
+        run: docker compose -p "$TRIPGENIE_COMPOSE_PROJECT" --env-file shared/configuration/.env.example build shared-ui student-1-frontend student-1-backend student-1-database ai-mode
+      - name: Run Student 1 Compose smoke with degraded AI and fake host Ollama transport contract
+        run: python scripts/test/run_student1_compose_smoke.py --project-name "$TRIPGENIE_COMPOSE_PROJECT"

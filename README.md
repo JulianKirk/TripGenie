@@ -21,6 +21,10 @@ TripGenie is an AI Smart Travel Companion microservices application built with D
 | **Student 4** | Julian Kirk (Lead) | Activities & Attractions Management | `.github/workflows/student-4-ci.yml` |
 | **Student 5** | Caleb Huynh | Budget & Expense Management | `.github/workflows/student-5-ci.yml` |
 
+The rubric may refer to the Student 1 workflow as `student-1.yml`; in this
+repository the equivalent checked-in workflow is
+`.github/workflows/student-1-ci.yml`.
+
 ---
 
 ## 3. Project Repository Structure
@@ -29,12 +33,14 @@ TripGenie is an AI Smart Travel Companion microservices application built with D
 TripGenie/
 ├── .github/
 │   └── workflows/
+│       ├── ai-mode-ci.yml
 │       ├── student-1-ci.yml
 │       ├── student-2-ci.yml
 │       ├── student-3-ci.yml
 │       ├── student-4-ci.yml
 │       ├── student-5-ci.yml
 │       ├── shared-ci.yml
+│       ├── student-1-compose-smoke-ci.yml
 │       └── cloud-deployment.yml
 ├── README.md
 ├── .gitignore
@@ -168,7 +174,40 @@ reaches host Ollama through `host.docker.internal:11434`; the Linux
 Trip and itinerary CRUD remains available when Ollama is stopped or its model
 is absent. AI suggestion requests report the dependency failure separately.
 
-Useful status and log commands:
+CRUD remains usable even if Ollama or the default model is unavailable. In that state, `ai-mode` reports degraded health and `503` readiness until the model is present.
+
+### Routine smoke automation
+
+Routine Student 1 Compose smoke validation now has two automated phases:
+
+1. **Degraded host-Ollama phase** - forces `ai-mode` to observe an unavailable
+   host provider while proving CRUD startup still works.
+2. **Fake host Ollama transport-contract phase** - starts a tiny host process on
+   port `11434` so CI can exercise the shared `ai-mode` transport path without
+   downloading a real model.
+
+Run the structural validation, targeted Compose build, and routine smoke flow:
+
+```bash
+docker compose -p tripgenie14-local --env-file shared/configuration/.env.example config --format json > compose-config.json
+python scripts/test/validate_compose_config.py compose-config.json
+docker compose -p tripgenie14-local --env-file shared/configuration/.env.example build shared-ui student-1-frontend student-1-backend student-1-database ai-mode
+python scripts/test/run_student1_compose_smoke.py --project-name tripgenie14-local
+```
+
+For manual **live host Ollama** evidence, keep Ollama running on the host with
+the approved model already pulled, then run only the live phase:
+
+```bash
+python scripts/test/run_student1_compose_smoke.py --phase live-host-ollama
+```
+
+The fake host phase is **transport-contract evidence only**. It proves the
+shared `ai-mode` HTTP integration path, not real Ollama/model quality. See
+[`docs/reports/release-0/student-1-compose-smoke.md`](./docs/reports/release-0/student-1-compose-smoke.md)
+for expected checks, evidence, and limitations.
+
+### Status, logs, and reset
 
 ```bash
 docker compose --env-file shared/configuration/.env.example ps
@@ -186,4 +225,41 @@ docker compose --env-file shared/configuration/.env.example down -v --remove-orp
 This does not remove Ollama or models installed on the host. If AI-Mode cannot
 reach Ollama, verify the host binding and firewall access to port `11434`. On
 native Linux, confirm that the service is not listening on loopback only.
-Compose never installs Ollama or downloads models.
+Compose and CI never install Ollama or download models.
+
+## Compose validation
+
+- If `ai-mode` stays unhealthy, confirm host Ollama is running, `ollama pull qwen2.5:0.5b` completed, and `curl http://localhost:11434/api/tags` succeeds on the host.
+- Student 1 frontend/backend/database readiness is intentionally chained to database readiness only; AI degradation must not block CRUD startup.
+- Override `AI_MODE_OLLAMA_BASE_URL` only when the host Ollama endpoint differs from `http://host.docker.internal:11434` as seen from the container.
+- If host Ollama only binds to loopback, restart it so Docker can reach it and review host firewall rules for port `11434`.
+- `8081:8081` is fixed for Release 0. Only `SHARED_UI_HOST_PORT` may be overridden locally without breaking the shared portal route.
+- Do not give Student backends direct Ollama connection settings. Keep provider configuration on the shared `ai-mode` service only.
+
+---
+
+## 5. CI coverage
+
+Release 0 CI now separates concerns:
+
+- **`student-1-ci.yml`** (the repository equivalent of rubric
+  `student-1.yml`) runs Student 1 frontend/backend/database import checks,
+  `compileall`, Ruff, pytest, and image builds.
+- **`ai-mode-ci.yml`** runs the shared AI-Mode import checks, `compileall`, Ruff, pytest, and image build.
+- **`student-1-compose-smoke-ci.yml`** validates the fully resolved Compose contract with
+  `docker compose config`, runs targeted script `compileall`/Ruff checks, builds
+  the shared portal plus Student 1/shared AI images through Compose, and runs a
+  deterministic smoke flow that covers both degraded no-host-Ollama behaviour
+  and a fake host Ollama transport-contract phase without downloading Ollama
+  models.
+
+---
+
+## 6. Student 1 / shared AI references
+
+- Student 1 backend runtime notes: [`student-1/backend/README.md`](./student-1/backend/README.md)
+- Student 1 frontend runtime notes: [`student-1/frontend/README.md`](./student-1/frontend/README.md)
+- Shared AI-Mode contract: [`ai-services/ai-mode/README.md`](./ai-services/ai-mode/README.md)
+- Student 1 architecture notes: [`docs/architecture/student-1-release-0-architecture.md`](./docs/architecture/student-1-release-0-architecture.md)
+- Student 1 runtime AI details: [`docs/architecture/student-1-runtime-ai-mode.md`](./docs/architecture/student-1-runtime-ai-mode.md)
+- Student 1 Compose smoke guide: [`docs/reports/release-0/student-1-compose-smoke.md`](./docs/reports/release-0/student-1-compose-smoke.md)

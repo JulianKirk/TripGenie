@@ -3,27 +3,38 @@ name: Student 1 CI
 on:
   push:
     paths:
+      - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
       - 'student-1/**'
       - 'ai-services/ai-mode/**'
       - 'docs/architecture/student-1-*.md'
-      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
       - 'shared/configuration/**'
       - '.github/workflows/student-1-ci.yml'
       - '.github/workflows/ai-mode-ci.yml'
-      - 'docker-compose.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
       - 'ruff.toml'
   pull_request:
     paths:
+      - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
       - 'student-1/**'
       - 'ai-services/ai-mode/**'
       - 'docs/architecture/student-1-*.md'
-      - 'docs/reports/release-0/student-1-release-0-plan.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
       - 'shared/configuration/**'
       - '.github/workflows/student-1-ci.yml'
       - '.github/workflows/ai-mode-ci.yml'
-      - 'docker-compose.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
       - 'ruff.toml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   database:

@@ -3,19 +3,38 @@ name: AI-Mode CI
 on:
   push:
     paths:
-      - 'ai-services/ai-mode/**'
-      - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
+      - '.github/workflows/ai-mode-ci.yml'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
   pull_request:
     paths:
-      - 'ai-services/ai-mode/**'
-      - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
+      - 'README.md'
+      - 'shared/frontend/**'
+      - 'student-1/**'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
+      - 'docs/reports/release-0/student-1-*.md'
+      - 'scripts/test/**'
+      - '.github/workflows/ai-mode-ci.yml'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/student-1-compose-smoke-ci.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:

@@ -14,7 +14,12 @@ This update uses three labels consistently:
 
 Because the assignment handout is not committed in this repository snapshot, the traceability table below points the **Assignment / Group 07 requirement** column at the repository artefacts that currently carry that scope: README, Docker Compose, CI, and the paired Student 1 design docs.
 
-Issue #12 implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan stays evidence-oriented and does **not** fabricate live Compose showcase proof.
+Issue #12 implements the Student 1 runtime AI-mode and the shared AI-Mode
+service boundary, issue #13 wires that topology into `docker-compose.yml`
+against a host-installed Ollama prerequisite, and issue #14 adds deterministic
+cross-component Compose smoke coverage plus a documented manual live-host
+Ollama evidence path. The routine CI transport phase still uses a fake host
+process instead of claiming live model proof.
 
 ## 2. Course source pack used
 
@@ -117,13 +122,17 @@ Issue #12 implements the bounded runtime path separately from the assessed workf
 ## 8. Limitations and open points
 
 - [asd-labs README][ASD-README] advertises Labs 05/06, but the visible repository snapshot used for this update exposes only Labs 01-04 plus the AI guide and README [ASD-TREE]. No later-lab requirement is asserted here.
-- Current Group 07 repository evidence records shared-service names, ports, and the Compose host bridge in [docker-compose.yml][TG-COMPOSE].
+- `docker-compose.yml` now records the shared Student 1 and AI-Mode service
+  names, ports, Student 1 SQLite volume, and host-Ollama runtime Compose
+  connection; issue #14 adds the automated smoke execution evidence path and the
+  companion smoke-run guide in [TG-SMOKE].
 - `deepseek-r1:8b` appears in the AI guide only as a reasoning model for later labs [CFG], so it is intentionally kept out of Student 1 Release 0 scope.
 
 [TG-ARCH]: ../../architecture/student-1-release-0-architecture.md
 [TG-README]: ../../../README.md
 [TG-COMPOSE]: ../../../docker-compose.yml
 [TG-CI]: ../../../.github/workflows/student-1-ci.yml
+[TG-SMOKE]: ./student-1-compose-smoke.md
 [CFG]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/AI_Agent_Configuration_Guide.md
 [L1]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_01_DevOps_and_Agentic_AI_Foundations.md
 [L2]: https://github.com/Georges034302/asd-labs/blob/4777809f17f5e2ec681d6b727dc79acb0f55fc1d/Lab_02_Environment_and_Multi_Model_Workflows.md
