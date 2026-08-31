@@ -175,7 +175,10 @@
                 {% endif %}
               </div>
               <div class="button-row">
-                <a class="button button--primary" href="{{ suggestion.review_url }}">Review and save via CRUD</a>
+                <form action="{{ suggestion.review_action }}" method="post">
+                  <input type="hidden" name="draft_payload" value="{{ suggestion.review_payload }}">
+                  <button class="button button--primary" type="submit">Review and save via CRUD</button>
+                </form>
               </div>
             </li>
           {% endfor %}

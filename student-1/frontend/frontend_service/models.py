@@ -164,6 +164,10 @@ class AiSuggestionDraft(ItineraryItemFields):
     approval_required: bool = True
 
 
+class AiSuggestionReviewPayload(ItineraryItemFields):
+    ai_rationale: LongText | None = None
+
+
 class AiSuggestionsResponse(StrictModel):
     trip_id: TripIdentifier
     requested_date: IsoDate

@@ -218,7 +218,7 @@ class OllamaProviderAdapter:
             )
 
         return ProviderGenerateResult(
-            model=payload.model or model,
+            model=model,
             response=response_text,
         )
 

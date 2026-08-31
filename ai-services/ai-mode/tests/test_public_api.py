@@ -221,6 +221,43 @@ def test_generate_allows_approved_model_override(
     assert ollama_api.generate_requests[0]["model"] == "llama3.1:8b"
 
 
+@pytest.mark.parametrize(
+    "provider_model",
+    ["", "bad model", "deepseek-r1:8b"],
+)
+def test_generate_uses_requested_model_when_provider_model_is_untrusted(
+    client_factory,
+    ollama_api,
+    provider_model: str,
+) -> None:
+    ollama_api.queue_generate_response(
+        success_generate_response(
+            model=provider_model,
+            response_text='{"suggestions":[]}',
+        )
+    )
+
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={"prompt": "Return JSON only."},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "data": {
+            "run_id": response.json()["data"]["run_id"],
+            "correlation_id": response.json()["data"]["correlation_id"],
+            "model": "qwen2.5:0.5b",
+            "provider": "ollama",
+            "response": '{"suggestions":[]}',
+            "done": True,
+        }
+    }
+    assert response.json()["data"]["run_id"].startswith("aimode_")
+    assert response.json()["data"]["correlation_id"].startswith("aimode_")
+
+
 def test_generate_rejects_unapproved_model_override(client_factory, ollama_api) -> None:
     with client_factory(ollama_handler=ollama_api.handle) as client:
         response = client.post(

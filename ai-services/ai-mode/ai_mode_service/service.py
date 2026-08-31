@@ -4,8 +4,10 @@ import json
 import logging
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from .config import Settings
-from .errors import ApiError, validation_error
+from .errors import ApiError, bad_gateway, validation_error
 from .models import (
     GenerateRequest,
     GenerateResponsePayload,
@@ -79,21 +81,34 @@ class AiModeService:
             )
             raise
 
+        try:
+            response_payload = GenerateResponsePayload(
+                run_id=run_id,
+                correlation_id=correlation_id,
+                model=result.model,
+                provider="ollama",
+                response=result.response,
+                done=True,
+            )
+        except ValidationError as exc:
+            raise bad_gateway(
+                "The AI provider returned a malformed generate response.",
+                [
+                    {
+                        "field": "ai_mode",
+                        "issue": "provider response body was malformed",
+                    },
+                ],
+            ) from exc
+
         _log_stage(
             "success",
             run_id=run_id,
             correlation_id=correlation_id,
-            model=result.model,
-            response_bytes=len(result.response.encode("utf-8")),
+            model=response_payload.model,
+            response_bytes=len(response_payload.response.encode("utf-8")),
         )
-        return GenerateResponsePayload(
-            run_id=run_id,
-            correlation_id=correlation_id,
-            model=result.model,
-            provider="ollama",
-            response=result.response,
-            done=True,
-        )
+        return response_payload
 
     def _resolve_model(self, model_override: str | None) -> str:
         model = model_override or self._settings.default_model

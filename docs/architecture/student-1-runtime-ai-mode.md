@@ -103,6 +103,7 @@ The shared service validates the provider envelope it actually consumes:
 - Ollama model discovery/readiness through the official client
 - terminal non-stream `/generate` responses only
 - bounded output size
+- the approved requested model remains authoritative for the public response envelope if provider metadata is blank, invalid, or unexpected
 - tolerant handling of documented extra provider metadata
 
 Student 1 then validates the generated JSON against its own itinerary rules:
@@ -206,6 +207,7 @@ The Student 1 frontend now:
 - uses HTMX for loading, error, empty, and draft-result states
 - preserves entered values on backend validation and dependency failures
 - labels suggestions as draft-only and approval-required
+- hands AI draft review off through a POST body so generated free text does not land in URLs, browser history, or access logs
 - routes every save through the existing itinerary-item CRUD form
 
 ## 12. Evidence hooks for the report

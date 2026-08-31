@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import html
+import json
 import re
-from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 from .conftest import create_item_form_data, data_response, error_response
 
@@ -131,7 +134,7 @@ def test_ai_error_preserves_form_values_and_shows_backend_validation(
     assert '<option value="meal" selected>' in response.text
 
 
-def test_ai_review_link_prefills_item_form_and_requires_manual_save(
+def test_ai_review_control_uses_post_handoff_without_sensitive_query_string(
     client,
     backend_api,
 ) -> None:
@@ -148,20 +151,67 @@ def test_ai_review_link_prefills_item_form_and_requires_manual_save(
         headers=HTMX_HEADERS,
     )
 
-    review_url_match = re.search(r'href="([^"]*ai_draft=true[^"]*)"', response.text)
-    assert review_url_match is not None
-    review_url = review_url_match.group(1).replace("&amp;", "&")
+    review_form_match = re.search(
+        (
+            r'(<form action="/trips/trip_2027_sydney_getaway/items/new" '
+            r'method="post">.*?Review and save via CRUD.*?</form>)'
+        ),
+        response.text,
+        re.S,
+    )
+    assert review_form_match is not None
+    review_form = review_form_match.group(1)
 
-    parsed_query = parse_qs(urlparse(review_url).query)
-    assert parsed_query["title"] == ["Waterside Lunch"]
-    assert "item_generated_01" not in backend_api.items
+    assert 'name="draft_payload"' in review_form
+    assert 'href="' not in review_form
+    assert "title=Waterside" not in review_form
+    assert "location=Barangaroo" not in review_form
+    assert "description=Relaxed" not in review_form
+    assert "notes=Keep" not in review_form
+    assert "ai_rationale=" not in review_form
 
-    form_response = client.get(review_url)
+
+def test_ai_review_post_prefills_item_form_and_requires_manual_save(
+    client,
+    backend_api,
+) -> None:
+    suggestions_response = client.post(
+        "/trips/trip_2027_sydney_getaway/ai-suggestions",
+        data={
+            "requested_date": "2027-04-02",
+            "goal": "Plan a gentle afternoon after the harbour walk.",
+            "interests": "quiet cafes, water views",
+            "constraints": "avoid duplicate activities",
+            "view_date": "",
+            "view_category": "",
+        },
+        headers=HTMX_HEADERS,
+    )
+    payload_match = re.search(
+        (
+            r'<form action="/trips/trip_2027_sydney_getaway/items/new" '
+            r'method="post">.*?name="draft_payload" value="([^"]+)".*?'
+            r"Review and save via CRUD.*?</form>"
+        ),
+        suggestions_response.text,
+        re.S,
+    )
+    assert payload_match is not None
+    draft_payload = html.unescape(payload_match.group(1))
+
+    form_response = client.post(
+        "/trips/trip_2027_sydney_getaway/items/new",
+        data={"draft_payload": draft_payload},
+        headers=HTMX_HEADERS,
+    )
+
     assert form_response.status_code == 200
+    assert 'id="app-shell"' in form_response.text
     assert AI_REVIEW_NOTICE_SNIPPET in form_response.text
     assert 'value="Waterside Lunch"' in form_response.text
     assert 'value="12:30"' in form_response.text
     assert 'value="14:00"' in form_response.text
+    assert "item_generated_01" not in backend_api.items
 
     save_response = client.post(
         "/trips/trip_2027_sydney_getaway/items",
@@ -186,6 +236,42 @@ def test_ai_review_link_prefills_item_form_and_requires_manual_save(
     assert save_response.status_code == 200
     assert "Waterside Lunch" in save_response.text
     assert "item_generated_01" in backend_api.items
+
+
+@pytest.mark.parametrize(
+    "draft_payload",
+    [
+        "{not json",
+        json.dumps(
+            {
+                "date": "2027-04-02",
+                "start_time": "25:99",
+                "end_time": "14:00",
+                "title": "Waterside Lunch",
+                "location": "Barangaroo",
+                "description": "Relaxed lunch with harbour views.",
+                "category": "meal",
+                "notes": "Keep it flexible.",
+                "ai_rationale": "Creates a calm midday stop.",
+            }
+        ),
+    ],
+)
+def test_ai_review_post_rejects_malformed_or_tampered_handoff_safely(
+    client,
+    backend_api,
+    draft_payload: str,
+) -> None:
+    starting_item_ids = set(backend_api.items)
+
+    response = client.post(
+        "/trips/trip_2027_sydney_getaway/items/new",
+        data={"draft_payload": draft_payload},
+    )
+
+    assert response.status_code == 422
+    assert "The AI draft could not be prepared for review." in response.text
+    assert set(backend_api.items) == starting_item_ids
 
 
 def test_ai_mode_absence_error_does_not_break_normal_trip_pages(

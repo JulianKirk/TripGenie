@@ -99,6 +99,8 @@ Response:
 }
 ```
 
+The shared response envelope keeps the approved requested model authoritative. If provider success metadata reports a blank, invalid, or unexpected model name, that provider field is not passed through to consumers.
+
 ## Stable errors
 
 The service normalizes provider failures into bounded envelopes.
