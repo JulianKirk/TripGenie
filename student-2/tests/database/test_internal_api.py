@@ -34,6 +34,18 @@ HOTEL = {
     },
 }
 
+# Only the fields a create cannot go without -- every optional one is omitted,
+# so a response built from it says which fields the row actually carries.
+BARE = {
+    "name": "bare",
+    "type": "camping",
+    "description": "somewhere to sleep",
+    "price_per_night": 10.00,
+    "availability_status": "available",
+    "location_details": {"country": "australia", "city": "katoomba"},
+    "room_details": {"room_count": 1},
+}
+
 CABIN = {
     **HOTEL,
     "name": "cosy cabin",
@@ -52,7 +64,7 @@ def client(tmp_path):
 
 @pytest.fixture
 def hotel_id(client):
-    return client.post("/accommodation", json=HOTEL).json()["id"]
+    return client.post("/internal/accommodation", json=HOTEL).json()["id"]
 
 
 class TestHealth:
@@ -64,17 +76,17 @@ class TestHealth:
 
 class TestRouting:
     def test_a_non_uuid_id_is_404_not_a_validation_error(self, client):
-        assert client.get("/accommodation/garbage").status_code == 404
+        assert client.get("/internal/accommodation/garbage").status_code == 404
 
 
 class TestAccommodation:
     def test_create_returns_201_with_id_and_name(self, client):
-        response = client.post("/accommodation", json=HOTEL)
+        response = client.post("/internal/accommodation", json=HOTEL)
         assert response.status_code == 201
         assert response.json()["name"] == "example accommodation"
 
     def test_round_trip(self, client, hotel_id):
-        body = client.get(f"/accommodation/{hotel_id}").json()
+        body = client.get(f"/internal/accommodation/{hotel_id}").json()
         assert body["type"] == "hotel"
         assert body["amenities"] == ["wifi", "pool"]
         assert body["location_details"]["city"] == "sydney"
@@ -84,16 +96,19 @@ class TestAccommodation:
     def test_money_is_a_json_number_not_a_string(self, client, hotel_id):
         """Decimal round-trips through pydantic as a string unless told
         otherwise, and the API doc shows `1.00`."""
-        assert client.get(f"/accommodation/{hotel_id}").json()["price_per_night"] == 1.0
+        assert (
+            client.get(f"/internal/accommodation/{hotel_id}").json()["price_per_night"]
+            == 1.0
+        )
 
     def test_unknown_id_is_404(self, client):
-        assert client.get(f"/accommodation/{uuid4()}").status_code == 404
+        assert client.get(f"/internal/accommodation/{uuid4()}").status_code == 404
 
     def test_a_missing_required_field_is_400(self, client):
         """Every field on the message is nullable, so the strict create
         subclass is the only thing standing between POST {} and a row with no
         name. It has to name each field it rejected."""
-        response = client.post("/accommodation", json={})
+        response = client.post("/internal/accommodation", json={})
         assert response.status_code == 400
         missing = {tuple(e["loc"])[-1] for e in response.json()["detail"]}
         assert missing == {
@@ -108,29 +123,33 @@ class TestAccommodation:
     def test_the_create_response_carries_only_what_it_populated(self, client):
         """One nullable message serves every endpoint, so a response says what
         it means by which fields are present -- not by sending nulls."""
-        body = client.post("/accommodation", json=HOTEL).json()
+        body = client.post("/internal/accommodation", json=HOTEL).json()
         assert set(body) == {"id", "name"}
 
     def test_malformed_enum_is_400_not_422(self, client):
-        response = client.post("/accommodation", json={**HOTEL, "type": "igloo"})
+        response = client.post(
+            "/internal/accommodation", json={**HOTEL, "type": "igloo"}
+        )
         assert response.status_code == 400
 
     def test_country_and_city_are_reused_not_duplicated(self, client):
         """Two accommodations in the same city must not create two City rows --
         the second POST looks the first one's up by name."""
-        first = client.post("/accommodation", json=HOTEL).json()["id"]
-        second = client.post("/accommodation", json={**HOTEL, "name": "other"}).json()[
-            "id"
-        ]
+        first = client.post("/internal/accommodation", json=HOTEL).json()["id"]
+        second = client.post(
+            "/internal/accommodation", json={**HOTEL, "name": "other"}
+        ).json()["id"]
         cities = {
-            client.get(f"/accommodation/{i}").json()["location_details"]["city"]
+            client.get(f"/internal/accommodation/{i}").json()["location_details"][
+                "city"
+            ]
             for i in (first, second)
         }
         assert cities == {"sydney"}
 
         rows = client.request(
             "QUERY",
-            "/accommodation",
+            "/internal/accommodation",
             json={
                 "accommodation": {
                     "location_details": {"country": "australia", "city": "sydney"}
@@ -140,14 +159,53 @@ class TestAccommodation:
         assert rows["total"] == 2
 
 
+class TestUnsetFields:
+    """A field that was not supplied has to stay that way. An optional column
+    defaulting to 0 or "" makes it indistinguishable from a real zero, and
+    `exclude_none` then has nothing to drop -- so the response contradicts the
+    doc's "read a missing key as not supplied"."""
+
+    @pytest.fixture
+    def bare(self, client):
+        return client.post("/internal/accommodation", json=BARE).json()["id"]
+
+    def test_omitted_fields_come_back_absent(self, client, bare):
+        body = client.get(f"/internal/accommodation/{bare}").json()
+        assert "rating" not in body
+        assert "amenities" not in body
+        assert "street" not in body["location_details"]
+        assert set(body["room_details"]) == {"room_count"}
+
+    def test_an_explicit_zero_is_kept_and_is_not_the_same_thing(self, client, bare):
+        """A brand new listing and one rated 0.0 are different facts."""
+        rated = client.post(
+            "/internal/accommodation",
+            json={**BARE, "name": "rated", "rating": 0.0, "amenities": []},
+        ).json()["id"]
+        body = client.get(f"/internal/accommodation/{rated}").json()
+        assert body["rating"] == 0.0
+        assert body["amenities"] == []
+
+    def test_an_unrated_accommodation_matches_no_rating_bound(self, client, bare):
+        """The bug this guards: with rating defaulting to 0.0, a search for the
+        worst-rated places returned every unrated one."""
+        client.post(
+            "/internal/accommodation",
+            json={**BARE, "name": "rated", "rating": 0.0},
+        )
+        for bound in ({"rating_max": 0}, {"rating_min": 0}):
+            body = client.request("QUERY", "/internal/accommodation", json=bound).json()
+            assert [a["name"] for a in body["accommodations"]] == ["rated"]
+
+
 class TestAccommodationQuery:
     @pytest.fixture(autouse=True)
     def _seed(self, client):
-        client.post("/accommodation", json=HOTEL)
-        client.post("/accommodation", json=CABIN)
+        client.post("/internal/accommodation", json=HOTEL)
+        client.post("/internal/accommodation", json=CABIN)
 
     def query(self, client, **filters):
-        return client.request("QUERY", "/accommodation", json=filters)
+        return client.request("QUERY", "/internal/accommodation", json=filters)
 
     def test_no_filters_returns_everything(self, client):
         assert self.query(client).json()["total"] == 2
@@ -197,7 +255,7 @@ class TestAccommodationQuery:
 class TestAccommodationUpdate:
     def test_partial_update_leaves_other_fields_alone(self, client, hotel_id):
         response = client.put(
-            f"/accommodation/{hotel_id}",
+            f"/internal/accommodation/{hotel_id}",
             json={"price_per_night": 250.00, "availability_status": "sold_out"},
         )
         assert response.status_code == 200
@@ -208,13 +266,13 @@ class TestAccommodationUpdate:
         assert body["amenities"] == ["wifi", "pool"]
 
     def test_unknown_id_is_404(self, client):
-        response = client.put(f"/accommodation/{uuid4()}", json={"name": "x"})
+        response = client.put(f"/internal/accommodation/{uuid4()}", json={"name": "x"})
         assert response.status_code == 404
 
     def test_update_location_details(self, client, hotel_id):
         """Updating location should not cause UNIQUE constraint failure."""
         response = client.put(
-            f"/accommodation/{hotel_id}",
+            f"/internal/accommodation/{hotel_id}",
             json={
                 "location_details": {
                     "country": "australia",
@@ -233,7 +291,7 @@ class TestAccommodationUpdate:
     def test_update_room_details(self, client, hotel_id):
         """Updating room should preserve related data."""
         response = client.put(
-            f"/accommodation/{hotel_id}",
+            f"/internal/accommodation/{hotel_id}",
             json={"room_details": {"room_count": 10, "bed_count": 15}},
         )
         assert response.status_code == 200
