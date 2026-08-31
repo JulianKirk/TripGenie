@@ -7,17 +7,6 @@
 These are entities other services also care about. They live in this service's
 `models.py` because it is currently their only consumer.
 
-### User
-The person doing the booking/rating. Kept minimal — full profile/auth is
-likely owned by a shared identity service. Nothing points at it with a foreign
-key: ratings and bookings carry the identity service's ids directly.
-
-| Field | Type | Notes |
-|---|---|---|
-| id | UUID/int | PK |
-| name | str | |
-| email | str | |
-
 ### Country
 Reference list of countries - just a name.
 
@@ -50,7 +39,7 @@ The bookable listing (hotel, hostel, Airbnb, etc.).
 | type | AccommodationType | enum: HOTEL, HOSTEL, APARTMENT, RESORT, GUESTHOUSE, CAMPING |
 | description | str | |
 | price_per_night | Decimal | |
-| rating | float | derived/cached avg of AccommodationUserRating |
+| rating | float | 0–5, set by the caller |
 | amenities | list[str] | plain list until amenities need filtering at scale |
 | availability_status | AvailabilityStatus | enum: AVAILABLE, UNAVAILABLE, SOLD_OUT |
 | location_details | LocationDetails | composed, not subclassed — see below |
@@ -81,51 +70,19 @@ room counts don't apply (e.g. camping).
 | bed_types | list[BedType] | enum: SINGLE, DOUBLE, QUEEN, KING, BUNK, SOFA_BED |
 | description | str | free-text extra details, optional |
 
-### AccommodationBooking
-A reservation made against an Accommodation for a trip.
-
-| Field | Type | Notes |
-|---|---|---|
-| id | UUID/int | PK |
-| owner_id | FK → User | who made the booking |
-| trip_id | FK (external) | owned by Student 1's Trip service |
-| accommodation_id | FK → Accommodation | |
-| check_in_date | datetime | naive UTC |
-| check_out_date | datetime | naive UTC; `> check_in_date` (DB check constraint) |
-| num_guests | int | |
-| cost | Decimal | |
-| status | AccommodationBookingStatus | enum: PENDING, CONFIRMED, CANCELLED, COMPLETED |
-
-### AccommodationUserRating
-A user's rating/review of an Accommodation.
-
-| Field | Type | Notes |
-|---|---|---|
-| id | UUID/int | PK |
-| accommodation_id | FK → Accommodation | |
-| user_id | UUID | External — owned by the identity service, so no FK |
-| score | int | 1–5, enforced by a DB check constraint |
-| comment | str | optional |
-| created_at | datetime | |
-
 ## Persistence
 All entities above are SQLAlchemy ORM models (`Base`/`Mapped`/`mapped_column`),
 not plain dataclasses — the model classes are the tables. See:
-- `../database/database_service/models.py` — `Base`, `User`, `Accommodation`,
-  `LocationDetails`, `Country`, `City`, `RoomDetails`, `AccommodationBooking`,
-  `AccommodationUserRating`, plus the accommodation-local enums
+- `../database/database_service/models.py` — `Base`, `Accommodation`,
+  `LocationDetails`, `Country`, `City`, `RoomDetails`, plus the
+  accommodation-local enums
 - `../database/database_service/database.py` — engine/session, `DATABASE_URL`
   env var (SQLite by default)
 - `../database/database_service/repository.py` — `AccommodationRepository`,
-  `CountryRepository`, `CityRepository`, `AccommodationBookingRepository`,
-  `AccommodationUserRatingRepository`
+  `CountryRepository`, `CityRepository`
 
-`Base` and `User` used to live in `shared/`, but this service was their only
-consumer, so they moved here and the shared copy was deleted. `User` is now
-referenced by nothing: `AccommodationUserRating.user_id`,
-`AccommodationBooking.owner_id` and `AccommodationBooking.trip_id` are all ids
-owned by other services, so none of them carries a foreign key — this database
-has no row to point at.
+`Base` used to live in `shared/`, but this service was its only consumer, so it
+moved here and the shared copy was deleted.
 
 `RoomDetails.bed_types` stores `list[BedType]` as a JSON array via a small
 custom `TypeDecorator` (`BedTypesJSON`) — SQLAlchemy has no built-in "list of
@@ -137,21 +94,11 @@ schema is still moving; add Alembic once schema churn becomes a real problem.
 
 ```mermaid
 erDiagram
-    USER ||--o{ ACCOMMODATION_BOOKING : owns
-    USER ||--o{ ACCOMMODATION_RATING : writes
-    ACCOMMODATION ||--o{ ACCOMMODATION_BOOKING : "booked via"
-    ACCOMMODATION ||--o{ ACCOMMODATION_RATING : "rated via"
     ACCOMMODATION |o--|| LOCATION_DETAILS : has
     ACCOMMODATION |o--o| ROOM_DETAILS : has
     COUNTRY ||--o{ CITY : has
     COUNTRY ||--o{ LOCATION_DETAILS : "located in"
     CITY ||--o{ LOCATION_DETAILS : "located in"
-
-    USER {
-        UUID id PK
-        string name
-        string email
-    }
 
     ACCOMMODATION {
         UUID id PK
@@ -187,26 +134,5 @@ erDiagram
         int bed_count
         string bed_types
         string description
-    }
-
-    ACCOMMODATION_BOOKING {
-        UUID id PK
-        UUID owner_id FK
-        UUID trip_id FK
-        UUID accommodation_id FK
-        datetime check_in_date
-        datetime check_out_date
-        int num_guests
-        decimal cost
-        string status
-    }
-
-    ACCOMMODATION_RATING {
-        UUID id PK
-        UUID accommodation_id FK
-        UUID user_id
-        int score
-        string comment
-        datetime created_at
     }
 ```

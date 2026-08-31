@@ -8,16 +8,9 @@ fixtures are still just method arguments.
 
 from __future__ import annotations
 
-from datetime import datetime
-from decimal import Decimal
 from uuid import uuid4
 
-from database_service.models import (
-    AccommodationBooking,
-    AccommodationBookingStatus,
-    AccommodationUserRating,
-    BedType,
-)
+from database_service.models import BedType
 
 
 class TestAccommodationRepository:
@@ -76,30 +69,3 @@ class TestAccommodationRepository:
     def test_delete_missing_id_is_a_noop(self, accommodations, hotel):
         accommodations.delete(uuid4())
         assert accommodations.search()[1] == 1
-
-
-class TestAccommodationBookingRepository:
-    def test_booking_defaults_to_pending(self, bookings, user, hotel):
-        booking = bookings.add(
-            AccommodationBooking(
-                id=uuid4(),
-                owner_id=user.id,
-                cost=Decimal("500.00"),
-                trip_id=uuid4(),
-                accommodation_id=hotel.id,
-                check_in_date=datetime(2026, 1, 1, 14, 0),
-                check_out_date=datetime(2026, 1, 3, 10, 0),
-                num_guests=2,
-            )
-        )
-        assert bookings.get(booking.id).status is AccommodationBookingStatus.PENDING
-
-
-class TestAccommodationUserRatingRepository:
-    def test_rating(self, ratings, user, hotel):
-        rating = ratings.add(
-            AccommodationUserRating(
-                id=uuid4(), accommodation_id=hotel.id, user_id=user.id, score=5
-            )
-        )
-        assert ratings.get(rating.id).score == 5

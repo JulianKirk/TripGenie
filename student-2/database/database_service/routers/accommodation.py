@@ -43,10 +43,8 @@ from database_service.schemas import (
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-# The `:uuid` convertor is load-bearing, not decoration: without it
-# "/accommodation/booking" matches "/accommodation/{id}" and the booking routes
-# become unreachable unless they happen to be registered first. With it, the
-# path only matches a well-formed UUID, so router mount order does not matter.
+# The `:uuid` convertor keeps /accommodation/{id} matching only well-formed
+# UUIDs, so a future sub-resource path cannot be swallowed by it.
 router = APIRouter(prefix="/accommodation", tags=["accommodation"])
 
 
@@ -186,11 +184,29 @@ def update_accommodation(
     for name, value in fields.items():
         setattr(accommodation, name, value)
     if location is not None:
-        accommodation.location_details = _resolve_location(
-            session, LocationDetailsIn(**location)
+        # Update existing location_details fields rather than replacing the object.
+        # Replacing would trigger a cascade delete + insert, causing UNIQUE constraint
+        # failure on the accommodation_id FK. Updating in-place avoids that.
+        loc_in = LocationDetailsIn(**location)
+        countries = CountryRepository(session)
+        country = countries.get_by_name(loc_in.country) or countries.add(
+            Country(name=loc_in.country)
         )
+        cities = CityRepository(session)
+        city = cities.get_by_name(loc_in.city, country.id) or cities.add(
+            City(name=loc_in.city, country_id=country.id)
+        )
+        accommodation.location_details.country_id = country.id
+        accommodation.location_details.city_id = city.id
+        accommodation.location_details.street = loc_in.street
+        accommodation.location_details.street_number = loc_in.street_number
     if room is not None:
-        accommodation.room_details = _room_details(RoomDetailsIn(**room))
+        # Same logic: update fields rather than replace.
+        # Only update fields that were explicitly provided.
+        room_in = RoomDetailsIn(**room)
+        room_updates = room_in.model_dump(exclude_unset=True)
+        for field, value in room_updates.items():
+            setattr(accommodation.room_details, field, value)
     # add() on an already-persistent instance is a no-op plus the commit.
     accommodations.add(accommodation)
     return _accommodation_out(accommodation)

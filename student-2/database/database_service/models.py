@@ -5,12 +5,11 @@ See ../../docs/object-model.md for the design (entities + ERD).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, UniqueConstraint, event
+from sqlalchemy import JSON, ForeignKey, Index, UniqueConstraint, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.mutable import MutableList
@@ -20,22 +19,6 @@ from sqlalchemy.types import TypeDecorator
 
 class Base(DeclarativeBase):
     """Declarative base every ORM model in this service inherits from."""
-
-
-class User(Base):
-    """The person doing the booking/rating.
-
-    ponytail: no longer referenced by a FK -- see AccommodationUserRating.user_id.
-    Kept because the object model documents it and the identity service that
-    will own it does not exist yet. Delete this table if that service lands and
-    this one never grows a reason to store users.
-    """
-
-    __tablename__ = "users"
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    name: Mapped[str]
-    email: Mapped[str]
 
 
 @event.listens_for(Engine, "connect")
@@ -52,13 +35,6 @@ class AccommodationType(Enum):
     RESORT = "resort"
     GUESTHOUSE = "guesthouse"
     CAMPING = "camping"
-
-
-class AccommodationBookingStatus(Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
 
 
 class AvailabilityStatus(Enum):
@@ -188,54 +164,4 @@ class Accommodation(Base):
     )
     room_details: Mapped[RoomDetails | None] = relationship(
         back_populates="accommodation", uselist=False, cascade="all, delete-orphan"
-    )
-    # RESTRICT: delete the bookings/ratings first, the DB refuses otherwise.
-    # passive_deletes="all" stops the ORM nulling the FK out from under it.
-    bookings: Mapped[list[AccommodationBooking]] = relationship(passive_deletes="all")
-    ratings: Mapped[list[AccommodationUserRating]] = relationship(passive_deletes="all")
-
-
-class AccommodationBooking(Base):
-    __tablename__ = "accommodation_bookings"
-    __table_args__ = (
-        CheckConstraint("check_out_date > check_in_date", name="ck_booking_dates"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    owner_id: Mapped[UUID]
-    trip_id: Mapped[UUID]  # external FK, owned by Student 1's Trip service
-    accommodation_id: Mapped[UUID] = mapped_column(
-        ForeignKey("accommodations.id", ondelete="RESTRICT")
-    )
-    # ponytail: naive UTC like created_at -- convert at the API edge if the
-    # 2pm-local check-in time ever needs to survive a timezone change.
-    check_in_date: Mapped[datetime]
-    check_out_date: Mapped[datetime]
-    num_guests: Mapped[int]
-    cost: Mapped[Decimal]
-    status: Mapped[AccommodationBookingStatus] = mapped_column(
-        SAEnum(AccommodationBookingStatus),
-        default=AccommodationBookingStatus.PENDING,
-    )
-
-
-class AccommodationUserRating(Base):
-    __tablename__ = "accommodation_user_ratings"
-    __table_args__ = (CheckConstraint("score BETWEEN 1 AND 5", name="ck_rating_score"),)
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    accommodation_id: Mapped[UUID] = mapped_column(
-        ForeignKey("accommodations.id", ondelete="RESTRICT")
-    )
-    # No FK, for the same reason as AccommodationBooking.owner_id/trip_id: the
-    # id comes from an identity service that owns the users, and this database
-    # has no row to point at. The API doc agrees -- POST /accommodation/rating
-    # documents a 404 for a missing accommodation, but none for a missing user.
-    user_id: Mapped[UUID]
-    score: Mapped[int]  # 1-5
-    comment: Mapped[str] = mapped_column(default="")
-    # ponytail: naive UTC -- SQLite's DATETIME drops the offset on the way
-    # back out, so storing tz-aware just yields naive rows anyway.
-    created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

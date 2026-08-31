@@ -12,8 +12,6 @@ from sqlalchemy import func, select
 
 from database_service.models import (
     Accommodation,
-    AccommodationBooking,
-    AccommodationUserRating,
     City,
     Country,
     LocationDetails,
@@ -148,52 +146,4 @@ class CityRepository:
         city = self.get(id)
         if city is not None:
             self.session.delete(city)
-            _commit(self.session)
-
-
-class AccommodationBookingRepository:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def add(self, booking: AccommodationBooking) -> AccommodationBooking:
-        self.session.add(booking)
-        _commit(self.session)
-        return booking
-
-    def get(self, id: UUID) -> AccommodationBooking | None:
-        return self.session.get(AccommodationBooking, id)
-
-    def list(
-        self, limit: int = 20, offset: int = 0
-    ) -> tuple[list[AccommodationBooking], int]:
-        return _paginate(self.session, select(AccommodationBooking), limit, offset)
-
-    def delete(self, id: UUID) -> None:
-        booking = self.get(id)
-        if booking is not None:
-            self.session.delete(booking)
-            _commit(self.session)
-
-
-class AccommodationUserRatingRepository:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def add(self, rating: AccommodationUserRating) -> AccommodationUserRating:
-        self.session.add(rating)
-        _commit(self.session)
-        return rating
-
-    def get(self, id: UUID) -> AccommodationUserRating | None:
-        return self.session.get(AccommodationUserRating, id)
-
-    def list(
-        self, limit: int = 20, offset: int = 0
-    ) -> tuple[list[AccommodationUserRating], int]:
-        return _paginate(self.session, select(AccommodationUserRating), limit, offset)
-
-    def delete(self, id: UUID) -> None:
-        rating = self.session.get(AccommodationUserRating, id)
-        if rating is not None:
-            self.session.delete(rating)
             _commit(self.session)

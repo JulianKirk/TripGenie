@@ -6,8 +6,6 @@ The accommodation microservice is responsible for all accommodation related busi
 
 1. Users can view accommodation details
 2. Users can filter for accommodation based on properties such as price, type, location, etc.
-3. Users can create bookings for specific accommodations
-4. Users can rate accommodations
 
 As such, the service has providence over the objects expanded on in [object-model.md](./docs/object-model.md).
 

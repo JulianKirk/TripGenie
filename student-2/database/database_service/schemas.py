@@ -10,14 +10,12 @@ serialises `Decimal` as a JSON *string*, and the API doc shows a number.
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database_service.models import (
-    AccommodationBookingStatus,
     AccommodationType,
     AvailabilityStatus,
     BedType,
@@ -136,100 +134,6 @@ class AccommodationList(BaseModel):
 class AccommodationCreated(BaseModel):
     id: UUID
     name: str
-
-
-class BookingCreate(BaseModel):
-    owner_id: UUID
-    trip_id: UUID
-    accommodation_id: UUID
-    check_in_date: datetime
-    check_out_date: datetime
-    num_guests: int = Field(ge=1)
-    cost: Decimal = Field(ge=0)
-    status: AccommodationBookingStatus = AccommodationBookingStatus.PENDING
-
-    @model_validator(mode="after")
-    def _check_out_after_check_in(self) -> BookingCreate:
-        if self.check_out_date <= self.check_in_date:
-            message = "check_out_date must be after check_in_date"
-            raise ValueError(message)
-        return self
-
-
-class BookingOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    owner_id: UUID
-    trip_id: UUID
-    accommodation_id: UUID
-    check_in_date: datetime
-    check_out_date: datetime
-    num_guests: int
-    cost: float
-    status: AccommodationBookingStatus
-
-
-class BookingSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    accommodation_id: UUID
-    check_in_date: datetime
-    check_out_date: datetime
-    status: AccommodationBookingStatus
-
-
-class BookingList(BaseModel):
-    bookings: list[BookingSummary]
-    total: int
-
-
-class BookingCreated(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    status: AccommodationBookingStatus
-
-
-class RatingCreate(BaseModel):
-    accommodation_id: UUID
-    user_id: UUID
-    score: int = Field(ge=1, le=5)
-    comment: str = ""
-
-
-class RatingOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    accommodation_id: UUID
-    user_id: UUID
-    score: int
-    comment: str
-    created_at: datetime
-
-
-class RatingSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    accommodation_id: UUID
-    user_id: UUID
-    score: int
-    comment: str
-
-
-class RatingList(BaseModel):
-    ratings: list[RatingSummary]
-    total: int
-
-
-class RatingCreated(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    score: int
 
 
 class Health(BaseModel):

@@ -63,14 +63,6 @@ class TestHealth:
 
 
 class TestRouting:
-    """The `:uuid` convertor on /accommodation/{id} is what lets the router
-    modules be mounted in any order. Without it, "booking" and "rating" parse
-    as accommodation ids and those routes become unreachable."""
-
-    def test_sub_resource_paths_are_not_read_as_accommodation_ids(self, client):
-        assert client.get("/accommodation/booking").status_code == 200
-        assert client.get("/accommodation/rating").status_code == 200
-
     def test_a_non_uuid_id_is_404_not_a_validation_error(self, client):
         assert client.get("/accommodation/garbage").status_code == 404
 
@@ -172,133 +164,34 @@ class TestAccommodationUpdate:
         response = client.put(f"/accommodation/{uuid4()}", json={"name": "x"})
         assert response.status_code == 404
 
-
-class TestBooking:
-    @pytest.fixture
-    def booking(self, client, hotel_id):
-        return client.post(
-            "/accommodation/booking",
+    def test_update_location_details(self, client, hotel_id):
+        """Updating location should not cause UNIQUE constraint failure."""
+        response = client.put(
+            f"/accommodation/{hotel_id}",
             json={
-                "owner_id": str(uuid4()),
-                "trip_id": str(uuid4()),
-                "accommodation_id": hotel_id,
-                "check_in_date": "2026-09-01T14:00:00",
-                "check_out_date": "2026-09-05T10:00:00",
-                "num_guests": 2,
-                "cost": 1000.00,
+                "location_details": {
+                    "country": "australia",
+                    "city": "melbourne",
+                    "street": "new street",
+                    "street_number": 999,
+                }
             },
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["location_details"]["city"] == "melbourne"
+        assert body["location_details"]["street"] == "new street"
+        assert body["location_details"]["street_number"] == 999
 
-    def test_create_defaults_to_pending(self, booking):
-        assert booking.status_code == 201
-        assert booking.json()["status"] == "pending"
-
-    def test_round_trip(self, client, booking):
-        body = client.get(f"/accommodation/booking/{booking.json()['id']}").json()
-        assert body["num_guests"] == 2
-        assert body["cost"] == 1000.0
-        assert body["check_in_date"] == "2026-09-01T14:00:00"
-
-    def test_list(self, client, booking):
-        body = client.get("/accommodation/booking?limit=10").json()
-        assert body["total"] == 1
-        assert set(body["bookings"][0]) == {
-            "id",
-            "accommodation_id",
-            "check_in_date",
-            "check_out_date",
-            "status",
-        }
-
-    def test_check_out_before_check_in_is_400(self, client, hotel_id):
-        response = client.post(
-            "/accommodation/booking",
-            json={
-                "owner_id": str(uuid4()),
-                "trip_id": str(uuid4()),
-                "accommodation_id": hotel_id,
-                "check_in_date": "2026-09-05T10:00:00",
-                "check_out_date": "2026-09-01T14:00:00",
-                "num_guests": 2,
-                "cost": 1000.00,
-            },
+    def test_update_room_details(self, client, hotel_id):
+        """Updating room should preserve related data."""
+        response = client.put(
+            f"/accommodation/{hotel_id}",
+            json={"room_details": {"room_count": 10, "bed_count": 15}},
         )
-        assert response.status_code == 400
-
-    def test_unknown_accommodation_is_404(self, client):
-        response = client.post(
-            "/accommodation/booking",
-            json={
-                "owner_id": str(uuid4()),
-                "trip_id": str(uuid4()),
-                "accommodation_id": str(uuid4()),
-                "check_in_date": "2026-09-01T14:00:00",
-                "check_out_date": "2026-09-05T10:00:00",
-                "num_guests": 2,
-                "cost": 1000.00,
-            },
-        )
-        assert response.status_code == 404
-
-    def test_delete_then_get_is_404(self, client, booking):
-        booking_id = booking.json()["id"]
-        assert client.delete(f"/accommodation/booking/{booking_id}").status_code == 204
-        assert client.get(f"/accommodation/booking/{booking_id}").status_code == 404
-
-    def test_delete_unknown_is_404(self, client):
-        assert client.delete(f"/accommodation/booking/{uuid4()}").status_code == 404
-
-
-class TestRating:
-    @pytest.fixture
-    def rating(self, client, hotel_id):
-        return client.post(
-            "/accommodation/rating",
-            json={
-                "accommodation_id": hotel_id,
-                "user_id": str(uuid4()),
-                "score": 5,
-                "comment": "Fantastic stay, would book again.",
-            },
-        )
-
-    def test_create(self, rating):
-        assert rating.status_code == 201
-        assert rating.json()["score"] == 5
-
-    def test_round_trip(self, client, rating):
-        body = client.get(f"/accommodation/rating/{rating.json()['id']}").json()
-        assert body["comment"] == "Fantastic stay, would book again."
-        assert body["created_at"]
-
-    def test_list(self, client, rating):
-        body = client.get("/accommodation/rating?limit=10").json()
-        assert body["total"] == 1
-        assert body["ratings"][0]["score"] == 5
-
-    def test_score_out_of_range_is_400(self, client, hotel_id):
-        response = client.post(
-            "/accommodation/rating",
-            json={
-                "accommodation_id": hotel_id,
-                "user_id": str(uuid4()),
-                "score": 6,
-            },
-        )
-        assert response.status_code == 400
-
-    def test_unknown_accommodation_is_404(self, client):
-        response = client.post(
-            "/accommodation/rating",
-            json={
-                "accommodation_id": str(uuid4()),
-                "user_id": str(uuid4()),
-                "score": 5,
-            },
-        )
-        assert response.status_code == 404
-
-    def test_delete_then_get_is_404(self, client, rating):
-        rating_id = rating.json()["id"]
-        assert client.delete(f"/accommodation/rating/{rating_id}").status_code == 204
-        assert client.get(f"/accommodation/rating/{rating_id}").status_code == 404
+        assert response.status_code == 200
+        body = response.json()
+        assert body["room_details"]["room_count"] == 10
+        assert body["room_details"]["bed_count"] == 15
+        # bed_types should still be there from the fixture
+        assert set(body["room_details"]["bed_types"]) == {"king", "queen"}

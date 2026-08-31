@@ -23,13 +23,8 @@ from database_service.models import (
     Country,
     LocationDetails,
     RoomDetails,
-    User,
 )
-from database_service.repository import (
-    AccommodationBookingRepository,
-    AccommodationRepository,
-    AccommodationUserRatingRepository,
-)
+from database_service.repository import AccommodationRepository
 
 
 @pytest.fixture
@@ -44,24 +39,6 @@ def session():
 @pytest.fixture
 def accommodations(session):
     return AccommodationRepository(session)
-
-
-@pytest.fixture
-def bookings(session):
-    return AccommodationBookingRepository(session)
-
-
-@pytest.fixture
-def ratings(session):
-    return AccommodationUserRatingRepository(session)
-
-
-@pytest.fixture
-def user(session):
-    user = User(id=uuid4(), name="Mark", email="mark@example.com")
-    session.add(user)
-    session.commit()
-    return user
 
 
 @pytest.fixture

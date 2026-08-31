@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from database_service import errors
 from database_service.config import Settings
 from database_service.database import create_engine_and_session
-from database_service.routers import accommodation, booking, health, rating
+from database_service.routers import accommodation, health
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -37,9 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Accommodation Database Service", lifespan=lifespan)
     errors.register(app)
-    # Mount order is not significant -- the `:uuid` convertor on
-    # /accommodation/{id} keeps it from swallowing /accommodation/booking.
-    for router in (health, accommodation, booking, rating):
+    for router in (health, accommodation):
         app.include_router(router.router)
     return app
 
