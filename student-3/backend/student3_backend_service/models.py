@@ -38,19 +38,23 @@ IsoDateTime = Annotated[
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 LongText = Annotated[str, StringConstraints(max_length=2000)]
 Price = Annotated[float, Field(ge=0, le=1_000_000)]
-# UTC-12:00 through UTC+14:00, the range of real civil offsets.
 UtcOffsetMinutes = Annotated[int, Field(ge=-720, le=840)]
 
 T = TypeVar("T")
 
 MAX_TRANSPORT_DURATION_MINUTES = 60 * 24 * 90
+MAX_COMPARE_SELECTION = 4
+
+_ISO_DATETIME_MESSAGE = "must be a valid ISO timestamp in YYYY-MM-DDTHH:MM format"
+_ISO_DATE_MESSAGE = "must be a valid ISO date in YYYY-MM-DD format"
+_MONEY_MESSAGE = "must have at most 2 decimal places"
 
 
 def _validate_iso_date(value: str) -> str:
     try:
         date.fromisoformat(value)
     except ValueError as exc:
-        raise ValueError("must be a valid ISO date in YYYY-MM-DD format") from exc
+        raise ValueError(_ISO_DATE_MESSAGE) from exc
 
     return value
 
@@ -59,14 +63,10 @@ def _validate_iso_datetime(value: str) -> str:
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as exc:
-        raise ValueError(
-            "must be a valid ISO timestamp in YYYY-MM-DDTHH:MM format",
-        ) from exc
+        raise ValueError(_ISO_DATETIME_MESSAGE) from exc
 
     if parsed.second or parsed.microsecond or parsed.tzinfo is not None:
-        raise ValueError(
-            "must be a valid ISO timestamp in YYYY-MM-DDTHH:MM format",
-        )
+        raise ValueError(_ISO_DATETIME_MESSAGE)
 
     return value
 
@@ -74,7 +74,7 @@ def _validate_iso_datetime(value: str) -> str:
 def _validate_money(value: float) -> float:
     rounded = round(value, 2)
     if abs(value - rounded) > 1e-9:
-        raise ValueError("must have at most 2 decimal places")
+        raise ValueError(_MONEY_MESSAGE)
 
     return rounded
 
@@ -108,16 +108,15 @@ class AvailabilityStatus(str, Enum):
 
 
 class BookingStatus(str, Enum):
+    """Plan states. TripGenie does not place reservations with carriers."""
+
     PENDING = "pending"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
 
 
-BOOKABLE_AVAILABILITY_STATUSES = frozenset(
-    {AvailabilityStatus.AVAILABLE, AvailabilityStatus.LIMITED},
-)
-CAPACITY_CONSUMING_BOOKING_STATUSES = frozenset(
+ACTIVE_PLAN_STATUSES = frozenset(
     {BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.COMPLETED},
 )
 
@@ -141,15 +140,32 @@ class DataEnvelope(StrictModel, Generic[T]):
     data: T
 
 
-class HealthResponse(StrictModel):
+class DeleteResponse(StrictModel):
+    id: str
+    deleted: bool = True
+
+
+class DatabaseHealthPayload(StrictModel):
     status: str
     service: str
     sqlite_path: str
 
 
-class DeleteResponse(StrictModel):
-    id: str
-    deleted: bool = True
+class DependencyStatus(StrictModel):
+    status: str
+    service: str
+    detail: str
+    code: str | None = None
+
+
+class HealthDependencies(StrictModel):
+    database: DependencyStatus
+
+
+class HealthResponse(StrictModel):
+    status: str
+    service: str
+    dependencies: HealthDependencies
 
 
 class TransportOptionFields(StrictModel):
@@ -222,20 +238,13 @@ class TransportOptionUpdate(StrictModel):
         return _normalise_optional_text(value)
 
 
-class TransportOptionStored(TransportOptionFields):
-    """Exactly the columns persisted in ``transport_options``."""
-
+class TransportOptionRecord(TransportOptionFields):
     id: TransportIdentifier
     duration_minutes: int = Field(ge=1, le=MAX_TRANSPORT_DURATION_MINUTES)
-
-
-class TransportOptionRecord(TransportOptionStored):
-    """A stored option plus the seat count derived from live bookings."""
-
     seats_remaining: int = Field(ge=0)
 
 
-class TransportBookingFields(StrictModel):
+class TransportPlanEntryFields(StrictModel):
     trip_id: TripIdentifier
     transport_id: TransportIdentifier
     traveller_count: int = Field(ge=1, le=1000)
@@ -254,7 +263,7 @@ class TransportBookingFields(StrictModel):
         return _normalise_optional_text(value)
 
 
-class TransportBookingCreate(TransportBookingFields):
+class TransportPlanEntryCreate(TransportPlanEntryFields):
     id: BookingIdentifier | None = None
     estimated_cost: Price | None = None
 
@@ -267,7 +276,7 @@ class TransportBookingCreate(TransportBookingFields):
         return _validate_money(value)
 
 
-class TransportBookingUpdate(StrictModel):
+class TransportPlanEntryUpdate(StrictModel):
     trip_id: TripIdentifier | None = None
     transport_id: TransportIdentifier | None = None
     traveller_count: int | None = Field(default=None, ge=1, le=1000)
@@ -298,6 +307,21 @@ class TransportBookingUpdate(StrictModel):
         return _normalise_optional_text(value)
 
 
-class TransportBookingRecord(TransportBookingFields):
+class TransportPlanEntryRecord(TransportPlanEntryFields):
     id: BookingIdentifier
     estimated_cost: Price
+
+
+class PlannedTransport(StrictModel):
+    """A plan entry joined to the transport option it refers to."""
+
+    entry: TransportPlanEntryRecord
+    option: TransportOptionRecord
+
+
+class TripTransportSummary(StrictModel):
+    trip_id: TripIdentifier
+    entry_count: int = Field(ge=0)
+    active_entry_count: int = Field(ge=0)
+    estimated_cost_total: Price
+    planned: list[PlannedTransport]

@@ -35,9 +35,9 @@ from .seed_data import SEED_TRANSPORT_BOOKINGS, SEED_TRANSPORT_OPTIONS
 VALIDATION_MESSAGE = "One or more fields failed validation."
 
 # Patching any of these invalidates a previously derived (or overridden)
-# total_cost, so the per-passenger default is recalculated unless the caller
-# sends an explicit total_cost in the same request.
-TOTAL_COST_DRIVERS = frozenset({"passenger_count", "transport_id"})
+# estimated_cost, so the per-traveller default is recalculated unless the caller
+# sends an explicit estimated_cost in the same request.
+ESTIMATED_COST_DRIVERS = frozenset({"traveller_count", "transport_id"})
 
 OPTION_FIELDS = (
     "id",
@@ -59,9 +59,9 @@ BOOKING_FIELDS = (
     "id",
     "trip_id",
     "transport_id",
-    "passenger_count",
+    "traveller_count",
     "booking_date",
-    "total_cost",
+    "estimated_cost",
     "booking_status",
     "notes",
 )
@@ -81,7 +81,7 @@ _CAPACITY_CONSUMING_SQL = ", ".join(
 # table, so it is recomputed by this subquery on every read.
 SEATS_REMAINING_SQL = f"""
     transport_options.capacity - COALESCE((
-        SELECT SUM(booked.passenger_count)
+        SELECT SUM(booked.traveller_count)
         FROM transport_bookings AS booked
         WHERE booked.transport_id = transport_options.id
           AND booked.booking_status IN ({_CAPACITY_CONSUMING_SQL})
@@ -117,9 +117,9 @@ CREATE TABLE IF NOT EXISTS transport_bookings (
     id TEXT PRIMARY KEY,
     trip_id TEXT NOT NULL,
     transport_id TEXT NOT NULL REFERENCES transport_options(id),
-    passenger_count INTEGER NOT NULL CHECK (passenger_count > 0),
+    traveller_count INTEGER NOT NULL CHECK (traveller_count > 0),
     booking_date TEXT NOT NULL,
-    total_cost REAL NOT NULL CHECK (total_cost >= 0),
+    estimated_cost REAL NOT NULL CHECK (estimated_cost >= 0),
     booking_status TEXT NOT NULL CHECK (
         booking_status IN ({_BOOKING_STATUS_SQL})
     ),
@@ -209,18 +209,18 @@ INSERT INTO transport_bookings (
     id,
     trip_id,
     transport_id,
-    passenger_count,
+    traveller_count,
     booking_date,
-    total_cost,
+    estimated_cost,
     booking_status,
     notes
 ) VALUES (
     :id,
     :trip_id,
     :transport_id,
-    :passenger_count,
+    :traveller_count,
     :booking_date,
-    :total_cost,
+    :estimated_cost,
     :booking_status,
     :notes
 )
@@ -231,9 +231,9 @@ UPDATE transport_bookings
 SET
     trip_id = :trip_id,
     transport_id = :transport_id,
-    passenger_count = :passenger_count,
+    traveller_count = :traveller_count,
     booking_date = :booking_date,
-    total_cost = :total_cost,
+    estimated_cost = :estimated_cost,
     booking_status = :booking_status,
     notes = :notes
 WHERE id = :id
@@ -262,13 +262,13 @@ def duration_minutes(
     return int((arrives - departs).total_seconds() // 60)
 
 
-def default_total_cost(price: float, passenger_count: int) -> float:
-    """Per-passenger fare total used when a booking omits ``total_cost``.
+def default_estimated_cost(price: float, traveller_count: int) -> float:
+    """Per-traveller fare total used when a booking omits ``estimated_cost``.
 
     Multiplication happens in whole cents so the result cannot inherit a
     binary floating point remainder from the fare.
     """
-    return round(round(price * 100) * passenger_count) / 100
+    return round(round(price * 100) * traveller_count) / 100
 
 
 class DatabaseService:
@@ -576,10 +576,10 @@ class DatabaseService:
                 option = dict(
                     self._get_option_row(connection, str(merged["transport_id"])),
                 )
-                if "total_cost" not in updates and (
-                    TOTAL_COST_DRIVERS & updates.keys()
+                if "estimated_cost" not in updates and (
+                    ESTIMATED_COST_DRIVERS & updates.keys()
                 ):
-                    merged["total_cost"] = None
+                    merged["estimated_cost"] = None
                 self._apply_booking_derived_fields(merged, option)
                 self._validate_booking_record(merged, option)
                 if self._is_reactivating_booking(existing, merged):
@@ -682,10 +682,10 @@ class DatabaseService:
                     [{"field": "transport_id", "issue": transport_id}],
                 )
 
-            if booking.get("total_cost") is None:
-                booking["total_cost"] = default_total_cost(
+            if booking.get("estimated_cost") is None:
+                booking["estimated_cost"] = default_estimated_cost(
                     prices[transport_id],
-                    int(booking["passenger_count"]),
+                    int(booking["traveller_count"]),
                 )
 
             TransportBookingRecord.model_validate(booking)
@@ -782,10 +782,10 @@ class DatabaseService:
         record: dict[str, object],
         option: dict[str, object],
     ) -> None:
-        if record.get("total_cost") is None:
-            record["total_cost"] = default_total_cost(
+        if record.get("estimated_cost") is None:
+            record["estimated_cost"] = default_estimated_cost(
                 float(option["price"]),
-                int(record["passenger_count"]),
+                int(record["traveller_count"]),
             )
 
     def _validate_option_record(self, record: dict[str, object]) -> None:
@@ -895,7 +895,7 @@ class DatabaseService:
 
         booked = connection.execute(
             f"""
-            SELECT COALESCE(SUM(passenger_count), 0)
+            SELECT COALESCE(SUM(traveller_count), 0)
             FROM transport_bookings
             WHERE transport_id = ?
               AND id != ?
@@ -905,7 +905,7 @@ class DatabaseService:
         ).fetchone()[0]
 
         capacity = int(option["capacity"])
-        requested = int(record["passenger_count"])
+        requested = int(record["traveller_count"])
         if booked + requested <= capacity:
             return
 
@@ -916,7 +916,7 @@ class DatabaseService:
             ),
             [
                 {
-                    "field": "passenger_count",
+                    "field": "traveller_count",
                     "issue": (
                         f"exceeds remaining capacity ({capacity - booked} "
                         f"of {capacity})"
@@ -932,7 +932,7 @@ class DatabaseService:
     ) -> None:
         booked = connection.execute(
             f"""
-            SELECT COALESCE(SUM(passenger_count), 0)
+            SELECT COALESCE(SUM(traveller_count), 0)
             FROM transport_bookings
             WHERE transport_id = ?
               AND booking_status IN ({_CAPACITY_CONSUMING_SQL})
