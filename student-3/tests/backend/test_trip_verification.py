@@ -149,3 +149,45 @@ def test_editing_other_fields_skips_the_trip_lookup(
 
 def _notes(response) -> str | None:
     return response.json()["data"]["notes"]
+
+
+# ------------------------------------------------------------- trip directory
+
+DIRECTORY_PATH = "/api/trip-directory"
+
+
+def test_trip_directory_lists_trips_from_student_1(
+    verifying_client: TestClient,
+) -> None:
+    body = verifying_client.get(DIRECTORY_PATH).json()["data"]
+
+    assert body["available"] is True
+    assert [trip["id"] for trip in body["trips"]] == [KNOWN_TRIP]
+    assert body["trips"][0]["name"]
+    assert body["trips"][0]["destination"]
+
+
+def test_trip_directory_reports_unavailable_rather_than_failing(
+    degraded_client: TestClient,
+) -> None:
+    """An unreachable Student 1 must not break the caller.
+
+    available=false is distinguishable from an empty list, which lets the UI
+    fall back to free text instead of claiming there are no trips.
+    """
+    response = degraded_client.get(DIRECTORY_PATH)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["available"] is False
+    assert body["trips"] == []
+
+
+def test_trip_directory_is_available_even_when_verification_is_off(
+    unverified_client: TestClient,
+) -> None:
+    """The picker is a separate concern from the opt-in existence check."""
+    body = unverified_client.get(DIRECTORY_PATH).json()["data"]
+
+    assert body["available"] is True
+    assert body["trips"]

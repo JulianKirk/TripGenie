@@ -1,0 +1,19 @@
+<main
+  id="app-shell"
+  class="app-shell"
+  hx-boost="true"
+  hx-target="#app-shell"
+  hx-swap="outerHTML"
+  hx-indicator="#global-loading-indicator"
+  tabindex="-1"
+  data-autofocus
+>
+  <div class="app-layout">
+    <aside class="sidebar" aria-labelledby="option-list-heading">
+      {% include "partials/option_sidebar.html" %}
+    </aside>
+    <section class="content-panel">
+      {% include content_template %}
+    </section>
+  </div>
+</main>

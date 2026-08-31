@@ -1,0 +1,32 @@
+<section class="panel" aria-labelledby="confirm-heading">
+  <div class="panel__header">
+    <h2 id="confirm-heading">{{ confirm_title }}</h2>
+  </div>
+
+  {% if error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ error.code }}</strong></p>
+      <p>{{ error.message }}</p>
+      {% if error.details %}
+        <ul class="field-errors">
+          {% for detail in error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if confirm_body %}<p>{{ confirm_body }}</p>{% endif %}
+
+  {% if blocked_reason %}
+    <div class="banner banner--warning" role="status">
+      <p>{{ blocked_reason }}</p>
+    </div>
+  {% endif %}
+
+  <form method="post" action="{{ form_action }}" class="actions">
+    <button class="button button--danger" type="submit">Remove</button>
+    <a class="button" href="{{ cancel_url }}">Cancel</a>
+  </form>
+</section>

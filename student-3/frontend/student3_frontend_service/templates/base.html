@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title }} · TripGenie Student 3</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{{ request.url_for('static', path='js/app.js') }}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <p class="site-header__eyebrow">TripGenie Student 3</p>
+      <h1 class="site-header__title">
+        <a href="{{ request.url_for('browse') }}">Transport Management</a>
+      </h1>
+      <p class="site-header__subtitle">
+        Compare transport options and add them to a trip itinerary. TripGenie
+        does not book transport &mdash; nothing here places a reservation or
+        takes a payment.
+      </p>
+    </div>
+  </header>
+  <div id="global-loading-indicator" class="loading-indicator htmx-indicator" role="status" aria-live="polite">
+    Loading transport data&hellip;
+  </div>
+  {% block body %}{% endblock %}
+</body>
+</html>

@@ -66,7 +66,7 @@ services:
       context: ./student-3
       dockerfile: Dockerfile
     ports:
-      - "8083:8083"
+      - "8093:8093"
 
   # Student 4: Activities & Attractions Management
   student-4-service:

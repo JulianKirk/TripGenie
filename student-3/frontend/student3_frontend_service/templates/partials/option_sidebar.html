@@ -1,0 +1,43 @@
+<section class="panel panel--sidebar">
+  <div class="panel__header panel__header--compact">
+    <div>
+      <p class="section-eyebrow">Catalogue</p>
+      <h2 id="option-list-heading">Transport options</h2>
+    </div>
+    <a class="button button--primary" href="{{ request.url_for('new_option_form') }}">Add option</a>
+  </div>
+
+  <nav class="sidebar-nav" aria-label="Transport views">
+    <a href="{{ request.url_for('browse') }}">Browse &amp; filter</a>
+    <a href="{{ request.url_for('compare') }}">Compare</a>
+    <a href="{{ request.url_for('new_entry_form') }}">Add to a trip</a>
+  </nav>
+
+  {% if option_list_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>Option list unavailable.</strong></p>
+      <p>{{ option_list_error.message }}</p>
+    </div>
+  {% elif options %}
+    <ul class="option-list">
+      {% for option in options %}
+        <li>
+          <a
+            class="option-list__link{% if option.id == selected_option_id %} is-active{% endif %}"
+            href="{{ request.url_for('view_option', transport_id=option.id) }}"
+            {% if option.id == selected_option_id %}aria-current="page"{% endif %}
+          >
+            <span class="option-list__title">{{ option.origin }} &rarr; {{ option.destination }}</span>
+            <span class="option-list__meta">
+              {{ option.type_label }} · {{ option.provider }} · {{ option.duration_label }}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-copy">
+      No transport options yet. Add one to start comparing routes.
+    </p>
+  {% endif %}
+</section>

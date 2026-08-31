@@ -1,0 +1,19 @@
+<section class="panel" aria-labelledby="error-heading">
+  <div class="panel__header">
+    <h2 id="error-heading">{{ error_title }}</h2>
+  </div>
+  <div class="banner banner--error" role="alert">
+    <p><strong>{{ error.code }}</strong></p>
+    <p>{{ error.message }}</p>
+    {% if error.details %}
+      <ul class="field-errors">
+        {% for detail in error.details %}
+          <li>{{ detail.field }}: {{ detail.issue }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+  <p class="actions">
+    <a class="button button--primary" href="{{ retry_url }}">Try again</a>
+  </p>
+</section>

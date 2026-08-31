@@ -54,6 +54,7 @@ Responses wrap payloads in a `data` envelope; failures use the shared
 | `GET` | `/api/transport-bookings/{bookingId}` | Fetch one plan entry. |
 | `PATCH` | `/api/transport-bookings/{bookingId}` | Partially update a plan entry. |
 | `DELETE` | `/api/transport-bookings/{bookingId}` | Remove a plan entry. |
+| `GET` | `/api/trip-directory` | Trips available for selection, read through from Student 1. |
 | `GET` | `/api/trips/{tripId}/transport` | **Composed view** — everything planned for one trip. |
 
 ### Filters
@@ -88,6 +89,16 @@ never be shown a shorter comparison than it asked for.
 - **Ordered ranges.** `min_price` above `max_price`, or `departure_from` after
   `departure_to`, returns `422` before the database is called.
 - **Comparison limits.** At most 4 distinct options per request.
+### `GET /api/trip-directory`
+
+A read-only convenience lookup so the UI can offer trip names instead of asking
+for a typed identifier. Student 3 does not own trips, which is why this is a
+directory rather than `/api/trips`.
+
+Always returns `200`. When Student 1 cannot be reached it reports
+`{"available": false, "trips": []}` — distinguishable from a genuine empty list,
+so a caller can fall back to free text rather than claiming there are no trips.
+
 - **Optional trip check.** With `STUDENT3_BACKEND_VERIFY_TRIP_EXISTS=true`, plan entries are
   checked against Student 1's trips API. Only a definitive `404` blocks the write; a timeout
   or an unreachable service does not, so transport planning survives that outage. Off by

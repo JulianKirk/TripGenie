@@ -31,6 +31,7 @@ from .models import (
     TransportPlanEntryRecord,
     TransportPlanEntryUpdate,
     TransportType,
+    TripDirectory,
     TripIdentifier,
     TripTransportSummary,
 )
@@ -591,6 +592,20 @@ def create_app(
         service: ServiceDep,
     ) -> dict[str, object]:
         return envelope(service.delete_plan_entry(booking_id))
+
+    @router.get(
+        "/trip-directory",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TripDirectory],
+    )
+    def trip_directory(service: ServiceDep) -> dict[str, object]:
+        """Trips available for selection, read through from Student 1.
+
+        Named a directory rather than /trips so no consumer mistakes it for a
+        Student 3 resource. Always 200: an unreachable Student 1 reports
+        available=false so a caller can fall back to free text.
+        """
+        return envelope(service.trip_directory())
 
     @router.get(
         "/trips/{trip_id}/transport",
