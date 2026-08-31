@@ -9,7 +9,7 @@ from __future__ import annotations
 import operator
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 
 from database_service.models import (
     Accommodation,
@@ -73,9 +73,7 @@ def _equalities(match: AccommodationMessage) -> list[tuple[Any, Any]]:
     location = match.location_details or Location()
     room = match.room_details or Room()
     return [
-        (Accommodation.name, match.name),
         (Accommodation.type, match.type),
-        (Accommodation.description, match.description),
         (Accommodation.price_per_night, match.price_per_night),
         (Accommodation.availability_status, match.availability_status),
         (Accommodation.rating, match.rating),
@@ -87,6 +85,28 @@ def _equalities(match: AccommodationMessage) -> list[tuple[Any, Any]]:
         (RoomDetails.bed_count, room.bed_count),
         (RoomDetails.description, room.description),
     ]
+
+
+def _substrings(match: AccommodationMessage) -> list[tuple[Any, Any]]:
+    """(column, wanted) for the free-text fields, matched case-insensitively
+    anywhere in the value. These are what a search box types into -- an exact
+    match on a name or a description is no use to someone still typing."""
+    return [
+        (Accommodation.name, match.name),
+        (Accommodation.description, match.description),
+    ]
+
+
+def _amenity_clauses(match: AccommodationMessage) -> list[Any]:
+    """One clause per wanted amenity; an accommodation has to carry them all.
+
+    ponytail: LIKE over the stored JSON text rather than a join. The quotes
+    around the value keep "wifi" from matching "wifi6". Move amenities to their
+    own table if this ever needs an index or an any-of mode.
+    """
+    amenities = match.amenities or []
+    column = cast(Accommodation.amenities, String)
+    return [column.like(f'%"{amenity}"%') for amenity in amenities]
 
 
 def _bounds(query: AccommodationQueryRequest) -> list[tuple[Any, Any, Any]]:
@@ -126,14 +146,26 @@ class AccommodationRepository:
         """Backs QUERY /internal/accommodation.
 
         `query.accommodation` is a match template -- any field set on it has to
-        match exactly. The `*_min`/`*_max` fields carry the comparisons a
-        template cannot express. Everything is optional and everything stacks.
+        match. Most fields match exactly; `name` and `description` match as
+        case-insensitive substrings, and `amenities` matches when the row
+        carries every amenity listed. The `*_min`/`*_max` fields carry the
+        comparisons a template cannot express. Everything is optional and
+        everything stacks.
         """
         stmt = _join_for(select(Accommodation), query)
         for column, value in _equalities(query.accommodation):
             if value is not None:
                 stmt = stmt.where(column == value)
+        for column, value in _substrings(query.accommodation):
+            if value is not None:
+                stmt = stmt.where(column.ilike(f"%{value}%"))
+        for clause in _amenity_clauses(query.accommodation):
+            stmt = stmt.where(clause)
         for column, compare, bound in _bounds(query):
             if bound is not None:
                 stmt = stmt.where(compare(column, bound))
+        # A window without an ORDER BY is not a stable page -- SQLite may hand
+        # back the same row twice across two pages. There is no created_at to
+        # order by, so name (id to break ties) is the order the pager gets.
+        stmt = stmt.order_by(Accommodation.name, Accommodation.id)
         return _paginate(self.session, stmt, query.limit, query.offset)

@@ -57,7 +57,9 @@ CABIN = {
 
 @pytest.fixture
 def client(tmp_path):
-    settings = Settings(database_url=f"sqlite:///{tmp_path / 'accommodation.db'}")
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'accommodation.db'}", seed=False
+    )
     with TestClient(create_app(settings)) as client:
         yield client
 

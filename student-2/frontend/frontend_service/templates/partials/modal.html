@@ -1,0 +1,45 @@
+{#
+  One accommodation in full, from GET /accommodation/{id}. A native <dialog>
+  opened with showModal(), so the top layer, the dimmed ::backdrop, focus
+  trapping and Escape all come from the browser rather than a modal library.
+#}
+{% set where = accommodation.location_details or {} %}
+{% set room = accommodation.room_details %}
+<dialog class="modal" aria-labelledby="modal-title" onclose="this.remove()">
+  <article>
+    <header class="modal__header">
+      <h2 id="modal-title">{{ accommodation.name }}</h2>
+      <button type="button" class="modal__close" autofocus aria-label="Close"
+              onclick="this.closest('dialog').close()">&times;</button>
+    </header>
+
+    <p class="modal__lede">{{ accommodation.description|default("No description recorded.", true) }}</p>
+
+    <dl class="modal__facts">
+      <dt>Type</dt><dd>{{ (accommodation.type or "")|replace("_", " ")|title }}</dd>
+      <dt>Price per night</dt>
+      <dd>{% if accommodation.price_per_night is not none %}${{ "%.2f"|format(accommodation.price_per_night) }}{% else %}—{% endif %}</dd>
+      <dt>Availability</dt>
+      <dd>{{ (accommodation.availability_status or "unknown")|replace("_", " ")|title }}</dd>
+      <dt>Rating</dt>
+      <dd>{% if accommodation.rating is not none %}{{ accommodation.rating }} / 5{% else %}Unrated{% endif %}</dd>
+      <dt>Amenities</dt>
+      <dd>{{ accommodation.amenities|default([], true)|map("replace", "_", " ")|map("title")|join(", ")|default("None recorded", true) }}</dd>
+      <dt>Address</dt>
+      <dd>
+        {{ where.street_number|default("", true) }} {{ where.street|default("", true)|title }},
+        {{ where.city|default("", true)|title }}, {{ where.country|default("", true)|title }}
+      </dd>
+      {% if room %}
+        <dt>Rooms</dt><dd>{{ room.room_count|default("—", true) }}</dd>
+        <dt>Beds</dt><dd>{{ room.bed_count|default("—", true) }}</dd>
+        <dt>Bed types</dt>
+        <dd>{{ room.bed_types|default([], true)|map("replace", "_", " ")|map("title")|join(", ")|default("—", true) }}</dd>
+        <dt>Room notes</dt><dd>{{ room.description|default("—", true) }}</dd>
+      {% else %}
+        <dt>Rooms</dt><dd>Not applicable for this accommodation.</dd>
+      {% endif %}
+    </dl>
+  </article>
+</dialog>
+<script>document.querySelector("#modal dialog").showModal();</script>

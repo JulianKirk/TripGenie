@@ -68,3 +68,21 @@ jobs:
           echo "service did not become healthy after 8 attempts"
           docker logs student-2-backend
           exit 1
+      - name: Build frontend service image
+        run: docker build -f student-2/frontend/Dockerfile -t student-2-frontend student-2
+      - name: Health check frontend service
+        # Same as the backend above: no backend container on this network, so
+        # /health answers "degraded" with a 200. What is under test is that the
+        # service starts and serves.
+        run: |
+          docker run -d --name student-2-frontend -p 9003:9003 student-2-frontend
+          for _ in $(seq 1 8); do
+            if curl -fsS http://localhost:9003/health; then
+              echo "frontend service healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service did not become healthy after 8 attempts"
+          docker logs student-2-frontend
+          exit 1

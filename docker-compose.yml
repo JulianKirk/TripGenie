@@ -16,6 +16,18 @@ services:
       - "8081:8081"
 
   # Student 2: Accommodation Management
+  # Not a service -- the name you type to bring the whole accommodation
+  # micro-service up: `docker compose up --build student-2`. It exits at once;
+  # the three services it depends on are the point.
+  # ponytail: compose has no way to name a group of services. A container that
+  # runs `true` is the cheapest one. Switch to profiles if this ever needs to
+  # be excluded from a bare `docker compose up`.
+  student-2:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - student-2-frontend
+
   # The public face of the accommodation service, and the only caller of the
   # database service behind it.
   student-2-backend:
@@ -26,6 +38,16 @@ services:
       - "9000:9000"
     depends_on:
       - student-2-database
+
+  # The accommodation webpage. Talks to the backend service and nothing else.
+  student-2-frontend:
+    build:
+      context: ./student-2
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "9003:9003"
+    depends_on:
+      - student-2-backend
 
   # Internal only -- no published port. The backend service is the sole caller
   # and reaches it as http://student-2-database:9001 on the compose network.
