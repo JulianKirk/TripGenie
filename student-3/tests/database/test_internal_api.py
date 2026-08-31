@@ -331,13 +331,13 @@ def test_malformed_trip_id_filter_is_rejected(client: TestClient) -> None:
     assert _detail_fields(response) == ["trip_id"]
 
 
-def test_create_booking_derives_total_cost(client: TestClient) -> None:
+def test_create_booking_derives_estimated_cost(client: TestClient) -> None:
     response = client.post(
         BOOKINGS_PATH,
         json={
             "trip_id": "trip_2027_queenstown_ski_escape",
             "transport_id": "transport_2027_zqn_snow_shuttle",
-            "passenger_count": 2,
+            "traveller_count": 2,
             "booking_date": "2027-05-03",
             "booking_status": "pending",
         },
@@ -346,24 +346,24 @@ def test_create_booking_derives_total_cost(client: TestClient) -> None:
     assert response.status_code == 201, response.text
     booking = _data(response)
     assert booking["id"].startswith("booking_")
-    assert booking["total_cost"] == 56.00
+    assert booking["estimated_cost"] == 56.00
 
 
-def test_create_booking_accepts_explicit_total_cost(client: TestClient) -> None:
+def test_create_booking_accepts_explicit_estimated_cost(client: TestClient) -> None:
     response = client.post(
         BOOKINGS_PATH,
         json={
             "trip_id": "trip_2027_queenstown_ski_escape",
             "transport_id": "transport_2027_zqn_snow_shuttle",
-            "passenger_count": 2,
+            "traveller_count": 2,
             "booking_date": "2027-05-03",
             "booking_status": "pending",
-            "total_cost": 40.00,
+            "estimated_cost": 40.00,
         },
     )
 
     assert response.status_code == 201
-    assert _data(response)["total_cost"] == 40.00
+    assert _data(response)["estimated_cost"] == 40.00
 
 
 def test_create_booking_for_unknown_option_returns_not_found(
@@ -374,7 +374,7 @@ def test_create_booking_for_unknown_option_returns_not_found(
         json={
             "trip_id": "trip_2027_queenstown_ski_escape",
             "transport_id": "transport_missing_service",
-            "passenger_count": 1,
+            "traveller_count": 1,
             "booking_date": "2027-05-03",
             "booking_status": "pending",
         },
@@ -390,7 +390,7 @@ def test_booking_after_departure_is_rejected(client: TestClient) -> None:
         json={
             "trip_id": "trip_2027_queenstown_ski_escape",
             "transport_id": "transport_2027_zqn_snow_shuttle",
-            "passenger_count": 1,
+            "traveller_count": 1,
             "booking_date": "2027-07-11",
             "booking_status": "pending",
         },
@@ -406,7 +406,7 @@ def test_booking_on_sold_out_option_is_rejected(client: TestClient) -> None:
         json={
             "trip_id": "trip_2026_singapore_stopover",
             "transport_id": "transport_2026_sq232_syd_sin",
-            "passenger_count": 1,
+            "traveller_count": 1,
             "booking_date": "2026-08-01",
             "booking_status": "pending",
         },
@@ -424,7 +424,7 @@ def test_cancelled_booking_on_unavailable_option_is_allowed(
         json={
             "trip_id": "trip_2026_singapore_stopover",
             "transport_id": "transport_2026_sq232_syd_sin",
-            "passenger_count": 1,
+            "traveller_count": 1,
             "booking_date": "2026-08-01",
             "booking_status": "cancelled",
         },
@@ -439,7 +439,7 @@ def test_booking_beyond_remaining_capacity_conflicts(client: TestClient) -> None
         json={
             "trip_id": "trip_2027_queenstown_ski_escape",
             "transport_id": "transport_2027_zqn_snow_shuttle",
-            "passenger_count": 9,
+            "traveller_count": 9,
             "booking_date": "2027-05-03",
             "booking_status": "confirmed",
         },
@@ -447,29 +447,29 @@ def test_booking_beyond_remaining_capacity_conflicts(client: TestClient) -> None
 
     assert response.status_code == 409
     assert _error(response)["code"] == "CONFLICT"
-    assert _detail_fields(response) == ["passenger_count"]
+    assert _detail_fields(response) == ["traveller_count"]
 
 
-def test_patch_booking_recomputes_total_cost(client: TestClient) -> None:
+def test_patch_booking_recomputes_estimated_cost(client: TestClient) -> None:
     response = client.patch(
         f"{BOOKINGS_PATH}/booking_2027_queenstown_transfer",
-        json={"passenger_count": 4},
+        json={"traveller_count": 4},
     )
 
     assert response.status_code == 200
     booking = _data(response)
-    assert booking["passenger_count"] == 4
-    assert booking["total_cost"] == 112.00
+    assert booking["traveller_count"] == 4
+    assert booking["estimated_cost"] == 112.00
 
 
-def test_patch_booking_keeps_explicit_total_cost(client: TestClient) -> None:
+def test_patch_booking_keeps_explicit_estimated_cost(client: TestClient) -> None:
     response = client.patch(
         f"{BOOKINGS_PATH}/booking_2027_queenstown_transfer",
-        json={"passenger_count": 4, "total_cost": 99.00},
+        json={"traveller_count": 4, "estimated_cost": 99.00},
     )
 
     assert response.status_code == 200
-    assert _data(response)["total_cost"] == 99.00
+    assert _data(response)["estimated_cost"] == 99.00
 
 
 def test_cancelling_a_booking_frees_capacity(client: TestClient) -> None:
@@ -484,10 +484,10 @@ def test_cancelling_a_booking_frees_capacity(client: TestClient) -> None:
         json={
             "trip_id": "trip_2026_gold_coast_family_break",
             "transport_id": "transport_2026_europcar_gold_coast",
-            "passenger_count": 5,
+            "traveller_count": 5,
             "booking_date": "2026-10-01",
             "booking_status": "confirmed",
-            "total_cost": 612.00,
+            "estimated_cost": 612.00,
         },
     )
 
@@ -530,7 +530,7 @@ def test_seats_remaining_updates_after_a_booking(client: TestClient) -> None:
         json={
             "trip_id": "trip_2026_sydney_long_weekend",
             "transport_id": created["id"],
-            "passenger_count": 3,
+            "traveller_count": 3,
             "booking_date": "2026-09-01",
             "booking_status": "confirmed",
         },

@@ -11,6 +11,14 @@ the Student 3 backend reaches this data over HTTP only.
 | `STUDENT3_SQLITE_PATH` | `data/student-3/tripgenie.db` | SQLite database file owned by this service. |
 | `STUDENT3_SEED_DATA` | `true` | Seed demo records on first start. Accepts `1/true/yes/on`. |
 
+## Scope: plan records, not reservations
+
+TripGenie does not book transport. A `transport_bookings` row is a **saved plan entry** —
+"this transport is part of my trip". No reservation is placed with a carrier, no payment is
+taken, and `estimated_cost` is a planning figure rather than an amount charged. `capacity`
+and `seats_remaining` are reference data that make validation demonstrable; they are not a
+statement about real inventory.
+
 ## Tables
 
 ### `transport_options`
@@ -24,7 +32,7 @@ the Student 3 backend reaches this data over HTTP only.
 | `departure_time` / `arrival_time` | TEXT | Local wall-clock `YYYY-MM-DDTHH:MM`, as printed on a ticket. |
 | `departure_utc_offset` / `arrival_utc_offset` | INTEGER | Optional UTC offsets in minutes (`-720`..`+840`). Supply both or neither. |
 | `duration_minutes` | INTEGER | **Derived**; never client-supplied. See below. |
-| `price` | REAL | Per-passenger fare, at most 2 decimal places. |
+| `price` | REAL | Per-traveller fare, at most 2 decimal places. |
 | `capacity` | INTEGER | Total seats, `>= 1`. |
 | `availability_status` | TEXT | `available`, `limited`, `sold_out`, `cancelled`. |
 | `notes` | TEXT | Optional; blank strings are stored as `NULL`. |
@@ -40,10 +48,10 @@ contradict the bookings table.
 | `id` | TEXT | Primary key, `booking_*`. Generated when omitted. |
 | `trip_id` | TEXT | Student 1 trip identifier (`trip_*`). Not a foreign key — Student 1 owns trips. |
 | `transport_id` | TEXT | Foreign key to `transport_options(id)`. |
-| `passenger_count` | INTEGER | `>= 1`. |
-| `booking_date` | TEXT | `YYYY-MM-DD`; must be on or before the departure date. |
-| `total_cost` | REAL | Defaults to `price * passenger_count`; may be overridden. |
-| `booking_status` | TEXT | `pending`, `confirmed`, `cancelled`, `completed`. |
+| `traveller_count` | INTEGER | `>= 1`. Named to match the Student 1 trips table. |
+| `booking_date` | TEXT | `YYYY-MM-DD`; the date the entry was added to the plan. Must be on or before the departure date. |
+| `estimated_cost` | REAL | Planning estimate, defaults to `price * traveller_count`; may be overridden. Never an amount charged. |
+| `booking_status` | TEXT | Plan state: `pending` (shortlisted), `confirmed` (committed to the itinerary), `cancelled` (removed), `completed` (journey taken). |
 | `notes` | TEXT | Optional. |
 
 Both tables are seeded with 14 records on first start, meeting the project's
@@ -63,10 +71,10 @@ trips so the integrated demo shows transport attached to real trips.
 - Because of that, a leg may legitimately land at an earlier local clock time
   than it departed (an eastbound date-line crossing), so ordering is enforced on
   the derived duration rather than on the raw timestamps.
-- `total_cost` defaults to the per-passenger fare total. Whole-vehicle products
+- `estimated_cost` defaults to the per-traveller fare total. Whole-vehicle products
   (car hire, private transfers) can override it. A `PATCH` that changes
-  `passenger_count` or `transport_id` re-derives the default unless the same
-  request also sends an explicit `total_cost`.
+  `traveller_count` or `transport_id` re-derives the default unless the same
+  request also sends an explicit `estimated_cost`.
 - Seats are counted across `pending`, `confirmed`, and `completed` bookings.
   Overselling an option returns `409 CONFLICT`; `cancelled` bookings release
   their seats. `seats_remaining` reports the same figure on every read.
