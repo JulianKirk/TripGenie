@@ -49,32 +49,31 @@ the run still passes or fails on the checks, so CI works either way (add
 
 ## In CI
 
-`.github/workflows/agentic-ci.yml` runs on push and pull request, one job per
-service, plus a `test` job for the loop's own unit tests that always runs.
+`.github/workflows/agentic-ci.yml` runs on push and pull request as three jobs:
 
-Each service job is a post step: before doing anything it polls that service's
-own build-and-validate workflow for the same commit.
+- **Loop unit tests** -- `pytest` on the loop itself. Always runs, needs no
+  docker, and is the reason a change to `agentic_loop.py` still gets tested when
+  every service below is skipped.
+- **Pick services** -- the gate. For each service it polls that service's own
+  build-and-validate workflow for this commit and decides whether the loop runs.
+- **One job per chosen service** -- the loop.
 
-| That workflow | This job |
+| That service's workflow | This service |
 | --- | --- |
-| passed | runs the loop |
-| failed | stops, without running the loop |
-| never started (its path filters skipped the commit) | skips -- the service did not change, so there is nothing to validate |
+| passed | loop runs |
+| failed | skipped -- no point validating a build that did not pass |
+| never started (its path filters skipped the commit) | skipped -- the service did not change |
+| could not be read | loop runs ungated, rather than silently skipping validation |
 
 So an ordinary commit runs the loop for the one or two services it touched, not
-all six. "Run workflow" ignores the gate and runs everything.
+all six, and the gate's verdict for every service is written to the run summary
+as a table. When nothing was selected the summary says so outright:
+"No services were changed - agentic loop skipped for all services."
+"Run workflow" ignores the gate and runs everything.
 
 One gap worth knowing: a change to the shared service does not trigger student 2's
 CI, so student 2's loop skips even though it calls the shared backend. Integration
 CI is what covers that direction.
-
-The gate lives in a step rather than in a `workflow_run` trigger because
-`workflow_run` only fires from the default branch's copy of a workflow file, so
-it does nothing on a feature branch.
-
-`services.json` is the map from service name to compose service, port, and
-health path -- the workflow builds its matrix from it, so a new service is a new
-entry there plus a `checks/` file.
 
 ## Where the findings go
 
