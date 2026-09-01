@@ -311,6 +311,10 @@ def mapping(value: Any, *, context: str) -> dict[str, Any]:
     return value
 
 
+def plain_json_mapping(response: HttpResponse, *, context: str) -> dict[str, Any]:
+    return mapping(parse_json_body(response, context=context), context=context)
+
+
 def response_path(response: HttpResponse) -> str:
     return urllib.parse.urlparse(response.url).path
 
@@ -448,10 +452,7 @@ def wait_for_shared_ui() -> HttpResponse:
 
 def wait_for_database_health(project_name: str, env_file: Path) -> HttpResponse:
     def predicate(response: HttpResponse) -> bool:
-        data = mapping(
-            extract_envelope_data(response, context="database health"),
-            context="database health data",
-        )
+        data = plain_json_mapping(response, context="database health")
         return data.get("status") == "ok"
 
     return wait_for_probe(
@@ -634,10 +635,10 @@ def verify_phase_health(
     database_health_response = database_get(project_name, env_file, "/internal/health")
     backend_ready_response = backend_get(project_name, env_file, "/ready")
     return {
-        "database_status": status_value(
+        "database_status": plain_json_mapping(
             database_health_response,
             context="database health verification",
-        ),
+        ).get("status"),
         "backend_ready_status": status_value(
             backend_ready_response,
             context="backend ready verification",
