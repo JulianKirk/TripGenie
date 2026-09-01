@@ -72,3 +72,53 @@ TripGenie/
     ├── test/
     └── deploy/
 ```
+
+---
+
+## 4. Repository Knowledge Graph
+
+Graphify builds a navigable knowledge graph of the services, APIs,
+documentation, and source relationships in this repository. The portable
+outputs are committed so every team member can use them without rebuilding
+first:
+
+- `graphify-out/graph.html` — interactive graph that opens in a browser
+- `graphify-out/GRAPH_REPORT.md` — architecture report and suggested queries
+- `graphify-out/graph.json` — raw graph used by Graphify queries
+
+### Install Graphify and the Git hooks
+
+Install Graphify once, then run the repository setup script:
+
+```bash
+uv tool install --upgrade graphifyy
+./scripts/setup-graphify.sh
+```
+
+The official Graphify `post-commit` hook incrementally rebuilds the graph after
+code commits. Its `post-checkout` hook rebuilds after switching branches. Hook
+work runs in the background; its log is written to
+`~/.cache/graphify-rebuild.log`.
+
+Git does not distribute local hooks when a repository is cloned, which is why
+each contributor must run the setup script once. Confirm the installation at
+any time with:
+
+```bash
+graphify hook status
+```
+
+The hooks update code relationships without an LLM. They deliberately ignore
+documentation and image changes. `graphify update .` refreshes code only; after
+changing documentation or images, run a full semantic extraction with a
+supported LLM backend configured:
+
+```bash
+graphify extract .
+```
+
+To refresh only code relationships from the repository root, run:
+
+```bash
+graphify update .
+```
