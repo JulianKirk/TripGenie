@@ -86,39 +86,39 @@ first:
 - `graphify-out/GRAPH_REPORT.md` — architecture report and suggested queries
 - `graphify-out/graph.json` — raw graph used by Graphify queries
 
-### Install Graphify and the Git hooks
+### Using Graphify
 
-Install Graphify once, then run the repository setup script:
+The repository's initial agent guidance lives in `AGENTS.md`. It tells coding
+agents to consult the committed graph for architecture and dependency
+questions. Developers can open the report or interactive graph without any
+local setup. To run focused terminal queries, optionally install Graphify:
 
 ```bash
 uv tool install --upgrade graphifyy
-./scripts/setup-graphify.sh
+graphify query "how do the backend services reach their databases?"
 ```
 
-The official Graphify `post-commit` hook incrementally rebuilds the graph after
-code commits. Its `post-checkout` hook rebuilds after switching branches. Hook
-work runs in the background; its log is written to
-`~/.cache/graphify-rebuild.log`.
-
-Git does not distribute local hooks when a repository is cloned, which is why
-each contributor must run the setup script once. Confirm the installation at
-any time with:
-
-```bash
-graphify hook status
-```
-
-The hooks update code relationships without an LLM. They deliberately ignore
-documentation and image changes. `graphify update .` refreshes code only; after
-changing documentation or images, run a full semantic extraction with a
-supported LLM backend configured:
+`graphify update .` refreshes code only. After changing documentation or
+images, a full semantic extraction requires a supported LLM backend:
 
 ```bash
 graphify extract .
 ```
 
-To refresh only code relationships from the repository root, run:
+### Central graph updates on GitHub
 
-```bash
-graphify update .
-```
+The `Graphify Update` GitHub Actions workflow runs after changes are merged to
+`main`. It performs the no-LLM code update and, when the portable graph changes,
+commits only `graph.json`, `graph.html`, and `GRAPH_REPORT.md` as
+`github-actions[bot]`. This gives every contributor the same current code graph
+after pulling `main`, without requiring local Git hooks.
+
+The repository must allow GitHub Actions to write repository contents. In
+GitHub, check **Settings → Actions → General → Workflow permissions**.
+Branch protection must also permit `github-actions[bot]` to push the generated
+artifact commit to `main`.
+
+This workflow intentionally performs code-only extraction, which is
+deterministic and does not need an API key. Documentation, paper, and image
+changes still require semantic extraction with a supported LLM backend before
+their relationships can be added to the committed graph.
