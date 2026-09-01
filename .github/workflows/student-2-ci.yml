@@ -4,12 +4,18 @@ on:
   push:
     paths:
       - 'student-2/**'
+      # The end-to-end tests drive the real shared reference service, so a
+      # change there can break this suite.
+      - 'shared/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'
   pull_request:
     paths:
       - 'student-2/**'
+      # The end-to-end tests drive the real shared reference service, so a
+      # change there can break this suite.
+      - 'shared/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'
@@ -28,7 +34,9 @@ jobs:
           cache: pip
           cache-dependency-path: student-2/pyproject.toml
       - name: Install dependencies
-        run: pip install -e "./student-2[dev]"
+        # shared/ too: tests/e2e wires this service to the real shared
+        # reference service, which is what catches drift in the id/name swap.
+        run: pip install -e "./shared[dev]" -e "./student-2[dev]"
       - name: Lint
         run: |
           ruff check student-2

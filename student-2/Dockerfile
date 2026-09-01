@@ -9,6 +9,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BACKEND_URL=http://127.0.0.1:9000 \
     BACKEND_TIMEOUT=5 \
     DB_TIMEOUT=5 \
+    # Country and city live in the shared reference service, which is not in
+    # this image -- there is one of it, not one per student. On the compose
+    # network this name resolves; run the image alone and /health says
+    # "location": "unreachable", with rows that cannot name their place.
+    LOCATION_URL=http://shared-backend:9100 \
     SQLITE_URL=sqlite:////data/accommodation.db \
     DB_SERVICE_URL=http://127.0.0.1:9001
 

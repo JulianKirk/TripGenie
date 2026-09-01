@@ -2,6 +2,12 @@
 
 See ../../docs/object-model.md for the design (entities + ERD).
 
+Country and City are *not* here. They are reference data every service needs,
+so they live in the shared reference service (shared/docs/object-model.md) and
+this table holds their ids. Nothing in this package resolves an id to a name --
+that is the backend service's job, because the shared service is reached over
+HTTP and a database service does not make outbound calls.
+
 The tables also own the translation to and from the wire messages in
 `schemas.py` -- `to_message`, `from_message` and `update_from` below. A row
 knows how to describe itself; the routers just call these.
@@ -10,10 +16,9 @@ knows how to describe itself; the routers just call these.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, ForeignKey, Index, UniqueConstraint, event, select
+from sqlalchemy import JSON, ForeignKey, Index, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.mutable import MutableList
@@ -23,9 +28,6 @@ from sqlalchemy.types import TypeDecorator
 from database_service import schemas
 from database_service.enums import AccommodationType, AvailabilityStatus, BedType
 
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-
 
 class Base(DeclarativeBase):
     """Declarative base every ORM model in this service inherits from."""
@@ -33,8 +35,9 @@ class Base(DeclarativeBase):
 
 @event.listens_for(Engine, "connect")
 def _enforce_sqlite_foreign_keys(dbapi_connection, _record):
-    """SQLite ships with FK enforcement off, so RESTRICT below is a no-op
-    without this. Applies to every engine, including the test fixtures'."""
+    """SQLite ships with FK enforcement off, so the CASCADE below is a no-op
+    without this -- deleting an accommodation would leave its details behind.
+    Applies to every engine, including the test fixtures'."""
     dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 
@@ -61,116 +64,49 @@ class BedTypesJSON(TypeDecorator):
         return [BedType(v) for v in value]
 
 
-class Country(Base):
-    """Reference list of countries -- just a name, nothing else."""
-
-    __tablename__ = "countries"
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    name: Mapped[str] = mapped_column(unique=True)
-
-    @classmethod
-    def get_or_create(cls, session: Session, name: str) -> Country:
-        """The backend sends place names, not ids -- it has no way to know
-        ours -- so an unknown country is created rather than rejected."""
-        country = session.scalar(select(cls).where(cls.name == name))
-        if country is None:
-            country = cls(name=name)
-            session.add(country)
-            session.flush()  # the id is assigned on INSERT, and callers need it
-        return country
-
-
-class City(Base):
-    """Reference list of cities, scoped to a country (Sydney, Canada is a
-    different row to Sydney, Australia)."""
-
-    __tablename__ = "cities"
-    __table_args__ = (UniqueConstraint("name", "country_id", name="uq_city_country"),)
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    name: Mapped[str]
-    country_id: Mapped[UUID] = mapped_column(
-        ForeignKey("countries.id", ondelete="RESTRICT")
-    )
-
-    country: Mapped[Country] = relationship()
-
-    @classmethod
-    def get_or_create(cls, session: Session, name: str, country_id: UUID) -> City:
-        """Scoped to the country, so Sydney/Australia and Sydney/Canada are
-        two rows rather than a collision."""
-        city = session.scalar(
-            select(cls).where(cls.name == name, cls.country_id == country_id)
-        )
-        if city is None:
-            city = cls(name=name, country_id=country_id)
-            session.add(city)
-            session.flush()
-        return city
-
-
 class LocationDetails(Base):
     __tablename__ = "location_details"
-    # Same reason as the RoomDetails index: the itinerary service asks "what
-    # can I stay in at <place>", so country/city are the query keys.
+    # The itinerary service asks "what can I stay in at <place>", so the two
+    # shared-service ids are the query keys.
     __table_args__ = (Index("ix_location_details_city", "country_id", "city_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     accommodation_id: Mapped[UUID] = mapped_column(
         ForeignKey("accommodations.id", ondelete="CASCADE"), unique=True
     )
-    country_id: Mapped[UUID] = mapped_column(
-        ForeignKey("countries.id", ondelete="RESTRICT")
-    )
-    city_id: Mapped[UUID] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"))
+    # Ids owned by the shared reference service, with no ForeignKey behind
+    # them -- the rows they point at are in another service's database, so
+    # SQLite cannot enforce this and pretending otherwise would only fail at
+    # CREATE TABLE. The backend service turns them into names on the way out.
+    country_id: Mapped[UUID]
+    city_id: Mapped[UUID]
     street: Mapped[str | None] = mapped_column(default=None)
     street_number: Mapped[int | None] = mapped_column(default=None)
 
     accommodation: Mapped[Accommodation] = relationship(
         back_populates="location_details"
     )
-    country: Mapped[Country] = relationship()
-    city: Mapped[City] = relationship()
 
     @classmethod
-    def from_message(
-        cls, session: Session, message: schemas.Location
-    ) -> LocationDetails:
-        country = Country.get_or_create(session, message.country)
-        city = City.get_or_create(session, message.city, country.id)
+    def from_message(cls, message: schemas.Location) -> LocationDetails:
         return cls(
-            country_id=country.id,
-            city_id=city.id,
+            country_id=message.country_id,
+            city_id=message.city_id,
             street=message.street,
             street_number=message.street_number,
         )
 
-    def update_from(self, session: Session, message: schemas.Location) -> None:
+    def update_from(self, message: schemas.Location) -> None:
         """Updated in place rather than replaced: reassigning the relationship
         cascades a delete + insert, which trips the UNIQUE constraint on
         accommodation_id."""
-        sent = message.model_fields_set
-        if "country" in sent or "city" in sent:
-            country = Country.get_or_create(
-                session, message.country or self.country.name
-            )
-            self.country_id = country.id
-            self.city_id = City.get_or_create(
-                session, message.city or self.city.name, country.id
-            ).id
-        if "street" in sent and message.street is not None:
-            self.street = message.street
-        if "street_number" in sent:
-            self.street_number = message.street_number
+        for field in message.model_fields_set:
+            value = getattr(message, field)
+            if value is not None:
+                setattr(self, field, value)
 
     def to_message(self) -> schemas.Location:
-        return schemas.Location(
-            country=self.country.name,
-            city=self.city.name,
-            street=self.street,
-            street_number=self.street_number,
-        )
+        return schemas.Location.model_validate(self)
 
 
 class RoomDetails(Base):
@@ -246,9 +182,7 @@ class Accommodation(Base):
     # endpoint actually fills in.
 
     @classmethod
-    def from_message(
-        cls, session: Session, message: schemas.AccommodationCreateRequest
-    ) -> Accommodation:
+    def from_message(cls, message: schemas.AccommodationCreateRequest) -> Accommodation:
         """A new row from a create request. The request type is the strict
         subclass, so the fields read here are guaranteed present."""
         return cls(
@@ -259,9 +193,7 @@ class Accommodation(Base):
             availability_status=message.availability_status,
             rating=message.rating,
             amenities=message.amenities,
-            location_details=LocationDetails.from_message(
-                session, message.location_details
-            ),
+            location_details=LocationDetails.from_message(message.location_details),
             room_details=(
                 None
                 if message.room_details is None
@@ -269,7 +201,7 @@ class Accommodation(Base):
             ),
         )
 
-    def update_from(self, session: Session, message: schemas.Accommodation) -> None:
+    def update_from(self, message: schemas.Accommodation) -> None:
         """Apply an edit. Only fields the caller actually sent are touched, so
         an omitted field is left alone. An explicit `null` does not clear a
         field either: PUT is documented as a merge, and there is no documented
@@ -280,7 +212,7 @@ class Accommodation(Base):
             if value is not None:
                 setattr(self, field, value)
         if message.location_details is not None:
-            self.location_details.update_from(session, message.location_details)
+            self.location_details.update_from(message.location_details)
         if message.room_details is not None and self.room_details is not None:
             self.room_details.update_from(message.room_details)
 

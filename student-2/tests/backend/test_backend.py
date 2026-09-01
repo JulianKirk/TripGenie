@@ -22,18 +22,32 @@ from backend_service.config import DEFAULT_DATABASE_URL, DEFAULT_DB_TIMEOUT, Set
 from backend_service.schemas import Accommodation, AccommodationQueryRequest
 
 DATABASE_URL = "http://database.test"
+LOCATION_URL = "http://location.test"
 NO_ROUTE = "no route to the database service"
 TOO_SLOW = "slower than DB_TIMEOUT"
+
+
+def no_places(request):
+    """A shared reference service that knows of nowhere.
+
+    Enough for the tests below: none of them assert on a place name, and the
+    stub keeps a unit test from dialling a real socket when a response does
+    carry a place. The real thing is in tests/e2e; the client itself is in
+    tests/backend/test_location.py.
+    """
+    key = "countries" if "country" in str(request.url) else "cities"
+    return httpx.Response(200, json={key: [], "total": 0})
 
 
 @pytest.fixture
 def mock_client():
     """Build a backend whose database service is the given handler."""
 
-    def factory(handler):
+    def factory(handler, location=no_places):
         app = create_app(
-            Settings(database_url=DATABASE_URL),
+            Settings(database_url=DATABASE_URL, location_url=LOCATION_URL),
             transport=httpx.MockTransport(handler),
+            location_transport=httpx.MockTransport(location),
         )
         return TestClient(app)
 
@@ -208,13 +222,14 @@ class TestHealthWithoutADatabase:
         def unreachable(request):
             raise httpx.ConnectError(NO_ROUTE, request=request)
 
-        with mock_client(unreachable) as client:
+        with mock_client(unreachable, location=unreachable) as client:
             response = client.get("/health")
         assert response.status_code == 200
         assert response.json() == {
             "status": "degraded",
             "service": "student-2-backend",
             "database": "unreachable",
+            "location": "unreachable",
         }
 
     def test_a_health_body_that_says_nothing_is_not_read_as_ok(self, mock_client):

@@ -33,15 +33,37 @@ frontend / other students' backends
             │  :9000  /accommodation
             ▼
       student-2-backend ──────────────▶ student-1-backend  :8001  /api
-            │  :9001  /internal/accommodation   (itineraries)
+            │        │                  (itineraries)
+            │        └────────────────▶ shared-backend     :9100  /location
+            │  :9001  /internal/accommodation              (country + city)
             ▼
       student-2-database ── SQLite
 ```
 
-The arrow to the right is the itinerary integration. Adding an accommodation to
-an itinerary is student 1's data, so this service does not store it; it calls
-student 1's public API. The call is made *here* rather than in the frontend so
-that the frontend keeps talking to exactly one backend.
+The two arrows to the right are the cross-service dependencies, and both are
+made *here* rather than in the frontend so that the frontend keeps talking to
+exactly one backend.
+
+Adding an accommodation to an itinerary is student 1's data, so this service
+does not store it; it calls student 1's public API.
+
+Country and city are the [shared reference service](../../shared/docs/backend-service-api.md)'s
+data, so this service does not store them either. The database service behind
+this one keeps a `country_id` and a `city_id` on every accommodation; this
+service is what turns `"australia"` into that id on a search and back into a
+name on a response. Its callers never see an id, and there is exactly one list
+of places in the system.
+
+Both reference lists are small and near-static, so they are fetched once and
+held in memory (`backend_service/location_client.py`), refetched when a name or
+id is not in the cache. A useful side effect: once the cache is warm, requests
+about places it already knows keep working while the shared service is down.
+`GET /health` still reports `"location": "unreachable"`, so the outage is
+visible rather than hidden. A search that names a place nobody has heard of comes
+back as an empty result, not an error — nobody has accommodation in Narnia, and
+that is an answer. An accommodation whose stored id the shared service does not
+know still returns; its `location_details` simply omits `country`/`city`, which
+beats failing a whole page over one stale reference.
 
 This service declares the accommodation message itself, in
 `backend/backend_service/schemas.py`, rather than importing the database
@@ -56,6 +78,11 @@ exposed — and drift is loud rather than silent: a database response that no
 longer fits this service's contract is a `502`, and the end-to-end tests in
 `tests/e2e/` run the real database service, so it fails CI immediately.
 
+The one message that deliberately differs is `Location`: the database service
+declares `country_id`/`city_id`, this one declares `country`/`city`. That swap
+is the reason this service talks to the shared reference service at all, so the
+end-to-end tests assert the difference rather than the match.
+
 ponytail: no auth. The compose network is the trust boundary for Release 0,
 same as the database service. Add a shared bearer token when this service is
 published beyond it.
@@ -69,6 +96,8 @@ published beyond it.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Base URL of student 1's trip/itinerary service |
 | `ITINERARY_PREFIX` | `/api`                      | Path prefix that service serves its API under |
 | `ITINERARY_TIMEOUT` | `5`                        | Seconds to wait on an itinerary service call |
+| `LOCATION_URL` | `http://shared-backend:9100`     | Base URL of the shared reference service     |
+| `LOCATION_TIMEOUT` | `5`                          | Seconds to wait on a shared reference service call |
 
 ### Running it
 
@@ -98,10 +127,13 @@ reached:
 | 502    | Database service answered, but with something unusable            |
 | 503    | Database service unreachable or slower than `DB_TIMEOUT`          |
 
-The itinerary endpoints below fail the same way against student 1's service: a
-`503` when it cannot be reached, a `502` when it answers with something that
-does not fit this contract. One mapping covers both upstreams
-(`backend_service/client.py`).
+The itinerary endpoints below fail the same way against student 1's service, and
+so does an accommodation endpoint that has to reach the shared reference service:
+a `503` when it cannot be reached, a `502` when it answers with something that
+does not fit this contract. One mapping covers all three upstreams
+(`backend_service/client.py`). An accommodation request only reaches the shared
+service when the cache above cannot answer it, so a warm cache and a known place
+are served regardless.
 
 Both carry `{"detail": "..."}`. A caller should treat them as retryable and a
 `400`/`404` as not.
@@ -131,14 +163,21 @@ curl -X GET "http://localhost:9000/health"
 {
   "status": "ok",
   "service": "student-2-backend",
-  "database": "ok"
+  "database": "ok",
+  "location": "ok"
 }
 ```
 
 `database` is whatever [`GET /health`](./database-service-api.md#get-health) on
-the database service reported, or `"unreachable"` if the call failed. The
-top-level `status` is `"degraded"` in that case — still `200`, because the
-service itself is running and is what this endpoint is asked about.
+the database service reported, and `location` the same from the
+[shared reference service](../../shared/docs/backend-service-api.md#get-health);
+either is `"unreachable"` if the call failed. The top-level `status` is
+`"degraded"` unless both are `"ok"` — still `200`, because the service itself is
+running and is what this endpoint is asked about.
+
+They are reported separately because they break differently: without its
+database this service serves nothing, and without the shared service it serves
+rows that cannot say where they are.
 
 ### Error Responses
 
@@ -303,8 +342,12 @@ documents the template in full. Its rules hold here unchanged:
   box can filter on a half-typed word.
 - `amenities` matches when the accommodation carries **every** amenity listed.
 - Everything else matches exactly.
-- `city` requires `country`, `room_details.bed_types` cannot be filtered on, and
-  an unrecognised field is a `400` rather than a silently ignored one.
+- `city` requires `country` — "Sydney" exists in more than one, and a city name
+  cannot be resolved to a single id without knowing which. `room_details.bed_types`
+  cannot be filtered on, and an unrecognised field is a `400` rather than a
+  silently ignored one.
+- A `country` or `city` the shared reference service does not know is an empty
+  result (`{"accommodations": [], "total": 0}`), not a `400` or a `404`.
 - Results come back ordered by name, so `limit`/`offset` pages do not overlap.
 
 ### Example Request
