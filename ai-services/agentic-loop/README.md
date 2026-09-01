@@ -49,10 +49,15 @@ the run still passes or fails on the checks, so CI works either way (add
 
 ## In CI
 
-`.github/workflows/agentic-ci.yml` is a post step: it triggers on
-`workflow_run` after a service's own build-and-validate workflow finishes, and
-only when that finished successfully. One service's CI passing runs that one
-service's loop; "Run workflow" runs all of them.
+`.github/workflows/agentic-ci.yml` runs on push and pull request, one job per
+service. Each job is a post step: before doing anything it polls that service's
+own build-and-validate workflow for the same commit, and stops if it failed. If
+that workflow never runs -- its path filters skipped the commit -- the loop
+carries on after a two minute grace period.
+
+The gate lives in a step rather than in a `workflow_run` trigger because
+`workflow_run` only fires from the default branch's copy of a workflow file, so
+it does nothing on a feature branch.
 
 `services.json` is the map from service name to compose service, port, and
 health path -- the workflow builds its matrix from it, so a new service is a new

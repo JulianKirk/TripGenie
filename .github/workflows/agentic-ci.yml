@@ -1,70 +1,53 @@
 name: Agentic Loop
 
-# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against a service's public
-# backend. This is a post step: it runs only after that service's own build and
-# validate workflow has finished successfully, so a service that does not
-# compile never reaches the loop.
+# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against every service's
+# public backend.
 #
-# NOTE: `workflow_run` only fires for workflow files that are on the default
-# branch. Until this file is merged to main it will not trigger on its own --
-# use "Run workflow" to exercise it from a branch.
+# This is a post step: each job waits for that service's own build-and-validate
+# workflow to finish on the same commit, and stops if it failed. The waiting is
+# done here rather than with a `workflow_run` trigger because workflow_run only
+# fires from the default branch's copy of a workflow file -- it does nothing on
+# a feature branch, which is where this needs to work.
 on:
-  workflow_run:
-    workflows:
-      - Shared Reference Service CI
-      - Student 1 CI
-      - Student 2 CI
-      - Student 3 CI
-      - Student 4 CI
-      - Student 5 CI
-    types: [completed]
+  push:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
   workflow_dispatch:
 
 jobs:
-  # Which services to run. A workflow_run maps to the one service whose CI just
-  # passed; a manual run does all of them.
+  # The matrix comes from services.json so there is one place to add a service.
   plan:
     name: Pick services
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
-      empty: ${{ steps.pick.outputs.empty }}
     steps:
       - uses: actions/checkout@v4
       - id: pick
-        env:
-          UPSTREAM: ${{ github.event.workflow_run.name }}
         run: |
-          case "$UPSTREAM" in
-            "Shared Reference Service CI") only=shared ;;
-            "Student 1 CI") only=student-1 ;;
-            "Student 2 CI") only=student-2 ;;
-            "Student 3 CI") only=student-3 ;;
-            "Student 4 CI") only=student-4 ;;
-            "Student 5 CI") only=student-5 ;;
-            *) only= ;;
-          esac
-          services=ai-services/agentic-loop/services.json
-          if [ -z "$only" ]; then
-            selected=$(jq -c . "$services")
-          else
-            selected=$(jq -c --arg s "$only" '[.[] | select(.service == $s)]' "$services")
-          fi
+          selected=$(jq -c . ai-services/agentic-loop/services.json)
           echo "matrix={\"include\":$selected}" >> "$GITHUB_OUTPUT"
-          echo "empty=$([ "$selected" = "[]" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   loop:
     name: ${{ matrix.service }}
     needs: plan
-    if: needs.plan.outputs.empty == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # workflow_run runs in the base repo's context, so this token can comment
-      # on a pull request even when the push came from a fork.
+      # Enough to comment on a pull request from a branch in this repo. A pull
+      # request from a fork gets a read-only token and no comment -- the report
+      # is still on the job summary.
       pull-requests: write
     strategy:
       # One service's failure should not hide the others' on a manual run.
@@ -78,10 +61,39 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          # workflow_run checks out the default branch by default -- take the
-          # commit whose CI just passed instead.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # The post step gate. Poll this service's own CI for the same commit:
+      # proceed on success, stop on failure, and proceed anyway if that workflow
+      # never starts -- its path filters mean an unrelated change does not run
+      # it, and there is then nothing to wait for.
+      - name: Wait for ${{ matrix.ci }}
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI: ${{ matrix.ci }}
+        run: |
+          for attempt in $(seq 1 120); do
+            run=$(gh api "repos/$REPO/actions/workflows/$CI/runs?head_sha=$SHA&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"' 2>/dev/null || true)
+            case "$run" in
+              "completed success"|"completed skipped")
+                echo "$CI passed for $SHA"; exit 0 ;;
+              completed*)
+                echo "$CI did not pass for $SHA ($run) -- skipping the loop"; exit 1 ;;
+              "")
+                # Give it two minutes to appear before deciding it was filtered out.
+                if [ "$attempt" -ge 8 ]; then
+                  echo "$CI did not run for $SHA (path filters); continuing"; exit 0
+                fi ;;
+              *)
+                echo "$CI is $run; waiting" ;;
+            esac
+            sleep 15
+          done
+          echo "$CI did not finish within 30 minutes"
+          exit 1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -125,7 +137,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MARKER: '<!-- agentic-loop: ${{ matrix.service }} -->'
         run: |
           if [ ! -s "$GITHUB_STEP_SUMMARY" ]; then
