@@ -45,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Listing another workflow's runs is an Actions API read. Declaring any
+      # permissions block zeroes the rest, so this has to be spelled out.
+      actions: read
       # Enough to comment on a pull request from a branch in this repo. A pull
       # request from a fork gets a read-only token and no comment -- the report
       # is still on the job summary.
@@ -74,21 +77,31 @@ jobs:
           CI: ${{ matrix.ci }}
         run: |
           for attempt in $(seq 1 120); do
-            run=$(gh api "repos/$REPO/actions/workflows/$CI/runs?head_sha=$SHA&per_page=1" \
-              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"' 2>/dev/null || true)
-            case "$run" in
-              "completed success"|"completed skipped")
-                echo "$CI passed for $SHA"; exit 0 ;;
-              completed*)
-                echo "$CI did not pass for $SHA ($run) -- skipping the loop"; exit 1 ;;
-              "")
-                # Give it two minutes to appear before deciding it was filtered out.
-                if [ "$attempt" -ge 8 ]; then
-                  echo "$CI did not run for $SHA (path filters); continuing"; exit 0
-                fi ;;
-              *)
-                echo "$CI is $run; waiting" ;;
-            esac
+            # gh prints the API error body on stdout and exits non-zero, so the
+            # status has to gate on the exit code -- otherwise a 403 body looks
+            # like a workflow status and the poll spins until it times out.
+            if raw=$(gh api "repos/$REPO/actions/workflows/$CI/runs?head_sha=$SHA&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"' 2>&1); then
+              case "$raw" in
+                "completed success"|"completed skipped")
+                  echo "$CI passed for $SHA"; exit 0 ;;
+                completed*)
+                  echo "$CI did not pass for $SHA ($raw) -- skipping the loop"; exit 1 ;;
+                "")
+                  # Give it two minutes to appear before deciding it was filtered out.
+                  if [ "$attempt" -ge 8 ]; then
+                    echo "$CI did not run for $SHA (path filters); continuing"; exit 0
+                  fi ;;
+                *)
+                  echo "$CI is $raw; waiting" ;;
+              esac
+            else
+              echo "could not read $CI status: $raw"
+              if [ "$attempt" -ge 8 ]; then
+                echo "giving up on the gate after 2 minutes; running the loop ungated"
+                exit 0
+              fi
+            fi
             sleep 15
           done
           echo "$CI did not finish within 30 minutes"
