@@ -495,16 +495,45 @@ def wait_for_frontend_ready() -> HttpResponse:
     )
 
 
+def inspect_service_ports(
+    project_name: str,
+    env_file: Path,
+    service: str,
+) -> dict[str, Any]:
+    container_id_result = run_command(
+        compose_command(project_name, env_file, "ps", "-q", service)
+    )
+    container_id = container_id_result.stdout.strip()
+    ensure(container_id, f"could not resolve container id for {service}")
+
+    inspect_result = run_command(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{json .NetworkSettings.Ports}}",
+            container_id,
+        ]
+    )
+    response = HttpResponse(
+        status_code=200,
+        body=inspect_result.stdout.strip(),
+        headers={},
+        url=f"docker://inspect/{service}",
+    )
+    return mapping(
+        parse_json_body(response, context=f"{service} port inspection"),
+        context=f"{service} port inspection",
+    )
+
+
 def verify_port_exposure(project_name: str, env_file: Path) -> None:
     for service, port in UNPUBLISHED_INTERNAL_PORTS:
-        result = run_command(
-            compose_command(project_name, env_file, "port", service, port),
-            check=False,
-        )
+        ports = inspect_service_ports(project_name, env_file, service)
+        binding = ports.get(f"{port}/tcp")
         ensure(
-            result.returncode != 0 and not result.stdout.strip(),
-            f"{service} unexpectedly published host port {port}: "
-            f"{result.stdout.strip()}",
+            binding is None,
+            f"{service} unexpectedly published host port {port}: {binding}",
         )
 
 
