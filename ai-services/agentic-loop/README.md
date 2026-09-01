@@ -50,10 +50,23 @@ the run still passes or fails on the checks, so CI works either way (add
 ## In CI
 
 `.github/workflows/agentic-ci.yml` runs on push and pull request, one job per
-service. Each job is a post step: before doing anything it polls that service's
-own build-and-validate workflow for the same commit, and stops if it failed. If
-that workflow never runs -- its path filters skipped the commit -- the loop
-carries on after a two minute grace period.
+service, plus a `test` job for the loop's own unit tests that always runs.
+
+Each service job is a post step: before doing anything it polls that service's
+own build-and-validate workflow for the same commit.
+
+| That workflow | This job |
+| --- | --- |
+| passed | runs the loop |
+| failed | stops, without running the loop |
+| never started (its path filters skipped the commit) | skips -- the service did not change, so there is nothing to validate |
+
+So an ordinary commit runs the loop for the one or two services it touched, not
+all six. "Run workflow" ignores the gate and runs everything.
+
+One gap worth knowing: a change to the shared service does not trigger student 2's
+CI, so student 2's loop skips even though it calls the shared backend. Integration
+CI is what covers that direction.
 
 The gate lives in a step rather than in a `workflow_run` trigger because
 `workflow_run` only fires from the default branch's copy of a workflow file, so
