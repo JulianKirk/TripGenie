@@ -3,14 +3,16 @@
 # Shared Reference Micro-Service
 
 The shared reference microservice owns the data that is nobody's feature and
-everybody's dependency. Today that is places:
+everybody's dependency. Today that is places and the money spent in them:
 
 1. Every service needs to say where something is
-2. No service should keep its own private list of countries and cities
+2. Every service that shows a price needs to say what the price is in
+3. No service should keep its own private list of countries, cities or currencies
 
 `Country` and `City` used to live in the accommodation service's `models.py`,
 under a heading that admitted the arrangement was temporary. They live here now,
-and the entities are expanded on in [object-model.md](./docs/object-model.md).
+alongside `Currency` — one per country — and the entities are expanded on in
+[object-model.md](./docs/object-model.md).
 
 The micro-service is comprised of two services:
 
@@ -58,12 +60,31 @@ Any service that stores a place should do the same. The rule for everyone is the
 same one student 2 follows: **store the id, publish the name, and let this
 service be the only thing that knows both.**
 
+Currencies are there for whoever needs them next — student 5's budget service is
+the obvious one, and student 2's prices are in AUD today because nothing yet
+says otherwise. Asking takes one request:
+
+```bash
+curl "http://localhost:9100/currency/country?name=japan"
+# -> {"name": "japanese yen", "code": "JPY", "symbol": "¥", "conversion_rate": 98.0, ...}
+```
+
+A country name in, and back comes its currency: the ISO 4217 code, the symbol a
+page renders, and `conversion_rate` — how many units of it 1 AUD buys. Prices
+here are quoted in AUD, so AUD is the base and its own row is `1.0`, which makes
+converting a multiplication rather than a branch. The rates are static and
+indicative; nothing refreshes them yet.
+
+Going the other way — "who spends EUR" — is a `QUERY /currency` on the code,
+because a code names a currency rather than a row and France and Italy both
+answer to it.
+
 ## Backend Service
 
-The public entry point. Read-only: it serves the reference lists and the two
+The public entry point. Read-only: it serves the reference lists and the
 `GET /{id}` look-ups, and forwards searches to the database service. It does not
-create places — the lists are seeded, and a service that invents countries on
-demand is a service that quietly accumulates typos.
+create places or currencies — the lists are seeded, and a service that invents
+countries on demand is a service that quietly accumulates typos.
 
 It runs as the `shared-backend` container on port `9100`, published to the host,
 and is the only service permitted to call the database service.

@@ -13,6 +13,11 @@
   - [GET /location/city/{id}](#get-locationcityid)
   - [GET /location/city](#get-locationcity)
   - [QUERY /location/city](#query-locationcity)
+- [Currency Endpoints](#currency-endpoints)
+  - [GET /currency/country](#get-currencycountry)
+  - [GET /currency/{id}](#get-currencyid)
+  - [GET /currency](#get-currency)
+  - [QUERY /currency](#query-currency)
 
 # Shared Reference Backend Service API
 
@@ -30,15 +35,18 @@ network. The backend is its only caller.
 
 ```
 other students' backends
-            │  :9100  /location
+            │  :9100  /location, /currency
             ▼
       shared-backend
-            │  :9101  /internal/location
+            │  :9101  /internal/location, /internal/currency
             ▼
       shared-database ── SQLite
 ```
 
-This service declares the country and city messages itself, in
+Currencies sit under their own prefix rather than under `/location`: a currency
+is not a place, it is the other thing a country tells you.
+
+This service declares the country, city and currency messages itself, in
 `backend/shared_backend_service/schemas.py`, rather than importing the database
 service's. It is the public face: its callers code against what it documents and
 serves at `/docs`, and they cannot reach the internal service that would
@@ -92,6 +100,30 @@ small and near-static, so a caller pages through them once and keeps a
 name-to-id map in memory — see
 `student-2/backend/backend_service/location_client.py` for a worked example,
 including what to do on a miss.
+
+### Currencies
+
+A currency belongs to exactly one country, and a country has at most one
+currency — so a service that shows a price needs nothing but the country id it
+already stores. See [object-model.md](./object-model.md#currency) for why that
+one-to-one is deliberate and when to undo it.
+
+A currency carries a `name`, an ISO 4217 `code` (`AUD`, `JPY`, `EUR`), a
+`symbol`, and a `conversion_rate` — how many units of it 1 AUD buys. TripGenie
+quotes prices in AUD, so AUD is the base and its own row is exactly `1.0`;
+converting is one multiplication with no special case for home.
+
+The rates are static and indicative, enough for a page to say "about ¥9,800" and
+not enough to charge anyone. There is no endpoint that refreshes one.
+
+[`GET /currency/country`](#get-currencycountry) is the shortcut for what a
+caller would otherwise do in two requests: find the country, then find its
+currency.
+
+A code is **not** unique — France's euro and Italy's euro are two rows and both
+are `EUR`, so a code names a currency rather than a row. Asking by code is
+therefore [QUERY /currency](#query-currency), which answers with a list, not the
+single-answer endpoint above.
 
 ### Names
 
@@ -412,6 +444,218 @@ curl -X QUERY "http://localhost:9100/location/city" \
     {
       "id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
       "name": "sydney",
+      "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Error Responses
+
+| Status | Description                        |
+|--------|------------------------------------|
+| 400    | Unknown field                      |
+| 502    | Bad response from database service |
+| 503    | Database service unavailable       |
+
+## Currency Endpoints
+
+## GET /currency/country
+
+The currency a country spends, by the country's name.
+
+This is the endpoint most callers want. Everything else about a currency starts
+from a `country_id`; this one starts from the country a caller actually has
+written down, and does the two look-ups itself.
+
+### Request
+
+**Method:** `GET`
+**Endpoint:** `/currency/country`
+
+### Query Parameters
+
+| Name | Type   | Required | Description                                                 |
+|------|--------|----------|-------------------------------------------------------------|
+| name | string | Yes      | Country name, matched **exactly** (case and padding ignored) |
+
+`name` is an exact match here, unlike the substring matching in
+[QUERY /location/country](#query-locationcountry). A search wants `"austral"` to
+find Australia; a look-up that returns *a* currency for a half-typed country is
+worse than one that returns nothing.
+
+To go the other way — from a currency code to the countries that spend it — use
+[QUERY /currency](#query-currency). A code is not unique, so that question has a
+list for an answer and does not belong here.
+
+### Example Request
+
+```bash
+curl -X GET "http://localhost:9100/currency/country?name=australia"
+curl -X GET "http://localhost:9100/currency/country?name=new%20zealand"
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "id": "41348563-8656-579b-917b-088fba86759a",
+  "name": "australian dollar",
+  "code": "AUD",
+  "symbol": "$",
+  "conversion_rate": 1.0,
+  "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+}
+```
+
+One country has at most one currency, so this is a single currency and not a
+list.
+
+### Error Responses
+
+| Status | Description                                            |
+|--------|--------------------------------------------------------|
+| 400    | `name` missing or empty                                 |
+| 404    | `country not found` — no country by that name           |
+| 404    | `country has no currency` — the country exists, but nothing records what it spends |
+| 502    | Bad response from database service                      |
+| 503    | Database service unavailable                            |
+
+The two `404`s are deliberately different: one is the caller's typo, the other
+is missing reference data. Read the `detail`.
+
+
+## GET /currency/{id}
+
+Retrieve a single currency.
+
+### Request
+
+**Method:** `GET`
+**Endpoint:** `/currency/{id}`
+
+### Path Parameters
+
+| Name | Type | Required | Description                |
+|------|------|----------|----------------------------|
+| id   | uuid | Yes      | Identifier of the currency |
+
+### Example Request
+
+```bash
+curl -X GET "http://localhost:9100/currency/41348563-8656-579b-917b-088fba86759a"
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "id": "41348563-8656-579b-917b-088fba86759a",
+  "name": "australian dollar",
+  "code": "AUD",
+  "symbol": "$",
+  "conversion_rate": 1.0,
+  "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+}
+```
+
+### Error Responses
+
+| Status | Description                        |
+|--------|------------------------------------|
+| 404    | Currency not found                 |
+| 502    | Bad response from database service |
+| 503    | Database service unavailable       |
+
+
+## GET /currency
+
+Every currency, paginated. There is one per country, so the whole list fits in a
+page or two and a caller can hold it beside the country list it already keeps.
+
+### Request
+
+**Method:** `GET`
+**Endpoint:** `/currency`
+
+### Query Parameters
+
+| Name   | Type    | Required | Description                                |
+|--------|---------|----------|--------------------------------------------|
+| limit  | integer | No       | Max number of results, 1-100 (default 20)  |
+| offset | integer | No       | Number of results to skip (default 0)      |
+
+### Example Request
+
+```bash
+curl -X GET "http://localhost:9100/currency?limit=100"
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "currencies": [
+    {
+      "id": "41348563-8656-579b-917b-088fba86759a",
+      "name": "australian dollar",
+      "code": "AUD",
+      "symbol": "$",
+      "conversion_rate": 1.0,
+      "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Error Responses
+
+| Status | Description                        |
+|--------|------------------------------------|
+| 400    | `limit` or `offset` out of range   |
+| 502    | Bad response from database service |
+| 503    | Database service unavailable       |
+
+
+## QUERY /currency
+
+Search currencies. The body is forwarded to the database service as-is; see
+[its QUERY](./database-service-api.md#query-internalcurrency) for the match
+template in full. `country_id` is the usual filter — "what does this country
+spend" — `code` matches exactly and case-insensitively, and `name` as a
+case-insensitive substring.
+
+Filtering on `code` can return several rows: `EUR` matches every country that
+spends euros. `conversion_rate` is not filterable — exact equality on a float
+matches nothing anyone meant.
+
+### Request
+
+**Method:** `QUERY`
+**Endpoint:** `/currency`
+**Content-Type:** `application/json`
+
+### Example Request
+
+```bash
+curl -X QUERY "http://localhost:9100/currency" \
+  -H "Content-Type: application/json" \
+  -d '{"currency": {"country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"}}'
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "currencies": [
+    {
+      "id": "41348563-8656-579b-917b-088fba86759a",
+      "name": "australian dollar",
+      "code": "AUD",
+      "symbol": "$",
+      "conversion_rate": 1.0,
       "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
     }
   ],

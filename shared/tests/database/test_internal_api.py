@@ -16,6 +16,7 @@ from shared_database_service.config import Settings
 
 COUNTRY = "/internal/location/country"
 CITY = "/internal/location/city"
+CURRENCY = "/internal/currency"
 
 
 @pytest.fixture
@@ -143,6 +144,220 @@ class TestQueryCity:
         body = client.request("QUERY", CITY, json={"limit": 2}).json()
         assert body["total"] == 3
         assert [city["name"] for city in body["cities"]] == ["brisbane", "melbourne"]
+
+
+class TestCreateCurrency:
+    def test_returns_201_and_the_derived_id(self, client, australia):
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "symbol": "$",
+                "conversion_rate": 1.0,
+                "country_id": australia["id"],
+            },
+        )
+        assert response.status_code == 201
+        assert response.json() == {
+            "id": str(ids.currency_id("australia", "australian dollar")),
+            "name": "australian dollar",
+            "code": "AUD",
+            "symbol": "$",
+            "conversion_rate": 1.0,
+            "country_id": australia["id"],
+        }
+
+    def test_creating_the_same_currency_twice_returns_200(self, client, australia):
+        payload = {
+            "name": "australian dollar",
+            "code": "AUD",
+            "symbol": "$",
+            "conversion_rate": 1.0,
+            "country_id": australia["id"],
+        }
+        client.post(CURRENCY, json=payload)
+        assert client.post(CURRENCY, json=payload).status_code == 200
+
+    def test_a_second_currency_for_one_country_is_409(self, client, australia):
+        """The one-to-one is a UNIQUE constraint underneath -- without the
+        check in the router it would surface as a 500 out of SQLite."""
+        client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "symbol": "$",
+                "conversion_rate": 1.0,
+                "country_id": australia["id"],
+            },
+        )
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "bitcoin",
+                "code": "XBT",
+                "symbol": "B",
+                "conversion_rate": 0.00002,
+                "country_id": australia["id"],
+            },
+        )
+        assert response.status_code == 409
+        assert response.json()["detail"] == "country already has a currency"
+
+    def test_the_same_currency_under_two_countries_is_allowed(self, client):
+        """France and Italy both spend euros. Under the one-to-one rule that is
+        two rows, not a conflict."""
+        for name in ("france", "italy"):
+            country = client.post(COUNTRY, json={"name": name}).json()
+            response = client.post(
+                CURRENCY,
+                json={
+                    "name": "euro",
+                    "code": "EUR",
+                    "symbol": "\u20ac",
+                    "conversion_rate": 0.57,
+                    "country_id": country["id"],
+                },
+            )
+            assert response.status_code == 201
+
+    def test_unknown_country_is_404(self, client):
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "x",
+                "code": "XXX",
+                "symbol": "x",
+                "conversion_rate": 1.0,
+                "country_id": str(uuid4()),
+            },
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "country not found"
+
+    def test_a_currency_without_a_symbol_is_400(self, client, australia):
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "country_id": australia["id"],
+            },
+        )
+        assert response.status_code == 400
+
+    def test_a_rate_of_zero_or_less_is_400(self, client, australia):
+        """A zero or negative rate is not a cheap currency, it is a broken
+        row -- and one that would divide badly downstream."""
+        for rate in (0, -1.5):
+            response = client.post(
+                CURRENCY,
+                json={
+                    "name": "australian dollar",
+                    "code": "AUD",
+                    "symbol": "$",
+                    "conversion_rate": rate,
+                    "country_id": australia["id"],
+                },
+            )
+            assert response.status_code == 400
+
+    def test_a_currency_without_a_rate_is_400(self, client, australia):
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "symbol": "$",
+                "country_id": australia["id"],
+            },
+        )
+        assert response.status_code == 400
+
+    def test_a_code_that_is_not_three_characters_is_400(self, client, australia):
+        response = client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AU",
+                "symbol": "$",
+                "conversion_rate": 1.0,
+                "country_id": australia["id"],
+            },
+        )
+        assert response.status_code == 400
+
+
+class TestGetCurrency:
+    def test_returns_the_row(self, client, australia):
+        created = client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "symbol": "$",
+                "conversion_rate": 1.0,
+                "country_id": australia["id"],
+            },
+        ).json()
+        assert client.get(f"{CURRENCY}/{created['id']}").json() == created
+
+    def test_missing_is_404(self, client):
+        assert client.get(f"{CURRENCY}/{uuid4()}").status_code == 404
+
+
+class TestQueryCurrency:
+    def test_filters_by_country(self, client, australia):
+        japan = client.post(COUNTRY, json={"name": "japan"}).json()
+        client.post(
+            CURRENCY,
+            json={
+                "name": "australian dollar",
+                "code": "AUD",
+                "symbol": "$",
+                "conversion_rate": 1.0,
+                "country_id": australia["id"],
+            },
+        )
+        client.post(
+            CURRENCY,
+            json={
+                "name": "japanese yen",
+                "code": "JPY",
+                "symbol": "\u00a5",
+                "conversion_rate": 98.0,
+                "country_id": japan["id"],
+            },
+        )
+        body = client.request(
+            "QUERY", CURRENCY, json={"currency": {"country_id": japan["id"]}}
+        ).json()
+        assert [row["name"] for row in body["currencies"]] == ["japanese yen"]
+        assert body["total"] == 1
+
+    def test_code_matches_every_country_that_spends_it(self, client):
+        """EUR is not one row. Asking by code is asking "who spends this"."""
+        for name in ("france", "italy"):
+            country = client.post(COUNTRY, json={"name": name}).json()
+            client.post(
+                CURRENCY,
+                json={
+                    "name": "euro",
+                    "code": "EUR",
+                    "symbol": "\u20ac",
+                    "conversion_rate": 0.57,
+                    "country_id": country["id"],
+                },
+            )
+        body = client.request(
+            "QUERY", CURRENCY, json={"currency": {"code": "eur"}}
+        ).json()
+        assert body["total"] == 2
+
+    def test_unknown_field_is_400(self, client):
+        response = client.request("QUERY", CURRENCY, json={"currency": {"iso": "AUD"}})
+        assert response.status_code == 400
 
 
 class TestSeed:

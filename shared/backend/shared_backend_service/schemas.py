@@ -46,6 +46,23 @@ class City(BaseModel):
     country_id: UUID | None = None
 
 
+class Currency(BaseModel):
+    """The money a country spends. One country, one currency -- see
+    ../../docs/object-model.md for why that simplification is deliberate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID | None = None
+    name: str | None = None
+    # ISO 4217, upper case: AUD, JPY, EUR. Not unique -- France's euro and
+    # Italy's euro are two rows and both are EUR.
+    code: str | None = Field(default=None, min_length=3, max_length=3)
+    symbol: str | None = None
+    # Units of this currency per 1 AUD. AUD itself is 1.0.
+    conversion_rate: float | None = Field(default=None, gt=0)
+    country_id: UUID | None = None
+
+
 class CountryQueryRequest(BaseModel):
     """A match template plus paging.
 
@@ -78,6 +95,21 @@ class CityQueryRequest(BaseModel):
 
 class CityQueryResponse(BaseModel):
     cities: list[City]
+    total: int
+
+
+class CurrencyQueryRequest(BaseModel):
+    """As `CountryQueryRequest`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    currency: Currency = Field(default_factory=Currency)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class CurrencyQueryResponse(BaseModel):
+    currencies: list[Currency]
     total: int
 
 

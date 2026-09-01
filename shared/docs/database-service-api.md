@@ -12,6 +12,10 @@
   - [GET /internal/location/city/{id}](#get-internallocationcityid)
   - [QUERY /internal/location/city](#query-internallocationcity)
   - [POST /internal/location/city](#post-internallocationcity)
+- [Currency Endpoints](#currency-endpoints)
+  - [GET /internal/currency/{id}](#get-internalcurrencyid)
+  - [QUERY /internal/currency](#query-internalcurrency)
+  - [POST /internal/currency](#post-internalcurrency)
 
 # Shared Reference Database Service API
 
@@ -43,7 +47,7 @@ docker run --rm -p 9101:9101 shared-database
 
 The SQLite database lives at `$DATABASE_URL` (default `/data/location.db` in the
 image, on the `shared-db` volume). Tables are created on startup, and an *empty*
-database is then filled with the starter places in
+database is then filled with the starter places, and their currencies, in
 `shared_database_service/seed_data.py`.
 
 Those rows are not demo data. Other services' seeded rows point at the ids these
@@ -58,10 +62,9 @@ nothing can name. A database that already has rows is left alone. Set
 | `DATABASE_URL` | `sqlite:///shared/database/location.db` | SQLite path (`/data/location.db` in the image)  |
 | `SEED_DATA`    | `1`                                  | Seed an empty database on startup; `0` to skip      |
 
-### The country and city messages
+### The country, city and currency messages
 
-There is one country shape and one city shape, and every field on each is
-nullable — the protobuf convention. The same message is the match template
+There is one shape per resource, and every field on each is nullable — the protobuf convention. The same message is the match template
 inside a `QUERY` and the response body of every endpoint; what differs is which
 fields are filled in.
 
@@ -435,3 +438,203 @@ rule as the country endpoint.
 | 400    | Invalid input / validation error |
 | 404    | Country not found                |
 | 500    | Internal server error            |
+
+## Currency Endpoints
+
+A currency belongs to exactly one country, and a country has at most one
+currency. Each carries a `conversion_rate`: how many units of it 1 AUD buys,
+with the AUD row itself at `1.0`.
+
+The seeded rates are static and indicative. They are here so a page can say
+"about ¥9,800", not so anyone can be charged.
+
+A currency belongs to exactly one country, and a country has at most one
+currency. That is a deliberate simplification — France and Italy both spend
+euros and get a row each. See
+[object-model.md](./object-model.md#currency) for what it buys and when to undo
+it.
+
+Currencies sit under `/internal/currency`, not under `/internal/location`: a
+currency is not a place, it is the other thing a country tells you.
+
+## GET /internal/currency/{id}
+
+Retrieve a single currency.
+
+### Request
+
+**Method:** `GET`
+**Endpoint:** `/internal/currency/{id}`
+
+### Path Parameters
+
+| Name | Type | Required | Description                |
+|------|------|----------|----------------------------|
+| id   | uuid | Yes      | Identifier of the currency |
+
+### Example Request
+
+```bash
+curl -X GET "http://localhost:9101/internal/currency/41348563-8656-579b-917b-088fba86759a"
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "id": "41348563-8656-579b-917b-088fba86759a",
+  "name": "australian dollar",
+  "code": "AUD",
+  "symbol": "$",
+  "conversion_rate": 1.0,
+  "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+}
+```
+
+### Error Responses
+
+| Status | Description           |
+|--------|-----------------------|
+| 404    | Currency not found    |
+| 500    | Internal server error |
+
+
+## QUERY /internal/currency
+
+Search currencies. Same method and same shape as the country and city queries.
+
+### Request
+
+**Method:** `QUERY`
+**Endpoint:** `/internal/currency`
+**Content-Type:** `application/json`
+
+### Request Body
+
+| Field    | Type    | Description                                       |
+|----------|---------|---------------------------------------------------|
+| currency | object  | Match template; see the matching rules below      |
+| limit    | integer | Max number of results, 1-100 (default 20)         |
+| offset   | integer | Number of results to skip (default 0)             |
+
+How each field inside `currency` matches:
+
+| Field        | Matching                                                                |
+|--------------|-------------------------------------------------------------------------|
+| `name`       | Case-insensitive **substring**: `"dollar"` matches `"australian dollar"`  |
+| `id`         | Exact                                                                    |
+| `country_id` | Exact — this is the usual filter: "what does this country spend"          |
+| `code`       | Exact, case-insensitive: `"eur"` matches `"EUR"`                          |
+| `symbol`     | Exact — a symbol is one or two characters, so a substring match is noise  |
+| `conversion_rate`   | **Not filterable** — see below                                            |
+
+`code` is not unique, so filtering on it answers "who spends this" and can return
+several countries: `{"currency": {"code": "EUR"}}` matches both France and Italy.
+
+`conversion_rate` cannot be filtered on. Exact equality against a float never
+matches what anyone meant, and nobody searches for "the currency at exactly
+98.0". Add `conversion_rate_min`/`conversion_rate_max` alongside the template if
+a range ever has a caller.
+
+### Example Request
+
+```bash
+curl -X QUERY "http://localhost:9101/internal/currency" \
+  -H "Content-Type: application/json" \
+  -d '{"currency": {"country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"}}'
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "currencies": [
+    {
+      "id": "41348563-8656-579b-917b-088fba86759a",
+      "name": "australian dollar",
+      "code": "AUD",
+      "symbol": "$",
+      "conversion_rate": 1.0,
+      "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Error Responses
+
+| Status | Description           |
+|--------|-----------------------|
+| 400    | Unknown field         |
+| 500    | Internal server error |
+
+
+## POST /internal/currency
+
+Give a country its currency, or look up the one it already has.
+
+### Request
+
+**Method:** `POST`
+**Endpoint:** `/internal/currency`
+**Content-Type:** `application/json`
+
+### Request Body
+
+| Field      | Type   | Required | Description                                          |
+|------------|--------|----------|------------------------------------------------------|
+| name       | string | Yes      | Currency name; trimmed and lower-cased before use     |
+| code       | string | Yes      | ISO 4217, exactly three characters; upper-cased before use |
+| symbol     | string | Yes      | What a page renders next to a number: `$`, `¥`, `€` |
+| conversion_rate   | float  | Yes      | How many units of this currency 1 AUD buys; must be > 0 |
+| country_id | uuid   | Yes      | The country that spends it; must already exist        |
+
+`country_id` is required because a currency's id is derived from its country's
+name, and because the country is what a caller actually has in hand. An unknown
+`country_id` is a `404`.
+
+### Example Request
+
+```bash
+curl -X POST "http://localhost:9101/internal/currency" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "australian dollar",
+    "code": "AUD",
+    "symbol": "$",
+    "conversion_rate": 1.0,
+    "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+  }'
+```
+
+### Example Response `201 Created`
+
+```json
+{
+  "id": "41348563-8656-579b-917b-088fba86759a",
+  "name": "australian dollar",
+  "code": "AUD",
+  "symbol": "$",
+  "conversion_rate": 1.0,
+  "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0"
+}
+```
+
+`201` when this call inserted the row, `200` when it was already there — same
+rule as the place endpoints. An existing row comes back untouched — code, symbol
+and rate included: this is get-or-create, not an update, so a stale rate cannot
+be refreshed through it. That endpoint does not exist yet.
+
+Giving a country a **second** currency is a `409`. The one-to-one is a `UNIQUE`
+constraint underneath, so this check is what turns it into an answer rather than
+a 500 out of SQLite.
+
+### Error Responses
+
+| Status | Description                          |
+|--------|--------------------------------------|
+| 400    | Invalid input / validation error     |
+| 404    | Country not found                    |
+| 409    | Country already has a currency       |
+| 500    | Internal server error                |

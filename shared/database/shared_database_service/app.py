@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from shared_database_service import errors
 from shared_database_service.config import Settings
 from shared_database_service.database import create_engine_and_session
-from shared_database_service.routers import health, location
+from shared_database_service.routers import currency, health, location
 from shared_database_service.seed_data import seed
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Shared Reference Database Service", lifespan=lifespan)
     errors.register(app)
-    for router in (health, location):
+    for router in (health, location, currency):
         app.include_router(router.router)
     return app
 

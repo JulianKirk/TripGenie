@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound=BaseModel)
 
 PATH = "/internal/location"
+# The one resource that is not a place, so not under the location prefix.
+CURRENCY_PATH = "/internal/currency"
 UNAVAILABLE = "database service unavailable"
 BAD_RESPONSE = "bad response from database service"
 
@@ -50,6 +52,12 @@ class DatabaseClient:
 
     async def query(self, resource: str, body: dict[str, Any]) -> dict[str, Any]:
         return await self.request("QUERY", f"{PATH}/{resource}", json=body)
+
+    async def get_currency(self, currency_id: UUID) -> dict[str, Any]:
+        return await self.request("GET", f"{CURRENCY_PATH}/{currency_id}")
+
+    async def query_currency(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self.request("QUERY", CURRENCY_PATH, json=body)
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await request(

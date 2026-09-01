@@ -52,6 +52,35 @@ class CityCreateRequest(City):
     country_id: UUID
 
 
+class Currency(BaseModel):
+    """The money a country spends. One country, one currency -- see
+    ../../docs/object-model.md for why that simplification is deliberate."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID | None = None
+    name: str | None = None
+    # ISO 4217, stored and returned upper case: AUD, JPY, EUR.
+    code: str | None = Field(default=None, min_length=3, max_length=3)
+    symbol: str | None = None
+    # Units of this currency per 1 AUD -- the base is not in the name because
+    # one base currency is an assumption of the whole table. Strictly positive:
+    # a zero or negative rate is not a cheap currency, it is a broken row.
+    conversion_rate: float | None = Field(default=None, gt=0)
+    country_id: UUID | None = None
+
+
+class CurrencyCreateRequest(Currency):
+    """A currency cannot exist without the country that spends it, and a name,
+    a code, a symbol and a rate are each a quarter of describing an amount."""
+
+    name: str
+    code: str = Field(min_length=3, max_length=3)
+    symbol: str
+    conversion_rate: float = Field(gt=0)
+    country_id: UUID
+
+
 class CountryQueryRequest(BaseModel):
     """A match template plus paging.
 
@@ -84,6 +113,31 @@ class CityQueryRequest(BaseModel):
 
 class CityQueryResponse(BaseModel):
     cities: list[City]
+    total: int
+
+
+class CurrencyQueryRequest(BaseModel):
+    """As `CountryQueryRequest`. `code` and `symbol` match exactly -- three
+    characters and one, so a substring match on either is noise.
+
+    `code` is the filter that answers "who spends euros": it is not unique, so
+    it matches every country that uses it.
+
+    `conversion_rate` is *not* filterable. Exact equality on a float is a filter that
+    never matches anything anyone meant, and nobody searches for "the currency
+    at exactly 98.0". Add `conversion_rate_min`/`_max` alongside if a range ever has a
+    caller -- one field here and one line in `CurrencyRepository.search`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    currency: Currency = Field(default_factory=Currency)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class CurrencyQueryResponse(BaseModel):
+    currencies: list[Currency]
     total: int
 
 

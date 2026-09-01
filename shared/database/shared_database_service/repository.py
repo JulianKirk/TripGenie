@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import func, select
 
 from shared_database_service import ids
-from shared_database_service.models import City, Country
+from shared_database_service.models import City, Country, Currency
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -19,7 +19,11 @@ if TYPE_CHECKING:
     from sqlalchemy import Select
     from sqlalchemy.orm import Session
 
-    from shared_database_service.schemas import CityQueryRequest, CountryQueryRequest
+    from shared_database_service.schemas import (
+        CityQueryRequest,
+        CountryQueryRequest,
+        CurrencyQueryRequest,
+    )
 
 
 def _paginate(
@@ -106,4 +110,61 @@ class CityRepository:
         if match.name is not None:
             stmt = stmt.where(City.name.ilike(f"%{ids.normalise(match.name)}%"))
         stmt = stmt.order_by(City.name, City.id)
+        return _paginate(self.session, stmt, query.limit, query.offset)
+
+
+class CurrencyRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get(self, id: UUID) -> Currency | None:
+        return self.session.get(Currency, id)
+
+    def for_country(self, country_id: UUID) -> Currency | None:
+        """The country's currency, if it has one. One row at most -- the
+        one-to-one is a UNIQUE constraint on `country_id`, not a convention."""
+        return self.session.scalar(
+            select(Currency).where(Currency.country_id == country_id)
+        )
+
+    def add(
+        self,
+        name: str,
+        code: str,
+        symbol: str,
+        conversion_rate: float,
+        country: Country,
+    ) -> tuple[Currency, bool]:
+        """Same idempotence as `CountryRepository.add`. Giving a country a
+        *second* currency is refused in the router, before this is called."""
+        created = self.get(ids.currency_id(country.name, name)) is None
+        currency = Currency.get_or_create(
+            self.session, name, code, symbol, conversion_rate, country
+        )
+        _commit(self.session)
+        return currency, created
+
+    def search(self, query: CurrencyQueryRequest) -> tuple[list[Currency], int]:
+        """Backs QUERY /internal/currency. `name` is a substring, everything
+        else exact -- a code is three characters and a symbol one or two, so a
+        substring match on either would match half the table.
+
+        `code` is not unique: it matches every country that spends that
+        currency, which is what "who uses EUR" is asking.
+
+        `conversion_rate` is deliberately not a filter -- see the note on
+        `CurrencyQueryRequest`."""
+        match = query.currency
+        stmt = select(Currency)
+        if match.id is not None:
+            stmt = stmt.where(Currency.id == match.id)
+        if match.country_id is not None:
+            stmt = stmt.where(Currency.country_id == match.country_id)
+        if match.code is not None:
+            stmt = stmt.where(Currency.code == ids.normalise_code(match.code))
+        if match.symbol is not None:
+            stmt = stmt.where(Currency.symbol == match.symbol)
+        if match.name is not None:
+            stmt = stmt.where(Currency.name.ilike(f"%{ids.normalise(match.name)}%"))
+        stmt = stmt.order_by(Currency.name, Currency.id)
         return _paginate(self.session, stmt, query.limit, query.offset)

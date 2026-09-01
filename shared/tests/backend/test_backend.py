@@ -30,7 +30,11 @@ from shared_backend_service.config import (
     DEFAULT_DB_TIMEOUT,
     Settings,
 )
-from shared_backend_service.schemas import Country, CountryQueryResponse
+from shared_backend_service.schemas import (
+    Country,
+    CountryQueryResponse,
+    CurrencyQueryResponse,
+)
 
 DATABASE_URL = "http://database.test"
 NO_ROUTE = "no route to the database service"
@@ -192,6 +196,27 @@ class TestRoutes:
                 "QUERY", "/location/country", json={"country": {"name": "aus"}}
             )
         assert sent == {"country": {"name": "aus"}, "limit": 20, "offset": 0}
+
+    def test_a_currency_query_forwards_only_what_was_set(self, mock_client):
+        """Currency lives under its own prefix, not the location one -- a
+        currency is not a place."""
+        seen = {}
+
+        def handler(request):
+            seen["path"] = request.url.path
+            seen["body"] = json.loads(request.read())
+            return httpx.Response(200, json={"currencies": [], "total": 0})
+
+        client = mock_client(handler)
+        with client:
+            client.request("QUERY", "/currency", json={"currency": {"symbol": "$"}})
+        assert seen["path"] == "/internal/currency"
+        assert seen["body"] == {"currency": {"symbol": "$"}, "limit": 20, "offset": 0}
+
+    def test_a_currency_response_that_does_not_fit_the_contract_is_502(self):
+        with pytest.raises(HTTPException) as caught:
+            parse(CurrencyQueryResponse, {"currencies": [{"iso": "AUD"}], "total": 1})
+        assert caught.value.status_code == 502
 
     def test_an_unknown_query_field_is_400_without_a_round_trip(self, mock_client):
         def handler(request):  # pragma: no cover - must never be reached

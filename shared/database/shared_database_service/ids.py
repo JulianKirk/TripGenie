@@ -29,6 +29,12 @@ def normalise(name: str) -> str:
     return name.strip().lower()
 
 
+def normalise_code(code: str) -> str:
+    """The form a currency code is stored in. ISO 4217 codes are conventionally
+    upper case, and a caller typing `aud` means `AUD`."""
+    return code.strip().upper()
+
+
 def country_id(name: str) -> UUID:
     return uuid5(NAMESPACE, f"country:{normalise(name)}")
 
@@ -37,3 +43,10 @@ def city_id(country: str, name: str) -> UUID:
     """Scoped to the country -- Sydney, Australia and Sydney, Canada are two
     places, so they must be two ids."""
     return uuid5(NAMESPACE, f"city:{normalise(country)}/{normalise(name)}")
+
+
+def currency_id(country: str, name: str) -> UUID:
+    """Scoped to the country for the same reason a city is: a currency belongs
+    to exactly one country here, and France's euro and Italy's euro are two
+    rows under that rule."""
+    return uuid5(NAMESPACE, f"currency:{normalise(country)}/{normalise(name)}")

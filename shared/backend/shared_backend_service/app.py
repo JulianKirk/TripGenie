@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from shared_backend_service import errors
 from shared_backend_service.client import DatabaseClient
 from shared_backend_service.config import Settings
-from shared_backend_service.routers import health, location
+from shared_backend_service.routers import currency, health, location
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None, *, transport: Any = None) -> Fa
 
     app = FastAPI(title="Shared Reference Backend Service", lifespan=lifespan)
     errors.register(app)
-    for router in (health, location):
+    for router in (health, location, currency):
         app.include_router(router.router)
     return app
 

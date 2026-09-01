@@ -10,8 +10,12 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from shared_database_service.models import Base, City, Country
-from shared_database_service.repository import CityRepository, CountryRepository
+from shared_database_service.models import Base, City, Country, Currency
+from shared_database_service.repository import (
+    CityRepository,
+    CountryRepository,
+    CurrencyRepository,
+)
 
 
 @pytest.fixture
@@ -38,6 +42,20 @@ def australia(session):
     country = Country.get_or_create(session, "australia")
     session.commit()
     return country
+
+
+@pytest.fixture
+def currencies(session):
+    return CurrencyRepository(session)
+
+
+@pytest.fixture
+def aud(session, australia):
+    currency = Currency.get_or_create(
+        session, "australian dollar", "AUD", "$", 1.0, australia
+    )
+    session.commit()
+    return currency
 
 
 @pytest.fixture
