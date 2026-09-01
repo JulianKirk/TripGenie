@@ -143,6 +143,42 @@ def review_advice(recommendation, evidence):
     )
 
 
+def write_summary(results, recommendation, review, failures):
+    """Put the run on the GitHub Actions summary page. Nobody reads a job log;
+    they do read the summary tab, which is where the agent findings belong."""
+    summary = os.getenv("GITHUB_STEP_SUMMARY")
+    if not summary:
+        return
+    verdict = f"{len(failures)} check(s) failed" if failures else "all checks passed"
+    lines = [
+        f"## Agentic loop -- {verdict}",
+        "",
+        f"_{PLAN['goal']}_",
+        "",
+        "| Check | Result |",
+        "| --- | --- |",
+    ]
+    lines += [
+        f"| {label} | {'❌' if outcome.startswith('FAIL') else '✅'} {outcome} |"
+        for label, outcome in results
+    ]
+    lines += [
+        "",
+        f"### Implementation agent ({IMPLEMENTATION_MODEL})",
+        "",
+        recommendation,
+        "",
+        f"### Review agent ({REVIEW_MODEL})",
+        "",
+        review,
+        "",
+        "Agent findings are advisory -- only the checks above decide the exit code.",
+        "",
+    ]
+    with Path(summary).open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+
+
 def human_review():
     print("\nHUMAN REVIEW\n1 - Accept\n2 - Partially Accept\n3 - Reject")
     return {"1": "Accept", "2": "Partially Accept"}.get(
@@ -177,7 +213,8 @@ def main():
     print(recommendation)
 
     print(f"\nREVIEW AGENT ({REVIEW_MODEL})")
-    print(review_advice(recommendation, evidence))
+    review = review_advice(recommendation, evidence)
+    print(review)
 
     decision = human_review() if interactive else "Deferred (non-interactive run)"
     print(f"\nHUMAN DECISION\n  {decision}")
@@ -189,6 +226,8 @@ def main():
             print(f"    - {failure}")
     else:
         print("  All deterministic checks passed; agent advice is advisory only.")
+
+    write_summary(results, recommendation, review, failures)
 
     print("\nLOOP COMPLETE")
     return 1 if failures else 0

@@ -47,7 +47,29 @@ the more capable of the two. Override either with `IMPLEMENTATION_MODEL` /
 the run still passes or fails on the checks, so CI works either way (add
 `ANTHROPIC_API_KEY` to the repository secrets to turn them on).
 
-In CI this runs as `.github/workflows/agentic-ci.yml` -- one matrix job per
-service, so a red square names the service that broke. A new service is a new
-`checks/` file plus a matrix entry naming its compose service, port, and health
-path.
+## In CI
+
+`.github/workflows/agentic-ci.yml` is a post step: it triggers on
+`workflow_run` after a service's own build-and-validate workflow finishes, and
+only when that finished successfully. One service's CI passing runs that one
+service's loop; "Run workflow" runs all of them.
+
+`services.json` is the map from service name to compose service, port, and
+health path -- the workflow builds its matrix from it, so a new service is a new
+entry there plus a `checks/` file.
+
+## Where the findings go
+
+Both agents' output is written to the job's **Summary** page (via
+`GITHUB_STEP_SUMMARY`) as a check table plus the two agent sections -- not just
+buried in the log. Locally it prints to stdout; `--ci` skips the human-review
+prompt but not the printing.
+
+On a pull request the workflow posts that same report as a comment -- one per
+service, edited in place on later pushes rather than appended, so a busy pull
+request does not fill with tables. It posts whether the loop passed or failed,
+and says nothing at all when the commit is not on an open pull request.
+
+Findings are advisory. Only the deterministic checks set the exit code, so a
+broken or unauthenticated Claude call cannot fail the build -- and equally,
+cannot block it. Read the summary, don't just trust the green tick.

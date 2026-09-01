@@ -1,66 +1,75 @@
 name: Agentic Loop
 
-# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against every service's
-# public backend. One job per service, so a red square names the service that
-# broke. The loop itself lives in ai-services/agentic-loop.
+# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against a service's public
+# backend. This is a post step: it runs only after that service's own build and
+# validate workflow has finished successfully, so a service that does not
+# compile never reaches the loop.
+#
+# NOTE: `workflow_run` only fires for workflow files that are on the default
+# branch. Until this file is merged to main it will not trigger on its own --
+# use "Run workflow" to exercise it from a branch.
 on:
-  push:
-    paths:
-      - 'shared/**'
-      - 'student-*/**'
-      - 'ai-services/agentic-loop/**'
-      - 'docker-compose.yml'
-      - '.github/workflows/agentic-ci.yml'
-  pull_request:
-    paths:
-      - 'shared/**'
-      - 'student-*/**'
-      - 'ai-services/agentic-loop/**'
-      - 'docker-compose.yml'
-      - '.github/workflows/agentic-ci.yml'
+  workflow_run:
+    workflows:
+      - Shared Reference Service CI
+      - Student 1 CI
+      - Student 2 CI
+      - Student 3 CI
+      - Student 4 CI
+      - Student 5 CI
+    types: [completed]
   workflow_dispatch:
 
 jobs:
+  # Which services to run. A workflow_run maps to the one service whose CI just
+  # passed; a manual run does all of them.
+  plan:
+    name: Pick services
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+      empty: ${{ steps.pick.outputs.empty }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        env:
+          UPSTREAM: ${{ github.event.workflow_run.name }}
+        run: |
+          case "$UPSTREAM" in
+            "Shared Reference Service CI") only=shared ;;
+            "Student 1 CI") only=student-1 ;;
+            "Student 2 CI") only=student-2 ;;
+            "Student 3 CI") only=student-3 ;;
+            "Student 4 CI") only=student-4 ;;
+            "Student 5 CI") only=student-5 ;;
+            *) only= ;;
+          esac
+          services=ai-services/agentic-loop/services.json
+          if [ -z "$only" ]; then
+            selected=$(jq -c . "$services")
+          else
+            selected=$(jq -c --arg s "$only" '[.[] | select(.service == $s)]' "$services")
+          fi
+          echo "matrix={\"include\":$selected}" >> "$GITHUB_OUTPUT"
+          echo "empty=$([ "$selected" = "[]" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   loop:
     name: ${{ matrix.service }}
+    needs: plan
+    if: needs.plan.outputs.empty == 'false'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # workflow_run runs in the base repo's context, so this token can comment
+      # on a pull request even when the push came from a fork.
+      pull-requests: write
     strategy:
-      # One service's failure should not hide the others'.
+      # One service's failure should not hide the others' on a manual run.
       fail-fast: false
-      matrix:
-        include:
-          - service: shared
-            compose: shared-backend
-            port: 9100
-            health: /health
-            ready: '"status":"ok"'
-          - service: student-1
-            compose: student-1-backend
-            port: 8001
-            health: /health
-            ready: '"status":"ok"'
-          - service: student-2
-            compose: student-2-backend
-            port: 9000
-            health: /health
-            ready: '"status":"ok"'
-          - service: student-3
-            compose: student-3-backend
-            port: 8003
-            health: /health
-            ready: '"status":"ok"'
-          # Students 4 and 5 have no backend yet -- their image serves a static
-          # directory, so "it answers at all" is the whole contract for now.
-          - service: student-4
-            compose: student-4-service
-            port: 8084
-            health: /
-            ready: ''
-          - service: student-5
-            compose: student-5-service
-            port: 8085
-            health: /
-            ready: ''
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       SERVICE_URL: http://127.0.0.1:${{ matrix.port }}
       CHECKS_FILE: checks/${{ matrix.service }}.json
@@ -69,6 +78,10 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # workflow_run checks out the default branch by default -- take the
+          # commit whose CI just passed instead.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -103,6 +116,38 @@ jobs:
       - name: Run the agentic loop
         working-directory: ai-services/agentic-loop
         run: python agentic_loop.py --ci
+      # The loop already wrote its report to the step summary, and that is a
+      # real file on the runner -- reuse it verbatim as the comment body rather
+      # than rendering the same markdown twice.
+      - name: Comment the report on the pull request
+        # always(), because a failing loop is the run worth commenting on.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          MARKER: '<!-- agentic-loop: ${{ matrix.service }} -->'
+        run: |
+          if [ ! -s "$GITHUB_STEP_SUMMARY" ]; then
+            echo "no report to post -- the loop did not get far enough"
+            exit 0
+          fi
+          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "commit $SHA is not on an open pull request; nothing to comment on"
+            exit 0
+          fi
+          body=$(printf '%s\n\n%s' "$MARKER" "$(cat "$GITHUB_STEP_SUMMARY")")
+          # One comment per service, edited in place, so a busy pull request
+          # does not collect a new wall of tables on every push.
+          existing=$(gh api "repos/$REPO/issues/$pr/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body"
+          else
+            gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$body"
+          fi
+
       - name: Service logs
         if: failure()
         run: docker compose logs --tail 100

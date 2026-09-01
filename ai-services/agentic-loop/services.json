@@ -1,0 +1,8 @@
+[
+  {"service": "shared",    "compose": "shared-backend",    "port": 9100, "health": "/health", "ready": "\"status\":\"ok\""},
+  {"service": "student-1", "compose": "student-1-backend", "port": 8001, "health": "/health", "ready": "\"status\":\"ok\""},
+  {"service": "student-2", "compose": "student-2-backend", "port": 9000, "health": "/health", "ready": "\"status\":\"ok\""},
+  {"service": "student-3", "compose": "student-3-backend", "port": 8003, "health": "/health", "ready": "\"status\":\"ok\""},
+  {"service": "student-4", "compose": "student-4-service", "port": 8084, "health": "/",       "ready": ""},
+  {"service": "student-5", "compose": "student-5-service", "port": 8085, "health": "/",       "ready": ""}
+]
