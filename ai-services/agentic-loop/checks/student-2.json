@@ -1,0 +1,10 @@
+{
+  "goal": "Validate the student 2 accommodation backend with a local multi-agent workflow",
+  "checks": [
+    {"label": "GET /health", "path": "${SERVICE_URL}/health", "contains": ["\"status\":\"ok\"", "\"location\":\"ok\""]},
+    {"label": "GET /accommodation", "path": "${SERVICE_URL}/accommodation", "contains": ["accommodations"], "nfr_ms": 500},
+    {"label": "QUERY /accommodation (by type)", "method": "QUERY", "path": "${SERVICE_URL}/accommodation", "json": {"accommodation": {"type": "guesthouse"}}, "contains": ["guesthouse"]},
+    {"label": "GET /accommodation/{id} (missing)", "path": "${SERVICE_URL}/accommodation/00000000-0000-0000-0000-000000000000", "status": 404},
+    {"label": "GET /accommodation/{id} (malformed, no route match)", "path": "${SERVICE_URL}/accommodation/nope", "status": 404}
+  ]
+}

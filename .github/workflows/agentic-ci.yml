@@ -1,0 +1,108 @@
+name: Agentic Loop
+
+# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against every service's
+# public backend. One job per service, so a red square names the service that
+# broke. The loop itself lives in ai-services/agentic-loop.
+on:
+  push:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  loop:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One service's failure should not hide the others'.
+      fail-fast: false
+      matrix:
+        include:
+          - service: shared
+            compose: shared-backend
+            port: 9100
+            health: /health
+            ready: '"status":"ok"'
+          - service: student-1
+            compose: student-1-backend
+            port: 8001
+            health: /health
+            ready: '"status":"ok"'
+          - service: student-2
+            compose: student-2-backend
+            port: 9000
+            health: /health
+            ready: '"status":"ok"'
+          - service: student-3
+            compose: student-3-backend
+            port: 8003
+            health: /health
+            ready: '"status":"ok"'
+          # Students 4 and 5 have no backend yet -- their image serves a static
+          # directory, so "it answers at all" is the whole contract for now.
+          - service: student-4
+            compose: student-4-service
+            port: 8084
+            health: /
+            ready: ''
+          - service: student-5
+            compose: student-5-service
+            port: 8085
+            health: /
+            ready: ''
+    env:
+      SERVICE_URL: http://127.0.0.1:${{ matrix.port }}
+      CHECKS_FILE: checks/${{ matrix.service }}.json
+      # Optional. Without it the two agent sections print "unavailable" and the
+      # deterministic checks still gate the build.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ai-services/agentic-loop/requirements.txt
+      - name: Install dependencies
+        run: pip install -r ai-services/agentic-loop/requirements.txt pytest
+      - name: Test the loop itself
+        working-directory: ai-services/agentic-loop
+        run: pytest -q
+      - name: Start the service
+        # Compose pulls in whatever the service depends on -- its database, and
+        # for student 2 the two backends it calls. The overlay publishes student
+        # 3's backend, which is internal-only in the main file.
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f ai-services/agentic-loop/docker-compose.agentic.yml \
+            up -d --build ${{ matrix.compose }}
+      - name: Wait for the service to answer
+        run: |
+          for _ in $(seq 1 20); do
+            if curl -fsS "$SERVICE_URL${{ matrix.health }}" | grep -q '${{ matrix.ready }}'; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "${{ matrix.service }} did not become ready after 20 attempts"
+          docker compose logs --tail 50
+          exit 1
+      - name: Run the agentic loop
+        working-directory: ai-services/agentic-loop
+        run: python agentic_loop.py --ci
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --tail 100

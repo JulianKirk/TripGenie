@@ -1,0 +1,16 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+These are the ONLY endpoints under test. Do not invent or recommend others.
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review the live check results using the validation evidence above.
+
+Base your answer only on the Validation Evidence - it already reflects real HTTP requests made to the running service. Do not claim to have made requests yourself, and do not rely on assumptions beyond that evidence. If the evidence indicates the service is not responding, say: Unable to verify live endpoint behavior.
+
+Output rules:
+- If the evidence does not support an improvement, write: No evidence-backed improvement identified.
+- Return exactly two bullet points, or the no-evidence sentence.

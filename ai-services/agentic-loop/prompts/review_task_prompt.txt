@@ -1,0 +1,26 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Implementation Recommendation:
+{{IMPLEMENTATION_RECOMMENDATION}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review only the implementation-agent recommendation and identify evidence-backed risks or corrections. Only raise risks tied to the recommendation; ignore evidence about unrelated endpoints. If no evidence-backed risk exists, say so.
+
+Format:
+Risk: <one short sentence>
+Correction: <one short sentence>
+Retest: <one short sentence>
+
+If no risk is supported by the evidence, use:
+Risk: No evidence-backed risk identified.
+Correction: No correction required.
+Retest: Repeat validation after future changes.
+
+Output rules:
+- Return exactly three lines.
+- Maximum 35 words total.
+- Do not explain reasoning.
