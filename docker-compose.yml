@@ -7,6 +7,35 @@ services:
     ports:
       - "8080:80"
 
+  # Shared Reference Service
+  # Country and city -- the reference data every micro-service needs. Same
+  # shape as a student's service: a public backend and an internal-only
+  # database service behind it. There is no frontend; the shared portal above
+  # is a different thing entirely.
+  #
+  # ponytail: no grouping container like student-2's. `docker compose up
+  # --build shared-backend` starts both, because the backend depends on the
+  # database. Add one if a third shared service ever appears.
+  shared-backend:
+    build:
+      context: ./shared
+      dockerfile: backend/Dockerfile
+    ports:
+      - "9100:9100"
+    depends_on:
+      - shared-database
+
+  # Internal only -- the shared backend is the sole caller and reaches it as
+  # http://shared-database:9101 on the compose network.
+  shared-database:
+    build:
+      context: ./shared
+      dockerfile: database/Dockerfile
+    expose:
+      - "9101"
+    volumes:
+      - shared-db:/data
+
   # Student 1: Trip & Itinerary Management
   # Same shape as student-2 below: a grouping container, a public backend, a
   # webpage, and an internal-only database service.
@@ -74,9 +103,14 @@ services:
       # itinerary is a call to student 1's public API from here, never from
       # the frontend.
       ITINERARY_URL: http://student-1-backend:8001
+      # Country and city live in the shared reference service. This service
+      # stores their ids and publishes their names, so every accommodation
+      # response passes through here.
+      LOCATION_URL: http://shared-backend:9100
     depends_on:
       - student-2-database
       - student-1-backend
+      - shared-backend
 
   # The accommodation webpage. Talks to the backend service and nothing else.
   student-2-frontend:
@@ -221,6 +255,7 @@ services:
       - "11434:11434"
 
 volumes:
+  shared-db:
   student-1-db:
   student-2-db:
   student-3-sqlite:

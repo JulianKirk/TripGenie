@@ -10,6 +10,8 @@ DEFAULT_DB_TIMEOUT = 5.0
 DEFAULT_ITINERARY_URL = "http://student-1-backend:8001"
 DEFAULT_ITINERARY_PREFIX = "/api"
 DEFAULT_ITINERARY_TIMEOUT = 5.0
+DEFAULT_LOCATION_URL = "http://shared-backend:9100"
+DEFAULT_LOCATION_TIMEOUT = 5.0
 
 
 @dataclass(slots=True)
@@ -25,6 +27,12 @@ class Settings:
     itinerary_url: str = DEFAULT_ITINERARY_URL
     itinerary_prefix: str = DEFAULT_ITINERARY_PREFIX
     itinerary_timeout: float = DEFAULT_ITINERARY_TIMEOUT
+    # The shared reference service. Country and city live there, so this is
+    # where a place name becomes an id and an id becomes a name again. Reached
+    # from here and never from the frontend, same rule as the itinerary
+    # service.
+    location_url: str = DEFAULT_LOCATION_URL
+    location_timeout: float = DEFAULT_LOCATION_TIMEOUT
     service_name: str = "student-2-backend"
 
     @classmethod
@@ -41,5 +49,9 @@ class Settings:
             ),
             itinerary_timeout=float(
                 os.environ.get("ITINERARY_TIMEOUT", DEFAULT_ITINERARY_TIMEOUT)
+            ),
+            location_url=os.environ.get("LOCATION_URL", DEFAULT_LOCATION_URL),
+            location_timeout=float(
+                os.environ.get("LOCATION_TIMEOUT", DEFAULT_LOCATION_TIMEOUT)
             ),
         )

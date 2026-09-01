@@ -19,18 +19,24 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from database_service.enums import AccommodationType, AvailabilityStatus, BedType
 
 
 class Location(BaseModel):
-    """Where an accommodation is."""
+    """Where an accommodation is.
+
+    Country and city are the shared reference service's ids, not names: this
+    service stores what it is given and never resolves one. The backend service
+    is what turns `"australia"` into an id on the way in and back into a name on
+    the way out, so the public contract still speaks names.
+    """
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
-    country: str | None = None
-    city: str | None = None
+    country_id: UUID | None = None
+    city_id: UUID | None = None
     street: str | None = None
     street_number: int | None = None
 
@@ -82,10 +88,21 @@ class Accommodation(BaseModel):
                 "location_details": (
                     None
                     if location is None
-                    else Location(country=location.country, city=location.city)
+                    else Location(
+                        country_id=location.country_id, city_id=location.city_id
+                    )
                 ),
             }
         )
+
+
+class LocationCreateRequest(Location):
+    """The same message with the two ids a new accommodation cannot go without.
+    Both columns are NOT NULL, so without this a create missing one would be a
+    500 from SQLite rather than the documented 400."""
+
+    country_id: UUID
+    city_id: UUID
 
 
 class AccommodationCreateRequest(Accommodation):
@@ -98,7 +115,7 @@ class AccommodationCreateRequest(Accommodation):
     description: str
     price_per_night: Decimal = Field(ge=0)
     availability_status: AvailabilityStatus
-    location_details: Location
+    location_details: LocationCreateRequest
 
 
 class AccommodationQueryRequest(BaseModel):
@@ -108,6 +125,11 @@ class AccommodationQueryRequest(BaseModel):
     fields add the comparisons nobody can write as equality (no one searches
     for a hotel costing exactly $189.50). A new range filter is one field here
     and one line in `AccommodationRepository.search`.
+
+    A city id needs no country alongside it here -- the shared service's city
+    ids are already scoped by country, so one names exactly one place. The
+    "city requires country" rule lives in the backend service, where names are
+    what arrive.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -121,15 +143,6 @@ class AccommodationQueryRequest(BaseModel):
     bed_count_min: int | None = Field(default=None, ge=0)
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
-
-    @model_validator(mode="after")
-    def _city_needs_country(self) -> AccommodationQueryRequest:
-        # Sydney exists in more than one country, so a bare city is ambiguous.
-        location = self.accommodation.location_details
-        if location is not None and location.city and not location.country:
-            message = "city requires country"
-            raise ValueError(message)
-        return self
 
 
 class AccommodationQueryResponse(BaseModel):

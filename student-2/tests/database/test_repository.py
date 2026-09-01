@@ -13,6 +13,11 @@ from uuid import uuid4
 from database_service.models import BedType
 from database_service.schemas import AccommodationQueryRequest
 from database_service.seed_data import SEED_ACCOMMODATIONS, seed
+from tests.database.conftest import KATOOMBA, SYDNEY
+
+# A place filter is a pair of shared-service ids now, not a pair of names.
+SYDNEY_FILTER = {key: str(value) for key, value in SYDNEY.items()}
+KATOOMBA_FILTER = {key: str(value) for key, value in KATOOMBA.items()}
 
 
 class TestAccommodationRepository:
@@ -41,11 +46,7 @@ class TestAccommodationRepository:
 
     def test_search_by_city(self, accommodations, camping, hotel):
         rows, _ = accommodations.search(
-            AccommodationQueryRequest(
-                accommodation={
-                    "location_details": {"country": "Australia", "city": "Sydney"}
-                }
-            )
+            AccommodationQueryRequest(accommodation={"location_details": SYDNEY_FILTER})
         )
         assert [a.name for a in rows] == ["Grand Hotel"]
 
@@ -53,9 +54,7 @@ class TestAccommodationRepository:
         """The case the two old single-purpose methods could not express."""
         rows, total = accommodations.search(
             AccommodationQueryRequest(
-                accommodation={
-                    "location_details": {"country": "Australia", "city": "Sydney"}
-                },
+                accommodation={"location_details": SYDNEY_FILTER},
                 room_count_min=10,
             )
         )
@@ -64,9 +63,7 @@ class TestAccommodationRepository:
 
         rows, total = accommodations.search(
             AccommodationQueryRequest(
-                accommodation={
-                    "location_details": {"country": "Australia", "city": "Katoomba"}
-                },
+                accommodation={"location_details": KATOOMBA_FILTER},
                 room_count_min=10,
             )
         )

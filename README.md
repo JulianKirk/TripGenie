@@ -34,6 +34,7 @@ TripGenie/
 │       ├── student-3-ci.yml
 │       ├── student-4-ci.yml
 │       ├── student-5-ci.yml
+│       ├── shared-ci.yml
 │       ├── integration-ci.yml
 │       └── cloud-deployment.yml
 ├── README.md
@@ -46,6 +47,11 @@ TripGenie/
 │       ├── release-1/
 │       └── release-2/
 ├── shared/
+│   ├── shared-service.md
+│   ├── backend/
+│   ├── database/
+│   ├── docs/
+│   ├── tests/
 │   ├── frontend/
 │   │   ├── index.html
 │   │   ├── css/

@@ -6,6 +6,8 @@ line-length = 88
 # `database_service`, and so on) apart from third-party ones.
 src = [
     ".",
+    "shared/backend",
+    "shared/database",
     "student-1/database",
     "student-2/backend",
     "student-2/database",

@@ -54,6 +54,13 @@ This service is the main entry point for queries coming in from the frontend.
 This is responsible for managing data models in the accommodation database via the database service.
 This service is integrated with Artificial Intelligence in order to provide accommodation suggestions from user queries.
 
+It is also where this micro-service reaches the two services outside it: student
+1's itinerary API, and the [shared reference service](../shared/shared-service.md)
+that owns `Country` and `City`. The accommodation database stores a country id
+and a city id; this service turns those into names on the way out and names into
+ids on the way in, so callers of the accommodation API never see an id and there
+is only one list of places in the system.
+
 It runs as the `student-2-backend` container on port `9000`, published to the
 host, and is the only service permitted to call the database service.
 

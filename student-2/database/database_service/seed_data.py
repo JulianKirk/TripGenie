@@ -12,6 +12,7 @@ Release 0; delete the module once there is a real import path.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 
@@ -20,6 +21,21 @@ from database_service.schemas import AccommodationCreateRequest
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+# The shared reference service derives a place's id from its name, so a service
+# with no HTTP client -- this one, at startup -- can still point a row at the
+# right country and city. The rule is documented in shared/docs/object-model.md;
+# these four lines are this service's copy of it.
+LOCATION_NAMESPACE = UUID("9a7c1f2e-3b4d-5e6f-8a9b-0c1d2e3f4a5b")
+
+
+def place(country: str, city: str) -> dict[str, UUID]:
+    """The `location_details` ids for a country/city pair."""
+    return {
+        "country_id": uuid5(LOCATION_NAMESPACE, f"country:{country}"),
+        "city_id": uuid5(LOCATION_NAMESPACE, f"city:{country}/{city}"),
+    }
+
 
 SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
     {
@@ -31,8 +47,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.6,
         "amenities": ["wifi", "pool", "gym", "breakfast"],
         "location_details": {
-            "country": "australia",
-            "city": "sydney",
+            **place("australia", "sydney"),
             "street": "george street",
             "street_number": 12,
         },
@@ -52,8 +67,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 3.9,
         "amenities": ["wifi", "laundry", "kitchen"],
         "location_details": {
-            "country": "australia",
-            "city": "sydney",
+            **place("australia", "sydney"),
             "street": "campbell parade",
             "street_number": 180,
         },
@@ -73,8 +87,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.2,
         "amenities": ["wifi", "kitchen", "air_conditioning"],
         "location_details": {
-            "country": "australia",
-            "city": "sydney",
+            **place("australia", "sydney"),
             "street": "victoria street",
             "street_number": 44,
         },
@@ -94,8 +107,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.4,
         "amenities": ["wifi", "gym", "parking", "breakfast"],
         "location_details": {
-            "country": "australia",
-            "city": "melbourne",
+            **place("australia", "melbourne"),
             "street": "southbank boulevard",
             "street_number": 8,
         },
@@ -115,8 +127,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.7,
         "amenities": ["wifi", "breakfast", "kitchen"],
         "location_details": {
-            "country": "australia",
-            "city": "melbourne",
+            **place("australia", "melbourne"),
             "street": "brunswick street",
             "street_number": 221,
         },
@@ -136,8 +147,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.1,
         "amenities": ["parking", "laundry"],
         "location_details": {
-            "country": "australia",
-            "city": "apollo bay",
+            **place("australia", "apollo bay"),
             "street": "great ocean road",
             "street_number": 4200,
         },
@@ -151,8 +161,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.8,
         "amenities": ["wifi", "pool", "spa", "breakfast", "parking"],
         "location_details": {
-            "country": "australia",
-            "city": "airlie beach",
+            **place("australia", "airlie beach"),
             "street": "shingley drive",
             "street_number": 3,
         },
@@ -172,8 +181,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.3,
         "amenities": ["wifi", "pool", "kitchen", "parking"],
         "location_details": {
-            "country": "australia",
-            "city": "brisbane",
+            **place("australia", "brisbane"),
             "street": "brunswick street",
             "street_number": 96,
         },
@@ -193,8 +201,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.5,
         "amenities": ["wifi", "breakfast", "parking"],
         "location_details": {
-            "country": "australia",
-            "city": "adelaide",
+            **place("australia", "adelaide"),
             "street": "greenhill road",
             "street_number": 512,
         },
@@ -214,8 +221,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.4,
         "amenities": ["wifi", "spa", "parking", "breakfast"],
         "location_details": {
-            "country": "new zealand",
-            "city": "queenstown",
+            **place("new zealand", "queenstown"),
             "street": "brecon street",
             "street_number": 21,
         },
@@ -235,8 +241,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 3.8,
         "amenities": ["wifi", "kitchen", "laundry"],
         "location_details": {
-            "country": "new zealand",
-            "city": "wellington",
+            **place("new zealand", "wellington"),
             "street": "cable street",
             "street_number": 63,
         },
@@ -256,8 +261,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.6,
         "amenities": ["wifi", "pool", "spa", "gym", "breakfast"],
         "location_details": {
-            "country": "new zealand",
-            "city": "rotorua",
+            **place("new zealand", "rotorua"),
             "street": "fenton street",
             "street_number": 1030,
         },
@@ -277,8 +281,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.0,
         "amenities": ["wifi", "laundry", "air_conditioning"],
         "location_details": {
-            "country": "japan",
-            "city": "tokyo",
+            **place("japan", "tokyo"),
             "street": "kabukicho",
             "street_number": 17,
         },
@@ -298,8 +301,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.5,
         "amenities": ["wifi", "kitchen", "air_conditioning", "laundry"],
         "location_details": {
-            "country": "japan",
-            "city": "tokyo",
+            **place("japan", "tokyo"),
             "street": "kaminarimon",
             "street_number": 2,
         },
@@ -319,8 +321,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.9,
         "amenities": ["wifi", "breakfast", "kitchen"],
         "location_details": {
-            "country": "japan",
-            "city": "kyoto",
+            **place("japan", "kyoto"),
             "street": "takakura dori",
             "street_number": 384,
         },
@@ -340,8 +341,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.2,
         "amenities": ["parking"],
         "location_details": {
-            "country": "japan",
-            "city": "fujikawaguchiko",
+            **place("japan", "fujikawaguchiko"),
             "street": "kawaguchiko",
             "street_number": 1122,
         },
@@ -355,8 +355,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 4.7,
         "amenities": ["wifi", "pool", "gym", "spa", "breakfast", "parking"],
         "location_details": {
-            "country": "singapore",
-            "city": "singapore",
+            **place("singapore", "singapore"),
             "street": "raffles avenue",
             "street_number": 10,
         },
@@ -376,8 +375,7 @@ SEED_ACCOMMODATIONS: tuple[dict[str, Any], ...] = (
         "rating": 3.6,
         "amenities": ["wifi", "kitchen", "air_conditioning"],
         "location_details": {
-            "country": "singapore",
-            "city": "singapore",
+            **place("singapore", "singapore"),
             "street": "serangoon road",
             "street_number": 217,
         },
@@ -401,6 +399,6 @@ def seed(session: Session) -> int:
         return 0
     for payload in SEED_ACCOMMODATIONS:
         message = AccommodationCreateRequest.model_validate(payload)
-        session.add(Accommodation.from_message(session, message))
+        session.add(Accommodation.from_message(message))
     session.commit()
     return len(SEED_ACCOMMODATIONS)
