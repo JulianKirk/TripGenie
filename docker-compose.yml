@@ -134,12 +134,103 @@ services:
       - student-2-db:/data
 
   # Student 3: Transport Management
-  student-3-service:
+  # Not a service -- the name you type to bring the whole transport slice up:
+  # `docker compose up --build student-3`. It exits immediately; the three
+  # services it depends on are the point.
+  student-3:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      student-3-frontend:
+        condition: service_healthy
+
+  # The transport webpage. Talks to the Student 3 backend and nothing else.
+  student-3-frontend:
     build:
       context: ./student-3
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
+    environment:
+      STUDENT3_FRONTEND_BACKEND_BASE_URL: "${STUDENT3_FRONTEND_BACKEND_BASE_URL:-http://student-3-backend:8003}"
+      STUDENT3_FRONTEND_BACKEND_API_PREFIX: "${STUDENT3_FRONTEND_BACKEND_API_PREFIX:-/api}"
+      STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS:-5}"
+      STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
     ports:
-      - "8093:8093"
+      - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
+    depends_on:
+      student-3-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8093/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # The public /api surface. The only caller of the database service behind it,
+  # and the only thing that reads Student 1's trips API for the trip picker.
+  student-3-backend:
+    build:
+      context: ./student-3
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT3_BACKEND_API_PREFIX: "${STUDENT3_BACKEND_API_PREFIX:-/api}"
+      STUDENT3_BACKEND_DB_API_BASE_URL: "${STUDENT3_BACKEND_DB_API_BASE_URL:-http://student-3-database:8004}"
+      STUDENT3_BACKEND_DB_API_PREFIX: "${STUDENT3_BACKEND_DB_API_PREFIX:-/internal}"
+      STUDENT3_BACKEND_DB_API_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_DB_API_TIMEOUT_SECONDS:-5}"
+      STUDENT3_BACKEND_TRIPS_API_BASE_URL: "${STUDENT3_BACKEND_TRIPS_API_BASE_URL:-http://student-1-backend:8001}"
+      STUDENT3_BACKEND_TRIPS_API_PREFIX: "${STUDENT3_BACKEND_TRIPS_API_PREFIX:-/api}"
+      STUDENT3_BACKEND_TRIPS_API_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_TRIPS_API_TIMEOUT_SECONDS:-5}"
+      STUDENT3_BACKEND_VERIFY_TRIP_EXISTS: "${STUDENT3_BACKEND_VERIFY_TRIP_EXISTS:-false}"
+      STUDENT3_BACKEND_SERVICE_NAME: "${STUDENT3_BACKEND_SERVICE_NAME:-student-3-backend}"
+    expose:
+      - "8003"
+    depends_on:
+      student-3-database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Internal only -- no published port. Owns the Student 3 SQLite file; the
+  # backend reaches it as http://student-3-database:8004 on the compose network.
+  student-3-database:
+    build:
+      context: ./student-3
+      dockerfile: database/Dockerfile
+    environment:
+      STUDENT3_SQLITE_PATH: "${STUDENT3_SQLITE_PATH:-/data/student-3/tripgenie.db}"
+      STUDENT3_SEED_DATA: "${STUDENT3_SEED_DATA:-true}"
+    expose:
+      - "8004"
+    volumes:
+      - student-3-sqlite:/data/student-3
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/internal/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Student 4: Activities & Attractions Management
   student-4-service:
@@ -167,3 +258,4 @@ volumes:
   shared-db:
   student-1-db:
   student-2-db:
+  student-3-sqlite:

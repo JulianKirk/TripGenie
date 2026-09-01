@@ -100,6 +100,22 @@ language so the integrated application reads as one product. The specification
 requires a shared team theme, and `shared/frontend/css/` is still empty — when
 the team lands one, this file should shrink to Student 3 specifics.
 
+## Running it
+
+```bash
+docker compose up --build student-3      # frontend, backend and database
+```
+
+Then open the Transport Management link on the shared home page at
+<http://localhost:8080>, or go straight to <http://localhost:8093>.
+
+`student-3` is not a real service: it is a name for the group, and the container
+exits as soon as the three services it depends on are healthy. Bring up a single
+service by name if you prefer, for example `docker compose up student-3-backend`.
+
+Only the frontend publishes a host port. The backend and database are reachable
+only inside the Compose network, which is what keeps the boundary honest.
+
 ## Local checks
 
 ```bash

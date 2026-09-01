@@ -128,6 +128,13 @@ rather than being silently ignored, and reversed ranges (`min_price` above
 | `422 VALIDATION_ERROR` | Field or business-rule validation failure. |
 | `503 DATABASE_BUSY` | SQLite write lock contention; safe to retry. |
 
+## Running it
+
+Under Compose the SQLite file lives in the `student-3-sqlite` named volume, so
+data survives `docker compose down` and is removed by `docker compose down -v`.
+The service is internal only: the backend reaches it as
+`http://student-3-database:8004` and nothing is published to the host.
+
 ## Local checks
 
 ```bash
