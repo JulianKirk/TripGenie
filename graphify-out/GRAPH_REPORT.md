@@ -1,137 +1,113 @@
-# Graph Report - TripGenie  (2026-09-01)
+# Graph Report - .  (2026-09-01)
 
 ## Corpus Check
-- 140 files · ~81,983 words
+- 181 files · ~83,762 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2356 nodes · 7664 edges · 125 communities (87 shown, 38 thin omitted)
-- Extraction: 57% EXTRACTED · 43% INFERRED · 0% AMBIGUOUS · INFERRED: 3297 edges (avg confidence: 0.51)
+- 2341 nodes · 7680 edges · 106 communities (70 shown, 36 thin omitted)
+- Extraction: 57% EXTRACTED · 43% INFERRED · 0% AMBIGUOUS · INFERRED: 3300 edges (avg confidence: 0.51)
 - Token cost: 0 input · 0 output
 
-## Graph Freshness
-- Built from commit: `98371191`
-- Run `git rev-parse HEAD` and compare to check if the graph is stale.
-- Run `graphify update .` after code changes (no API cost).
-
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_DatabaseApiClient Components|DatabaseApiClient Components]]
-- [[_COMMUNITY_Settings Components|Settings Components]]
-- [[_COMMUNITY_DatabaseService Components|DatabaseService Components]]
-- [[_COMMUNITY_DatabaseService Components|DatabaseService Components]]
-- [[_COMMUNITY_app Components|app Components]]
-- [[_COMMUNITY_BackendApiClient Components|BackendApiClient Components]]
-- [[_COMMUNITY_test frontend pages|test frontend pages]]
-- [[_COMMUNITY_AccommodationType Components|AccommodationType Components]]
-- [[_COMMUNITY_test internal api|test internal api]]
-- [[_COMMUNITY_test public api|test public api]]
-- [[_COMMUNITY_FakeBackendApi Components|FakeBackendApi Components]]
-- [[_COMMUNITY_conftest Components|conftest Components]]
-- [[_COMMUNITY_AccommodationQueryRequest Components|AccommodationQueryRequest Components]]
-- [[_COMMUNITY_TestAccommodationQuery Components|TestAccommodationQuery Components]]
-- [[_COMMUNITY_Transport public API|Transport public API]]
-- [[_COMMUNITY_test public api|test public api]]
-- [[_COMMUNITY_test repository regressions|test repository regressions]]
-- [[_COMMUNITY_Accommodation Components|Accommodation Components]]
-- [[_COMMUNITY_AccommodationQueryRequest Components|AccommodationQueryRequest Components]]
-- [[_COMMUNITY_app Components|app Components]]
-- [[_COMMUNITY_FakeDatabaseApi Components|FakeDatabaseApi Components]]
-- [[_COMMUNITY_Location Components|Location Components]]
-- [[_COMMUNITY_TestQueryBody Components|TestQueryBody Components]]
-- [[_COMMUNITY_button Components|button Components]]
-- [[_COMMUNITY_test backend|test backend]]
-- [[_COMMUNITY_test trip verification|test trip verification]]
-- [[_COMMUNITY_RoomDetails Components|RoomDetails Components]]
-- [[_COMMUNITY_test public api|test public api]]
-- [[_COMMUNITY_schemas Components|schemas Components]]
-- [[_COMMUNITY_test internal api|test internal api]]
-- [[_COMMUNITY_DatabaseClient Components|DatabaseClient Components]]
-- [[_COMMUNITY_test trip accommodation api|test trip accommodation api]]
-- [[_COMMUNITY_ItineraryClient Components|ItineraryClient Components]]
-- [[_COMMUNITY_test itinerary|test itinerary]]
-- [[_COMMUNITY_create engine and session|create engine and session]]
-- [[_COMMUNITY_test trip accommodation storage|test trip accommodation storage]]
-- [[_COMMUNITY_HealthResponse Components|HealthResponse Components]]
-- [[_COMMUNITY_FakeBackend Components|FakeBackend Components]]
-- [[_COMMUNITY_TripGenie AI Smart Travel Companion|TripGenie AI Smart Travel Companion]]
-- [[_COMMUNITY_itinerary client|itinerary client]]
-- [[_COMMUNITY_dependencies Components|dependencies Components]]
-- [[_COMMUNITY_call Components|call Components]]
-- [[_COMMUNITY_dependencies Components|dependencies Components]]
-- [[_COMMUNITY_Navigation to five student feature|Navigation to five student feature]]
-- [[_COMMUNITY_validation error handler|validation error handler]]
-- [[_COMMUNITY_validation error handler|validation error handler]]
-- [[_COMMUNITY_Student 1 backend service|Student 1 backend service]]
-- [[_COMMUNITY_AI mode for bounded itinerary|AI mode for bounded itinerary]]
-- [[_COMMUNITY_ADR 0001 Student 1 service|ADR 0001 Student 1 service]]
-- [[_COMMUNITY_config Components|config Components]]
-- [[_COMMUNITY_TestPicker Components|TestPicker Components]]
-- [[_COMMUNITY_Evidence driven assessed workflow|Evidence driven assessed workflow]]
-- [[_COMMUNITY_Student 1 database service|Student 1 database service]]
-- [[_COMMUNITY_config Components|config Components]]
-- [[_COMMUNITY_Accommodation Microservice|Accommodation Microservice]]
-- [[_COMMUNITY_parse bool|parse bool]]
-- [[_COMMUNITY_Itinerary items|Itinerary items]]
-- [[_COMMUNITY_HTMX accessible browser CRUD shell|HTMX accessible browser CRUD shell]]
-- [[_COMMUNITY_Paginated accommodation results|Paginated accommodation results]]
-- [[_COMMUNITY_Shared UI service|Shared UI service]]
-- [[_COMMUNITY_Disabled AI Suggestion Affordance|Disabled AI Suggestion Affordance]]
-- [[_COMMUNITY_Field Level Validation|Field Level Validation]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Package Components|Package Components]]
-- [[_COMMUNITY_Cloud Deployment workflow|Cloud Deployment workflow]]
-- [[_COMMUNITY_Student 2 container health checks|Student 2 container health checks]]
-- [[_COMMUNITY_Release 0 boundary|Release 0 boundary]]
-- [[_COMMUNITY_Delete Confirmation Workflow|Delete Confirmation Workflow]]
-- [[_COMMUNITY_Trip Form|Trip Form]]
 - [[_COMMUNITY_ScrapeService Components|ScrapeService Components]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_Settings Components|Settings Components]]
+- [[_COMMUNITY_config Components|config Components]]
+- [[_COMMUNITY_app Components|app Components]]
+- [[_COMMUNITY_AccommodationType Components|AccommodationType Components]]
+- [[_COMMUNITY_BackendApiClient Components|BackendApiClient Components]]
 - [[_COMMUNITY_tripgenie student1 backend|tripgenie student1 backend]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_DatabaseService Components|DatabaseService Components]]
+- [[_COMMUNITY_parse bool|parse bool]]
 - [[_COMMUNITY_tripgenie student1 database|tripgenie student1 database]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_app Components|app Components]]
+- [[_COMMUNITY_config Components|config Components]]
 - [[_COMMUNITY_tripgenie student1 frontend|tripgenie student1 frontend]]
 - [[_COMMUNITY_tripgenie student1 services|tripgenie student1 services]]
-- [[_COMMUNITY_tripgenie student2 accommodation|tripgenie student2 accommodation]]
+- [[_COMMUNITY_FakeDatabaseApi Components|FakeDatabaseApi Components]]
+- [[_COMMUNITY_test public api|test public api]]
+- [[_COMMUNITY_test trip accommodation api|test trip accommodation api]]
+- [[_COMMUNITY_test internal api|test internal api]]
+- [[_COMMUNITY_test trip accommodation storage|test trip accommodation storage]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_FakeBackendApi Components|FakeBackendApi Components]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_ItineraryClient Components|ItineraryClient Components]]
+- [[_COMMUNITY_DatabaseClient Components|DatabaseClient Components]]
+- [[_COMMUNITY_validation error handler|validation error handler]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_AccommodationQueryRequest Components|AccommodationQueryRequest Components]]
+- [[_COMMUNITY_HealthResponse Components|HealthResponse Components]]
+- [[_COMMUNITY_schemas Components|schemas Components]]
+- [[_COMMUNITY_Location Components|Location Components]]
 - [[_COMMUNITY_tripgenie student2 backend|tripgenie student2 backend]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_create engine and session|create engine and session]]
+- [[_COMMUNITY_dependencies Components|dependencies Components]]
+- [[_COMMUNITY_validation error handler|validation error handler]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_AccommodationQueryRequest Components|AccommodationQueryRequest Components]]
 - [[_COMMUNITY_tripgenie student2 database|tripgenie student2 database]]
+- [[_COMMUNITY_Package Components|Package Components]]
 - [[_COMMUNITY_tripgenie student2 frontend|tripgenie student2 frontend]]
+- [[_COMMUNITY_tripgenie student2 accommodation|tripgenie student2 accommodation]]
+- [[_COMMUNITY_test backend|test backend]]
+- [[_COMMUNITY_TestAccommodationQuery Components|TestAccommodationQuery Components]]
+- [[_COMMUNITY_conftest Components|conftest Components]]
+- [[_COMMUNITY_test public api|test public api]]
+- [[_COMMUNITY_FakeBackend Components|FakeBackend Components]]
+- [[_COMMUNITY_TestQueryBody Components|TestQueryBody Components]]
+- [[_COMMUNITY_button Components|button Components]]
 - [[_COMMUNITY_tripgenie student3 backend|tripgenie student3 backend]]
+- [[_COMMUNITY_DatabaseApiClient Components|DatabaseApiClient Components]]
 - [[_COMMUNITY_tripgenie student3 database|tripgenie student3 database]]
+- [[_COMMUNITY_DatabaseService Components|DatabaseService Components]]
+- [[_COMMUNITY_test repository regressions|test repository regressions]]
 - [[_COMMUNITY_tripgenie student3 frontend|tripgenie student3 frontend]]
 - [[_COMMUNITY_tripgenie student3 services|tripgenie student3 services]]
+- [[_COMMUNITY_test public api|test public api]]
+- [[_COMMUNITY_test trip verification|test trip verification]]
+- [[_COMMUNITY_test internal api|test internal api]]
+- [[_COMMUNITY_Package Components|Package Components]]
+- [[_COMMUNITY_test frontend pages|test frontend pages]]
+- [[_COMMUNITY_Student 1 Release 0 Architecture|Student 1 Release 0 Architecture]]
+- [[_COMMUNITY_Student 1 backend service|Student 1 backend service]]
+- [[_COMMUNITY_Student 1 frontend service|Student 1 frontend service]]
+- [[_COMMUNITY_Accommodation Backend Service API|Accommodation Backend Service API]]
+- [[_COMMUNITY_Accommodation Components|Accommodation Components]]
+- [[_COMMUNITY_Student 3 backend service|Student 3 backend service]]
+- [[_COMMUNITY_Student 3 database service|Student 3 database service]]
+- [[_COMMUNITY_Student 3 frontend service|Student 3 frontend service]]
+- [[_COMMUNITY_Cloud Deployment workflow|Cloud Deployment workflow]]
+- [[_COMMUNITY_Shared UI service|Shared UI service]]
+- [[_COMMUNITY_Student 1 backend service|Student 1 backend service]]
+- [[_COMMUNITY_Student 2 container health checks|Student 2 container health checks]]
+- [[_COMMUNITY_Navigation to five student feature|Navigation to five student feature]]
 - [[_COMMUNITY_Student 4 placeholder validation|Student 4 placeholder validation]]
 - [[_COMMUNITY_Student 5 placeholder validation|Student 5 placeholder validation]]
-- [[_COMMUNITY_Community 100|Community 100]]
-- [[_COMMUNITY_Community 101|Community 101]]
-- [[_COMMUNITY_Community 102|Community 102]]
-- [[_COMMUNITY_Community 103|Community 103]]
-- [[_COMMUNITY_Community 104|Community 104]]
-- [[_COMMUNITY_Community 105|Community 105]]
-- [[_COMMUNITY_Community 106|Community 106]]
-- [[_COMMUNITY_Community 107|Community 107]]
-- [[_COMMUNITY_Community 108|Community 108]]
-- [[_COMMUNITY_Community 109|Community 109]]
-- [[_COMMUNITY_Community 110|Community 110]]
-- [[_COMMUNITY_Community 111|Community 111]]
-- [[_COMMUNITY_Community 112|Community 112]]
-- [[_COMMUNITY_Community 113|Community 113]]
-- [[_COMMUNITY_Community 114|Community 114]]
-- [[_COMMUNITY_Community 115|Community 115]]
-- [[_COMMUNITY_Community 116|Community 116]]
-- [[_COMMUNITY_Community 117|Community 117]]
-- [[_COMMUNITY_Community 118|Community 118]]
-- [[_COMMUNITY_Community 119|Community 119]]
-- [[_COMMUNITY_Community 120|Community 120]]
-- [[_COMMUNITY_Community 121|Community 121]]
-- [[_COMMUNITY_Community 122|Community 122]]
-- [[_COMMUNITY_Community 123|Community 123]]
-- [[_COMMUNITY_Community 124|Community 124]]
+- [[_COMMUNITY_AI mode for bounded itinerary|AI mode for bounded itinerary]]
+- [[_COMMUNITY_Student 1 Release 0 runtime|Student 1 Release 0 runtime]]
+- [[_COMMUNITY_Itinerary items|Itinerary items]]
+- [[_COMMUNITY_Release 0 boundary|Release 0 boundary]]
+- [[_COMMUNITY_Evidence driven assessed workflow|Evidence driven assessed workflow]]
+- [[_COMMUNITY_HTMX accessible browser CRUD shell|HTMX accessible browser CRUD shell]]
+- [[_COMMUNITY_Transport Management UI|Transport Management UI]]
+- [[_COMMUNITY_Trip Detail Timeline|Trip Detail Timeline]]
+- [[_COMMUNITY_Delete Confirmation Workflow|Delete Confirmation Workflow]]
+- [[_COMMUNITY_Disabled AI Suggestion Affordance|Disabled AI Suggestion Affordance]]
+- [[_COMMUNITY_Field Level Validation|Field Level Validation]]
+- [[_COMMUNITY_Trip Form|Trip Form]]
+- [[_COMMUNITY_Paginated accommodation results|Paginated accommodation results]]
+- [[_COMMUNITY_Transport public API|Transport public API]]
+- [[_COMMUNITY_Reusable Jinja form macros|Reusable Jinja form macros]]
+- [[_COMMUNITY_transport options table|transport options table]]
+- [[_COMMUNITY_setup graphify sh script|setup graphify sh script]]
+- [[_COMMUNITY_test graphify setup sh script|test graphify setup sh script]]
+- [[_COMMUNITY_ActivityAvailabilitySchedule Components|ActivityAvailabilitySchedule Components]]
+- [[_COMMUNITY_Portable Graph Outputs|Portable Graph Outputs]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Settings` - 126 edges
@@ -150,12 +126,12 @@
   student-1/tests/backend/conftest.py → student-2/backend/backend_service/config.py
 - `TestClient` --uses--> `Settings`  [INFERRED]
   student-1/tests/frontend/conftest.py → student-2/backend/backend_service/config.py
-- `BaseTransport` --uses--> `Settings`  [INFERRED]
-  student-3/tests/frontend/conftest.py → student-2/backend/backend_service/config.py
+- `Settings` --uses--> `BaseTransport`  [INFERRED]
+  student-2/backend/backend_service/config.py → student-3/tests/frontend/conftest.py
 - `Dependency Recovery State` --semantically_similar_to--> `Backend Error Containment`  [INFERRED] [semantically similar]
   student-1/frontend/frontend_service/templates/partials/error_state.html → student-2/docs/frontend-service.md
-- `DatabaseService` --uses--> `ApiError`  [INFERRED]
-  student-3/tests/database/test_repository_regressions.py → student-1/backend/backend_service/errors.py
+- `Activities and Attractions Management` --semantically_similar_to--> `Activities and Attractions Service`  [INFERRED] [semantically similar]
+  README.md → student-4/docs/object-model.md
 
 ## Import Cycles
 - 1-file cycle: `student-1/backend/backend_service/app.py -> student-1/backend/backend_service/app.py`
@@ -180,350 +156,279 @@
 - 1-file cycle: `student-3/frontend/student3_frontend_service/app.py -> student-3/frontend/student3_frontend_service/app.py`
 
 ## Hyperedges (group relationships)
-- **** — docker_compose_student_1_frontend, docker_compose_student_1_backend, docker_compose_student_1_database [EXTRACTED 1.00]
-- **** — release_0_student_1_release_0_plan_plan_act_observe_adapt, release_0_student_1_release_0_plan_implementation_review_human_roles, release_0_student_1_release_0_plan_expected_actual_pass_fail, release_0_student_1_release_0_plan_prompt_assets [EXTRACTED 1.00]
-- **** — readme_trip_itinerary_management, readme_accommodation_management, readme_transport_management, readme_activities_attractions_management, readme_budget_expense_management [EXTRACTED 1.00]
-- **Accommodation Three-Service Architecture** — student_2_accommodation_service_backend_service, student_2_accommodation_service_database_service, student_2_accommodation_service_frontend_service [EXTRACTED 1.00]
-- **Accommodation Composed Domain Model** — docs_object_model_accommodation, docs_object_model_locationdetails, docs_object_model_roomdetails, docs_object_model_country, docs_object_model_city [EXTRACTED 1.00]
-- **Accommodation Filtering Flow** — templates_page_unified_filter_form, docs_frontend_service_live_filtering, docs_backend_service_api_accommodation_search_contract, docs_database_service_api_match_template_query [INFERRED 0.95]
+- **Activity Classification Model** — docs_object_model_activity, docs_object_model_activitycategory, docs_object_model_category [EXTRACTED 1.00]
+- **Activity Availability Model** — docs_object_model_activity, docs_object_model_activityavailabilityschedule, docs_object_model_recurring_weekly_schedule, docs_object_model_one_off_schedule, docs_object_model_duration_bounded_start_range [EXTRACTED 1.00]
+- **Activity Service API Boundary** — docs_object_model_student_4_database_service, docs_object_model_internal_database_api, docs_object_model_backend_service, docs_object_model_public_backend_api, docs_object_model_frontend, docs_object_model_itinerary_service, docs_object_model_budget_service [EXTRACTED 1.00]
 
-## Communities (125 total, 38 thin omitted)
-
-### Community 0 - "DatabaseApiClient Components"
-Cohesion: 0.07
-Nodes (144): allow_query_params(), create_app(), _error_response(), get_service(), _normalise_optional_query_text(), parse_availability_filter(), parse_booking_status_filter(), parse_compare_ids() (+136 more)
+## Communities (106 total, 36 thin omitted)
 
 ### Community 1 - "Settings Components"
 Cohesion: 0.07
-Nodes (118): allow_query_params(), _ensure_allowed_query_params(), _error_response(), get_service(), _normalise_optional_query_text(), parse_category_filter(), parse_date_filter(), parse_destination_filter() (+110 more)
+Nodes (118): _error_response(), ApiError, JSONResponse, _ensure_allowed_query_params(), Request, allow_query_params(), get_service(), BackendService (+110 more)
 
-### Community 2 - "DatabaseService Components"
-Cohesion: 0.07
-Nodes (94): allow_query_params(), create_app(), _ensure_allowed_query_params(), _ensure_ordered_range(), _error_response(), get_service(), _normalise_optional_query_text(), parse_availability_filter() (+86 more)
+### Community 52 - "config Components"
+Cohesion: 0.52
+Nodes (5): _parse_timeout(), _normalise_prefix(), _normalise_base_url(), _normalise_optional_base_url(), Settings
 
-### Community 3 - "DatabaseService Components"
-Cohesion: 0.07
-Nodes (76): allow_query_params(), _ensure_allowed_query_params(), _error_response(), get_service(), _normalise_optional_query_text(), parse_category_filter(), parse_date_filter(), parse_destination_filter() (+68 more)
+### Community 22 - "app Components"
+Cohesion: 0.12
+Nodes (35): Exception, BackendError, _picked(), QueryParams, Any, query_body(), _page_number(), call() (+27 more)
 
-### Community 4 - "app Components"
-Cohesion: 0.07
-Nodes (88): backend_dependency_from_error(), backend_dependency_from_payload(), build_query_url(), DateFilterResolution, error_details_by_field(), get_backend_client(), is_htmx_request(), iso_date_or_none() (+80 more)
+### Community 6 - "AccommodationType Components"
+Cohesion: 0.05
+Nodes (61): BaseModel, Enum, AccommodationType, AvailabilityStatus, BedType, The accommodation enums, as this service publishes them.  Copied from the databa, AccommodationType, AvailabilityStatus (+53 more)
 
 ### Community 5 - "BackendApiClient Components"
 Cohesion: 0.07
-Nodes (73): str, create_app(), entry_to_form(), error_details_by_field(), filter_query(), get_backend_client(), is_htmx_request(), _numeric_or_text() (+65 more)
+Nodes (73): str, Student 3 transport frontend service package., transport_choices(), TransportOptionRecord, trip_choices(), TripDirectory, get_backend_client(), Request (+65 more)
 
-### Community 6 - "test frontend pages"
-Cohesion: 0.05
-Nodes (77): _post(), An untouched filter form must not be sent as blank query parameters.      The ba, The product plans transport; it never books it.      Guards the wording across t, A boosted request must not answer with a whole document.      The shell swaps it, display:flex on a <td> drops it out of the table layout.      The cell then stop, A dependency outage must not make the form unusable.      The default fixture ha, Transport options are Student 3's own data, so the picker never degrades., A raw offset in minutes is not something a user should have to work out. (+69 more)
+### Community 3 - "DatabaseService Components"
+Cohesion: 0.07
+Nodes (76): _error_response(), ApiError, JSONResponse, _ensure_allowed_query_params(), Request, allow_query_params(), get_service(), DatabaseService (+68 more)
 
-### Community 7 - "AccommodationType Components"
-Cohesion: 0.09
-Nodes (40): AccommodationType, AvailabilityStatus, BedType, The accommodation enums, as this service publishes them.  Copied from the databa, HealthResponse, ItinerarySelectionResponse, Location, The wire format this service publishes -- the accommodation contract.  These mir (+32 more)
+### Community 4 - "app Components"
+Cohesion: 0.07
+Nodes (88): DateFilterResolution, get_backend_client(), Request, BackendApiClient, is_htmx_request(), path_for(), error_details_by_field(), ApiError (+80 more)
 
-### Community 8 - "test internal api"
-Cohesion: 0.10
-Nodes (56): _create_option(), _data(), _detail_fields(), _error(), test_arrival_before_departure_is_rejected(), test_booking_after_departure_is_rejected(), test_booking_beyond_remaining_capacity_conflicts(), test_booking_on_sold_out_option_is_rejected() (+48 more)
+### Community 54 - "config Components"
+Cohesion: 0.53
+Nodes (4): _parse_timeout(), _normalise_prefix(), _normalise_base_url(), Settings
 
-### Community 9 - "test public api"
-Cohesion: 0.11
-Nodes (53): _create_option(), _data(), _detail_fields(), _error(), test_car_rental_may_return_to_the_same_depot(), test_compare_accepts_repeated_query_parameters(), test_compare_rejects_a_malformed_identifier(), test_compare_rejects_a_repeated_option() (+45 more)
-
-### Community 10 - "FakeBackendApi Components"
-Cohesion: 0.09
-Nodes (20): async_client_factory(), backend_api(), client_factory(), create_item_form_data(), create_trip_form_data(), data_response(), error_response(), FakeBackendApi (+12 more)
-
-### Community 11 - "conftest Components"
-Cohesion: 0.06
-Nodes (45): database_path(), database_settings(), database_transport(), known_trips_transport(), offline_client(), Stand in for Student 1's trips API, answering for KNOWN_TRIP_IDS., A trips API that cannot be reached at all., Run the real database service in-process behind the backend's client.      Stubb (+37 more)
-
-### Community 12 - "AccommodationQueryRequest Components"
-Cohesion: 0.13
-Nodes (34): parse(), A database service response, as the message this service publishes.      The two, Accommodation, AccommodationQueryRequest, AccommodationQueryResponse, The accommodation message. Every field is nullable because the same     class ca, A match template plus the bounds that a template cannot express.      Forwarded, This service declares the accommodation message separately from the         data (+26 more)
-
-### Community 13 - "TestAccommodationQuery Components"
-Cohesion: 0.05
-Nodes (16): End-to-end tests for the HTTP layer, driven through TestClient against a real (t, Every field on the message is nullable, so the strict create         subclass is, One nullable message serves every endpoint, so a response says what         it m, Two accommodations in the same city must not create two City rows --         the, A field that was not supplied has to stay that way. An optional column     defau, A brand new listing and one rated 0.0 are different facts., The bug this guards: with rating defaulting to 0.0, a search for the         wor, Updating location should not cause UNIQUE constraint failure. (+8 more)
-
-### Community 14 - "Transport public API"
-Cohesion: 0.18
-Nodes (11): Traveller-facing plan state labels, Server-rendered HTMX progressive enhancement, Outage-resilient trip picker, Transport Management UI, Select-to-text dependency fallback, HTMX App Shell, Dependency error state panel, HTMX 2.0.4 (+3 more)
-
-### Community 15 - "test public api"
-Cohesion: 0.05
-Nodes (18): query(), End-to-end tests for the public accommodation API, driven through TestClient aga, The database service forbids unknown fields but would accept an         explicit, The two services declare the accommodation message separately, so the     tests, A row written to the database service, read back through this one., `Decimal` in the database service, `float` here. A price that is not         a r, This service has no write path and no cache, so an edit made         directly on, Each bound this service publishes, forwarded and actually applied. The     stack (+10 more)
-
-### Community 16 - "test repository regressions"
-Cohesion: 0.09
-Nodes (34): _new_option(), test_a_two_month_car_hire_is_accepted(), test_an_explicit_estimated_cost_wins_over_the_rederived_default(), test_blank_notes_are_stored_as_null(), test_cancelled_bookings_do_not_consume_capacity(), test_changing_traveller_count_rederives_an_overridden_total(), test_completed_booking_on_a_sold_out_option_can_be_edited(), test_cross_timezone_duration_uses_utc_not_wall_clock() (+26 more)
-
-### Community 17 - "Accommodation Components"
-Cohesion: 0.05
-Nodes (46): Accommodation Search Contract, Database Service Passthrough, HTTP QUERY Method, Independently Deployable Public Contract, Itinerary Integration, Public Accommodation API, Upstream Error Mapping, Whole Picker State Response (+38 more)
-
-### Community 18 - "AccommodationQueryRequest Components"
-Cohesion: 0.08
-Nodes (15): AccommodationQueryRequest, A match template plus the bounds that a template cannot express.      Every fiel, Starter accommodations, inserted on first start.  The service ships with an empt, Insert the starter rows if the table is empty. Returns how many went in.      Em, seed(), Tests for the repository layer. Run `pytest student-2/tests` from the repo root., Without an ORDER BY, LIMIT/OFFSET may hand back the same row twice., SQL-level range filter via the RoomDetails join. (+7 more)
-
-### Community 19 - "app Components"
-Cohesion: 0.12
-Nodes (35): Exception, _added_message(), BackendError, call(), detail(), health(), index(), itineraries() (+27 more)
-
-### Community 20 - "FakeDatabaseApi Components"
+### Community 23 - "FakeDatabaseApi Components"
 Cohesion: 0.19
-Nodes (9): client_factory(), data_response(), database_api(), error_response(), FakeDatabaseApi, client(), Request, Response (+1 more)
+Nodes (9): data_response(), Response, error_response(), FakeDatabaseApi, Request, database_api(), client_factory(), client() (+1 more)
 
-### Community 21 - "Location Components"
-Cohesion: 0.12
-Nodes (23): _amenity_clauses(), _bounds(), _commit(), _equalities(), _join_for(), _paginate(), Repository classes for the accommodation microservice.  Each repository wraps a, One clause per wanted amenity; an accommodation has to carry them all.      pony (+15 more)
-
-### Community 22 - "TestQueryBody Components"
-Cohesion: 0.07
-Nodes (7): Tests for the accommodation frontend service.  Two things can break here: the fo, The backend 400s on it, so the page never sends one., TestDetail, TestErrors, TestPage, TestPager, TestQueryBody
-
-### Community 23 - "button Components"
-Cohesion: 0.09
-Nodes (13): _button(), The Add-to-Itinerary picker.  What matters here is the same thing the rest of th, The confirm already covered that decision -- announcing it after the         fac, It has to be a descendant of the modal <dialog> to paint above the         backd, The one <button> whose label is `label`., The list is fetched on first open, not with the modal: most opens         are a, Removing asks first; adding does not. hx-confirm is htmx's own     window.confir, The button that was just added becomes the one that asks. (+5 more)
-
-### Community 24 - "test backend"
-Cohesion: 0.11
-Nodes (12): call(), mock_client(), Unit tests for the accommodation backend service -- the parts that need no datab, A 4xx is the database service answering correctly about a bad         request, s, The statuses that originate here: the request was fine, the data was     not rea, The question this endpoint answers is whether *this* service is         running,, Build a backend whose database service is the given handler., Run one `DatabaseClient` call against a handler.      `asyncio.run` rather than (+4 more)
-
-### Community 25 - "test trip verification"
-Cohesion: 0.20
-Nodes (19): _build_client(), degraded_client(), _notes(), The opt-in trip existence check against Student 1's trips API.  Student 1 owns t, An unreachable Student 1 must not break the caller.      available=false is dist, The picker is a separate concern from the opt-in existence check., test_an_unreachable_trips_service_does_not_block_planning(), test_editing_other_fields_skips_the_trip_lookup() (+11 more)
-
-### Community 26 - "RoomDetails Components"
-Cohesion: 0.07
-Nodes (28): accommodations(), australia(), camping(), hotel(), katoomba(), Shared fixtures for the accommodation database service tests.  `database_service, Fresh in-memory SQLite DB per test -- no dependency on database.py., session() (+20 more)
-
-### Community 27 - "test public api"
+### Community 30 - "test public api"
 Cohesion: 0.16
-Nodes (11): create_item_payload(), create_trip_payload(), error_response(), test_get_trip_rejects_oversized_upstream_trip_before_day_expansion(), test_itinerary_item_crud_filtering_and_ordering(), test_trip_crud_and_day_by_day_detail(), test_trip_duration_limit_applies_to_create_requests(), test_trip_duration_limit_validates_effective_patch_state_before_write() (+3 more)
+Nodes (11): create_trip_payload(), create_item_payload(), error_response(), Response, test_trip_crud_and_day_by_day_detail(), test_trip_duration_limit_applies_to_create_requests(), test_get_trip_rejects_oversized_upstream_trip_before_day_expansion(), test_trip_duration_limit_validates_effective_patch_state_before_write() (+3 more)
 
-### Community 28 - "schemas Components"
-Cohesion: 0.36
-Nodes (12): ItinerarySelection, One of student 1's itineraries, and whether this accommodation is on it.      `s, ItineraryDep, ItinerarySelectionResponse, add_to_itinerary(), list_itineraries(), Adding an accommodation to one of student 1's itineraries.  The accommodation fr, Every itinerary, ticked where this accommodation already sits on it.      Two ca (+4 more)
-
-### Community 29 - "test internal api"
-Cohesion: 0.22
-Nodes (11): create_item_payload(), create_trip_payload(), test_delete_trip_cascades_its_itinerary_items(), test_duplicate_ids_return_409(), test_itinerary_item_crud_filtering_and_ordering(), test_rejects_unsupported_query_params_and_invalid_filters(), test_schema_enforces_foreign_keys(), test_schema_initialisation_and_seed_data_are_idempotent() (+3 more)
-
-### Community 30 - "DatabaseClient Components"
-Cohesion: 0.24
-Nodes (8): AsyncClient, DatabaseClient, The database service, as this service sees it.  The only module that knows the d, The decoded response body, or the documented 502/503.      A 4xx is the upstream, request(), Any, Settings, UUID
-
-### Community 31 - "test trip accommodation api"
+### Community 33 - "test trip accommodation api"
 Cohesion: 0.23
-Nodes (13): The public accommodation-pinning API, against the faked database service., The id comes from another service, so it is validated at the boundary     rather, The accommodation service has no opinion about which day, and an item     must f, test_a_malformed_accommodation_id_is_rejected_before_the_database(), test_a_new_trip_starts_with_no_accommodations(), test_accommodations_appear_on_the_trip_detail(), test_adding_an_accommodation_pins_it_to_the_trip_start_date(), test_adding_the_same_accommodation_twice_stays_a_200() (+5 more)
+Nodes (13): test_adding_an_accommodation_pins_it_to_the_trip_start_date(), TestClient, test_adding_the_same_accommodation_twice_stays_a_200(), test_accommodations_appear_on_the_trip_detail(), test_a_new_trip_starts_with_no_accommodations(), test_reverse_lookup_lists_every_trip_holding_the_accommodation(), test_removing_an_accommodation_drops_it_from_both_directions(), test_removing_an_accommodation_that_is_not_pinned_is_a_404() (+5 more)
 
-### Community 32 - "ItineraryClient Components"
-Cohesion: 0.29
-Nodes (6): ItineraryClient, The reverse lookup: every itinerary already holding this         accommodation., Student 1 envelopes every success body. Unwrapping in one place keeps         `{, Any, Settings, UUID
+### Community 32 - "test internal api"
+Cohesion: 0.22
+Nodes (11): create_trip_payload(), create_item_payload(), test_schema_initialisation_and_seed_data_are_idempotent(), DatabaseService, test_schema_enforces_foreign_keys(), test_trip_crud_lifecycle(), test_itinerary_item_crud_filtering_and_ordering(), test_delete_trip_cascades_its_itinerary_items() (+3 more)
 
-### Community 33 - "test itinerary"
-Cohesion: 0.17
-Nodes (7): FakeItineraryApi, itinerary_api(), The itinerary integration -- this service calling student 1's.  Student 1 is a `, Student 1's public API, envelopes and all., TestSettings, Request, Response
-
-### Community 34 - "create engine and session"
-Cohesion: 0.17
-Nodes (11): HTTP wrapper around the accommodation database.  Internal-only: the backend serv, create_engine_and_session(), Engine/session setup for the accommodation microservice's SQLite DB., Build the engine and its session factory, and create any missing tables.      po, Engine, sessionmaker, create_app(), FastAPI (+3 more)
-
-### Community 35 - "test trip accommodation storage"
+### Community 37 - "test trip accommodation storage"
 Cohesion: 0.26
-Nodes (12): create_trip_payload(), The associative entity between trips and accommodations.  A trip holds many acco, The query the accommodation service's picker asks: which trips are     already t, Re-ticking a box the user already ticked must not fail, and must not     quietly, test_accommodation_is_added_listed_and_removed(), test_adding_the_same_accommodation_twice_is_not_a_conflict(), test_deleting_a_trip_removes_its_accommodation_links(), test_removing_an_accommodation_that_was_never_added_is_a_404() (+4 more)
+Nodes (12): create_trip_payload(), trip_id(), TestClient, test_accommodation_is_added_listed_and_removed(), test_adding_the_same_accommodation_twice_is_not_a_conflict(), test_removing_an_accommodation_that_was_never_added_is_a_404(), test_unknown_trip_is_a_404_on_every_route(), test_reverse_lookup_returns_every_trip_holding_the_accommodation() (+4 more)
 
-### Community 36 - "HealthResponse Components"
-Cohesion: 0.40
-Nodes (4): HealthResponse, Request, health(), Liveness endpoint. Polled by CI after the container starts.
+### Community 11 - "FakeBackendApi Components"
+Cohesion: 0.09
+Nodes (20): create_trip_form_data(), create_item_form_data(), data_response(), Response, error_response(), FakeBackendApi, Request, backend_api() (+12 more)
 
-### Community 37 - "FakeBackend Components"
-Cohesion: 0.23
-Nodes (7): backend(), FakeBackend, Records the last QUERY body so a test can assert on what was sent, and     answe, The real backend answers PUT and DELETE with the whole list, so the         fake, Fixtures for the accommodation frontend tests.  The backend is a `MockTransport`, Request, Response
+### Community 13 - "ItineraryClient Components"
+Cohesion: 0.06
+Nodes (25): create_app(), Settings, Any, FastAPI, The public HTTP face of the accommodation service.  Its callers are the frontend, `transport` seams the database service, `itinerary_transport` student 1's.     T, ItineraryClient, Settings (+17 more)
 
-### Community 38 - "TripGenie AI Smart Travel Companion"
-Cohesion: 0.20
-Nodes (10): Bounded accommodation identifier, Idempotent accommodation pin, Trip accommodations association, Accommodation Management, Activities and Attractions Management, Budget and Expense Management, Docker, HTMX, Python, SQLite, and Ollama microservices stack, Transport Management (+2 more)
+### Community 24 - "DatabaseClient Components"
+Cohesion: 0.09
+Nodes (22): DatabaseClient, Settings, Any, UUID, request(), AsyncClient, parse(), T (+14 more)
 
-### Community 39 - "itinerary client"
+### Community 47 - "validation error handler"
+Cohesion: 0.29
+Nodes (7): validation_error_handler(), Request, RequestValidationError, JSONResponse, register(), FastAPI, Error handling for the backend service.  The API doc specifies 400 for "invalid
+
+### Community 19 - "AccommodationQueryRequest Components"
+Cohesion: 0.13
+Nodes (32): get_accommodation(), UUID, DbDep, Accommodation, list_accommodation(), Limit, Offset, AccommodationQueryResponse (+24 more)
+
+### Community 44 - "HealthResponse Components"
+Cohesion: 0.27
+Nodes (9): health(), Request, DbDep, HealthResponse, HealthResponse, health(), Request, HealthResponse (+1 more)
+
+### Community 31 - "schemas Components"
+Cohesion: 0.30
+Nodes (14): _selection(), ItineraryClient, UUID, ItinerarySelectionResponse, list_itineraries(), ItineraryDep, add_to_itinerary(), remove_from_itinerary() (+6 more)
+
+### Community 25 - "Location Components"
+Cohesion: 0.12
+Nodes (27): Location, Room, Where an accommodation is., What you get to sleep in., _paginate(), Session, Select, _commit() (+19 more)
+
+### Community 36 - "create engine and session"
+Cohesion: 0.17
+Nodes (11): create_app(), Settings, FastAPI, HTTP wrapper around the accommodation database.  Internal-only: the backend serv, create_engine_and_session(), Settings, Engine, sessionmaker (+3 more)
+
+### Community 46 - "dependencies Components"
 Cohesion: 0.25
-Nodes (7): The public HTTP face of the accommodation service.  Its callers are the frontend, `transport` seams the database service, `itinerary_transport` student 1's.     T, Student 1's itinerary service, as this service sees it.  The accommodation front, Any, create_app(), FastAPI, Settings
+Nodes (8): get_session(), Request, Session, get_or_404(), UUID, Shared route dependencies and helpers.  Everything here is used by more than one, One session per request, always closed. The engine and session factory     are b, Fetch by id or raise the documented 404. `repository` is any of the     reposito
 
-### Community 40 - "dependencies Components"
-Cohesion: 0.25
-Nodes (8): get_db(), get_itinerary(), Shared route dependencies., The one client, built once in the app lifespan. It pools connections,     so sha, The one itinerary client, built once in the app lifespan -- same reason     as `, DatabaseClient, ItineraryClient, Request
-
-### Community 41 - "call Components"
-Cohesion: 0.33
-Nodes (4): call(), Student 1 answering correctly about a missing trip is not this         service f, One `ItineraryClient` call against a handler -- the same shape as the     `call`, TestItineraryClient
-
-### Community 42 - "dependencies Components"
-Cohesion: 0.25
-Nodes (8): get_or_404(), get_session(), Shared route dependencies and helpers.  Everything here is used by more than one, One session per request, always closed. The engine and session factory     are b, Fetch by id or raise the documented 404. `repository` is any of the     reposito, Request, Session, UUID
-
-### Community 43 - "Navigation to five student feature"
-Cohesion: 0.19
-Nodes (13): ADR-0001 Student 1 service mapping, Lab 04 three-service pattern, Proposed Student 1 ports 8081, 8001, and 8002, Student 1 backend service, Student 1 frontend service, Student 2 backend service, Student 2 database service, Student 2 frontend service (+5 more)
-
-### Community 44 - "validation error handler"
+### Community 49 - "validation error handler"
 Cohesion: 0.29
-Nodes (7): Error handling for the backend service.  The API doc specifies 400 for "invalid, register(), validation_error_handler(), FastAPI, JSONResponse, Request, RequestValidationError
+Nodes (7): validation_error_handler(), Request, RequestValidationError, JSONResponse, register(), FastAPI, Error handling for the database service.  The API doc specifies 400 for "invalid
 
-### Community 45 - "validation error handler"
-Cohesion: 0.29
-Nodes (7): Error handling for the database service.  The API doc specifies 400 for "invalid, register(), validation_error_handler(), FastAPI, JSONResponse, Request, RequestValidationError
+### Community 20 - "AccommodationQueryRequest Components"
+Cohesion: 0.08
+Nodes (15): AccommodationQueryRequest, A match template plus the bounds that a template cannot express.      Every fiel, seed(), Session, Starter accommodations, inserted on first start.  The service ships with an empt, Insert the starter rows if the table is empty. Returns how many went in.      Em, TestAccommodationRepository, TestSeedData (+7 more)
 
-### Community 46 - "Student 1 backend service"
-Cohesion: 0.29
-Nodes (7): Student 1 backend validation, Student 1 frontend validation, Python 3.11, Ruff, pytest, and compileall, Student 1 CI, Student 3 Compose integration, Shared home-page port consistency, Student 3 CI
+### Community 28 - "test backend"
+Cohesion: 0.11
+Nodes (12): mock_client(), call(), TestSettings, TestDatabaseClient, TestDatabaseFailures, TestHealthWithoutADatabase, Unit tests for the accommodation backend service -- the parts that need no datab, Build a backend whose database service is the given handler. (+4 more)
 
-### Community 47 - "AI mode for bounded itinerary"
-Cohesion: 0.29
-Nodes (7): AI mode for bounded itinerary suggestions, Human approval boundary, qwen2.5:0.5b and llama3.1:8b local model baselines, Local Ollama runtime, Deferred live AI suggestions, FastAPI, Jinja, and HTMX frontend, Frontend health and readiness endpoints
-
-### Community 48 - "ADR 0001 Student 1 service"
+### Community 15 - "TestAccommodationQuery Components"
 Cohesion: 0.05
-Nodes (38): Accommodation Database Service API, Accommodation Endpoints, Configuration, Error Responses, Error Responses, Error Responses, Error Responses, Error Responses (+30 more)
+Nodes (16): TestHealth, TestRouting, TestAccommodation, TestUnsetFields, TestAccommodationQuery, TestAccommodationUpdate, End-to-end tests for the HTTP layer, driven through TestClient against a real (t, Decimal round-trips through pydantic as a string unless told         otherwise, (+8 more)
 
-### Community 49 - "config Components"
-Cohesion: 0.52
-Nodes (5): _normalise_base_url(), _normalise_optional_base_url(), _normalise_prefix(), _parse_timeout(), Settings
+### Community 12 - "conftest Components"
+Cohesion: 0.06
+Nodes (45): database(), Fixtures for the accommodation end-to-end tests.  The default `client` wires the, The real database service, on a temporary SQLite file. Entering the     TestClie, _parse_timeout(), _parse_bool(), _normalise_prefix(), _normalise_base_url(), database_path() (+37 more)
 
-### Community 51 - "Evidence driven assessed workflow"
+### Community 16 - "test public api"
+Cohesion: 0.05
+Nodes (18): query(), TestHealth, TestGetAccommodation, TestListAccommodation, TestQueryAccommodation, TestContract, TestValuesSurviveBothHops, TestFiltersReachTheDatabase (+10 more)
+
+### Community 39 - "FakeBackend Components"
+Cohesion: 0.23
+Nodes (7): FakeBackend, Request, Response, backend(), Fixtures for the accommodation frontend tests.  The backend is a `MockTransport`, Records the last QUERY body so a test can assert on what was sent, and     answe, The real backend answers PUT and DELETE with the whole list, so the         fake
+
+### Community 26 - "TestQueryBody Components"
+Cohesion: 0.07
+Nodes (7): TestPage, TestQueryBody, TestPager, TestDetail, TestErrors, Tests for the accommodation frontend service.  Two things can break here: the fo, The backend 400s on it, so the page never sends one.
+
+### Community 27 - "button Components"
+Cohesion: 0.09
+Nodes (13): TestModal, TestPicker, TestConfirmBeforeRemoving, TestToast, TestErrors, _button(), The Add-to-Itinerary picker.  What matters here is the same thing the rest of th, The list is fetched on first open, not with the modal: most opens         are a (+5 more)
+
+### Community 0 - "DatabaseApiClient Components"
+Cohesion: 0.07
+Nodes (144): Student 3 backend service package., _error_response(), ApiError, JSONResponse, allow_query_params(), get_service(), Request, BackendService (+136 more)
+
+### Community 2 - "DatabaseService Components"
+Cohesion: 0.07
+Nodes (94): Student 3 database service package., _error_response(), ApiError, JSONResponse, _ensure_allowed_query_params(), Request, allow_query_params(), get_service() (+86 more)
+
+### Community 18 - "test repository regressions"
+Cohesion: 0.09
+Nodes (34): duration_minutes(), default_estimated_cost(), Elapsed minutes between two validated ``YYYY-MM-DDTHH:MM`` timestamps.      Time, Per-traveller fare total used when a booking omits ``estimated_cost``.      Mult, Demo data for the Student 3 transport service.  Derived columns (``duration_minu, _new_option(), test_initialize_is_idempotent(), DatabaseService (+26 more)
+
+### Community 10 - "test public api"
+Cohesion: 0.11
+Nodes (53): _data(), Any, _error(), _detail_fields(), _create_option(), TestClient, test_health_reports_the_database_dependency(), test_ready_returns_200_when_the_database_is_reachable() (+45 more)
+
+### Community 29 - "test trip verification"
+Cohesion: 0.20
+Nodes (19): _build_client(), MockTransport, TestClient, verifying_client(), degraded_client(), unverified_client(), test_entry_for_a_known_trip_is_accepted(), test_entry_for_an_unknown_trip_is_rejected() (+11 more)
+
+### Community 9 - "test internal api"
+Cohesion: 0.10
+Nodes (56): _data(), Any, _error(), _detail_fields(), _create_option(), TestClient, test_health_reports_service_metadata(), test_seed_data_meets_minimum_record_requirement() (+48 more)
+
+### Community 7 - "test frontend pages"
+Cohesion: 0.05
+Nodes (77): _post(), TestClient, Any, test_health_reports_the_backend_dependency(), test_ready_returns_200_when_the_backend_is_reachable(), test_health_degrades_when_the_backend_is_unreachable(), test_ready_returns_503_when_the_backend_is_unreachable(), test_browse_shows_an_error_panel_when_the_backend_is_down() (+69 more)
+
+### Community 17 - "Student 1 Release 0 Architecture"
+Cohesion: 0.05
+Nodes (38): ADR-0001: Map the Lab 04 three-service example onto TripGenie Student 1, Status, Context, Decision, Consequences, ADR-0002: Treat internal API and observability details as TripGenie proposals, Status, Context (+30 more)
+
+### Community 40 - "Student 1 backend service"
 Cohesion: 0.18
-Nodes (11): Student 1 Release 0 runtime target, UI mode, ADR-0002 internal API and observability proposals, Manual evidence proof set, AI Agent Configuration Guide, Evidence-driven assessed workflow, Expected Actual Pass-Fail evidence, Implementation agent, review agent, and human review roles (+3 more)
+Nodes (10): Student 1 backend service, Environment variables, Accommodations on a trip, Trip duration rule, Current concurrency note, Student 1 FastAPI public backend, Trip accommodations association, Idempotent accommodation pin (+2 more)
 
-### Community 52 - "Student 1 database service"
-Cohesion: 0.33
-Nodes (6): Exclusive SQLite ownership by database API, Student 1 FastAPI public backend, Last-write-wins concurrency, Trip duration rule, Student 1 database service, Student 1 database validation
+### Community 58 - "Student 1 frontend service"
+Cohesion: 0.50
+Nodes (3): Student 1 frontend service, Environment variables, Runtime notes
 
-### Community 53 - "config Components"
-Cohesion: 0.53
-Nodes (4): _normalise_base_url(), _normalise_prefix(), _parse_timeout(), Settings
+### Community 8 - "Accommodation Backend Service API"
+Cohesion: 0.05
+Nodes (58): Running It, Backend Service, Database Service, Frontend Service, Table of Contents, Accommodation Backend Service API, Service Scope, Configuration (+50 more)
 
-### Community 54 - "Accommodation Microservice"
-Cohesion: 0.48
-Nodes (7): Accommodation Micro-Service, Accommodation Microservice, Backend Service, Compose Service Topology, Database Service, Frontend Service, Running It
+### Community 14 - "Accommodation Components"
+Cohesion: 0.05
+Nodes (46): Accommodation Service Object Model, Shared Entities, Country, City, Accommodation Microservice Entities, Accommodation, LocationDetails, RoomDetails (+38 more)
 
-### Community 56 - "Itinerary items"
-Cohesion: 1.00
-Nodes (3): Itinerary items, Student 1 public CRUD and AI suggestion API, Trips aggregate
-
-### Community 57 - "HTMX accessible browser CRUD shell"
-Cohesion: 0.67
-Nodes (3): Reusable field-error macro, HTMX accessible browser CRUD shell, TripGenie Student 1 base layout
-
-### Community 58 - "Paginated accommodation results"
-Cohesion: 0.67
-Nodes (3): Accessible accommodation detail interaction, Paginated accommodation results, HTMX filter-preserving pagination
-
-### Community 100 - "Community 100"
-Cohesion: 0.12
-Nodes (17): 1. Architecture stance, 2. Traceability table, 3. Repository reality today versus Release 0 target, 4.1 Mapping to the visible Lab 04 example, 4.2 Service responsibilities, 4. Runtime service map, 5. UI-mode versus AI-mode runtime design, 6.1 Data model (project design) (+9 more)
-
-### Community 101 - "Community 101"
-Cohesion: 0.12
-Nodes (17): Accommodation Backend Service API, Accommodation Endpoints, DELETE /accommodation/{id}/itineraries/{itinerary_id}, Error Responses, Error Responses, Error Responses, Example Request, Example Request (+9 more)
-
-### Community 102 - "Community 102"
-Cohesion: 0.16
-Nodes (10): ADR-0001: Map the Lab 04 three-service example onto TripGenie Student 1, Consequences, Context, Decision, Status, ADR-0002: Treat internal API and observability details as TripGenie proposals, Consequences, Context (+2 more)
-
-### Community 103 - "Community 103"
+### Community 34 - "Student 3 backend service"
 Cohesion: 0.15
-Nodes (12): API surface, Business rules owned here, Filters, `GET /api/transport-options/compare`, `GET /api/trip-directory`, `GET /api/trips/{tripId}/transport`, Local checks, Optional Student 1 trip verification (+4 more)
+Nodes (12): Student 3 backend service, Scope: plan records, not reservations, Environment variables, API surface, Filters, `GET /api/trips/{tripId}/transport`, `GET /api/transport-options/compare`, Business rules owned here (+4 more)
 
-### Community 104 - "Community 104"
+### Community 35 - "Student 3 database service"
 Cohesion: 0.15
-Nodes (12): API surface, Business rules, Environment variables, Filters, Local checks, Running it, Scope: plan records, not reservations, Status codes (+4 more)
+Nodes (12): Student 3 database service, Environment variables, Scope: plan records, not reservations, Tables, `transport_options`, `transport_bookings`, Business rules, API surface (+4 more)
 
-### Community 105 - "Community 105"
+### Community 42 - "Student 3 frontend service"
 Cohesion: 0.18
-Nodes (10): Design notes, Input controls, Local checks, Ports, Running it, Scope: plan transport, do not book it, Screens, Student 3 frontend service (+2 more)
+Nodes (10): Student 3 frontend service, Scope: plan transport, do not book it, Environment variables, Ports, Screens, Input controls, Design notes, Styling (+2 more)
 
-### Community 106 - "Community 106"
+### Community 38 - "Student 1 backend service"
+Cohesion: 0.23
+Nodes (12): Student 1 CI, Student 1 database validation, Student 1 backend validation, Student 1 frontend validation, Python 3.11, Ruff, pytest, and compileall, Student 1 frontend service, Student 1 backend service, Student 1 database service (+4 more)
+
+### Community 41 - "Navigation to five student feature"
 Cohesion: 0.18
-Nodes (11): 1. Documentation stance, 2. Course source pack used, 3. Traceability summary, 4. Release 0 scope, 5. The assessed Student 1 workflow, 6. Prompt assets and report evidence to retain, 7. Runtime AI-mode is separate from the assessed loop, 8. Limitations and open points (+3 more)
+Nodes (11): Student 3 CI, Student 3 Compose integration, Shared home-page port consistency, Student 2 frontend service, Student 2 backend service, Student 2 database service, Student 3 frontend service, Student 3 backend service (+3 more)
 
-### Community 107 - "Community 107"
-Cohesion: 0.22
-Nodes (9): Four-option comparison limit, UTC-aware derived journey duration, Reusable Jinja form macros, Native API-aligned date and numeric inputs, Side-by-side transport comparison, Cross-timezone transport input, Transport option create and edit form, Transport catalogue navigation (+1 more)
-
-### Community 108 - "Community 108"
-Cohesion: 0.32
-Nodes (8): Operator-declared availability, Live seat and capacity validation, Student 3 transport SQLite database, transport_bookings table, transport_options table, Availability and seats paired display, Transport option detail, Transport option filtering and listing
-
-### Community 110 - "Community 110"
-Cohesion: 0.25
-Nodes (8): Accommodation Frontend Service, Configuration, Errors, Filters, Routes, Running it, The page, Why there is a service here at all
-
-### Community 111 - "Community 111"
-Cohesion: 0.33
-Nodes (7): Composed trip transport view, Transport plan entry, Transport public API, Delete confirmation panel, Planning rather than booking, Active-entry estimated trip total, Per-trip transport summary
-
-### Community 112 - "Community 112"
+### Community 50 - "AI mode for bounded itinerary"
 Cohesion: 0.29
-Nodes (3): What the QUERY route relies on: the database service forbids unknown         fie, The search this service accepts, validated before a round trip., TestQueryRequest
+Nodes (7): Local Ollama runtime, AI mode for bounded itinerary suggestions, Human approval boundary, qwen2.5:0.5b and llama3.1:8b local model baselines, FastAPI, Jinja, and HTMX frontend, Deferred live AI suggestions, Frontend health and readiness endpoints
 
-### Community 113 - "Community 113"
-Cohesion: 0.53
-Nodes (5): AccommodationType, AvailabilityStatus, BedType, The accommodation enums, shared by the tables and the wire format.  They live in, Enum
-
-### Community 114 - "Community 114"
-Cohesion: 0.33
-Nodes (6): Error Responses, Example Request, Example Response `200 OK`, GET /accommodation/{id}, Path Parameters, Request
-
-### Community 115 - "Community 115"
-Cohesion: 0.33
-Nodes (6): Error Responses, Example Request, Example Response `200 OK`, QUERY /accommodation, Request, Request Body
-
-### Community 116 - "Community 116"
-Cohesion: 0.33
-Nodes (6): Trip Sidebar, Contract-Ready AI Placeholder, Day Selector, Itinerary Filtering, Trip Detail Timeline, Trip Navigation
-
-### Community 117 - "Community 117"
-Cohesion: 0.33
-Nodes (6): 1. Project Overview, 2. Team Member Feature Allocation, 3. Project Repository Structure, 4. Repository Knowledge Graph, Install Graphify and the Git hooks, TripGenie – AI Smart Travel Companion
-
-### Community 118 - "Community 118"
-Cohesion: 0.40
-Nodes (4): Accommodations on a trip, Current concurrency note, Student 1 backend service, Environment variables
-
-### Community 119 - "Community 119"
-Cohesion: 0.40
-Nodes (5): Configuration, Errors, Running it, Service Scope, What is not exposed
-
-### Community 120 - "Community 120"
-Cohesion: 0.40
-Nodes (5): Error Responses, Example Request, Example Response `200 OK`, GET /health, Request
-
-### Community 121 - "Community 121"
+### Community 56 - "Student 1 Release 0 runtime"
 Cohesion: 0.50
-Nodes (4): Error Responses, Example Request, GET /accommodation/{id}/itineraries, Path Parameters
+Nodes (4): ADR-0002 internal API and observability proposals, Manual evidence proof set, Student 1 Release 0 runtime target, UI mode
 
-### Community 122 - "Community 122"
-Cohesion: 0.50
-Nodes (3): Runtime notes, Student 1 frontend service, Environment variables
+### Community 59 - "Itinerary items"
+Cohesion: 1.00
+Nodes (3): Trips aggregate, Itinerary items, Student 1 public CRUD and AI suggestion API
+
+### Community 53 - "Evidence driven assessed workflow"
+Cohesion: 0.29
+Nodes (7): Evidence-driven assessed workflow, PLAN ACT OBSERVE ADAPT loop, Implementation agent, review agent, and human review roles, Expected Actual Pass-Fail evidence, Versioned prompt and review assets, AI Agent Configuration Guide, Visible ASD Labs 01-04
+
+### Community 60 - "HTMX accessible browser CRUD shell"
+Cohesion: 0.67
+Nodes (3): TripGenie Student 1 base layout, HTMX accessible browser CRUD shell, Reusable field-error macro
+
+### Community 43 - "Transport Management UI"
+Cohesion: 0.18
+Nodes (11): Student 1 Trip Page, HTMX App Shell, Transport Management UI, Server-rendered HTMX progressive enhancement, Traveller-facing plan state labels, Outage-resilient trip picker, TripGenie transport page shell, HTMX 2.0.4 (+3 more)
+
+### Community 55 - "Trip Detail Timeline"
+Cohesion: 0.33
+Nodes (6): Trip Sidebar, Trip Detail Timeline, Itinerary Filtering, Day Selector, Contract-Ready AI Placeholder, Trip Navigation
+
+### Community 61 - "Paginated accommodation results"
+Cohesion: 0.67
+Nodes (3): Paginated accommodation results, HTMX filter-preserving pagination, Accessible accommodation detail interaction
+
+### Community 51 - "Transport public API"
+Cohesion: 0.33
+Nodes (7): Transport public API, Transport plan entry, Composed trip transport view, Delete confirmation panel, Planning rather than booking, Per-trip transport summary, Active-entry estimated trip total
+
+### Community 45 - "Reusable Jinja form macros"
+Cohesion: 0.22
+Nodes (9): Four-option comparison limit, UTC-aware derived journey duration, Reusable Jinja form macros, Native API-aligned date and numeric inputs, Side-by-side transport comparison, Transport option create and edit form, Cross-timezone transport input, Transport catalogue navigation (+1 more)
+
+### Community 48 - "transport options table"
+Cohesion: 0.32
+Nodes (8): Student 3 transport SQLite database, transport_options table, transport_bookings table, Live seat and capacity validation, Operator-declared availability, Transport option detail, Availability and seats paired display, Transport option filtering and listing
+
+### Community 21 - "ActivityAvailabilitySchedule Components"
+Cohesion: 0.07
+Nodes (36): TripGenie, Microservices Application, Activities and Attractions Management, Activity Catalog Entity, Recurring Local-Time Availability Windows, Fixed Scheduled Sessions, Availability Mode, ActivityAvailabilitySchedule (+28 more)
+
+### Community 62 - "Portable Graph Outputs"
+Cohesion: 1.00
+Nodes (3): Graphify, Portable Graph Outputs, Incremental Graph Rebuild Hooks
 
 ## Knowledge Gaps
-- **227 isolated node(s):** `ScrapeService`, `setup-graphify.sh script`, `test_graphify_setup.sh script`, `tripgenie-student1-backend`, `tripgenie-student1-database` (+222 more)
+- **179 isolated node(s):** `ScrapeService`, `tripgenie-student1-backend`, `tripgenie-student1-database`, `tripgenie-student1-frontend`, `tripgenie-student1-services` (+174 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **38 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **36 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Settings` connect `Settings Components` to `DatabaseService Components`, `DatabaseService Components`, `FakeBackendApi Components`, `conftest Components`, `AccommodationQueryRequest Components`, `TestAccommodationQuery Components`, `test repository regressions`, `app Components`, `FakeDatabaseApi Components`, `test backend`, `test trip verification`, `DatabaseClient Components`, `ItineraryClient Components`, `test itinerary`, `create engine and session`, `FakeBackend Components`, `itinerary client`, `call Components`, `TestPicker Components`, `Community 112`?**
-  _High betweenness centrality (0.164) - this node is a cross-community bridge._
+- **Why does `Settings` connect `Settings Components` to `DatabaseService Components`, `DatabaseService Components`, `create engine and session`, `FakeBackend Components`, `FakeBackendApi Components`, `conftest Components`, `ItineraryClient Components`, `TestAccommodationQuery Components`, `test repository regressions`, `AccommodationQueryRequest Components`, `app Components`, `FakeDatabaseApi Components`, `DatabaseClient Components`, `test backend`, `test trip verification`?**
+  _High betweenness centrality (0.161) - this node is a cross-community bridge._
+- **Why does `DatabaseService` connect `DatabaseService Components` to `test internal api`, `Settings Components`, `DatabaseService Components`, `test repository regressions`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
 - **Why does `BackendError` connect `app Components` to `Settings Components`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
-- **Why does `AccommodationQueryRequest` connect `AccommodationQueryRequest Components` to `AccommodationType Components`, `Community 112`, `AccommodationQueryRequest Components`, `Location Components`, `test backend`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
-- **Are the 124 inferred relationships involving `Settings` (e.g. with `AsyncClient` and `FakeDatabaseApi`) actually correct?**
+  _High betweenness centrality (0.040) - this node is a cross-community bridge._
+- **Are the 124 inferred relationships involving `Settings` (e.g. with `ApiError` and `JSONResponse`) actually correct?**
   _`Settings` has 124 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 36 inferred relationships involving `DatabaseService` (e.g. with `BaseException` and `ApiError`) actually correct?**
+- **Are the 36 inferred relationships involving `DatabaseService` (e.g. with `ApiError` and `JSONResponse`) actually correct?**
   _`DatabaseService` has 36 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 46 inferred relationships involving `DatabaseApiClient` (e.g. with `Settings` and `ApiError`) actually correct?**
+- **Are the 46 inferred relationships involving `DatabaseApiClient` (e.g. with `ApiError` and `JSONResponse`) actually correct?**
   _`DatabaseApiClient` has 46 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 42 inferred relationships involving `DatabaseApiClient` (e.g. with `ApiError` and `DatabaseHealthPayload`) actually correct?**
+- **Are the 42 inferred relationships involving `DatabaseApiClient` (e.g. with `ApiError` and `JSONResponse`) actually correct?**
   _`DatabaseApiClient` has 42 INFERRED edges - model-reasoned connections that need verification._
