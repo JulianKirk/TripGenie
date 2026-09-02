@@ -30,6 +30,16 @@ def _timeout(name: str, default: float = 5.0) -> float:
     return value
 
 
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer.") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than zero.")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     service_name: str = "student-5-backend"
@@ -43,6 +53,10 @@ class Settings:
     transport_api_base_url: str = "http://student-3-backend:8003"
     transport_api_prefix: str = "/api"
     transport_api_timeout_seconds: float = 5.0
+    ai_mode_base_url: str = "http://ai-mode:8006"
+    ai_mode_timeout_seconds: float = 20.0
+    ai_prompt_max_chars: int = 12000
+    ai_prompt_asset: str = "budget_analysis_v1.md"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -78,4 +92,16 @@ class Settings:
             transport_api_timeout_seconds=_timeout(
                 "STUDENT5_BACKEND_TRANSPORT_API_TIMEOUT_SECONDS"
             ),
+            ai_mode_base_url=_url(
+                "STUDENT5_BACKEND_AI_MODE_BASE_URL", "http://ai-mode:8006"
+            ),
+            ai_mode_timeout_seconds=_timeout(
+                "STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS", 20.0
+            ),
+            ai_prompt_max_chars=_positive_int(
+                "STUDENT5_BACKEND_AI_PROMPT_MAX_CHARS", 12000
+            ),
+            ai_prompt_asset=os.getenv(
+                "STUDENT5_BACKEND_AI_PROMPT_ASSET", "budget_analysis_v1.md"
+            ).strip(),
         )

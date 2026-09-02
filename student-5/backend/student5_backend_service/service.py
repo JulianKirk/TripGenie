@@ -3,10 +3,15 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
+from .ai_analysis import build_budget_analysis_prompt
+from .ai_mode_client import AiModeClient
 from .calculations import calculate_summary
 from .client import DatabaseApiClient
-from .errors import date_outside_trip
+from .config import Settings
+from .errors import ApiError, bad_gateway, date_outside_trip
 from .models import (
+    BudgetAnalysisRequest,
+    BudgetAnalysisResponse,
     BudgetCreate,
     BudgetRecord,
     BudgetSummary,
@@ -27,10 +32,14 @@ class BackendService:
         database: DatabaseApiClient,
         trips: TripsApiClient,
         transport: TransportApiClient,
+        ai_mode: AiModeClient,
+        settings: Settings,
     ) -> None:
         self.database = database
         self.trips = trips
         self.transport = transport
+        self.ai_mode = ai_mode
+        self.settings = settings
 
     def ready(self) -> bool:
         return self.database.ready()
@@ -110,3 +119,61 @@ class BackendService:
             ),
         }
         return calculate_summary(budget, expenses, providers)
+
+    def budget_analysis(
+        self, budget_id: UUID, request: BudgetAnalysisRequest
+    ) -> BudgetAnalysisResponse:
+        summary = self.budget_summary(budget_id)
+        expenses = self.database.list_expenses(trip_id=summary.trip_id)
+        prompt = build_budget_analysis_prompt(self.settings, summary, expenses, request)
+        metadata = {
+            "feature": "student-5-budget-analysis",
+            "trip_id": summary.trip_id,
+            "attempt": "1",
+        }
+        try:
+            result = self.ai_mode.generate(
+                prompt=prompt,
+                correlation_id=f"budget_{budget_id.hex}",
+                metadata=metadata,
+            )
+            if self._analysis_is_grounded(result, summary):
+                return result
+        except ApiError as error:
+            if error.code != "INVALID_DEPENDENCY_RESPONSE":
+                raise
+
+        retry_prompt = (
+            f"{prompt}\n\nYour previous response was invalid or ungrounded. "
+            "Return valid schema-conforming JSON. In the overview, quote at least one "
+            "exact currency amount from the authoritative key facts."
+        )
+        result = self.ai_mode.generate(
+            prompt=retry_prompt,
+            correlation_id=f"budget_{budget_id.hex}_retry",
+            metadata=metadata | {"attempt": "2"},
+        )
+        if not self._analysis_is_grounded(result, summary):
+            raise bad_gateway("ai_mode", "analysis was not grounded in budget totals")
+        return result
+
+    @staticmethod
+    def _analysis_is_grounded(
+        result: BudgetAnalysisResponse, summary: BudgetSummary
+    ) -> bool:
+        text = " ".join(
+            (
+                result.analysis.overview,
+                *result.analysis.risks,
+                *result.analysis.recommendations,
+            )
+        )
+        amounts = (
+            summary.total_budget,
+            summary.actual_spending,
+            summary.committed_costs,
+            summary.remaining_budget,
+        )
+        return summary.currency in text and any(
+            f"{amount:.2f}" in text for amount in amounts
+        )

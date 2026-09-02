@@ -20,6 +20,7 @@ TripIdentifier = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 CurrencyCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 RequiredText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 OptionalText = Annotated[str, StringConstraints(max_length=2000)]
+AnalysisQuestion = Annotated[str, StringConstraints(min_length=1, max_length=500)]
 Money = Annotated[
     Decimal,
     Field(ge=Decimal("0.00"), le=Decimal("1000000000.00"), decimal_places=2),
@@ -165,3 +166,42 @@ class BudgetSummary(StrictModel):
     remaining_budget_complete: bool
     category_totals: dict[ExpenseCategory, Money]
     providers: dict[str, ProviderCost]
+
+
+class BudgetAnalysisRequest(StrictModel):
+    question: AnalysisQuestion
+
+
+class BudgetAnalysis(StrictModel):
+    overview: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=400),
+        Field(
+            description=(
+                "A concise direct answer quoting at least one exact supplied currency "
+                "amount and accurately stating relevant uncertainty."
+            )
+        ),
+    ]
+    risks: list[
+        Annotated[
+            str,
+            StringConstraints(min_length=1, max_length=180),
+            Field(description="One distinct risk supported by the supplied context."),
+        ]
+    ] = Field(max_length=3)
+    recommendations: list[
+        Annotated[
+            str,
+            StringConstraints(min_length=1, max_length=180),
+            Field(description="One concise, practical, non-contradictory next step."),
+        ]
+    ] = Field(min_length=1, max_length=3)
+    disclaimer: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class BudgetAnalysisResponse(StrictModel):
+    analysis: BudgetAnalysis
+    run_id: str
+    model: str
+    provider: str
