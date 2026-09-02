@@ -40,7 +40,9 @@ def load_prompt(name, **fields):
 def scope():
     """What the agents are allowed to talk about: this service, nothing else."""
     lines = [PLAN["goal"], "", "Endpoints under test:"]
-    lines += [f"- {c.get('method', 'GET')} {c['path']}" for c in PLAN["checks"]]
+    # The labels, not the paths: a path still holds its ${VAR} and the literal
+    # probe values (a bogus uuid, a malformed id), which read as real endpoints.
+    lines += [f"- {c['label']}" for c in PLAN["checks"]]
     return "\n".join(lines)
 
 
