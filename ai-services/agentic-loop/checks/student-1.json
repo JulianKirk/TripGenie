@@ -1,0 +1,13 @@
+{
+  "goal": "Validate the student 1 trip and itinerary backend with a local multi-agent workflow",
+  "checks": [
+    {"label": "GET /health", "path": "${SERVICE_URL}/health", "contains": ["\"status\":\"ok\""]},
+    {"label": "GET /ready", "path": "${SERVICE_URL}/ready", "contains": ["\"status\":\"ok\""]},
+    {"label": "GET /api/trips", "path": "${SERVICE_URL}/api/trips", "contains": ["\"data\""], "nfr_ms": 500},
+    {"label": "GET /api/trips?status=planned", "path": "${SERVICE_URL}/api/trips?status=planned", "contains": ["\"data\""]},
+    {"label": "GET /api/trips/{id} (missing)", "path": "${SERVICE_URL}/api/trips/trip_2026_does_not_exist", "status": 404, "contains": ["NOT_FOUND"]},
+    {"label": "GET /api/trips/{id} (malformed)", "path": "${SERVICE_URL}/api/trips/nope", "status": 422, "contains": ["VALIDATION_ERROR"]},
+    {"label": "GET /api/trips?unknown=1 (rejected)", "path": "${SERVICE_URL}/api/trips?unknown=1", "status": 400},
+    {"label": "GET /api/itinerary-items/{id} (malformed)", "path": "${SERVICE_URL}/api/itinerary-items/nope", "status": 422, "contains": ["VALIDATION_ERROR"]}
+  ]
+}

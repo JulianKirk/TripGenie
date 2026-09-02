@@ -1,0 +1,13 @@
+{
+  "goal": "Validate the shared reference service (country, city, currency) with a local multi-agent workflow",
+  "checks": [
+    {"label": "GET /health", "path": "${SERVICE_URL}/health", "contains": ["\"status\":\"ok\""]},
+    {"label": "GET /location/country", "path": "${SERVICE_URL}/location/country", "contains": ["australia"], "nfr_ms": 500},
+    {"label": "GET /location/city", "path": "${SERVICE_URL}/location/city", "contains": ["cities"], "nfr_ms": 500},
+    {"label": "QUERY /location/city (by name)", "method": "QUERY", "path": "${SERVICE_URL}/location/city", "json": {"city": {"name": "sydney"}}, "contains": ["sydney"]},
+    {"label": "GET /currency", "path": "${SERVICE_URL}/currency", "contains": ["AUD"], "nfr_ms": 500},
+    {"label": "GET /currency/country?name=australia", "path": "${SERVICE_URL}/currency/country?name=australia", "contains": ["AUD"]},
+    {"label": "GET /currency/country (unknown)", "path": "${SERVICE_URL}/currency/country?name=nowhere", "status": 404},
+    {"label": "GET /location/country/{id} (unknown)", "path": "${SERVICE_URL}/location/country/00000000-0000-0000-0000-000000000000", "status": 404}
+  ]
+}

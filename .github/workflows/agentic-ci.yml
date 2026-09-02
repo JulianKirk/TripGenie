@@ -1,0 +1,246 @@
+name: Agentic Loop
+
+# PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT against every service's
+# public backend.
+#
+# This is a post step: each job waits for that service's own build-and-validate
+# workflow to finish on the same commit, and stops if it failed. The waiting is
+# done here rather than with a `workflow_run` trigger because workflow_run only
+# fires from the default branch's copy of a workflow file -- it does nothing on
+# a feature branch, which is where this needs to work.
+on:
+  push:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'student-*/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/agentic-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Loop unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ai-services/agentic-loop/requirements.txt
+      - run: pip install -r ai-services/agentic-loop/requirements.txt pytest
+      - working-directory: ai-services/agentic-loop
+        run: pytest -q
+
+  # The gate, for every service at once. Each service's own build-and-validate
+  # workflow decides whether its loop runs, and this job reports the verdict.
+  plan:
+    name: Pick services
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+      empty: ${{ steps.pick.outputs.empty }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          services=ai-services/agentic-loop/services.json
+          pending=$(jq -r '.[].service' "$services" | tr '\n' ' ')
+          chosen=""; unchanged=""; failed=""; ungated=""; timedout=""
+
+          if [ "$DISPATCH" = "true" ]; then
+            chosen="$pending"; pending=""
+          fi
+
+          # One call lists every workflow run for this commit, so all six
+          # services share a single two minute grace period instead of waiting
+          # 8 x 15s each, one after another.
+          blind=0
+          for attempt in $(seq 1 120); do
+            [ -z "$pending" ] && break
+            if runs=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" \
+              --jq '.workflow_runs[] | "\(.path | split("/") | last) \(.status) \(.conclusion)"' 2>&1); then
+              blind=0
+            else
+              # A broken gate must not read as "nothing ran" -- that would skip
+              # every service silently. Count the failures separately.
+              echo "could not list runs: $runs"
+              blind=$((blind + 1))
+              if [ "$blind" -ge 8 ]; then
+                ungated="$pending"; pending=""; break
+              fi
+              sleep 15
+              continue
+            fi
+
+            still=""
+            for svc in $pending; do
+              ci=$(jq -r --arg s "$svc" '.[] | select(.service == $s) | .ci' "$services")
+              line=$(printf '%s\n' "$runs" | grep -m1 "^$ci " || true)
+              if [ -z "$line" ]; then
+                # Never started. Its path filters skipped this commit.
+                if [ "$attempt" -ge 8 ]; then unchanged="$unchanged $svc"; else still="$still $svc"; fi
+                continue
+              fi
+              # shellcheck disable=SC2086
+              set -- $line
+              case "$2/$3" in
+                completed/success|completed/skipped) chosen="$chosen $svc" ;;
+                completed/*) failed="$failed $svc=$3" ;;
+                *) still="$still $svc" ;;
+              esac
+            done
+            pending="$still"
+            [ -z "$pending" ] && break
+            sleep 15
+          done
+          # Anything still pending outran the 30 minute ceiling. Reported
+          # separately from an unreadable gate -- both run, for different reasons.
+          timedout="$pending"
+
+          {
+            echo "## Agentic loop"
+            echo ""
+            echo "| Service | Build and validate | Loop |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for svc in $(jq -r '.[].service' "$services"); do
+            case " $chosen " in *" $svc "*)
+              if [ "$DISPATCH" = "true" ]; then
+                echo "| $svc | not checked (manual run) | runs |"
+              else
+                echo "| $svc | passed | runs |"
+              fi
+              continue ;;
+            esac
+            case " $unchanged " in *" $svc "*)
+              echo "| $svc | did not run | skipped, service unchanged |"; continue ;;
+            esac
+            case " $ungated " in *" $svc "*)
+              echo "| $svc | could not be read | runs ungated |"; continue ;;
+            esac
+            case " $timedout " in *" $svc "*)
+              echo "| $svc | still running after 30 min | runs ungated |"; continue ;;
+            esac
+            echo "| $svc | failed | skipped, build and validate failed |"
+          done >> "$GITHUB_STEP_SUMMARY"
+
+          selected=$(jq -c --arg picked "$chosen $ungated $timedout" \
+            '($picked | split(" ") | map(select(length > 0))) as $p
+             | [.[] | select(.service as $s | $p | index($s))]' "$services")
+          echo "matrix={\"include\":$selected}" >> "$GITHUB_OUTPUT"
+          if [ "$selected" = "[]" ]; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            {
+              echo ""
+              echo "**No services were changed - agentic loop skipped for all services.**"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  loop:
+    name: ${{ matrix.service }}
+    needs: [test, plan]
+    if: needs.plan.outputs.empty == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Enough to comment on a pull request from a branch in this repo. A pull
+      # request from a fork gets a read-only token and no comment -- the report
+      # is still on the job summary.
+      pull-requests: write
+    strategy:
+      # One service's failure should not hide the others' on a manual run.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      SERVICE_URL: http://127.0.0.1:${{ matrix.port }}
+      CHECKS_FILE: checks/${{ matrix.service }}.json
+      # Optional. Without it the two agent sections print "unavailable" and the
+      # deterministic checks still gate the build.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ai-services/agentic-loop/requirements.txt
+      - name: Install dependencies
+        run: pip install -r ai-services/agentic-loop/requirements.txt pytest
+      - name: Start the service
+        # Compose pulls in whatever the service depends on -- its database, and
+        # for student 2 the two backends it calls. The overlay publishes student
+        # 3's backend, which is internal-only in the main file.
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f ai-services/agentic-loop/docker-compose.agentic.yml \
+            up -d --build ${{ matrix.compose }}
+      - name: Wait for the service to answer
+        run: |
+          for _ in $(seq 1 20); do
+            if curl -fsS "$SERVICE_URL${{ matrix.health }}" | grep -q '${{ matrix.ready }}'; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "${{ matrix.service }} did not become ready after 20 attempts"
+          docker compose logs --tail 50
+          exit 1
+      - name: Run the agentic loop
+        working-directory: ai-services/agentic-loop
+        run: python agentic_loop.py --ci
+      # The loop already wrote its report to the step summary, and that is a
+      # real file on the runner -- reuse it verbatim as the comment body rather
+      # than rendering the same markdown twice.
+      - name: Comment the report on the pull request
+        # always(), because a failing loop is the run worth commenting on.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MARKER: '<!-- agentic-loop: ${{ matrix.service }} -->'
+        run: |
+          if [ ! -s "$GITHUB_STEP_SUMMARY" ]; then
+            echo "no report to post -- the loop did not get far enough"
+            exit 0
+          fi
+          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "commit $SHA is not on an open pull request; nothing to comment on"
+            exit 0
+          fi
+          body=$(printf '%s\n\n%s' "$MARKER" "$(cat "$GITHUB_STEP_SUMMARY")")
+          # One comment per service, edited in place, so a busy pull request
+          # does not collect a new wall of tables on every push.
+          existing=$(gh api "repos/$REPO/issues/$pr/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body"
+          else
+            gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$body"
+          fi
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --tail 100
