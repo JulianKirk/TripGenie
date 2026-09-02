@@ -118,8 +118,11 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 .modal {
   border: 1px solid var(--border);
   border-radius: 10px;
-  width: min(56rem, 90vw);
-  max-width: none;
+  /* Sized by its contents, not to a fixed width: the dialog is as wide as the
+     details card plus the trip card, and no wider. `fit-content` on the max
+     keeps it from stretching to the viewport the way a plain width would. */
+  width: fit-content;
+  max-width: 95vw;
   max-height: 85vh;
   padding: 1.5rem 1.75rem;
   overflow: auto;
@@ -146,28 +149,55 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 .modal__facts dt { color: var(--muted); }
 .modal__facts dd { margin: 0; }
 
-.picker { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
-.picker__summary { cursor: pointer; font-weight: 600; color: var(--primary); }
-.picker__list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.6rem; }
-.picker__option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.4rem 0.5rem;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text);
+.modal__card { min-width: 0; }
+/* The Add to Trip button, under the facts. */
+.modal__actions { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+/* The form modal is a column of fields, so it wants to be narrower than the
+   details it opens over. */
+.modal--form { width: min(30rem, 92vw); }
+.stay__form { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+/* Date beside its time. Collapses in the narrow block at the bottom. */
+.stay__pair { display: grid; grid-template-columns: 1fr 8rem; gap: 0.6rem; }
+.stay__actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.2rem; }
+.stay__cancel {
   font: inherit;
-  text-align: left;
+  font-size: 0.85rem;
+  border: 0;
+  background: none;
+  padding: 0.45rem 0.25rem;
+  color: var(--muted);
   cursor: pointer;
 }
-.picker__option:hover { background: var(--page-bg); }
-.picker__option[aria-checked="true"] { color: var(--available); font-weight: 600; }
-/* Reserves the tick's width so the labels do not shift when one is toggled. */
-.picker__tick { display: inline-block; width: 1rem; }
-.picker__empty { color: var(--muted); margin: 0.6rem 0 0; }
+.stay__cancel:hover { color: var(--text); }
+.stay__field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+.stay__field select, .stay__field input {
+  width: 100%; font: inherit; padding: 0.35rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.stay__optional { font-size: 0.75rem; }
+.stay__submit {
+  font: inherit;
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--primary);
+  color: var(--surface);
+  cursor: pointer;
+}
+.stay__submit:hover { filter: brightness(1.08); }
+/* The form's own error sits above the fields, so the dates the user typed are
+   still on screen to correct. */
+.stay__form .error { font-size: 0.85rem; padding: 0.5rem; }
+
+/* The running total. Its own block so it reads as an answer rather than as
+   another field. */
+.stay__total {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+.stay__note { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.stay__sum { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; flex-wrap: wrap; }
+.stay__figure { font-size: 1.5rem; font-weight: 600; }
+.stay__working { font-size: 0.85rem; color: var(--muted); }
 
 /* Fixed inside the modal <dialog>, so it paints in the top layer above the
    backdrop while still positioning against the viewport. */
@@ -225,5 +255,6 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 
 @media (max-width: 40rem) {
   .modal__facts { grid-template-columns: 1fr; }
+  .stay__pair { grid-template-columns: 1fr; }
   .results__table { display: block; overflow-x: auto; }
 }

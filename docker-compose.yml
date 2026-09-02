@@ -46,11 +46,21 @@ services:
       - student-1-frontend
 
   # The public face of the trip service. Student 2's backend calls it to pin
-  # accommodations to trips.
+  # accommodations to trips, and this one calls student 2 back for the names
+  # and nightly rates the trip page shows -- the two services reference each
+  # other's data.
+  #
+  # ponytail: deliberately NO depends_on for student-2-backend. That service
+  # already depends on this one, so declaring the reverse is a cycle compose
+  # refuses to start. The dependency is a runtime lookup, not a boot order:
+  # AccommodationClient returns None when student 2 is not up yet and the trip
+  # page renders the stay without a name.
   student-1-backend:
     build:
       context: ./student-1
       dockerfile: backend/Dockerfile
+    environment:
+      STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
     ports:
       - "8001:8001"
     depends_on:
@@ -61,6 +71,10 @@ services:
     build:
       context: ./student-1
       dockerfile: frontend/Dockerfile
+    environment:
+      # A browser address, not a compose one: the trip page links out to
+      # student 2's webpage, and that link is followed on the user's machine.
+      STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
     ports:
       - "8081:8081"
     depends_on:

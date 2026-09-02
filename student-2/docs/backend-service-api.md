@@ -404,17 +404,47 @@ accommodations and an accommodation sits on many trips — so this service owns
 none of it; it relays and merges.
 
 All three endpoints answer with the **whole** picker state rather than just the
-row that changed. One response repaints the dropdown, and a tick can never
-disagree with what student 1 actually stored.
+row that changed. One response repaints the trip card, and a tick, a stay date
+and the form's own bounds can never disagree with what student 1 actually stored.
 
 ```json
 {
   "itineraries": [
-    { "itinerary_id": "trip_2026_sydney_long_weekend", "name": "Sydney Long Weekend", "selected": true },
-    { "itinerary_id": "trip_2027_tokyo_spring_visit", "name": "Tokyo Spring Visit", "selected": false }
+    {
+      "itinerary_id": "trip_2026_sydney_long_weekend",
+      "name": "Sydney Long Weekend",
+      "selected": true,
+      "start_date": "2026-09-04",
+      "end_date": "2026-09-07",
+      "check_in": "2026-09-05",
+      "check_in_time": "15:00",
+      "check_out": "2026-09-06",
+      "check_out_time": "10:00"
+    },
+    {
+      "itinerary_id": "trip_2027_tokyo_spring_visit",
+      "name": "Tokyo Spring Visit",
+      "selected": false,
+      "start_date": "2027-03-28",
+      "end_date": "2027-04-04",
+      "check_in": null,
+      "check_in_time": null,
+      "check_out": null,
+      "check_out_time": null
+    }
   ]
 }
 ```
+
+`start_date` and `end_date` are the itinerary's own window, so a caller can bound
+a date input to it rather than discovering the limit from a rejection.
+
+`check_in`/`check_out` are the stay stored against this accommodation. They are
+only ever set on a `selected` itinerary, and they are read with one extra call
+per selected itinerary — the reverse lookup answers *which* itineraries hold the
+accommodation but returns trips, not the rows linking them. If that lookup fails
+the itinerary still comes back ticked with both dates `null`: the tick is the
+point and the dates are a bonus.
 
 `selected` is whether this accommodation is already on that itinerary — what
 the caller draws as ticked or unticked. It is computed from two calls to
@@ -449,9 +479,38 @@ curl localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itinerari
 
 Adds the accommodation to that itinerary and returns the repainted list.
 
-`PUT`, not `POST`: it is idempotent. A user clicking an already-ticked box must
-not get a conflict, and student 1 pins the accommodation to the itinerary's
-start date, so a second call does not move it.
+`PUT`, not `POST`: a user clicking an already-ticked box must not get a conflict.
+It replaces the pin rather than creating a second one, so re-sending the same
+stay changes nothing and sending different dates **moves** it — someone
+correcting the dates they just entered has to see the correction stick.
+
+### Request Body
+
+Optional. Without one, student 1 pins the accommodation to the itinerary's first
+day with no departure recorded, which is what this endpoint did before a user
+could pick the dates.
+
+| Name        | Type   | Required | Description                                   |
+|-------------|--------|----------|-----------------------------------------------|
+| `check_in`       | date | No | First night. Defaults to the itinerary's start |
+| `check_in_time`  | time | No | Arrival time, `HH:MM`. Omitted means none recorded |
+| `check_out`      | date | No | Departure. Omitted means none recorded         |
+| `check_out_time` | time | No | Departure time, `HH:MM`                        |
+
+```json
+{
+  "check_in": "2026-09-05",
+  "check_in_time": "15:00",
+  "check_out": "2026-09-06",
+  "check_out_time": "10:00"
+}
+```
+
+Both dates must fall inside the itinerary's own window, `check_out` may not
+precede `check_in`, and on a same-day stay `check_out_time` must be after
+`check_in_time` — the times are the only thing separating arrival from
+departure on one date. Student 1 owns those rules — it stores the row — so this
+service relays its `422` rather than duplicating the checks.
 
 ### Path Parameters
 
@@ -463,7 +522,9 @@ start date, so a second call does not move it.
 ### Example Request
 
 ```bash
-curl -X PUT localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itineraries/trip_2026_sydney_long_weekend
+curl -X PUT localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/itineraries/trip_2026_sydney_long_weekend \
+  -H 'Content-Type: application/json' \
+  -d '{"check_in": "2026-09-05", "check_in_time": "15:00", "check_out": "2026-09-06"}'
 ```
 
 ### Error Responses
@@ -471,6 +532,7 @@ curl -X PUT localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11/it
 | Status | Description                        |
 |--------|------------------------------------|
 | 404    | Unknown itinerary, or a malformed id |
+| 422    | Stay outside the itinerary, or a check-out before the check-in |
 | 502    | Bad response from itinerary service |
 | 503    | Itinerary service unavailable      |
 

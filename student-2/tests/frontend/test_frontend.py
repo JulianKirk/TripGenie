@@ -7,6 +7,8 @@ HTML as substrings, which is the same approach student 1's frontend tests take.
 
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from tests.frontend.conftest import LISTING
@@ -146,3 +148,100 @@ class TestErrors:
         response = client.get("/")
         assert "<!DOCTYPE html>" in response.text
         assert "database unavailable" in response.text
+
+
+class TestListingPayloadRendersFaithfully:
+    """Body assertions for the listing and filter endpoints.
+
+    The tests above cover the request this service *sends* and that the name
+    comes back. These cover the other half: that every field of the payload
+    reaches the page as the value the backend gave, formatted but not altered.
+    A row that 200s with the wrong price is worse than one that fails.
+    """
+
+    def _row(self, text: str) -> str:
+        start = text.index('<tr class="results__row"')
+        return text[start : text.index("</tr>", start)]
+
+    def _cells(self, text: str) -> list[str]:
+        """The row's data cells, tags stripped and whitespace collapsed.
+
+        Per-cell rather than a substring search over the whole row: "Hotel"
+        appears in "Harbour View Hotel", so asserting it against the row would
+        pass whether or not the type column rendered at all.
+        """
+        row = self._row(text)
+        return [
+            " ".join(re.sub(r"<[^>]+>", " ", cell).split())
+            for cell in re.findall(r"<td>(.*?)</td>", row, re.DOTALL)
+        ]
+
+    def test_every_column_of_a_row_carries_its_value(self, client):
+        cells = self._cells(client.get("/accommodation").text)
+
+        # type, location, price, rating, availability -- in that order.
+        assert cells == [
+            "Hotel",
+            "Sydney, Australia",
+            "$320.00",
+            "4.6 / 5",
+            "Available",
+        ]
+        assert "pill--available" in self._row(client.get("/accommodation").text)
+        assert LISTING["name"] in self._row(client.get("/accommodation").text)
+
+    def test_a_null_price_and_rating_render_as_absences_not_zeroes(
+        self, client, backend
+    ):
+        """A missing price is not a free room."""
+        backend.response = httpx.Response(
+            200,
+            json={
+                "accommodations": [
+                    {**LISTING, "price_per_night": None, "rating": None}
+                ],
+                "total": 1,
+            },
+        )
+
+        cells = self._cells(client.get("/accommodation").text)
+
+        assert cells[2] == "\u2014"  # an em dash, not $0.00
+        assert cells[3] == "Unrated"
+
+    def test_a_filtered_response_renders_what_came_back_not_what_was_asked(
+        self, client, backend
+    ):
+        """The page must draw the backend's answer. Echoing the filter instead
+        would look identical whenever the two happen to agree."""
+        backend.response = httpx.Response(
+            200,
+            json={
+                "accommodations": [
+                    {**LISTING, "name": "Blue Mountains Lodge", "price_per_night": 95.5}
+                ],
+                "total": 1,
+            },
+        )
+
+        text = client.get("/accommodation?name=harbour").text
+
+        assert "Blue Mountains Lodge" in text
+        assert "$95.50" in text
+        assert "Harbour View Hotel" not in text
+
+    def test_the_row_links_to_that_accommodations_own_detail(self, client):
+        row = self._row(client.get("/accommodation").text)
+
+        assert f"/accommodation/{LISTING['id']}" in row
+
+    def test_the_whole_page_and_a_deep_link_both_carry_the_listing(self, client):
+        """The deep link renders a modal *and* the list behind it -- opening
+        one accommodation must not cost the page it opened from."""
+        listing_only = client.get("/").text
+        with_modal = client.get(f"/?accommodation={LISTING['id']}").text
+
+        for text in (listing_only, with_modal):
+            assert LISTING["name"] in text
+            assert "$320.00" in text
+        assert "<dialog" in with_modal

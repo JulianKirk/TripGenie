@@ -167,6 +167,22 @@ class BackendApiClient:
         )
         return envelope.data
 
+    async def remove_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> DeleteResponse:
+        envelope = await self._request_model(
+            "DELETE",
+            f"{self._api_prefix}/trips/{trip_id}/accommodations/{accommodation_id}",
+            expected_statuses={200},
+            response_type=DataEnvelope[DeleteResponse],
+            malformed_message=(
+                "Backend API returned a malformed accommodation removal response."
+            ),
+        )
+        return envelope.data
+
     async def _request_model(
         self,
         method: str,

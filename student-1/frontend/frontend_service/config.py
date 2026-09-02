@@ -61,6 +61,10 @@ class Settings:
     backend_api_prefix: str = "/api"
     backend_timeout_seconds: float = 5.0
     service_name: str = "student-1-frontend"
+    # Where a browser -- not this container -- reaches student 2's webpage. A
+    # row on the trip page links there, so it has to be the address on the
+    # user's machine, not the compose hostname this service would use.
+    accommodation_ui_url: str = "http://localhost:9003"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -72,6 +76,14 @@ class Settings:
                 ),
                 env_name="STUDENT1_FRONTEND_BACKEND_BASE_URL",
                 default="http://student-1-backend:8001",
+            ),
+            accommodation_ui_url=_normalise_base_url(
+                os.getenv(
+                    "STUDENT1_FRONTEND_ACCOMMODATION_UI_URL",
+                    "http://localhost:9003",
+                ),
+                env_name="STUDENT1_FRONTEND_ACCOMMODATION_UI_URL",
+                default="http://localhost:9003",
             ),
             backend_api_prefix=_normalise_prefix(
                 os.getenv("STUDENT1_FRONTEND_BACKEND_API_PREFIX"),

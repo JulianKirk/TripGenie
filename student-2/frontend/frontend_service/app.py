@@ -16,6 +16,7 @@ service starts computing on the data rather than displaying it.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
@@ -66,6 +67,8 @@ BOUND_FIELDS = (
     "room_count_min",
     "bed_count_min",
 )
+# The stay fields the form posts, in the order the backend documents them.
+STAY_FIELDS = ("check_in", "check_in_time", "check_out", "check_out_time")
 PAGE_SIZES = (10, 20, 50, 100)
 DEFAULT_LIMIT = 20
 
@@ -184,7 +187,12 @@ async def health(request: Request) -> dict[str, str]:
 @router.get("/")
 async def index(request: Request):
     """The whole page. The results are rendered server-side on first load, so
-    the list is there before HTMX has done anything."""
+    the list is there before HTMX has done anything.
+
+    `?accommodation=<id>` opens that one's modal with the page. It is how
+    another service links to a single accommodation: the modal is a fragment,
+    so a bare link to it would give the browser a page with no page around it.
+    """
     context: dict[str, Any] = {
         "page_sizes": PAGE_SIZES,
         "limit": DEFAULT_LIMIT,
@@ -196,6 +204,15 @@ async def index(request: Request):
         context |= await results_context(request)
     except BackendError as exc:
         context["error"] = str(exc)
+
+    requested = request.query_params.get("accommodation", "").strip()
+    if requested:
+        try:
+            context["opened"] = await call(request, "GET", f"{PATH}/{requested}")
+        except BackendError:
+            # A stale or unknown id should still give you the list, not an
+            # error page -- the link came from somewhere else's data.
+            context["opened_missing"] = requested
     return render(request, "page.html", context)
 
 
@@ -220,61 +237,82 @@ async def detail(request: Request, accommodation_id: UUID):
     return render(request, "partials/modal.html", {"accommodation": accommodation})
 
 
-@router.get(f"{PATH}/{{accommodation_id:uuid}}/itineraries")
-async def itineraries(request: Request, accommodation_id: UUID):
-    """The Add-to-Itinerary list, fetched when the user opens the disclosure."""
-    return await _picker(request, accommodation_id, "GET", "")
+@router.get(f"{PATH}/{{accommodation_id:uuid}}/stay")
+async def stay(request: Request, accommodation_id: UUID):
+    """The Add-to-Trip form, as its own modal over the details one.
+
+    Also what the form re-renders itself with: changing a date re-runs the
+    nightly total server-side, so the price on screen is arithmetic this
+    service did rather than a number a script guessed.
+    """
+    return await _stay_form(request, accommodation_id, dict(request.query_params))
 
 
 @router.put(f"{PATH}/{{accommodation_id:uuid}}/itineraries/{{itinerary_id}}")
-@router.delete(f"{PATH}/{{accommodation_id:uuid}}/itineraries/{{itinerary_id}}")
-async def toggle_itinerary(request: Request, accommodation_id: UUID, itinerary_id: str):
-    """One handler for both verbs: the ticked box sends DELETE and the unticked
-    one sends PUT, and the backend answers both with the whole list."""
-    return await _picker(
-        request, accommodation_id, request.method, f"/{itinerary_id}", itinerary_id
-    )
+async def add_to_itinerary(request: Request, accommodation_id: UUID, itinerary_id: str):
+    """The form's submit. The stay arrives as a form body, because that is what
+    an HTML form sends, and leaves as the JSON the backend documents."""
+    submitted = dict(await request.form())
+    path = f"{PATH}/{accommodation_id}/itineraries/{itinerary_id}"
+    body = {field: (submitted.get(field) or None) for field in STAY_FIELDS}
+    try:
+        await call(request, "PUT", path, json=body)
+    except BackendError as exc:
+        # Back into the form with the error and everything the user typed --
+        # a rejected date should be there to correct, not gone.
+        return await _stay_form(request, accommodation_id, submitted, error=str(exc))
+    return render(request, "partials/stay_done.html", {"trip": submitted.get("trip")})
 
 
-async def _picker(
+async def _stay_form(
     request: Request,
     accommodation_id: UUID,
-    method: str,
-    suffix: str,
-    itinerary_id: str = "",
+    form: dict[str, Any],
+    error: str = "",
 ):
-    path = f"{PATH}/{accommodation_id}/itineraries{suffix}"
     try:
-        body = await call(request, method, path)
+        accommodation = await call(request, "GET", f"{PATH}/{accommodation_id}")
+        body = await call(request, "GET", f"{PATH}/{accommodation_id}/itineraries")
     except BackendError as exc:
         return render(request, "partials/error.html", {"error": str(exc)})
+
+    itineraries = body["itineraries"]
+    chosen = form.get("itinerary_id") or (
+        itineraries[0]["itinerary_id"] if itineraries else ""
+    )
+    trip = next(
+        (it for it in itineraries if it["itinerary_id"] == chosen),
+        None,
+    )
     return render(
         request,
-        "partials/itinerary_picker.html",
+        "partials/stay_modal.html",
         {
-            "itineraries": body["itineraries"],
+            "accommodation": accommodation,
             "accommodation_id": accommodation_id,
-            "toast": _added_message(method, itinerary_id, body["itineraries"]),
+            "itineraries": itineraries,
+            "trip": trip,
+            "form": form,
+            "error": error,
+            "nights": _nights(form.get("check_in"), form.get("check_out")),
+            "rate": accommodation.get("price_per_night"),
         },
     )
 
 
-def _added_message(
-    method: str, itinerary_id: str, itineraries: list[dict[str, Any]]
-) -> str:
-    """What the toast says, or "" for no toast.
+def _nights(check_in: str | None, check_out: str | None) -> int | None:
+    """Nights between two ISO dates, or None if we cannot say yet.
 
-    Only an add announces itself. A removal already had the user confirm it, so
-    telling them it happened is a second interruption for the same decision.
-    The name comes from the repainted list rather than the request, so the toast
-    cannot name something the backend did not actually store.
+    None is not zero: an unfilled check-out means "no total to show", while a
+    same-day stay really is nought nights. The template draws them differently.
     """
-    if method != "PUT":
-        return ""
-    for itinerary in itineraries:
-        if itinerary["itinerary_id"] == itinerary_id and itinerary["selected"]:
-            return f"Added to {itinerary['name']}."
-    return ""
+    if not check_in or not check_out:
+        return None
+    try:
+        nights = (date.fromisoformat(check_out) - date.fromisoformat(check_in)).days
+    except ValueError:
+        return None
+    return nights if nights >= 0 else None
 
 
 def create_app(settings: Settings | None = None, *, transport: Any = None) -> FastAPI:
