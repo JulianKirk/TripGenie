@@ -20,11 +20,16 @@
     h1 { font-size: 2.4rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
     .sub { color: var(--muted); margin: 0 0 2.5rem; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
-    a.card { display: block; padding: 1rem 1.15rem; text-decoration: none; color: inherit;
+    /* The bare "Student N" text node is a grid item like the spans, but it
+       cannot be selected on its own -- so the card's own font is the label's
+       style, and the spans override it. */
+    a.card { display: grid; grid-template-columns: 1fr auto; gap: 0 .75rem;
+             padding: .85rem 1.15rem; text-decoration: none;
+             font-size: .8rem; color: var(--muted);
              background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
     a.card:hover, a.card:focus-visible { border-color: var(--muted); }
-    .name { font-weight: 600; }
-    .who { color: var(--muted); font-size: .85rem; }
+    .name { grid-column: 1; font-size: 1rem; font-weight: 600; color: var(--fg); }
+    .port { grid-column: 2; grid-row: 2; align-self: end; font-variant-numeric: tabular-nums; }
     footer { color: var(--muted); font-size: .85rem; margin-top: 2.5rem; }
   </style>
 </head>
@@ -34,11 +39,17 @@
     <p class="sub">AI Smart Travel Companion — Group 07</p>
 
     <ul>
-      <li><a class="card" href="http://localhost:8081"><span class="name">Trips &amp; Itineraries</span><br><span class="who">Student 1 · :8081</span></a></li>
-      <li><a class="card" href="http://localhost:9003"><span class="name">Accommodation</span><br><span class="who">Student 2 · :9003</span></a></li>
-      <li><a class="card" href="http://localhost:8093"><span class="name">Transport</span><br><span class="who">Student 3 · :8093</span></a></li>
-      <li><a class="card" href="http://localhost:8084"><span class="name">Activities &amp; Attractions</span><br><span class="who">Student 4 · :8084</span></a></li>
-      <li><a class="card" href="http://localhost:8085"><span class="name">Budget &amp; Expenses</span><br><span class="who">Student 5 · :8085</span></a></li>
+      <!-- Each card opens with a bare "Student N" text node, before any
+           element. Student 3's CI greps this file for
+           localhost:<port>">Student N to prove the page links the port compose
+           actually publishes, and a <span> in between would hide the label
+           from it. The label reads first anyway, so this costs the design
+           nothing. -->
+      <li><a class="card" href="http://localhost:8081">Student 1<span class="name">Trips &amp; Itineraries</span><span class="port">:8081</span></a></li>
+      <li><a class="card" href="http://localhost:9003">Student 2<span class="name">Accommodation</span><span class="port">:9003</span></a></li>
+      <li><a class="card" href="http://localhost:8093">Student 3<span class="name">Transport</span><span class="port">:8093</span></a></li>
+      <li><a class="card" href="http://localhost:8084">Student 4<span class="name">Activities &amp; Attractions</span><span class="port">:8084</span></a></li>
+      <li><a class="card" href="http://localhost:8085">Student 5<span class="name">Budget &amp; Expenses</span><span class="port">:8085</span></a></li>
     </ul>
 
     <footer>Student 4 and 5 frontends are not in docker-compose.yml yet; those links 404 until they are.</footer>
