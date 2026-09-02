@@ -18,3 +18,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["student5_frontend_service*"]
+
+[tool.setuptools.package-data]
+student5_frontend_service = ["templates/**/*.html", "static/**/*"]

@@ -1,0 +1,20 @@
+<div class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">Budget</p><h2>{{ heading }}</h2></div></div>
+  {% if form_error %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  <form method="post" action="{{ action }}">
+    <div class="form-grid">
+      {% for name, label, input_type in [
+        ('trip_id', 'Trip ID', 'text'), ('currency', 'Currency', 'text'),
+        ('total_budget', 'Total budget', 'number'), ('accommodation_budget', 'Accommodation allocation', 'number'),
+        ('transport_budget', 'Transport allocation', 'number'), ('activities_budget', 'Activities allocation', 'number'),
+        ('food_budget', 'Food allocation', 'number'), ('other_budget', 'Other allocation', 'number')
+      ] %}
+      <label class="field"><span>{{ label }}</span>
+        <input name="{{ name }}" type="{{ input_type }}" value="{{ form.get(name, '') }}" {% if input_type == 'number' %}min="0" step="0.01"{% endif %} required maxlength="100">
+        {% for issue in errors.get(name, []) %}<span class="field-error">{{ issue }}</span>{% endfor %}
+      </label>
+      {% endfor %}
+    </div>
+    <div class="actions"><button class="button button--primary" type="submit">Save budget</button><a class="button" href="{% if budget %}/budgets/{{ budget.budget_id }}{% else %}/{% endif %}">Cancel</a></div>
+  </form>
+</div>
