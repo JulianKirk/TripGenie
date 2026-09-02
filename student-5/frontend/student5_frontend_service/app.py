@@ -289,6 +289,31 @@ def create_app(
         backend.request("DELETE", f"/budgets/{budget_id}")
         return RedirectResponse("/", status_code=303)
 
+    @app.post("/budgets/{budget_id}/ai-analysis")
+    async def budget_analysis(request: Request, budget_id: str) -> Response:
+        form = await request.form()
+        question = str(form.get("question", "")).strip()
+        try:
+            analysis = backend.request(
+                "POST",
+                f"/budgets/{budget_id}/ai-analysis",
+                json={"question": question},
+                timeout=settings.ai_analysis_timeout_seconds,
+            )
+            analysis_error = None
+        except BackendError as error:
+            analysis, analysis_error = None, error
+        return TEMPLATES.TemplateResponse(
+            request,
+            "partials/ai_analysis.html",
+            {
+                "budget": {"budget_id": budget_id},
+                "question": question,
+                "analysis": analysis,
+                "analysis_error": analysis_error,
+            },
+        )
+
     @app.get("/budgets/{budget_id}/expenses/new")
     def new_expense(request: Request, budget_id: str) -> Response:
         try:

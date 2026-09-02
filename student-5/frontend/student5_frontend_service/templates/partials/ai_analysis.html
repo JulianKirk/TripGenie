@@ -1,0 +1,16 @@
+<div id="ai-analysis" class="panel ai-analysis" aria-live="polite">
+  <div><p class="eyebrow">Advisory assistant</p><h2>Budget analysis</h2></div>
+  <form method="post" action="/budgets/{{ budget.budget_id }}/ai-analysis" hx-post="/budgets/{{ budget.budget_id }}/ai-analysis" hx-target="#ai-analysis" hx-swap="outerHTML" hx-indicator="#ai-analysis-loading">
+    <label class="field"><span>What would you like to understand?</span><textarea name="question" rows="3" maxlength="500" required>{{ question or '' }}</textarea></label>
+    <div class="actions"><button class="button button--primary" type="submit">Analyse budget</button><span id="ai-analysis-loading" class="htmx-indicator muted">Analysing...</span></div>
+  </form>
+  {% if analysis %}
+  <div class="analysis-result">
+    <p>{{ analysis.analysis.overview }}</p>
+    {% if analysis.analysis.risks %}<h3>Risks</h3><ul>{% for risk in analysis.analysis.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
+    <h3>Recommendations</h3><ul>{% for recommendation in analysis.analysis.recommendations %}<li>{{ recommendation }}</li>{% endfor %}</ul>
+    <p class="muted">{{ analysis.analysis.disclaimer }}</p>
+    <p class="cell-note">Model: {{ analysis.model }} via {{ analysis.provider }}</p>
+  </div>
+  {% elif analysis_error %}<div class="banner banner--warning">AI analysis is unavailable: {{ analysis_error }} Budget and expense actions remain available.</div>{% endif %}
+</div>

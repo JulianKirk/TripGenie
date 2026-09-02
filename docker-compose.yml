@@ -242,11 +242,79 @@ services:
 
   # Student 5: Budget & Expense Management
   student-5-service:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      student-5-frontend:
+        condition: service_healthy
+
+  student-5-frontend:
     build:
       context: ./student-5
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
     ports:
       - "8085:8085"
+    depends_on:
+      student-5-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  student-5-backend:
+    build:
+      context: ./student-5
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT5_BACKEND_API_PREFIX: /api/v1
+      STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+    expose:
+      - "8005"
+    depends_on:
+      student-5-database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  student-5-database:
+    build:
+      context: ./student-5
+      dockerfile: database/Dockerfile
+    expose:
+      - "8007"
+    volumes:
+      - student-5-sqlite:/data/student-5
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Local AI Model Runtime (Ollama)
   ollama:
@@ -259,3 +327,4 @@ volumes:
   student-1-db:
   student-2-db:
   student-3-sqlite:
+  student-5-sqlite:

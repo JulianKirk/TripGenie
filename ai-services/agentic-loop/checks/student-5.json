@@ -1,7 +1,7 @@
 {
   "goal": "Validate the student 5 budget and expense service with a local multi-agent workflow",
-  "_note": "student-5 has no backend yet -- its Dockerfile serves a static directory. This file checks that the container is up; replace these with real endpoint checks when the backend lands.",
+  "_note": "The workflow starts the Student 5 frontend, backend, and database through the student-5-service grouping target.",
   "checks": [
-    {"label": "GET / (placeholder static server)", "path": "${SERVICE_URL}/", "contains": ["<html"]}
+    {"label": "GET / (budget frontend)", "path": "${SERVICE_URL}/", "contains": ["<html", "Budget"]}
   ]
 }
