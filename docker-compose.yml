@@ -241,7 +241,9 @@ services:
       - "8084:8084"
 
   # Student 5: Budget & Expense Management
-  student-5-service:
+  # Grouping target for the complete Student 5 slice:
+  # `docker compose up --build student-5`.
+  student-5:
     image: alpine:3
     command: ["true"]
     depends_on:
@@ -252,6 +254,8 @@ services:
     build:
       context: ./student-5
       dockerfile: frontend/Dockerfile
+    environment:
+      STUDENT5_FRONTEND_BACKEND_BASE_URL: http://student-5-backend:8005
     ports:
       - "8085:8085"
     depends_on:
@@ -276,12 +280,21 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       STUDENT5_BACKEND_API_PREFIX: /api/v1
+      STUDENT5_BACKEND_DB_API_BASE_URL: http://student-5-database:8007
+      STUDENT5_BACKEND_TRIPS_API_BASE_URL: http://student-1-backend:8001
+      STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
       STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
     expose:
       - "8005"
     depends_on:
       student-5-database:
         condition: service_healthy
+      student-1-backend:
+        condition: service_started
+      student-3-backend:
+        condition: service_started
+      ai-mode:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -299,6 +312,8 @@ services:
     build:
       context: ./student-5
       dockerfile: database/Dockerfile
+    environment:
+      STUDENT5_SQLITE_PATH: /data/student-5/tripgenie.db
     expose:
       - "8007"
     volumes:
@@ -310,6 +325,32 @@ services:
           "python",
           "-c",
           "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Shared AI gateway. Student backends call this service; only it calls the
+  # host Ollama runtime. Student 5 waits for the process to start, not for AI
+  # readiness, so budget and expense CRUD remains available without a model.
+  ai-mode:
+    build:
+      context: ./ai-services/ai-mode
+      dockerfile: Dockerfile
+    environment:
+      AI_MODE_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    expose:
+      - "8006"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health', timeout=3)",
         ]
       interval: 15s
       timeout: 5s
