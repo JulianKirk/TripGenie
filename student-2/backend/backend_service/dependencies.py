@@ -8,6 +8,7 @@ from fastapi import Depends, Request
 
 from backend_service.client import DatabaseClient
 from backend_service.itinerary_client import ItineraryClient
+from backend_service.location_client import LocationClient
 
 
 def get_db(request: Request) -> DatabaseClient:
@@ -26,3 +27,12 @@ def get_itinerary(request: Request) -> ItineraryClient:
 
 
 ItineraryDep = Annotated[ItineraryClient, Depends(get_itinerary)]
+
+
+def get_location(request: Request) -> LocationClient:
+    """The one location client, built once in the app lifespan -- same reason
+    as `get_db`, and it carries the reference-data cache besides."""
+    return request.app.state.location
+
+
+LocationDep = Annotated[LocationClient, Depends(get_location)]

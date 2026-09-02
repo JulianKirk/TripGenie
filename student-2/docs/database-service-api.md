@@ -53,6 +53,19 @@ entirely; the tests do.
 | `DATABASE_URL` | `sqlite:///student-2/database/accommodation.db` | SQLite path (`/data/accommodation.db` in the image) |
 | `SEED_DATA`    | `1`                                        | Seed an empty database on startup; `0` to skip |
 
+### Where an accommodation is
+
+`location_details` carries the shared reference service's `country_id` and
+`city_id`, not names. This service stores what it is given and never resolves
+one: the shared service is reached over HTTP, and a database service makes no
+outbound calls. The [backend service](./backend-service-api.md) is what turns
+`"australia"` into an id on the way in and back into a name on the way out, so
+the public contract still speaks names.
+
+Ids are `uuid5` over the place name (see
+[shared/docs/object-model.md](../../shared/docs/object-model.md#ids)), which is
+how `seed_data.py` here can name a place at startup with no client to ask.
+
 ### The accommodation message
 
 There is one accommodation shape, and every field on it is nullable — the
@@ -153,8 +166,8 @@ curl -X GET "http://localhost:9001/internal/accommodation/3f1c8b52-8f8e-4a3d-9f2
   "rating": 4.5,
   "amenities": ["wifi", "pool"],
   "location_details": {
-    "country": "australia",
-    "city": "sydney",
+    "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",
+    "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
     "street": "example street avenue",
     "street_number": 123
   },
@@ -207,8 +220,10 @@ carry the comparisons a template cannot express.
 
 Inside `accommodation`, any field from [POST /internal/accommodation](#post-internalaccommodation)
 can be used as a filter, including the nested `location_details` and
-`room_details` objects. `city` still requires `country` — Sydney exists in more
-than one.
+`room_details` objects. A `city_id` needs no `country_id` alongside it — the
+shared service's city ids are already scoped by country, so one names exactly
+one place. The "city requires country" rule lives in the backend service, where
+names are what arrive.
 
 How each field matches:
 
@@ -228,8 +243,8 @@ by `name` (then `id` to break ties) — without an `ORDER BY`, `limit`/`offset`
 is free to hand the same row back on two different pages.
 
 Results are trimmed — each row carries `id`, `name`, `type`, `price_per_night`,
-`availability_status`, `rating` and `location_details.country`/`city`, since a
-result list is for choosing which one to `GET` in full.
+`availability_status`, `rating` and `location_details.country_id`/`city_id`,
+since a result list is for choosing which one to `GET` in full.
 
 ### Example Request
 
@@ -239,7 +254,10 @@ curl -X QUERY "http://localhost:9001/internal/accommodation" \
   -d '{
     "accommodation": {
       "type": "hotel",
-      "location_details": {"country": "australia", "city": "sydney"}
+      "location_details": {
+        "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",
+        "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e"
+      }
     },
     "price_max": 250,
     "room_count_min": 2,
@@ -260,8 +278,8 @@ curl -X QUERY "http://localhost:9001/internal/accommodation" \
       "availability_status": "available",
       "rating": 4.5,
       "location_details": {
-        "country": "australia",
-        "city": "sydney"
+        "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",
+        "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e"
       }
     }
   ],
@@ -273,7 +291,7 @@ curl -X QUERY "http://localhost:9001/internal/accommodation" \
 
 | Status | Description                                  |
 |--------|----------------------------------------------|
-| 400    | Unknown field / `city` given without `country` |
+| 400    | Unknown field                                |
 | 500    | Internal server error                        |
 
 
@@ -298,15 +316,15 @@ Create a new accommodation.
 | availability_status | enum    | Yes      | `available`, `unavailable`, `sold_out`                                   |
 | rating              | float   | No       | Aggregate rating; absent until one is recorded, never `0.0` as a stand-in |
 | amenities           | array   | No       | List of amenity strings                                                  |
-| location_details    | object  | Yes      | Country, city, street name, and street number                            |
+| location_details    | object  | Yes      | Shared country and city ids, street name, and street number              |
 | room_details        | object  | No       | Room counts, bed counts, bed types, and a free-text description          |
 
 `location_details` object:
 
 | Field         | Type    | Required | Description                                                                       |
 |---------------|---------|----------|------------------------------------------------------------------------------------|
-| country       | string  | Yes      | Country name; the `Country` row is looked up or created if it doesn't exist yet    |
-| city          | string  | Yes      | City name within `country`; the `City` row is looked up or created the same way    |
+| country_id    | uuid    | Yes      | The shared reference service's country id                                          |
+| city_id       | uuid    | Yes      | The shared reference service's city id; already scoped to a country                 |
 | street        | string  | No       | Street name                                                                        |
 | street_number | integer | No       | Street number                                                                      |
 
@@ -332,8 +350,8 @@ curl -X POST "http://localhost:9001/internal/accommodation" \
     "availability_status": "available",
     "amenities": ["wifi", "pool"],
     "location_details": {
-      "country": "australia",
-      "city": "sydney",
+      "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",
+      "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
       "street": "example street avenue",
       "street_number": 123
     },
@@ -416,8 +434,8 @@ just the fields that changed.
   "rating": 4.5,
   "amenities": ["wifi", "pool"],
   "location_details": {
-    "country": "australia",
-    "city": "sydney",
+    "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",
+    "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
     "street": "example street avenue",
     "street_number": 123
   },

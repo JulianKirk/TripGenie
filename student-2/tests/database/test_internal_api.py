@@ -12,6 +12,13 @@ from fastapi.testclient import TestClient
 
 from database_service.app import create_app
 from database_service.config import Settings
+from database_service.seed_data import place
+
+# The shared reference service's ids for the places these rows sit in. This
+# service stores ids and never resolves one -- see database_service/models.py.
+SYDNEY = {key: str(value) for key, value in place("australia", "sydney").items()}
+KATOOMBA = {key: str(value) for key, value in place("australia", "katoomba").items()}
+MELBOURNE = {key: str(value) for key, value in place("australia", "melbourne").items()}
 
 HOTEL = {
     "name": "example accommodation",
@@ -21,8 +28,7 @@ HOTEL = {
     "availability_status": "available",
     "amenities": ["wifi", "pool"],
     "location_details": {
-        "country": "australia",
-        "city": "sydney",
+        **SYDNEY,
         "street": "example street avenue",
         "street_number": 123,
     },
@@ -42,7 +48,7 @@ BARE = {
     "description": "somewhere to sleep",
     "price_per_night": 10.00,
     "availability_status": "available",
-    "location_details": {"country": "australia", "city": "katoomba"},
+    "location_details": KATOOMBA,
     "room_details": {"room_count": 1},
 }
 
@@ -50,7 +56,7 @@ CABIN = {
     **HOTEL,
     "name": "cosy cabin",
     "type": "camping",
-    "location_details": {"country": "australia", "city": "katoomba"},
+    "location_details": KATOOMBA,
     "room_details": {"room_count": 1, "bed_count": 1},
 }
 
@@ -91,7 +97,7 @@ class TestAccommodation:
         body = client.get(f"/internal/accommodation/{hotel_id}").json()
         assert body["type"] == "hotel"
         assert body["amenities"] == ["wifi", "pool"]
-        assert body["location_details"]["city"] == "sydney"
+        assert body["location_details"]["city_id"] == SYDNEY["city_id"]
         assert body["location_details"]["street_number"] == 123
         assert body["room_details"]["bed_types"] == ["king", "queen"]
 
@@ -134,29 +140,16 @@ class TestAccommodation:
         )
         assert response.status_code == 400
 
-    def test_country_and_city_are_reused_not_duplicated(self, client):
-        """Two accommodations in the same city must not create two City rows --
-        the second POST looks the first one's up by name."""
-        first = client.post("/internal/accommodation", json=HOTEL).json()["id"]
-        second = client.post(
-            "/internal/accommodation", json={**HOTEL, "name": "other"}
-        ).json()["id"]
-        cities = {
-            client.get(f"/internal/accommodation/{i}").json()["location_details"][
-                "city"
-            ]
-            for i in (first, second)
-        }
-        assert cities == {"sydney"}
+    def test_two_accommodations_in_one_city_share_its_id(self, client):
+        """The id is stored, not looked up, so two rows in the same place carry
+        the same id and one filter finds both."""
+        for name in ("example accommodation", "other"):
+            client.post("/internal/accommodation", json={**HOTEL, "name": name})
 
         rows = client.request(
             "QUERY",
             "/internal/accommodation",
-            json={
-                "accommodation": {
-                    "location_details": {"country": "australia", "city": "sydney"}
-                }
-            },
+            json={"accommodation": {"location_details": SYDNEY}},
         ).json()
         assert rows["total"] == 2
 
@@ -215,9 +208,7 @@ class TestAccommodationQuery:
     def test_filters_stack(self, client):
         body = self.query(
             client,
-            accommodation={
-                "location_details": {"country": "australia", "city": "sydney"}
-            },
+            accommodation={"location_details": SYDNEY},
             room_count_min=2,
         ).json()
         assert [a["name"] for a in body["accommodations"]] == ["example accommodation"]
@@ -226,11 +217,9 @@ class TestAccommodationQuery:
     def test_summary_omits_the_heavy_fields(self, client):
         row = self.query(
             client,
-            accommodation={
-                "location_details": {"country": "australia", "city": "sydney"}
-            },
+            accommodation={"location_details": SYDNEY},
         ).json()["accommodations"][0]
-        assert set(row["location_details"]) == {"country", "city"}
+        assert set(row["location_details"]) == {"country_id", "city_id"}
         assert "amenities" not in row
 
     def test_limit_pages_but_total_counts_every_match(self, client):
@@ -242,11 +231,16 @@ class TestAccommodationQuery:
         body = self.query(client, accommodation={"type": "hotel"}, price_max=250).json()
         assert [a["name"] for a in body["accommodations"]] == ["example accommodation"]
 
-    def test_city_without_country_is_400(self, client):
+    def test_a_city_id_needs_no_country_alongside_it(self, client):
+        """City ids are already scoped by country, so one names exactly one
+        place. The "city requires country" rule lives in the backend service,
+        where names are what arrive."""
         response = self.query(
-            client, accommodation={"location_details": {"city": "sydney"}}
+            client,
+            accommodation={"location_details": {"city_id": SYDNEY["city_id"]}},
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
 
     def test_an_unknown_filter_is_400_not_silently_ignored(self, client):
         assert self.query(client, room_count_minimum=2).status_code == 400
@@ -277,8 +271,7 @@ class TestAccommodationUpdate:
             f"/internal/accommodation/{hotel_id}",
             json={
                 "location_details": {
-                    "country": "australia",
-                    "city": "melbourne",
+                    **MELBOURNE,
                     "street": "new street",
                     "street_number": 999,
                 }
@@ -286,7 +279,7 @@ class TestAccommodationUpdate:
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["location_details"]["city"] == "melbourne"
+        assert body["location_details"]["city_id"] == MELBOURNE["city_id"]
         assert body["location_details"]["street"] == "new street"
         assert body["location_details"]["street_number"] == 999
 

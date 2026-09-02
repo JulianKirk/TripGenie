@@ -11,13 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import String, cast, func, select
 
-from database_service.models import (
-    Accommodation,
-    City,
-    Country,
-    LocationDetails,
-    RoomDetails,
-)
+from database_service.models import Accommodation, LocationDetails, RoomDetails
 from database_service.schemas import Location, Room
 
 if TYPE_CHECKING:
@@ -54,15 +48,14 @@ def _commit(session: Session) -> None:
 
 def _join_for(stmt: Select, query: AccommodationQueryRequest) -> Select:
     """Join only the tables this query actually touches -- an unconditional
-    join to RoomDetails would silently drop accommodations that have none."""
-    location = query.accommodation.location_details
+    join to RoomDetails would silently drop accommodations that have none.
+
+    Place filters need no join beyond LocationDetails now that country and city
+    are ids on that row rather than rows in this database.
+    """
     room = query.accommodation.room_details
-    if location is not None:
+    if query.accommodation.location_details is not None:
         stmt = stmt.join(LocationDetails)
-        if location.country is not None:
-            stmt = stmt.join(Country, LocationDetails.country_id == Country.id)
-        if location.city is not None:
-            stmt = stmt.join(City, LocationDetails.city_id == City.id)
     if room is not None or (query.room_count_min, query.bed_count_min) != (None, None):
         stmt = stmt.join(RoomDetails)
     return stmt
@@ -77,8 +70,8 @@ def _equalities(match: AccommodationMessage) -> list[tuple[Any, Any]]:
         (Accommodation.price_per_night, match.price_per_night),
         (Accommodation.availability_status, match.availability_status),
         (Accommodation.rating, match.rating),
-        (Country.name, location.country),
-        (City.name, location.city),
+        (LocationDetails.country_id, location.country_id),
+        (LocationDetails.city_id, location.city_id),
         (LocationDetails.street, location.street),
         (LocationDetails.street_number, location.street_number),
         (RoomDetails.room_count, room.room_count),

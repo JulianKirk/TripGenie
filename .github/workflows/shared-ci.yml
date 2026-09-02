@@ -1,0 +1,70 @@
+name: Shared Reference Service CI
+
+on:
+  push:
+    paths:
+      - 'shared/**'
+      - 'ruff.toml'
+      - 'docker-compose.yml'
+      - '.github/workflows/shared-ci.yml'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'ruff.toml'
+      - 'docker-compose.yml'
+      - '.github/workflows/shared-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  services:
+    name: Build and Validate the Shared Reference Service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: shared/pyproject.toml
+      - name: Install dependencies
+        run: pip install -e "./shared[dev]"
+      - name: Lint
+        run: |
+          ruff check shared
+          ruff format --check shared
+      - name: Run tests
+        run: pytest shared/tests -q
+      - name: Build database service image
+        run: docker build -f shared/database/Dockerfile -t shared-database shared
+      - name: Health check database service
+        run: |
+          docker run -d --name shared-database -p 9101:9101 shared-database
+          for _ in $(seq 1 8); do
+            if curl -fsS http://localhost:9101/health; then
+              echo "database service healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service did not become healthy after 8 attempts"
+          docker logs shared-database
+          exit 1
+      - name: Build backend service image
+        run: docker build -f shared/backend/Dockerfile -t shared-backend shared
+      - name: Health check backend service
+        # No database container on this network, so /health answers "degraded"
+        # with a 200 -- that is the documented behaviour and what is under test
+        # here: the service itself starts and serves.
+        run: |
+          docker run -d --name shared-backend -p 9100:9100 shared-backend
+          for _ in $(seq 1 8); do
+            if curl -fsS http://localhost:9100/health; then
+              echo "backend service healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service did not become healthy after 8 attempts"
+          docker logs shared-backend
+          exit 1

@@ -129,3 +129,4 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     database: str
+    location: str

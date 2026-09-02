@@ -60,7 +60,7 @@ def create_accommodation(
     payload: AccommodationCreateRequest, session: SessionDep
 ) -> AccommodationMessage:
     accommodation = AccommodationRepository(session).add(
-        Accommodation.from_message(session, payload)
+        Accommodation.from_message(payload)
     )
     # Only the fields the caller needs to find the row again -- the rest are
     # None and `exclude_none` drops them.
@@ -75,6 +75,6 @@ def update_accommodation(
 ) -> AccommodationMessage:
     accommodations = AccommodationRepository(session)
     accommodation = get_or_404(accommodations, id, "accommodation")
-    accommodation.update_from(session, payload)
+    accommodation.update_from(payload)
     # add() on an already-persistent instance is a no-op plus the commit.
     return accommodations.add(accommodation).to_message()

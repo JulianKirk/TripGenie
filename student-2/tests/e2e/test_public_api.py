@@ -16,6 +16,7 @@ from backend_service import enums as backend_enums
 from backend_service import schemas as backend_schemas
 from database_service import enums as database_enums
 from database_service import schemas as database_schemas
+from database_service.seed_data import place as place_ids
 from tests.database.test_internal_api import CABIN, HOTEL
 
 
@@ -42,6 +43,7 @@ class TestHealth:
             "status": "ok",
             "service": "student-2-backend",
             "database": "ok",
+            "location": "ok",
         }
 
 
@@ -57,12 +59,22 @@ class TestGetAccommodation:
     def test_the_message_survives_the_wrapper_unchanged(self, client, database):
         """This service declares the accommodation message separately from the
         database service, so the two have to agree field for field. They are
-        the same request one hop apart -- any difference is drift."""
+        the same request one hop apart -- and the only difference allowed is
+        the one this service exists to make: the stored country and city ids
+        come back as names."""
         row_id = database.post("/internal/accommodation", json=CABIN).json()["id"]
-        assert (
-            client.get(f"/accommodation/{row_id}").json()
-            == database.get(f"/internal/accommodation/{row_id}").json()
-        )
+        stored = database.get(f"/internal/accommodation/{row_id}").json()
+        published = client.get(f"/accommodation/{row_id}").json()
+
+        place = published.pop("location_details")
+        assert place.pop("country") == "australia"
+        assert place.pop("city") == "katoomba"
+        assert stored.pop("location_details") == {
+            **place,
+            "country_id": str(place_ids("australia", "katoomba")["country_id"]),
+            "city_id": str(place_ids("australia", "katoomba")["city_id"]),
+        }
+        assert published == stored
 
     def test_a_relation_the_row_does_not_have_is_absent(self, client, database):
         """The message is one nullable class, so a response says what it means
@@ -156,7 +168,6 @@ class TestContract:
         "name",
         [
             "Accommodation",
-            "Location",
             "Room",
             "AccommodationQueryRequest",
             "AccommodationQueryResponse",
@@ -166,6 +177,16 @@ class TestContract:
         assert set(getattr(backend_schemas, name).model_fields) == set(
             getattr(database_schemas, name).model_fields
         )
+
+    def test_location_is_the_one_message_that_deliberately_differs(self):
+        """The database service stores the shared service's ids; this service
+        publishes names. That swap is the whole reason this service talks to
+        the shared reference service, so the two declarations must *not* match
+        -- everything either side of the place fields still has to."""
+        published = set(backend_schemas.Location.model_fields)
+        stored = set(database_schemas.Location.model_fields)
+        assert published - stored == {"country", "city"}
+        assert stored - published == {"country_id", "city_id"}
 
     @pytest.mark.parametrize(
         "name", ["AccommodationType", "AvailabilityStatus", "BedType"]

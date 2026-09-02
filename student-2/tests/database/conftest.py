@@ -19,12 +19,17 @@ from database_service.models import (
     AvailabilityStatus,
     Base,
     BedType,
-    City,
-    Country,
     LocationDetails,
     RoomDetails,
 )
 from database_service.repository import AccommodationRepository
+from database_service.seed_data import place
+
+# The shared reference service's ids for these places. There are no Country or
+# City rows to build here any more -- those tables belong to the shared service
+# and this one only stores their ids.
+SYDNEY = place("australia", "sydney")
+KATOOMBA = place("australia", "katoomba")
 
 
 @pytest.fixture
@@ -42,31 +47,7 @@ def accommodations(session):
 
 
 @pytest.fixture
-def australia(session):
-    country = Country(id=uuid4(), name="Australia")
-    session.add(country)
-    session.commit()
-    return country
-
-
-@pytest.fixture
-def katoomba(session, australia):
-    city = City(id=uuid4(), name="Katoomba", country_id=australia.id)
-    session.add(city)
-    session.commit()
-    return city
-
-
-@pytest.fixture
-def sydney(session, australia):
-    city = City(id=uuid4(), name="Sydney", country_id=australia.id)
-    session.add(city)
-    session.commit()
-    return city
-
-
-@pytest.fixture
-def camping(accommodations, australia, katoomba):
+def camping(accommodations):
     return accommodations.add(
         Accommodation(
             id=uuid4(),
@@ -76,10 +57,7 @@ def camping(accommodations, australia, katoomba):
             price_per_night=Decimal("20.00"),
             availability_status=AvailabilityStatus.AVAILABLE,
             location_details=LocationDetails(
-                country_id=australia.id,
-                city_id=katoomba.id,
-                street="Cliff Dr",
-                street_number=1,
+                **KATOOMBA, street="Cliff Dr", street_number=1
             ),
             room_details=RoomDetails(
                 room_count=1, bed_count=1, bed_types=[BedType.SINGLE]
@@ -89,7 +67,7 @@ def camping(accommodations, australia, katoomba):
 
 
 @pytest.fixture
-def hotel(accommodations, australia, sydney):
+def hotel(accommodations):
     return accommodations.add(
         Accommodation(
             id=uuid4(),
@@ -99,10 +77,7 @@ def hotel(accommodations, australia, sydney):
             price_per_night=Decimal("250.00"),
             availability_status=AvailabilityStatus.AVAILABLE,
             location_details=LocationDetails(
-                country_id=australia.id,
-                city_id=sydney.id,
-                street="George St",
-                street_number=1,
+                **SYDNEY, street="George St", street_number=1
             ),
             room_details=RoomDetails(
                 room_count=40, bed_count=60, bed_types=[BedType.QUEEN, BedType.KING]
