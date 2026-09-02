@@ -30,6 +30,9 @@ def test_adding_an_accommodation_pins_it_to_the_trip_start_date(
         "trip_id": SYDNEY,
         "accommodation_id": ACCOMMODATION_ID,
         "date": "2027-04-01",
+        "check_in_time": None,
+        "check_out": None,
+        "check_out_time": None,
     }
 
 
@@ -55,6 +58,14 @@ def test_accommodations_appear_on_the_trip_detail(client: TestClient) -> None:
             "trip_id": SYDNEY,
             "accommodation_id": ACCOMMODATION_ID,
             "date": "2027-04-01",
+            "check_in_time": None,
+            "check_out": None,
+            "check_out_time": None,
+            # Student 2 does not know this id in the fake, so the trip page
+            # gets the stay without a label rather than an error.
+            "name": None,
+            "price_per_night": None,
+            "total_price": None,
         },
     ]
 
@@ -119,3 +130,158 @@ def test_a_malformed_accommodation_id_is_rejected_before_the_database(
 
     assert response.status_code == 422
     assert database_api.trip_accommodations == {}
+
+
+def test_a_chosen_stay_window_is_stored(client: TestClient) -> None:
+    """The point of the body: the caller says when, instead of the service
+    guessing the trip's first day."""
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-02", "check_out": "2027-04-03"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["date"] == "2027-04-02"
+    assert response.json()["data"]["check_out"] == "2027-04-03"
+
+
+def test_a_stay_starting_before_the_trip_is_rejected(client: TestClient) -> None:
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-03-30"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert [detail["field"] for detail in details] == ["date"]
+
+
+def test_a_stay_ending_after_the_trip_is_rejected(client: TestClient) -> None:
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-02", "check_out": "2027-04-09"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert [detail["field"] for detail in details] == ["check_out"]
+
+
+def test_a_checkout_before_the_checkin_is_rejected(client: TestClient) -> None:
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-03", "check_out": "2027-04-01"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_re_pinning_moves_the_stay(client: TestClient) -> None:
+    """PUT replaces the pin. A user correcting their dates must see the
+    correction stick, not silently keep the first answer."""
+    client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-01", "check_out": "2027-04-02"},
+    )
+    second = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-02", "check_out": "2027-04-03"},
+    )
+
+    assert second.json()["data"]["date"] == "2027-04-02"
+    listed = client.get(f"/api/trips/{SYDNEY}/accommodations").json()["data"]
+    assert len(listed) == 1
+
+
+def test_the_stay_carries_arrival_and_departure_times(client: TestClient) -> None:
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={
+            "date": "2027-04-01",
+            "check_in_time": "15:00",
+            "check_out": "2027-04-03",
+            "check_out_time": "10:00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["check_in_time"] == "15:00"
+    assert response.json()["data"]["check_out_time"] == "10:00"
+
+
+def test_a_same_day_stay_must_check_out_after_it_checks_in(
+    client: TestClient,
+) -> None:
+    """Only the times separate arrival from departure on a day-use booking."""
+    response = client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={
+            "date": "2027-04-02",
+            "check_in_time": "14:00",
+            "check_out": "2027-04-02",
+            "check_out_time": "09:00",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()["error"]
+    # Its own message: the dates are fine, so pointing at them would send the
+    # user to correct the one thing that is not wrong.
+    assert "check out after it checks in" in body["message"]
+    assert body["details"][0]["field"] == "check_out_time"
+
+
+def test_the_trip_detail_labels_and_prices_the_stay(
+    client: TestClient,
+    accommodation_api,
+) -> None:
+    """A trip stores an id; the page needs a name and what the stay costs, and
+    both come from student 2."""
+    accommodation_api.records[ACCOMMODATION_ID] = {
+        "id": ACCOMMODATION_ID,
+        "name": "Harbour View Hotel",
+        "price_per_night": 220.0,
+    }
+    client.put(
+        f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}",
+        json={"date": "2027-04-01", "check_out": "2027-04-03"},
+    )
+
+    stay = client.get(f"/api/trips/{SYDNEY}").json()["data"]["accommodations"][0]
+
+    assert stay["name"] == "Harbour View Hotel"
+    assert stay["price_per_night"] == 220.0
+    # Two nights, not three days.
+    assert stay["total_price"] == 440.0
+
+
+def test_an_unreachable_accommodation_service_still_returns_the_trip(
+    client: TestClient,
+    accommodation_api,
+) -> None:
+    """Losing a name must not cost the trip. The stay renders unlabelled."""
+    client.put(f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}")
+
+    response = client.get(f"/api/trips/{SYDNEY}")
+
+    assert response.status_code == 200
+    stay = response.json()["data"]["accommodations"][0]
+    assert stay["name"] is None
+    assert stay["date"] == "2027-04-01"
+    assert accommodation_api.calls == [ACCOMMODATION_ID]
+
+
+def test_a_stay_with_no_departure_has_no_total(
+    client: TestClient,
+    accommodation_api,
+) -> None:
+    accommodation_api.records[ACCOMMODATION_ID] = {
+        "name": "Harbour View Hotel",
+        "price_per_night": 220.0,
+    }
+    client.put(f"/api/trips/{SYDNEY}/accommodations/{ACCOMMODATION_ID}")
+
+    stay = client.get(f"/api/trips/{SYDNEY}").json()["data"]["accommodations"][0]
+
+    assert stay["price_per_night"] == 220.0
+    assert stay["total_price"] is None

@@ -143,8 +143,18 @@
     </section>
   </main>
 
-  {# The modal is swapped in here and removes itself on close. #}
-  <div id="modal"></div>
+  {# The modal is swapped in here and removes itself on close. A deep link
+     (?accommodation=<id>) renders it server-side so it is open on arrival. #}
+  <div id="modal">
+    {% if opened %}{% with accommodation = opened %}{% include "partials/modal.html" %}{% endwith %}{% endif %}
+  </div>
+  {% if opened_missing %}
+    <p class="error" role="alert">
+      That accommodation could not be found. It may have been removed.
+    </p>
+  {% endif %}
+  {# And the Add-to-Trip form, which opens as a second dialog over that one. #}
+  <div id="stay-modal"></div>
 
   <script>
     // The city filter is only legal alongside a country (see app.py).

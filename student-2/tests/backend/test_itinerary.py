@@ -10,6 +10,7 @@ picker draws.
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -48,7 +49,12 @@ class FakeItineraryApi:
     def __init__(self):
         self.trips = [SYDNEY, TOKYO]
         self.holding: set[str] = set()
-        self.writes: list[tuple[str, str]] = []
+        # (method, trip_id, body) -- the body matters now that a PUT carries
+        # the stay the user picked.
+        self.writes: list[tuple[str, str, dict | None]] = []
+        # trip_id -> the pinned row, as student 1 stores it.
+        self.stays: dict[str, dict] = {}
+        self.stays_response: httpx.Response | None = None
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -59,24 +65,32 @@ class FakeItineraryApi:
             return httpx.Response(200, json={"data": held})
 
         trip_id = path.split("/trips/")[1].split("/")[0]
-        self.writes.append((request.method, trip_id))
+
+        if path.endswith("/accommodations") and request.method == "GET":
+            if self.stays_response is not None:
+                return self.stays_response
+            row = self.stays.get(trip_id)
+            return httpx.Response(200, json={"data": [row] if row else []})
+
+        body = json.loads(request.content) if request.content else None
+        self.writes.append((request.method, trip_id, body))
         if request.method == "PUT":
             self.holding.add(trip_id)
-            return httpx.Response(
-                200,
-                json={
-                    "data": {
-                        "trip_id": trip_id,
-                        "accommodation_id": ACCOMMODATION_ID,
-                        "date": "2027-04-01",
-                    },
-                },
-            )
+            self.stays[trip_id] = {
+                "trip_id": trip_id,
+                "accommodation_id": ACCOMMODATION_ID,
+                "date": (body or {}).get("date") or "2027-04-01",
+                "check_in_time": (body or {}).get("check_in_time"),
+                "check_out": (body or {}).get("check_out"),
+                "check_out_time": (body or {}).get("check_out_time"),
+            }
+            return httpx.Response(200, json={"data": self.stays[trip_id]})
         if trip_id not in self.holding:
             return httpx.Response(
                 404, json={"error": {"code": "NOT_FOUND", "message": "nope"}}
             )
         self.holding.discard(trip_id)
+        self.stays.pop(trip_id, None)
         return httpx.Response(200, json={"data": {"id": trip_id, "deleted": True}})
 
 
@@ -185,19 +199,97 @@ class TestPicker:
                 "itinerary_id": "trip_sydney",
                 "name": "Sydney Getaway",
                 "selected": False,
+                "start_date": "2027-04-01",
+                "end_date": "2027-04-03",
+                "check_in": None,
+                "check_in_time": None,
+                "check_out": None,
+                "check_out_time": None,
             },
             {
                 "itinerary_id": "trip_tokyo",
                 "name": "Tokyo City Break",
                 "selected": False,
+                "start_date": "2027-04-01",
+                "end_date": "2027-04-03",
+                "check_in": None,
+                "check_in_time": None,
+                "check_out": None,
+                "check_out_time": None,
             },
         ]
 
     def test_adding_ticks_only_that_itinerary(self, client, itinerary_api):
         body = client.put(f"{PICKER}/trip_tokyo").json()
 
-        assert itinerary_api.writes == [("PUT", "trip_tokyo")]
+        assert itinerary_api.writes == [
+            (
+                "PUT",
+                "trip_tokyo",
+                {
+                    "date": None,
+                    "check_in_time": None,
+                    "check_out": None,
+                    "check_out_time": None,
+                },
+            ),
+        ]
         assert [it["selected"] for it in body["itineraries"]] == [False, True]
+
+    def test_a_chosen_stay_reaches_student_1(self, client, itinerary_api):
+        """The whole point of the panel: the dates the user picked are what
+        gets stored, under the name student 1 gives them."""
+        client.put(
+            f"{PICKER}/trip_tokyo",
+            json={
+                "check_in": "2027-04-02",
+                "check_in_time": "15:00",
+                "check_out": "2027-04-03",
+                "check_out_time": "10:00",
+            },
+        )
+
+        assert itinerary_api.writes == [
+            (
+                "PUT",
+                "trip_tokyo",
+                {
+                    "date": "2027-04-02",
+                    "check_in_time": "15:00",
+                    "check_out": "2027-04-03",
+                    "check_out_time": "10:00",
+                },
+            ),
+        ]
+
+    def test_a_ticked_itinerary_carries_its_stay(self, client):
+        client.put(
+            f"{PICKER}/trip_tokyo",
+            json={"check_in": "2027-04-02", "check_out": "2027-04-03"},
+        )
+
+        body = client.get(PICKER).json()
+        tokyo = next(
+            it for it in body["itineraries"] if it["itinerary_id"] == "trip_tokyo"
+        )
+        sydney = next(
+            it for it in body["itineraries"] if it["itinerary_id"] == "trip_sydney"
+        )
+
+        assert (tokyo["check_in"], tokyo["check_out"]) == ("2027-04-02", "2027-04-03")
+        # Not ticked, so there is no stay to report.
+        assert (sydney["check_in"], sydney["check_out"]) == (None, None)
+
+    def test_a_failing_stay_lookup_still_returns_the_ticks(self, client, itinerary_api):
+        """The tick is the picker's job and the dates are a bonus, so losing
+        the bonus must not cost the list."""
+        client.put(f"{PICKER}/trip_tokyo")
+        itinerary_api.stays_response = httpx.Response(500, json={})
+
+        body = client.get(PICKER).json()
+
+        assert [it["selected"] for it in body["itineraries"]] == [False, True]
+        assert all(it["check_in"] is None for it in body["itineraries"])
 
     def test_an_accommodation_can_sit_on_several_itineraries(self, client):
         client.put(f"{PICKER}/trip_sydney")
@@ -217,7 +309,7 @@ class TestPicker:
 
         body = client.delete(f"{PICKER}/trip_tokyo").json()
 
-        assert itinerary_api.writes[-1] == ("DELETE", "trip_tokyo")
+        assert itinerary_api.writes[-1] == ("DELETE", "trip_tokyo", None)
         assert [it["selected"] for it in body["itineraries"]] == [False, False]
 
     def test_a_malformed_accommodation_id_never_reaches_student_one(

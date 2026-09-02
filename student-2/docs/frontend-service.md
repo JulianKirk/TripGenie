@@ -47,9 +47,11 @@ These serve HTML, not an API — no other service is a caller.
 
 | Route                      | Returns                                                    |
 |----------------------------|------------------------------------------------------------|
-| `GET /`                    | The whole page, results already rendered                   |
+| `GET /`                    | The whole page, results already rendered. `?accommodation=<id>` opens that one's modal with the page |
 | `GET /accommodation`       | The results fragment: the table and the pager              |
 | `GET /accommodation/{id}`  | The details modal for one accommodation                    |
+| `GET /accommodation/{id}/stay` | The Add-to-Trip form, as a second modal. Re-renders itself on every change to recompute the total |
+| `PUT /accommodation/{id}/itineraries/{itineraryId}` | Stores the stay from the form body |
 | `GET /health`              | `{"status", "service", "backend"}`                         |
 
 `/health` reports `degraded` (still `200`) when the backend is unreachable —
@@ -77,6 +79,61 @@ Clicking a row swaps `GET /accommodation/{id}` into `#modal`, which renders a
 native `<dialog open>` — focus handling, Escape and the backdrop come from the
 browser rather than from a modal library. The row's name is a real `<button>`,
 so the modal is reachable without a mouse.
+
+### Linking to one accommodation
+
+`GET /?accommodation=<id>` renders the page with that accommodation's modal
+already open. Student 1's trip page links here from each row of its
+Accommodation section — the modal is a fragment, so a bare link to
+`/accommodation/{id}` would hand the browser a page with no page around it. An
+id the service does not know still returns the list, with a note above it: the
+link came from another service's data, and a stale one is not a reason to lose
+the page.
+
+### Adding one to a trip
+
+The details modal carries an **Add to Trip** button and nothing else about
+trips. Pressing it fetches `GET /accommodation/{id}/stay` into `#stay-modal`, a
+second `<dialog>` that opens over the first. Both sit in the browser's top
+layer, so the form stacks above the details without a `z-index` of ours, and
+closing it (Escape, Cancel, or the ×) leaves the details modal untouched
+underneath.
+
+The form asks for the trip, a check-in date and time, and a check-out date and
+time. The two dates are bounded by the chosen trip's own window, so the native
+calendar cannot offer a date the trip service would reject.
+
+**The nightly total is server-side arithmetic.** A wrapper inside the form
+carries `hx-trigger="change from:closest form"` and `hx-include="closest form"`,
+so any change re-renders the whole form — with the new total, and with the date
+bounds of whichever trip is now selected. The price is `price_per_night ×
+nights`, where nights is the gap between the two dates:
+
+| State | Shown |
+| --- | --- |
+| No check-out yet | "Pick a check-out date for the total." |
+| Same day | "Same-day stay — no nights, no charge." |
+| *n* nights | The total, with `n nights × $rate` as its working |
+| No `price_per_night` | "No nightly rate recorded, so there is no total to show." |
+
+ponytail: doing this on the server rather than in a script means the number on
+screen is the same arithmetic the rest of the page uses, and there is no
+JavaScript on the form at all — `<input type="date">` and `type="time"` bring
+their own pickers, keyboard handling and mobile UI.
+
+On success the response body is *only* an out-of-band toast: the main swap
+replaces the form's `<dialog>` with nothing, which is what closes it. The toast
+goes out-of-band into `#modal-toast` inside the details dialog, because it is
+`position: fixed` and only a descendant of an open modal paints above that
+modal's backdrop — left where the form was, it would be swapped away in the
+same breath.
+
+A rejected stay re-renders the form with the message inside it and every value
+still in the inputs.
+
+**Not offered here:** taking an accommodation back off a trip. The tick-list
+that carried that control is gone, so removal is currently only reachable
+through the backend's `DELETE` endpoint or student 1's own trip page.
 
 ### Filters
 

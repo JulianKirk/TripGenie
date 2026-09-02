@@ -88,12 +88,28 @@ async def request(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE) from exc
 
     if response.is_client_error:
-        # `detail` is what every documented error body carries; falling back to
-        # the whole body keeps an unexpected shape readable.
-        detail = body.get("detail", body) if isinstance(body, dict) else body
-        raise HTTPException(response.status_code, detail)
+        raise HTTPException(response.status_code, _detail(body))
 
     return body
+
+
+def _detail(body: Any) -> Any:
+    """The human-readable half of an upstream error body.
+
+    The two upstreams disagree about the shape. The database service and this
+    service use `{"detail": ...}`; student 1 envelopes as
+    `{"error": {"code", "message"}}`. Both are unwrapped to the message a
+    caller can put in front of a user -- without this, student 1's errors
+    reached the page as a Python dict repr.
+
+    Falling back to the whole body keeps an unexpected shape readable.
+    """
+    if not isinstance(body, dict):
+        return body
+    error = body.get("error")
+    if isinstance(error, dict) and "message" in error:
+        return error["message"]
+    return body.get("detail", body)
 
 
 def parse(model: type[T], body: Any) -> T:

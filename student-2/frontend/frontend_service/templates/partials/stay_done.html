@@ -1,0 +1,13 @@
+{#
+  The stay landed. The response body is only the out-of-band toast, so the main
+  swap replaces the form's <dialog> with nothing -- removing the dialog is what
+  closes it, and the details modal underneath is untouched.
+
+  The toast goes out-of-band into the details dialog rather than staying here:
+  it is position:fixed, and only a descendant of an open modal <dialog> paints
+  above that dialog's backdrop. Left where the form was, it would be swapped
+  away in the same breath.
+#}
+<p id="modal-toast" class="toast" role="status" hx-swap-oob="true">
+  Added to {{ trip|default("your trip", true) }}.
+</p>

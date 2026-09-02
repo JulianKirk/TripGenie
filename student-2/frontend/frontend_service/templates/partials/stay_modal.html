@@ -1,0 +1,119 @@
+{#
+  Add to Trip, as a second <dialog> over the details one. Both live in the
+  browser's top layer, so this one stacks above without any z-index of ours.
+
+  The whole form re-renders itself on every change: that is what keeps the
+  nightly total honest, because the arithmetic is done here rather than by a
+  script that could disagree with what gets stored. It also re-bounds the date
+  inputs when the trip changes, so the calendar cannot offer a date the trip
+  service would reject.
+
+  ponytail: no JS. `hx-trigger="change"` on the form plus `hx-include` is the
+  whole of the live total, and <input type="date"> / type="time"> bring their
+  own pickers and keyboard handling.
+#}
+<dialog class="modal modal--form" aria-labelledby="stay-title"
+        onclose="this.remove()">
+  <article class="modal__card">
+    <header class="modal__header">
+      <h2 id="stay-title">Add to Trip</h2>
+      <button type="button" class="modal__close" aria-label="Close"
+              onclick="this.closest('dialog').close()">&times;</button>
+    </header>
+
+    <p class="modal__lede">{{ accommodation.name }}</p>
+
+    {% if trip %}
+      <form id="stay-form" class="stay__form"
+            hx-put="{{ request.url_for('add_to_itinerary', accommodation_id=accommodation_id, itinerary_id=trip.itinerary_id) }}"
+            hx-target="closest dialog" hx-swap="outerHTML">
+        {# Any change re-renders this form from the server with the new total
+           and the new date bounds. The GET carries every field, so nothing the
+           user has typed is lost on the way round. #}
+        <div hx-get="{{ request.url_for('stay', accommodation_id=accommodation_id) }}"
+             hx-trigger="change from:closest form"
+             hx-target="closest dialog" hx-swap="outerHTML"
+             hx-include="closest form"></div>
+
+        {# So the confirmation can name the trip without a second lookup. It
+           stays in step because the form re-renders whenever the select
+           changes. #}
+        <input type="hidden" name="trip" value="{{ trip.name }}">
+
+        {% if error %}
+          <p class="error" role="alert">{{ error }}</p>
+        {% endif %}
+
+        <label class="stay__field" for="stay-trip">
+          Trip
+          <select id="stay-trip" name="itinerary_id" required>
+            {% for itinerary in itineraries %}
+              <option value="{{ itinerary.itinerary_id }}"
+                      {% if itinerary.itinerary_id == trip.itinerary_id %}selected{% endif %}>
+                {{ itinerary.name }} ({{ itinerary.start_date }} to {{ itinerary.end_date }})
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+
+        {# The trip's own window is the min and max on both dates. #}
+        <div class="stay__pair">
+          <label class="stay__field" for="stay-check-in">
+            Check-in
+            <input type="date" id="stay-check-in" name="check_in" required
+                   min="{{ trip.start_date }}" max="{{ trip.end_date }}"
+                   value="{{ form.get('check_in', '') or trip.start_date }}">
+          </label>
+          <label class="stay__field" for="stay-check-in-time">
+            Time
+            <input type="time" id="stay-check-in-time" name="check_in_time"
+                   value="{{ form.get('check_in_time', '') }}">
+          </label>
+        </div>
+
+        <div class="stay__pair">
+          <label class="stay__field" for="stay-check-out">
+            Check-out
+            <input type="date" id="stay-check-out" name="check_out"
+                   min="{{ trip.start_date }}" max="{{ trip.end_date }}"
+                   value="{{ form.get('check_out', '') }}">
+          </label>
+          <label class="stay__field" for="stay-check-out-time">
+            Time
+            <input type="time" id="stay-check-out-time" name="check_out_time"
+                   value="{{ form.get('check_out_time', '') }}">
+          </label>
+        </div>
+
+        {# The total, recomputed on every change. Nights is the gap between the
+           two dates, so a same-day stay is nought nights and costs nothing --
+           said plainly rather than shown as "$0.00" with no explanation. #}
+        <div class="stay__total" role="status" aria-live="polite">
+          {% if rate is none %}
+            <p class="stay__note">No nightly rate recorded, so there is no total to show.</p>
+          {% elif nights is none %}
+            <p class="stay__note">Pick a check-out date for the total.</p>
+          {% elif nights == 0 %}
+            <p class="stay__note">Same-day stay &mdash; no nights, no charge.</p>
+          {% else %}
+            <p class="stay__sum">
+              <span class="stay__figure">${{ "%.2f"|format(rate * nights) }}</span>
+              <span class="stay__working">
+                {{ nights }} night{{ "" if nights == 1 else "s" }} &times; ${{ "%.2f"|format(rate) }}
+              </span>
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="stay__actions">
+          <button type="submit" class="stay__submit">Add to trip</button>
+          <button type="button" class="stay__cancel"
+                  onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="stay__note">No trips yet. Create one in Trips first.</p>
+    {% endif %}
+  </article>
+</dialog>
+<script>document.querySelector("#stay-modal dialog").showModal();</script>

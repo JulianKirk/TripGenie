@@ -46,11 +46,21 @@ services:
       - student-1-frontend
 
   # The public face of the trip service. Student 2's backend calls it to pin
-  # accommodations to trips.
+  # accommodations to trips, and this one calls student 2 back for the names
+  # and nightly rates the trip page shows -- the two services reference each
+  # other's data.
+  #
+  # ponytail: deliberately NO depends_on for student-2-backend. That service
+  # already depends on this one, so declaring the reverse is a cycle compose
+  # refuses to start. The dependency is a runtime lookup, not a boot order:
+  # AccommodationClient returns None when student 2 is not up yet and the trip
+  # page renders the stay without a name.
   student-1-backend:
     build:
       context: ./student-1
       dockerfile: backend/Dockerfile
+    environment:
+      STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
     ports:
       - "8001:8001"
     depends_on:
@@ -61,6 +71,10 @@ services:
     build:
       context: ./student-1
       dockerfile: frontend/Dockerfile
+    environment:
+      # A browser address, not a compose one: the trip page links out to
+      # student 2's webpage, and that link is followed on the user's machine.
+      STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
     ports:
       - "8081:8081"
     depends_on:
@@ -241,12 +255,51 @@ services:
       - "8084:8084"
 
   # Student 5: Budget & Expense Management
-  student-5-service:
+  # Same shape as student-3: a grouping container plus frontend, backend and an
+  # internal-only database service.
+  student-5:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - student-5-frontend
+
+  # The budget webpage. Talks to the Student 5 backend and nothing else.
+  student-5-frontend:
     build:
       context: ./student-5
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
     ports:
       - "8085:8085"
+    depends_on:
+      - student-5-backend
+
+  # The public /api surface. Reads Student 1's trips and Student 3's transport
+  # legs to total a trip's spend.
+  #
+  # ponytail: no environment block -- every default is already baked into the
+  # Dockerfile ENV and points at these compose hostnames. Add one here only to
+  # override a default.
+  student-5-backend:
+    build:
+      context: ./student-5
+      dockerfile: backend/Dockerfile
+    expose:
+      - "8005"
+    depends_on:
+      - student-5-database
+      - student-1-backend
+      - student-3-backend
+
+  # Internal only -- no published port. Owns the Student 5 SQLite file; the
+  # backend reaches it as http://student-5-database:8007 on the compose network.
+  student-5-database:
+    build:
+      context: ./student-5
+      dockerfile: database/Dockerfile
+    expose:
+      - "8007"
+    volumes:
+      - student-5-db:/data/student-5
 
   # Local AI Model Runtime (Ollama)
   ollama:
@@ -259,3 +312,4 @@ volumes:
   student-1-db:
   student-2-db:
   student-3-sqlite:
+  student-5-db:

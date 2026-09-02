@@ -54,6 +54,9 @@ TRIP_ACCOMMODATION_FIELDS = (
     "trip_id",
     "accommodation_id",
     "date",
+    "check_in_time",
+    "check_out",
+    "check_out_time",
 )
 
 SEED_MARKER_KEY = "student1_demo_seed_v1"
@@ -97,7 +100,17 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
 CREATE TABLE IF NOT EXISTS trip_accommodations (
     trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
     accommodation_id TEXT NOT NULL,
+    -- The stay window. `date` is the check-in, named that way since before
+    -- there was a check-out to pair it with; renaming it is a table rebuild
+    -- for no user-visible gain. NULL check_out means no departure recorded,
+    -- which is what every row written before stay dates existed carries.
     date TEXT NOT NULL,
+    check_in_time TEXT,
+    check_out TEXT,
+    check_out_time TEXT,
+    -- ponytail: no CHECK on the ordering. ALTER TABLE ADD COLUMN cannot add
+    -- one, so a fresh database would enforce it and a migrated database
+    -- would not. TripAccommodationRecord validates it on both paths instead.
     PRIMARY KEY (trip_id, accommodation_id)
 )
 """,
@@ -465,17 +478,35 @@ class DatabaseService:
         trip_id: str,
         accommodation_id: str,
         date: str,
+        check_out: str | None = None,
+        check_in_time: str | None = None,
+        check_out_time: str | None = None,
     ) -> dict[str, object]:
-        """Idempotent -- re-ticking a box the user already ticked is a no-op,
-        not a conflict, so the second call returns the row the first wrote."""
+        """Replaces the pin, so re-sending the same body is a no-op and sending
+        new dates moves the stay. It was DO NOTHING while the date was invented
+        rather than chosen; now that a user picks it, silently keeping the old
+        one would drop an edit the user watched themselves make."""
         with self._connect() as connection:
             with self._write_transaction(connection):
                 self._get_trip_row(connection, trip_id)
                 connection.execute(
                     "INSERT INTO trip_accommodations "
-                    "(trip_id, accommodation_id, date) VALUES (?, ?, ?) "
-                    "ON CONFLICT (trip_id, accommodation_id) DO NOTHING",
-                    (trip_id, accommodation_id, date),
+                    "(trip_id, accommodation_id, date, check_in_time, "
+                    "check_out, check_out_time) "
+                    "VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT (trip_id, accommodation_id) DO UPDATE SET "
+                    "date = excluded.date, "
+                    "check_in_time = excluded.check_in_time, "
+                    "check_out = excluded.check_out, "
+                    "check_out_time = excluded.check_out_time",
+                    (
+                        trip_id,
+                        accommodation_id,
+                        date,
+                        check_in_time,
+                        check_out,
+                        check_out_time,
+                    ),
                 )
 
             row = connection.execute(
@@ -552,6 +583,30 @@ class DatabaseService:
     def _ensure_schema(self, connection: sqlite3.Connection) -> None:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
+        # CREATE TABLE IF NOT EXISTS does nothing to a table that already
+        # exists, so a database written before a column was added never gains
+        # it. Every deployment runs off a volume that predates check_out.
+        #
+        # ponytail: a PRAGMA and an ALTER, not a migration framework. The
+        # PRAGMA is the check, so this is idempotent by construction -- there
+        # is no metadata key to drift from what the table actually has. Grows
+        # a line per added column; revisit when a change needs more than
+        # ADD COLUMN, which SQLite cannot do in place anyway.
+        for column in ("check_in_time", "check_out", "check_out_time"):
+            self._ensure_column(connection, "trip_accommodations", column, "TEXT")
+
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection,
+        table: str,
+        column: str,
+        declaration: str,
+    ) -> None:
+        columns = {
+            row["name"] for row in connection.execute(f"PRAGMA table_info({table})")
+        }
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
     def _ensure_seed_data(self, connection: sqlite3.Connection) -> None:
         if self._get_schema_metadata(connection, SEED_MARKER_KEY) is not None:
@@ -660,8 +715,7 @@ class DatabaseService:
                 {
                     "field": "start_date",
                     "issue": (
-                        "cannot exclude existing itinerary item dates "
-                        f"({sample_dates})"
+                        f"cannot exclude existing itinerary item dates ({sample_dates})"
                     ),
                 },
             ],

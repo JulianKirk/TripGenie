@@ -3,22 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TripGenie - Integrated Home</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <title>TripGenie</title>
+  <!-- ponytail: no htmx. Every link leaves for another origin (a different
+       port), so there is no fragment to swap in -- a plain href is the whole
+       feature. Add htmx here if this page ever renders service content
+       in-place, e.g. live /health badges once the services send CORS headers. -->
+  <style>
+    :root { color-scheme: light dark; --fg: #1a1a1a; --bg: #fbfaf8; --card: #fff; --line: #e3e0da; --muted: #6b675f; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #ececec; --bg: #16171a; --card: #1e2024; --line: #2f3238; --muted: #9a978f; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 3rem 1.5rem; background: var(--bg); color: var(--fg);
+           font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .wrap { max-width: 46rem; margin: 0 auto; }
+    h1 { font-size: 2.4rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+    .sub { color: var(--muted); margin: 0 0 2.5rem; }
+    ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+    a.card { display: block; padding: 1rem 1.15rem; text-decoration: none; color: inherit;
+             background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+    a.card:hover, a.card:focus-visible { border-color: var(--muted); }
+    .name { font-weight: 600; }
+    .who { color: var(--muted); font-size: .85rem; }
+    footer { color: var(--muted); font-size: .85rem; margin-top: 2.5rem; }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>TripGenie 🧞‍♂️</h1>
-    <p>AI Smart Travel Companion - Group 07</p>
-  </header>
-  <main>
+  <div class="wrap">
+    <h1>TripGenie 🧞</h1>
+    <p class="sub">AI Smart Travel Companion — Group 07</p>
+
     <ul>
-      <li><a href="http://localhost:8081">Student 1: Trip & Itinerary Management</a></li>
-      <li><a href="http://localhost:9003">Student 2: Accommodation Management</a></li>
-      <li><a href="http://localhost:8093">Student 3: Transport Management</a></li>
-      <li><a href="http://localhost:8084">Student 4: Activities & Attractions Management</a></li>
-      <li><a href="http://localhost:8085">Student 5: Budget & Expense Management</a></li>
+      <li><a class="card" href="http://localhost:8081"><span class="name">Trips &amp; Itineraries</span><br><span class="who">Student 1 · :8081</span></a></li>
+      <li><a class="card" href="http://localhost:9003"><span class="name">Accommodation</span><br><span class="who">Student 2 · :9003</span></a></li>
+      <li><a class="card" href="http://localhost:8093"><span class="name">Transport</span><br><span class="who">Student 3 · :8093</span></a></li>
+      <li><a class="card" href="http://localhost:8084"><span class="name">Activities &amp; Attractions</span><br><span class="who">Student 4 · :8084</span></a></li>
+      <li><a class="card" href="http://localhost:8085"><span class="name">Budget &amp; Expenses</span><br><span class="who">Student 5 · :8085</span></a></li>
     </ul>
-  </main>
+
+    <footer>Student 4 and 5 frontends are not in docker-compose.yml yet; those links 404 until they are.</footer>
+  </div>
 </body>
 </html>
