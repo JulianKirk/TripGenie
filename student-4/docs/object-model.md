@@ -34,8 +34,8 @@ The stable catalogue entry displayed and selected by users.
 | `id` | UUID | Yes | Primary key. |
 | `name` | string | Yes | Human-readable activity name. |
 | `description` | string | Yes | Full description used by detail views and text search. |
-| `address` | string | Yes | Free-text address until a future location service owns structured location data. |
-| `price` | float | Yes | Non-negative numeric price in the activity's local currency. Currency metadata belongs to the future location service. |
+| `location_details` | LocationDetails | Yes | Composed location containing shared country/city references and locally owned address details. |
+| `price` | float/double | Yes | Non-negative price in AUD. Stored as a directly filterable numeric SQL column, not JSON. |
 | `duration_minutes` | integer | Yes | Positive expected duration. Also determines the valid starting range inside a schedule. |
 | `minimum_age` | integer \| null | No | Inclusive minimum participant age; `null` means no known minimum. |
 | `maximum_age` | integer \| null | No | Inclusive maximum participant age; `null` means no known maximum. |
@@ -61,10 +61,35 @@ Age and participant bounds follow these invariants:
 - `maximum_participants`, when present, cannot be less than
   `minimum_participants`.
 
-`price` is exposed as a JSON number as requested. It is interpreted in the
-local currency of the activity's address. Until the location service exists,
-consumers must not assume a currency symbol or combine prices from different
-countries as if they share a currency.
+`price` is stored as a normal SQL floating-point column (`REAL` in SQLite), so
+the database can apply indexed numeric equality and minimum/maximum filters
+directly. It is not stored in a JSON column. Following the repository-wide
+convention, this base value is in AUD. The backend may use the shared reference
+service's currency and conversion-rate data to show an approximate local value,
+but filtering and exchanges with the budget service use the stored AUD value.
+
+### LocationDetails
+
+Where an activity takes place. This follows the existing accommodation-service
+convention: shared place identifiers are stored for lookup and filtering, while
+the exact address remains in the service that owns the activity.
+
+| Field | Type | Required | Notes |
+|---|---|:---:|---|
+| `id` | UUID | Yes | Primary key. |
+| `activity_id` | FK → Activity | Yes | Unique owner; deleting the activity cascades to its location. |
+| `country_id` | UUID → shared Country | Yes | External reference used for country filtering and currency lookup. |
+| `city_id` | UUID → shared City | Yes | External reference used for city filtering; the shared city is already scoped to a country. |
+| `street` | string \| null | No | Street or other locally owned address text. |
+| `street_number` | integer \| null | No | Optional street number. |
+
+`country_id` and `city_id` are indexed together, but they are not SQL foreign
+keys: their authoritative rows live in the shared service's separate database.
+The Student 4 database service stores and filters the identifiers without
+making outbound calls. The Student 4 backend resolves public country and city
+names to identifiers before database queries and resolves identifiers back to
+names in responses, using the shared backend service. A city name without its
+country is rejected as ambiguous, matching the existing Student 2 contract.
 
 ### Category
 
@@ -74,13 +99,16 @@ them: for example, a guided coastal walk could be both `OUTDOOR` and `TOUR`.
 
 | Field | Type | Required | Notes |
 |---|---|:---:|---|
-| `id` | UUID | Yes | Primary key. |
-| `name` | string | Yes | Unique, case-insensitive category name. |
+| `code` | string | Yes | Stable primary key and code enum value, such as `OUTDOOR` or `TOUR`. |
+| `label` | string | Yes | Human-readable dropdown label, such as `Outdoor`. |
 | `description` | string \| null | No | Optional explanation for maintainers or user interfaces. |
+| `display_order` | integer | Yes | Non-negative ordering for category selectors. |
 
-Initial category values can be seeded with the database, but categories are
-rows rather than a code enum so the catalogue can grow without a schema or API
-version change.
+Categories are a fixed, seeded reference list rather than user-created data.
+Their stable codes are also declared as an enum in the service's wire schemas.
+There are no category create, update or delete operations in this release. The
+backend can return the ordered rows for the frontend's search dropdown without
+requiring the frontend to duplicate labels or ordering.
 
 ### ActivityCategory
 
@@ -89,10 +117,13 @@ The many-to-many association between activities and categories.
 | Field | Type | Required | Notes |
 |---|---|:---:|---|
 | `activity_id` | FK → Activity | Yes | Part of the composite primary key. |
-| `category_id` | FK → Category | Yes | Part of the composite primary key. |
+| `category_code` | FK → Category.code | Yes | Part of the composite primary key. |
 
 An activity must have at least one category. The association prevents the same
-category being attached to an activity twice.
+category being attached to an activity twice. Its composite primary key
+`(activity_id, category_code)` efficiently retrieves an activity's categories;
+an additional index on `(category_code, activity_id)` supports category-first
+searches, including matching any or all selected dropdown values.
 
 ## Availability
 
@@ -130,10 +161,10 @@ Overnight intervals are outside the initial scope. If they become necessary,
 the contract should add explicit next-day semantics rather than interpreting an
 end time earlier than the start time silently.
 
-All schedule dates and times are local to the activity's address. The model
-does not store a timezone yet. A future location service can resolve the
-address and add timezone-aware conversion without changing the meaning of the
-stored local schedule.
+All schedule dates and times are local to the activity's location. The model
+does not store a timezone because the shared reference service currently
+provides countries and cities but no timezone data. Timezone-aware conversion
+can be added later without changing the meaning of the stored local schedule.
 
 ### Availability interpretation
 
@@ -170,6 +201,11 @@ service that accesses its SQLite database. The backend service reaches them
 through the internal database API; the frontend and other students' services
 reach them only through the public backend API.
 
+Country, city and currency records remain owned by the shared reference
+service. Student 4 stores only the shared country and city UUIDs alongside its
+own address details. This is a cross-service reference rather than a database
+relationship: neither service reads or joins the other's SQLite database.
+
 The database layer will use SQLAlchemy models. Cross-field and cross-table
 rules that SQLite cannot express cleanly as `CHECK` constraints—particularly
 comparing a schedule interval with its parent activity's duration—are enforced
@@ -186,13 +222,13 @@ between the internal database response and the backend's public representation.
 erDiagram
     ACTIVITY ||--|{ ACTIVITY_AVAILABILITY_SCHEDULE : "has availability"
     ACTIVITY ||--|{ ACTIVITY_CATEGORY : "classified by"
+    ACTIVITY ||--|| LOCATION_DETAILS : "takes place at"
     CATEGORY ||--o{ ACTIVITY_CATEGORY : "classifies"
 
     ACTIVITY {
         UUID id PK
         string name
         string description
-        string address
         float price
         int duration_minutes
         int minimum_age "nullable"
@@ -208,6 +244,15 @@ erDiagram
         boolean is_active
     }
 
+    LOCATION_DETAILS {
+        UUID id PK
+        UUID activity_id FK, UK
+        UUID country_id "external shared Country reference"
+        UUID city_id "external shared City reference"
+        string street "nullable"
+        int street_number "nullable"
+    }
+
     ACTIVITY_AVAILABILITY_SCHEDULE {
         UUID id PK
         UUID activity_id FK
@@ -219,13 +264,19 @@ erDiagram
     }
 
     CATEGORY {
-        UUID id PK
-        string name UK
+        string code PK
+        string label
         string description "nullable"
+        int display_order
     }
 
     ACTIVITY_CATEGORY {
         UUID activity_id PK, FK
-        UUID category_id PK, FK
+        string category_code PK, FK
     }
 ```
+
+`COUNTRY`, `CITY` and `CURRENCY` do not appear as tables in this ERD because
+they belong to the shared reference service's database. The annotations on
+`LOCATION_DETAILS` document the cross-service references without implying that
+SQLite can enforce foreign keys across the two databases.
