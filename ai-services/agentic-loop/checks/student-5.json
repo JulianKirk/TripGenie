@@ -1,6 +1,6 @@
 {
   "goal": "Validate the student 5 budget and expense service with a local multi-agent workflow",
-  "_note": "The workflow starts the Student 5 frontend, backend, and database through the student-5-service grouping target.",
+  "_note": "The workflow starts the Student 5 frontend, backend, and database through the student-5 grouping target.",
   "checks": [
     {"label": "GET / (budget frontend)", "path": "${SERVICE_URL}/", "contains": ["<html", "Budget"]}
   ]
