@@ -93,6 +93,32 @@ runtime lookup in both directions, not a boot order, so `docker-compose.yml`
 deliberately declares no `depends_on` from here to student 2 — it would be a
 cycle compose refuses to start.
 
+## Error responses
+
+Every error, whatever the status, is the same envelope:
+
+```json
+{"error": {"code": "...", "message": "...", "details": [{"field": "...", "issue": "..."}]}}
+```
+
+The status distinguishes *what kind* of thing went wrong, and the two 4xx
+validation codes are deliberately different conditions rather than two spellings
+of one:
+
+| Status | `code` | Raised when |
+| --- | --- | --- |
+| 400 | `BAD_REQUEST` | The request carries something this endpoint does not accept **at all** — an unknown query parameter. Each offending name is listed in `details`. |
+| 422 | `VALIDATION_ERROR` | A value the endpoint *does* accept failed its constraints — a path id that does not match its pattern, or a body field out of range. |
+| 404 | `NOT_FOUND` | The id was well-formed but nothing has it. |
+| 502 | `BAD_GATEWAY` | A service behind this one answered with something unusable. |
+| 503 | `DEPENDENCY_UNAVAILABLE` / `DEPENDENCY_TIMEOUT` | A service behind this one could not be reached in time. |
+
+So `GET /api/trips/bad!id` is a `422` (the id is a value that failed a pattern)
+while `GET /api/trips?bogus=1` is a `400` (there is no `bogus` parameter to
+validate). Endpoints declare their own allowed parameters; anything else is
+rejected rather than ignored, so a typo in a filter name is a loud error instead
+of a silently unfiltered list.
+
 ## Trip duration rule
 
 TripGenie applies a project-specific maximum trip duration of **366 inclusive calendar days**. `POST /api/trips` and effective `PATCH /api/trips/{tripId}` payloads that exceed that limit return the normal validation envelope, and trip detail responses refuse oversized upstream records with a dependency error instead of expanding an unbounded `days` list.

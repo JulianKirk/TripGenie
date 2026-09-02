@@ -59,6 +59,23 @@ def backend(request: httpx.Request) -> httpx.Response:
         return response(request, {"data": BUDGET}, 201)
     if path == f"/api/v1/budgets/{BUDGET_ID}/summary":
         return response(request, {"data": SUMMARY})
+    if path == f"/api/v1/budgets/{BUDGET_ID}/ai-analysis":
+        return response(
+            request,
+            {
+                "data": {
+                    "analysis": {
+                        "overview": "Spending is within budget.",
+                        "risks": ["Provider costs are incomplete."],
+                        "recommendations": ["Keep a contingency reserve."],
+                        "disclaimer": "Advisory only; review before acting.",
+                    },
+                    "run_id": "aimode_1234",
+                    "model": "qwen2.5:0.5b",
+                    "provider": "ollama",
+                }
+            },
+        )
     if path == f"/api/v1/budgets/{BUDGET_ID}":
         if request.method == "DELETE":
             return response(request, {"data": {"deleted": True}})
@@ -117,6 +134,51 @@ def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
     assert expense_request.url.params["trip_id"] == "trip-7"
     assert expense_request.url.params["category"] == "food"
     assert expense_request.url.params["date_from"] == "2026-09-01"
+
+
+def test_budget_analysis_action_displays_structured_advice() -> None:
+    with make_client() as client:
+        detail = client.get(f"/budgets/{BUDGET_ID}")
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/ai-analysis",
+            data={"question": "Can I afford another activity?"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert "What would you like to understand?" in detail.text
+    assert "Spending is within budget." in result.text
+    assert "Keep a contingency reserve." in result.text
+    assert "qwen2.5:0.5b via ollama" in result.text
+    assert 'value="Can I afford another activity?"' not in result.text
+    assert "Can I afford another activity?" in result.text
+
+
+def test_budget_analysis_failure_keeps_question_and_shows_unavailable_state() -> None:
+    def offline_ai(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/ai-analysis"):
+            return response(
+                request,
+                {
+                    "error": {
+                        "code": "DEPENDENCY_UNAVAILABLE",
+                        "message": "The AI provider is unavailable.",
+                        "details": [],
+                    }
+                },
+                503,
+            )
+        return backend(request)
+
+    with make_client(offline_ai) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/ai-analysis",
+            data={"question": "Where can I save?"},
+        )
+
+    assert "AI analysis is unavailable" in result.text
+    assert "The AI provider is unavailable." in result.text
+    assert "Where can I save?" in result.text
+    assert "Budget and expense actions remain available." in result.text
 
 
 def test_budget_validation_preserves_submitted_values() -> None:

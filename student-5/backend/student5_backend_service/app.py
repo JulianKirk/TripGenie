@@ -11,10 +11,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError
 from .models import (
+    BudgetAnalysisRequest,
     BudgetCreate,
     BudgetUpdate,
     ExpenseCategory,
@@ -66,12 +68,14 @@ def create_app(
     database_transport: httpx.BaseTransport | None = None,
     trips_transport: httpx.BaseTransport | None = None,
     provider_transport: httpx.BaseTransport | None = None,
+    ai_mode_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     database = DatabaseApiClient(settings, transport=database_transport)
     trips = TripsApiClient(settings, transport=trips_transport)
     transport = TransportApiClient(settings, transport=provider_transport)
-    service = BackendService(database, trips, transport)
+    ai_mode = AiModeClient(settings, transport=ai_mode_transport)
+    service = BackendService(database, trips, transport, ai_mode, settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -79,6 +83,7 @@ def create_app(
         database.close()
         trips.close()
         transport.close()
+        ai_mode.close()
 
     app = FastAPI(title="TripGenie Student 5 Backend", lifespan=lifespan)
 
@@ -158,6 +163,12 @@ def create_app(
     @app.get(f"{prefix}/budgets/{{budget_id}}/summary")
     def budget_summary(budget_id: UUID) -> dict[str, Any]:
         return _json_data(service.budget_summary(budget_id))
+
+    @app.post(f"{prefix}/budgets/{{budget_id}}/ai-analysis")
+    def budget_analysis(
+        budget_id: UUID, payload: BudgetAnalysisRequest
+    ) -> dict[str, Any]:
+        return _json_data(service.budget_analysis(budget_id, payload))
 
     @app.get(f"{prefix}/expenses")
     def list_expenses(

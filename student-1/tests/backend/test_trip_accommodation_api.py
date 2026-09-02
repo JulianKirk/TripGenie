@@ -285,3 +285,45 @@ def test_a_stay_with_no_departure_has_no_total(
 
     assert stay["price_per_night"] == 220.0
     assert stay["total_price"] is None
+
+
+class TestValidationErrorContract:
+    """400 and 422 are different conditions, not two spellings of one.
+
+    Documented in backend/README.md. Asserted here because the accommodation
+    routes inherit the contract rather than declaring it, so a change to the
+    shared dependency would otherwise move their behaviour silently.
+    """
+
+    def test_an_unknown_query_param_is_a_400(self, client: TestClient) -> None:
+        response = client.get(f"/api/trips/{SYDNEY}/accommodations?bogus=1")
+
+        assert response.status_code == 400
+        body = response.json()["error"]
+        assert body["code"] == "BAD_REQUEST"
+        # The offending name is named, so a typo is diagnosable.
+        assert body["details"] == [{"field": "bogus", "issue": "is not supported"}]
+
+    def test_a_malformed_path_id_is_a_422(self, client: TestClient) -> None:
+        response = client.get("/api/trips/bad!id/accommodations")
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_a_well_formed_unknown_id_is_a_404(self, client: TestClient) -> None:
+        response = client.get("/api/trips/trip_not_here/accommodations")
+
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "NOT_FOUND"
+
+    def test_every_error_uses_the_same_envelope(self, client: TestClient) -> None:
+        """Different statuses, one shape -- that is what makes the split
+        navigable for a caller."""
+        for path in (
+            f"/api/trips/{SYDNEY}/accommodations?bogus=1",
+            "/api/trips/bad!id/accommodations",
+            "/api/trips/trip_not_here/accommodations",
+        ):
+            body = client.get(path).json()
+            assert set(body) == {"error"}
+            assert set(body["error"]) >= {"code", "message", "details"}
