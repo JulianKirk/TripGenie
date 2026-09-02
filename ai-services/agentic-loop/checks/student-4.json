@@ -1,0 +1,7 @@
+{
+  "goal": "Validate the student 4 activities service with a local multi-agent workflow",
+  "_note": "student-4 has no backend yet -- its Dockerfile serves a static directory. This file checks that the container is up; replace these with real endpoint checks when the backend lands.",
+  "checks": [
+    {"label": "GET / (placeholder static server)", "path": "${SERVICE_URL}/", "contains": ["<html"]}
+  ]
+}
