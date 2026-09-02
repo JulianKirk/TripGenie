@@ -30,6 +30,9 @@ include = [
     "student5_frontend_service*",
 ]
 
+[tool.setuptools.package-data]
+student5_frontend_service = ["templates/**/*.html", "static/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

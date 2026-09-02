@@ -1,0 +1,37 @@
+<div class="panel">
+  <div class="panel-heading">
+    <div><p class="eyebrow">Trip {{ budget.trip_id }}</p><h2>{{ budget.currency }} {{ budget.total_budget }}</h2></div>
+    <div class="actions"><a class="button" href="/budgets/{{ budget.budget_id }}/edit">Edit</a><a class="button button--danger" href="/budgets/{{ budget.budget_id }}/delete">Delete</a></div>
+  </div>
+  {% if summary %}
+  <dl class="summary-grid">
+    <div><dt>Total</dt><dd>{{ summary.currency }} {{ summary.total_budget }}</dd></div>
+    <div><dt>Committed{% if not summary.committed_costs_complete %} *{% endif %}</dt><dd>{{ summary.currency }} {{ summary.committed_costs }}</dd></div>
+    <div><dt>Actual{% if not summary.actual_spending_complete %} *{% endif %}</dt><dd>{{ summary.currency }} {{ summary.actual_spending }}</dd></div>
+    <div class="summary-grid__remaining"><dt>Remaining{% if not summary.remaining_budget_complete %} *{% endif %}</dt><dd>{{ summary.currency }} {{ summary.remaining_budget }}</dd></div>
+  </dl>
+  {% set unavailable = summary.providers.values() | selectattr('status', 'ne', 'available') | list %}
+  {% if unavailable or not summary.remaining_budget_complete %}<div class="banner banner--warning">Some provider costs are unavailable. Local expenses and budget actions remain available; totals marked * may be incomplete.</div>{% endif %}
+  {% elif summary_error %}<div class="banner banner--warning">Live summary unavailable: {{ summary_error }} Local budget and expense records are still available.</div>{% endif %}
+  <h3 class="section-heading">Planned allocations</h3>
+  <dl class="allocation-grid">
+    {% for name, label in [('accommodation_budget', 'Accommodation'), ('transport_budget', 'Transport'), ('activities_budget', 'Activities'), ('food_budget', 'Food'), ('other_budget', 'Other')] %}
+    <div><dt>{{ label }}</dt><dd>{{ budget.currency }} {{ budget.get(name, '') }}</dd></div>
+    {% endfor %}
+  </dl>
+</div>
+
+<div class="panel expenses-panel">
+  <div class="panel-heading"><div><p class="eyebrow">Recorded spending</p><h2>Expenses</h2></div><a class="button button--primary" href="/budgets/{{ budget.budget_id }}/expenses/new">Add expense</a></div>
+  <form class="filters" method="get" action="/budgets/{{ budget.budget_id }}">
+    <label>Category<select name="category"><option value="">All</option>{% for category in categories %}<option value="{{ category }}" {% if filters.category == category %}selected{% endif %}>{{ category | title }}</option>{% endfor %}</select></label>
+    <label>From<input type="date" name="date_from" value="{{ filters.date_from }}"></label>
+    <label>To<input type="date" name="date_to" value="{{ filters.date_to }}"></label>
+    <div class="actions"><button class="button" type="submit">Filter</button><a href="/budgets/{{ budget.budget_id }}">Clear</a></div>
+  </form>
+  {% if expenses %}
+  <div class="table-scroll"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+  {% for expense in expenses %}<tr><td>{{ expense.date }}</td><td><strong>{{ expense.description }}</strong>{% if expense.payment_method %}<span class="cell-note">{{ expense.payment_method }}</span>{% endif %}</td><td>{{ expense.category | title }}</td><td>{{ expense.currency }} {{ expense.amount }}</td><td><div class="row-actions"><a href="/expenses/{{ expense.expense_id }}/edit?budget_id={{ budget.budget_id }}">Edit</a><a class="danger-link" href="/expenses/{{ expense.expense_id }}/delete?budget_id={{ budget.budget_id }}">Delete</a></div></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No expenses match these filters.</p>{% endif %}
+</div>
