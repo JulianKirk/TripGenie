@@ -64,6 +64,11 @@ the run still passes or fails on the checks, so CI works either way (add
 | failed | skipped -- no point validating a build that did not pass |
 | never started (its path filters skipped the commit) | skipped -- the service did not change |
 | could not be read | loop runs ungated, rather than silently skipping validation |
+| still running after 30 minutes | loop runs ungated |
+
+The gate lists every workflow run for the commit in one call, so all six services
+share a single two minute wait for workflows to appear -- a commit that changes
+nothing clears the gate in about two minutes, not two minutes per service.
 
 So an ordinary commit runs the loop for the one or two services it touched, not
 all six, and the gate's verdict for every service is written to the run summary

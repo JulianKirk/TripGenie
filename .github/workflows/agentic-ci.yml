@@ -61,53 +61,87 @@ jobs:
           DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           services=ai-services/agentic-loop/services.json
-          chosen=""
+          pending=$(jq -r '.[].service' "$services" | tr '\n' ' ')
+          chosen=""; unchanged=""; failed=""; ungated=""; timedout=""
+
+          if [ "$DISPATCH" = "true" ]; then
+            chosen="$pending"; pending=""
+          fi
+
+          # One call lists every workflow run for this commit, so all six
+          # services share a single two minute grace period instead of waiting
+          # 8 x 15s each, one after another.
+          blind=0
+          for attempt in $(seq 1 120); do
+            [ -z "$pending" ] && break
+            if runs=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" \
+              --jq '.workflow_runs[] | "\(.path | split("/") | last) \(.status) \(.conclusion)"' 2>&1); then
+              blind=0
+            else
+              # A broken gate must not read as "nothing ran" -- that would skip
+              # every service silently. Count the failures separately.
+              echo "could not list runs: $runs"
+              blind=$((blind + 1))
+              if [ "$blind" -ge 8 ]; then
+                ungated="$pending"; pending=""; break
+              fi
+              sleep 15
+              continue
+            fi
+
+            still=""
+            for svc in $pending; do
+              ci=$(jq -r --arg s "$svc" '.[] | select(.service == $s) | .ci' "$services")
+              line=$(printf '%s\n' "$runs" | grep -m1 "^$ci " || true)
+              if [ -z "$line" ]; then
+                # Never started. Its path filters skipped this commit.
+                if [ "$attempt" -ge 8 ]; then unchanged="$unchanged $svc"; else still="$still $svc"; fi
+                continue
+              fi
+              # shellcheck disable=SC2086
+              set -- $line
+              case "$2/$3" in
+                completed/success|completed/skipped) chosen="$chosen $svc" ;;
+                completed/*) failed="$failed $svc=$3" ;;
+                *) still="$still $svc" ;;
+              esac
+            done
+            pending="$still"
+            [ -z "$pending" ] && break
+            sleep 15
+          done
+          # Anything still pending outran the 30 minute ceiling. Reported
+          # separately from an unreadable gate -- both run, for different reasons.
+          timedout="$pending"
+
           {
             echo "## Agentic loop"
             echo ""
             echo "| Service | Build and validate | Loop |"
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
-
           for svc in $(jq -r '.[].service' "$services"); do
-            ci=$(jq -r --arg s "$svc" '.[] | select(.service == $s) | .ci' "$services")
-            if [ "$DISPATCH" = "true" ]; then
-              chosen="$chosen $svc"
-              echo "| $svc | not checked (manual run) | runs |" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            verdict=unchanged
-            for attempt in $(seq 1 120); do
-              # gh prints API errors on stdout and exits non-zero, so gate on
-              # the exit code -- an error body is not a workflow status.
-              if raw=$(gh api "repos/$REPO/actions/workflows/$ci/runs?head_sha=$SHA&per_page=1" \
-                --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"' 2>&1); then
-                case "$raw" in
-                  "completed success"|"completed skipped") verdict=passed; break ;;
-                  completed*) verdict="failed ($raw)"; break ;;
-                  "")
-                    # Two minutes to appear. If it never does, its path filters
-                    # skipped this commit, so the service did not change.
-                    [ "$attempt" -ge 8 ] && break ;;
-                  *) echo "$ci is $raw; waiting" ;;
-                esac
+            case " $chosen " in *" $svc "*)
+              if [ "$DISPATCH" = "true" ]; then
+                echo "| $svc | not checked (manual run) | runs |"
               else
-                echo "could not read $ci: $raw"
-                # Do not let a broken gate silently stop the validation.
-                [ "$attempt" -ge 8 ] && { verdict=unreadable; break; }
+                echo "| $svc | passed | runs |"
               fi
-              sleep 15
-            done
-            case "$verdict" in
-              passed)     chosen="$chosen $svc"; row="passed | runs" ;;
-              unreadable) chosen="$chosen $svc"; row="could not read | runs ungated" ;;
-              unchanged)  row="did not run | skipped, service unchanged" ;;
-              *)          row="$verdict | skipped, build and validate failed" ;;
+              continue ;;
             esac
-            echo "| $svc | $row |" >> "$GITHUB_STEP_SUMMARY"
-          done
+            case " $unchanged " in *" $svc "*)
+              echo "| $svc | did not run | skipped, service unchanged |"; continue ;;
+            esac
+            case " $ungated " in *" $svc "*)
+              echo "| $svc | could not be read | runs ungated |"; continue ;;
+            esac
+            case " $timedout " in *" $svc "*)
+              echo "| $svc | still running after 30 min | runs ungated |"; continue ;;
+            esac
+            echo "| $svc | failed | skipped, build and validate failed |"
+          done >> "$GITHUB_STEP_SUMMARY"
 
-          selected=$(jq -c --arg picked "$chosen" \
+          selected=$(jq -c --arg picked "$chosen $ungated $timedout" \
             '($picked | split(" ") | map(select(length > 0))) as $p
              | [.[] | select(.service as $s | $p | index($s))]' "$services")
           echo "matrix={\"include\":$selected}" >> "$GITHUB_OUTPUT"
