@@ -66,15 +66,18 @@ Student 1 builds bounded prompt context from:
 - bounded selected accommodation context from Student 1 associations, enriched
   with Student 2 name/location data when available
 - bounded selected activity context from Student 1 associations, enriched with
-  Student 4 name, duration, location, and price data when available
+  Student 4 name, duration, and price data when available
 - bounded selected transport context from Student 1 associations, enriched with
-  Student 3 mode, provider, route, and departure/arrival data when available
+  Student 3 mode, provider, route, departure/arrival, price, and duration data
+  when available
 
 Cross-service context keeps the locally stored opaque identifier and scheduling
-facts even when an external service is unavailable. Such records carry
-`enrichment_status="unavailable"` and omit missing external fields rather than
-fabricating them. The same best-effort HTTP clients used by trip detail perform
-the enrichment; Student 1 never reads another service's database.
+facts even when an external service is unavailable. `source_status` is
+`available`, `partial`, or `unavailable` and describes enrichment completeness
+only; it never asserts booking availability or that unknown time is free.
+Missing fields remain absent rather than being fabricated. The same best-effort
+HTTP clients and enrichment helpers used by trip detail perform the enrichment;
+Student 1 never reads another service's database.
 
 Existing itinerary context stays bounded:
 
@@ -83,17 +86,22 @@ Existing itinerary context stays bounded:
 - `total_existing_items` and `omitted_existing_items` remain visible in the context payload
 - descriptions and notes are truncated before prompt assembly
 - prompt JSON is rendered compactly rather than prettified
-- if the rendered prompt would exceed the shared `AI_MODE_MAX_PROMPT_CHARS` contract, Student 1 deterministically drops optional existing-item notes/descriptions, optional trip notes, optional interests/constraints, then lower-priority context items while recording explicit `budget_adjustments`
+- if the rendered prompt would exceed the shared `AI_MODE_MAX_PROMPT_CHARS` contract, Student 1 deterministically drops optional existing-item notes/descriptions, optional trip notes and interests, then lower-priority context items while recording explicit `budget_adjustments`; requested date, traveller count, goal, explicit constraints, and retained authoritative timing are not silently removed
 - cross-service records have independent configured maxima (6 accommodations,
   12 activities, and 8 transport selections by default)
+- local cross-service records are prioritised and capped before external HTTP
+  lookups, bounding network fan-out as well as prompt size
 - budget reduction drops lower-priority transport records, then accommodation
   records, then activity records before removing lower-priority ordinary
   itinerary items; total/omitted counts remain in the serialized context
 - if the irreducible required context still does not fit, Student 1 returns a `422 VALIDATION_ERROR` before calling the shared AI-Mode service
 
 All context is deterministically serialized with sorted JSON keys. The v2
-prompt asset explicitly declares names, locations, notes, providers, and every
-other context value to be untrusted reference data, never instructions.
+prompt asset explicitly declares all downstream and user strings to be
+untrusted reference data that cannot override instructions. Template
+placeholders are replaced in one pass, so placeholder-like context data is not
+recursively substituted. Retry context is a bounded typed JSON structure, with
+retry instructions fixed in the trusted prompt asset.
 
 ## 4. Shared AI-Mode consumer contract used by Student 1
 

@@ -266,7 +266,6 @@ class TripAccommodationDetail(TripAccommodationRecord):
     name: str | None = None
     price_per_night: float | None = None
     total_price: float | None = None
-    location: str | None = Field(default=None, exclude=True)
 
 
 class TripTransportStatus(str, Enum):
@@ -348,7 +347,6 @@ class TripActivityDetail(TripActivityRecord):
     price: Annotated[str, StringConstraints(pattern=r"^\d+\.\d{2}$")] | None = None
     pricing_basis: str | None = None
     duration_minutes: int | None = Field(default=None, gt=0)
-    location: str | None = Field(default=None, exclude=True)
 
 
 class TripTransportDetail(TripTransportRecord):

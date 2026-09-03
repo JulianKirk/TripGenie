@@ -13,6 +13,8 @@ from backend_service.ai_suggestions import (
     AiSuggestionRequest,
     build_budgeted_prompt,
     build_prompt_context,
+    prepare_cross_service_prompt_context,
+    select_cross_service_records,
 )
 from backend_service.app import create_app as create_student_backend_app
 from backend_service.config import Settings as StudentBackendSettings
@@ -20,9 +22,12 @@ from backend_service.errors import ApiError
 from backend_service.models import (
     ItineraryItemRecord,
     TripAccommodationDetail,
+    TripAccommodationRecord,
     TripActivityDetail,
+    TripActivityRecord,
     TripRecord,
     TripTransportDetail,
+    TripTransportRecord,
 )
 from conftest import FakeDatabaseApi
 from fastapi.testclient import TestClient
@@ -143,7 +148,7 @@ def integrated_client(
 
 def extract_prompt_context(prompt: str) -> dict[str, object]:
     start_marker = "Trip request context:\n"
-    end_marker = "\n\nAdaptation note for this attempt:"
+    end_marker = "\n\nTyped retry context for this attempt:"
     context_start = prompt.index(start_marker) + len(start_marker)
     context_end = prompt.index(end_marker)
     return json.loads(prompt[context_start:context_end])
@@ -234,38 +239,54 @@ def test_cross_service_context_limits_and_budget_preserve_itinerary_priority(
         goal="Keep selected cross-service plans in view.",
     )
     long_label = make_long_text("external-", 170)
-    accommodations = [
-        TripAccommodationDetail(
+    accommodation_records = [
+        TripAccommodationRecord(
             trip_id=trip.id,
             accommodation_id=f"acc_budget_{index:02d}",
             date="2027-04-01",
             check_out="2027-04-03",
-            name=long_label,
-            location=long_label,
         )
         for index in range(10)
     ]
-    activities = [
-        TripActivityDetail(
+    activity_records = [
+        TripActivityRecord(
             trip_id=trip.id,
             activity_id=f"activity_budget_{index:02d}",
             date="2027-04-02",
             start_time="12:00",
-            name=long_label,
-            price="10.00",
-            pricing_basis="PER_PERSON",
-            duration_minutes=60,
-            location=long_label,
         )
         for index in range(10)
     ]
-    transport = [
-        TripTransportDetail(
+    transport_records = [
+        TripTransportRecord(
             trip_id=trip.id,
             transport_id=f"transport_budget_{index:02d}",
             traveller_count=2,
             plan_status="confirmed",
             added_on="2027-04-01",
+        )
+        for index in range(10)
+    ]
+    enriched_accommodations = [
+        TripAccommodationDetail(
+            **record.model_dump(mode="json"),
+            name=long_label,
+        )
+        for record in accommodation_records
+    ]
+    enriched_activities = [
+        TripActivityDetail(
+            **record.model_dump(mode="json"),
+            name=long_label,
+            price="10.00",
+            pricing_basis="PER_PERSON",
+            duration_minutes=60,
+        )
+        for record in activity_records
+    ]
+    enriched_transport = [
+        TripTransportDetail(
+            **record.model_dump(mode="json"),
             type="train",
             provider=long_label,
             origin=long_label,
@@ -277,7 +298,7 @@ def test_cross_service_context_limits_and_budget_preserve_itinerary_priority(
             pricing_basis="per_traveller",
             estimated_cost=20,
         )
-        for index in range(10)
+        for record in transport_records
     ]
     settings = student_settings(
         ai_mode_max_prompt_chars=5000,
@@ -286,21 +307,35 @@ def test_cross_service_context_limits_and_budget_preserve_itinerary_priority(
         ai_max_context_activities=10,
         ai_max_context_transport=10,
     )
+    selection = select_cross_service_records(
+        accommodations=accommodation_records,
+        activities=activity_records,
+        transport=transport_records,
+        request=request,
+        settings=settings,
+    )
+    cross_service_context = prepare_cross_service_prompt_context(
+        selection=selection,
+        enriched_accommodations=enriched_accommodations,
+        accommodation_sources={
+            record.accommodation_id: {"location": long_label}
+            for record in accommodation_records
+        },
+        enriched_activities=enriched_activities,
+        enriched_transport=enriched_transport,
+    )
     context = build_prompt_context(
         trip,
         trip_items(database_api),
         request,
         settings,
-        accommodations,
-        activities,
-        transport,
+        cross_service_context,
     )
 
     prepared = build_budgeted_prompt(
         prompt_asset=settings.ai_prompt_asset,
         prompt_context=context,
         output_schema=AiModeSuggestionEnvelope.model_json_schema(),
-        failure_note=None,
         max_prompt_chars=5000,
     )
 
@@ -371,13 +406,12 @@ def test_prompt_budgeting_trims_optional_fields_before_shared_call(
                     student_settings(ai_max_context_items=12),
                 ),
                 output_schema=AiModeSuggestionEnvelope.model_json_schema(),
-                failure_note=None,
                 max_prompt_chars=candidate_limit,
             )
         except ApiError:
             continue
         adjustments = prepared.prompt_context.budget_adjustments
-        if adjustments and adjustments.interests and adjustments.constraints:
+        if adjustments and adjustments.interests:
             trim_limit = len(prepared.prompt)
             break
 
@@ -405,9 +439,8 @@ def test_prompt_budgeting_trims_optional_fields_before_shared_call(
     assert prompt_context["goal"] == request_payload["goal"]
     assert prompt_context["requested_date"] == "2027-04-02"
     assert "budget_adjustments" in prompt_context
-    assert prompt_context["budget_adjustments"]["constraints"] is True
     assert prompt_context["budget_adjustments"]["interests"] is True
-    assert "constraints" not in prompt_context
+    assert prompt_context["constraints"] == request_payload["constraints"]
     assert "interests" not in prompt_context
 
 

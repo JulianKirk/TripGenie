@@ -9,25 +9,6 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 
-class ActivityLocation(BaseModel):
-    model_config = ConfigDict(extra="ignore", strict=True)
-
-    country: str | None = None
-    city: str | None = None
-    street: str | None = None
-    street_number: int | None = None
-
-    def label(self) -> str | None:
-        parts: list[str] = []
-        if self.street:
-            street = self.street
-            if self.street_number is not None:
-                street = f"{self.street_number} {street}"
-            parts.append(street)
-        parts.extend(value for value in (self.city, self.country) if value)
-        return ", ".join(parts) or None
-
-
 class ActivityDetails(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True)
 
@@ -36,7 +17,6 @@ class ActivityDetails(BaseModel):
     price: Annotated[str, StringConstraints(pattern=r"^\d+\.\d{2}$")]
     pricing_basis: Literal["PER_PERSON", "FLAT_ADMISSION"]
     duration_minutes: int = Field(gt=0)
-    location_details: ActivityLocation | None = None
 
 
 class ActivityClient:
