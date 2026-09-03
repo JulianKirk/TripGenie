@@ -30,16 +30,27 @@ def build_budget_analysis_prompt(
         "expenses": [expense.model_dump(mode="json") for expense in expenses],
         "question": request.question,
     }
+    provider_facts = tuple(
+        (
+            f"Provider {name}: available, subtotal {provider.currency} "
+            f"{provider.subtotal:.2f}, items: {len(provider.items)}"
+            if provider.status == "available"
+            else f"Provider {name}: {provider.status.value}, detail: {provider.detail}"
+        )
+        for name, provider in sorted(summary.providers.items())
+    )
     key_facts = "\n".join(
         (
             f"Currency: {summary.currency}",
             f"Total budget: {summary.currency} {summary.total_budget:.2f}",
-            f"Actual spending: {summary.currency} {summary.actual_spending:.2f}",
+            f"Actual spending: {summary.currency} {summary.actual_spending:.2f} "
+            f"(complete: {str(summary.actual_spending_complete).lower()})",
             f"Committed costs: {summary.currency} {summary.committed_costs:.2f} "
             f"(complete: {str(summary.committed_costs_complete).lower()})",
             f"Remaining budget: {summary.currency} {summary.remaining_budget:.2f} "
             f"(complete: {str(summary.remaining_budget_complete).lower()})",
             f"Recorded expenses: {len(expenses)}",
+            *provider_facts,
             f"User question: {request.question}",
         )
     )
