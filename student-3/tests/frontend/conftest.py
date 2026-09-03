@@ -56,25 +56,111 @@ STUB_TRIPS = [
 ]
 
 
-@pytest.fixture
-def trips_transport() -> httpx.MockTransport:
-    """Stands in for Student 1's trips API, answering the directory lookup."""
+class StubItinerary:
+    """Student 1's API, stateful enough to hold transport selections.
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith("/trips"):
-            return httpx.Response(200, json={"data": STUB_TRIPS})
+    Selections live over there now, so a UI test that ticks a trip and then
+    reads the page back has to see its own write.
+    """
 
-        trip_id = request.url.path.rsplit("/", 1)[-1]
-        known = {trip["id"] for trip in STUB_TRIPS}
-        if trip_id in known:
-            return httpx.Response(200, json={"data": {"id": trip_id}})
+    def __init__(self) -> None:
+        self.pins: dict[tuple[str, str], dict[str, object]] = {}
 
+    def pin(self, trip_id: str, transport_id: str, travellers: int = 2) -> None:
+        self.pins[(trip_id, transport_id)] = {
+            "trip_id": trip_id,
+            "transport_id": transport_id,
+            "traveller_count": travellers,
+            "plan_status": "pending",
+            "added_on": "2026-01-01",
+            "notes": None,
+        }
+
+    @staticmethod
+    def _data(payload: object) -> httpx.Response:
+        return httpx.Response(200, json={"data": payload})
+
+    @staticmethod
+    def _missing() -> httpx.Response:
         return httpx.Response(
             404,
             json={"error": {"code": "NOT_FOUND", "message": "no", "details": []}},
         )
 
-    return httpx.MockTransport(handler)
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        parts = [part for part in request.url.path.split("/") if part]
+        known = {trip["id"] for trip in STUB_TRIPS}
+
+        if len(parts) == 2 and parts[-1] == "trips":
+            return self._data(STUB_TRIPS)
+
+        if parts[-1] == "transport-traveller-totals":
+            totals: dict[str, int] = {}
+            for pin in self.pins.values():
+                if pin["plan_status"] == "cancelled":
+                    continue
+                key = str(pin["transport_id"])
+                totals[key] = totals.get(key, 0) + int(pin["traveller_count"])
+            return self._data(
+                [
+                    {"transport_id": key, "travellers": value}
+                    for key, value in sorted(totals.items())
+                ],
+            )
+
+        if len(parts) == 4 and parts[1] == "transport" and parts[3] == "trips":
+            holding = {t for (t, o) in self.pins if o == parts[2]}
+            return self._data([t for t in STUB_TRIPS if t["id"] in holding])
+
+        if len(parts) == 4 and parts[1] == "trips" and parts[3] == "transport":
+            if parts[2] not in known:
+                return self._missing()
+            return self._data(
+                [
+                    dict(pin)
+                    for (trip_id, _), pin in sorted(self.pins.items())
+                    if trip_id == parts[2]
+                ],
+            )
+
+        if len(parts) == 5 and parts[1] == "trips" and parts[3] == "transport":
+            trip_id, transport_id = parts[2], parts[4]
+            if trip_id not in known:
+                return self._missing()
+            if request.method == "PUT":
+                body = json.loads(request.content or b"{}")
+                record = {
+                    "trip_id": trip_id,
+                    "transport_id": transport_id,
+                    "traveller_count": int(body["traveller_count"]),
+                    "plan_status": str(body.get("plan_status") or "pending"),
+                    "added_on": str(body.get("added_on") or "2026-01-01"),
+                    "notes": body.get("notes"),
+                }
+                self.pins[(trip_id, transport_id)] = record
+                return self._data(dict(record))
+            if request.method == "DELETE":
+                if self.pins.pop((trip_id, transport_id), None) is None:
+                    return self._missing()
+                return self._data({"id": transport_id, "deleted": True})
+
+        if len(parts) == 3 and parts[1] == "trips":
+            if parts[2] in known:
+                return self._data({"id": parts[2]})
+            return self._missing()
+
+        return self._missing()
+
+
+@pytest.fixture
+def itinerary() -> StubItinerary:
+    return StubItinerary()
+
+
+@pytest.fixture
+def trips_transport(itinerary: StubItinerary) -> httpx.MockTransport:
+    """Stands in for Student 1's API, including transport selections."""
+    return httpx.MockTransport(itinerary.handle)
 
 
 @pytest.fixture
@@ -182,10 +268,17 @@ def _build_backend(
 @pytest.fixture
 def backend_app(
     database_path: Path,
-    unreachable_trips_transport: httpx.MockTransport,
+    trips_transport: httpx.MockTransport,
 ) -> Iterator[object]:
-    """Default backend: Student 1 unreachable, so pickers degrade to text."""
-    yield from _build_backend(database_path, unreachable_trips_transport)
+    """Default backend: the itinerary service is reachable.
+
+    It used to default to unreachable, which was reasonable while Student 1
+    was only consulted to populate a picker. It is load-bearing now -- trip
+    pages, seat counts and every selection go through it -- so an outage is a
+    special case worth its own fixture rather than the default everything else
+    is written against.
+    """
+    yield from _build_backend(database_path, trips_transport)
 
 
 @pytest.fixture
@@ -262,6 +355,28 @@ def client_with_trips(
 @pytest.fixture
 def frontend_settings() -> FrontendSettings:
     return FrontendSettings(backend_base_url=BACKEND_BASE_URL)
+
+
+@pytest.fixture
+def backend_app_without_itinerary(
+    database_path: Path,
+    unreachable_trips_transport: httpx.MockTransport,
+) -> Iterator[object]:
+    yield from _build_backend(database_path, unreachable_trips_transport)
+
+
+@pytest.fixture
+def client_without_itinerary(
+    frontend_settings: FrontendSettings,
+    backend_app_without_itinerary: object,
+) -> Iterator[TestClient]:
+    """A frontend whose backend cannot reach the itinerary service."""
+    app = create_frontend_app(
+        frontend_settings,
+        transport=httpx.ASGITransport(app=backend_app_without_itinerary),
+    )
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture

@@ -9,7 +9,6 @@ from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
     AvailabilityStatus,
-    BookingStatus,
     DatabaseHealthPayload,
     DataEnvelope,
     DeleteResponse,
@@ -17,9 +16,6 @@ from .models import (
     TransportOptionCreate,
     TransportOptionRecord,
     TransportOptionUpdate,
-    TransportPlanEntryCreate,
-    TransportPlanEntryRecord,
-    TransportPlanEntryUpdate,
     TransportType,
 )
 
@@ -159,106 +155,6 @@ class DatabaseApiClient:
             response_type=DataEnvelope[DeleteResponse],
             malformed_message=(
                 "Database API returned a malformed option delete response."
-            ),
-        )
-        return envelope.data
-
-    def list_entries_for_option(
-        self,
-        transport_id: str,
-        *,
-        booking_status: BookingStatus | None = None,
-    ) -> list[TransportPlanEntryRecord]:
-        params: dict[str, str] = {}
-        if booking_status is not None:
-            params["booking_status"] = booking_status.value
-
-        envelope = self._request_model(
-            "GET",
-            f"{self._api_prefix}/transport-options/{transport_id}/bookings",
-            params=params or None,
-            expected_statuses={200},
-            response_type=DataEnvelope[list[TransportPlanEntryRecord]],
-            malformed_message="Database API returned a malformed entry list response.",
-        )
-        return envelope.data
-
-    def list_plan_entries(
-        self,
-        *,
-        trip_id: str | None = None,
-        transport_id: str | None = None,
-        booking_status: BookingStatus | None = None,
-    ) -> list[TransportPlanEntryRecord]:
-        params: dict[str, str] = {}
-        if trip_id is not None:
-            params["trip_id"] = trip_id
-        if transport_id is not None:
-            params["transport_id"] = transport_id
-        if booking_status is not None:
-            params["booking_status"] = booking_status.value
-
-        envelope = self._request_model(
-            "GET",
-            f"{self._api_prefix}/transport-bookings",
-            params=params or None,
-            expected_statuses={200},
-            response_type=DataEnvelope[list[TransportPlanEntryRecord]],
-            malformed_message="Database API returned a malformed entry list response.",
-        )
-        return envelope.data
-
-    def create_plan_entry(
-        self,
-        payload: TransportPlanEntryCreate,
-    ) -> TransportPlanEntryRecord:
-        envelope = self._request_model(
-            "POST",
-            f"{self._api_prefix}/transport-bookings",
-            json=payload.model_dump(mode="json", exclude_none=True),
-            expected_statuses={201},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message=(
-                "Database API returned a malformed entry create response."
-            ),
-        )
-        return envelope.data
-
-    def get_plan_entry(self, booking_id: str) -> TransportPlanEntryRecord:
-        envelope = self._request_model(
-            "GET",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
-            expected_statuses={200},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message="Database API returned a malformed entry response.",
-        )
-        return envelope.data
-
-    def update_plan_entry(
-        self,
-        booking_id: str,
-        payload: TransportPlanEntryUpdate,
-    ) -> TransportPlanEntryRecord:
-        envelope = self._request_model(
-            "PATCH",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
-            json=payload.model_dump(mode="json", exclude_unset=True),
-            expected_statuses={200},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message=(
-                "Database API returned a malformed entry update response."
-            ),
-        )
-        return envelope.data
-
-    def delete_plan_entry(self, booking_id: str) -> DeleteResponse:
-        envelope = self._request_model(
-            "DELETE",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
-            expected_statuses={200},
-            response_type=DataEnvelope[DeleteResponse],
-            malformed_message=(
-                "Database API returned a malformed entry delete response."
             ),
         )
         return envelope.data

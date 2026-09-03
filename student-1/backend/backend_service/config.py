@@ -79,6 +79,10 @@ class Settings:
     accommodation_api_timeout_seconds: float = 5.0
     activity_api_base_url: str = "http://student-4-backend:8008"
     activity_api_timeout_seconds: float = 5.0
+    # Student 3's public API. A trip stores transport ids and a party size;
+    # the route, times and price come from there.
+    transport_api_base_url: str = "http://student-3-backend:8003"
+    transport_api_timeout_seconds: float = 5.0
     ollama_base_url: str | None = None
 
     @classmethod
@@ -116,6 +120,19 @@ class Settings:
             activity_api_timeout_seconds=_parse_timeout(
                 os.getenv("STUDENT1_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS"),
                 env_name="STUDENT1_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS",
+                default=5.0,
+            ),
+            transport_api_base_url=_normalise_base_url(
+                os.getenv(
+                    "STUDENT1_BACKEND_TRANSPORT_API_BASE_URL",
+                    "http://student-3-backend:8003",
+                ),
+                env_name="STUDENT1_BACKEND_TRANSPORT_API_BASE_URL",
+                default="http://student-3-backend:8003",
+            ),
+            transport_api_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_TRANSPORT_API_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_TRANSPORT_API_TIMEOUT_SECONDS",
                 default=5.0,
             ),
             database_api_prefix=_normalise_prefix(

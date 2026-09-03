@@ -62,6 +62,7 @@ services:
     environment:
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
+      STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
     ports:
       - "8001:8001"
     depends_on:
