@@ -52,6 +52,20 @@
               hx-target="#stay-modal" hx-swap="innerHTML">
         Add to Trip
       </button>
+      {# Edit opens over this dialog, the same way Add to Trip does. Both it
+         and Delete clear this dialog out of band when they succeed, since
+         what it is showing is then stale or gone. #}
+      <button type="button" class="button"
+              hx-get="{{ request.url_for('edit_accommodation', accommodation_id=accommodation.id) }}"
+              hx-target="#form-modal" hx-swap="innerHTML">
+        Edit
+      </button>
+      <button type="button" class="button button--danger"
+              hx-delete="{{ request.url_for('delete_accommodation', accommodation_id=accommodation.id) }}"
+              hx-confirm="Delete {{ accommodation.name }}? This cannot be undone."
+              hx-target="#form-modal" hx-swap="innerHTML">
+        Delete
+      </button>
     </div>
 
     {# Where the confirmation toast lands, out-of-band, once the form modal

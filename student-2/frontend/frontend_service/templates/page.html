@@ -19,6 +19,9 @@
     <h1 class="masthead__title">Accommodation</h1>
     <p class="masthead__subtitle">Search, filter and open any listing for the full detail.</p>
     <a class="masthead__home" href="http://localhost:8080">Home</a>
+    <button type="button" class="button button--primary"
+            hx-get="{{ request.url_for('new_accommodation') }}"
+            hx-target="#form-modal" hx-swap="innerHTML">Add accommodation</button>
   </header>
 
   <main class="layout">
@@ -72,6 +75,13 @@
   {% endif %}
   {# And the Add-to-Trip form, which opens as a second dialog over that one. #}
   <div id="stay-modal"></div>
+  {# The create/edit form. Its own container rather than #modal's, because an
+     edit opens over the details dialog and closing the form must leave that
+     one standing. #}
+  <div id="form-modal"></div>
+  {# Where a create, an edit or a delete says so afterwards. It sits at page
+     level: a toast inside a dialog that has just been removed goes with it. #}
+  <div id="page-toast"></div>
 
   <script>
     // The city filter is only legal alongside a country (see app.py).
