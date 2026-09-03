@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
-from sqlalchemy import func, select
-
 from student4_database_service.enums import CategoryCode
 from student4_database_service.models import Activity, Category
 from student4_database_service.schemas import ActivityWrite
@@ -74,6 +72,32 @@ CATEGORY_SEEDS = (
 
 SHARED_LOCATION_NAMESPACE = UUID("9a7c1f2e-3b4d-5e6f-8a9b-0c1d2e3f4a5b")
 AUSTRALIA_ID = uuid5(SHARED_LOCATION_NAMESPACE, "country:australia")
+ACTIVITY_SEED_NAMESPACE = UUID("cb327a7c-8a95-5fea-a895-4a04ca6d95da")
+
+
+def _activity_seed_id(seed_key: str) -> UUID:
+    return uuid5(
+        ACTIVITY_SEED_NAMESPACE,
+        f"activity:{seed_key}",
+    )
+
+
+SAMPLE_ACTIVITY_SEED_KEYS = (
+    "sydney harbour guided walk",
+    "melbourne museum discovery",
+    "great barrier reef snorkelling",
+    "barossa valley tasting tour",
+    "blue mountains family hike",
+    "salamanca market food walk",
+    "darwin sunset wildlife cruise",
+    "brisbane riverside sunrise yoga",
+    "perth evening food crawl",
+    "canberra national gallery visit",
+)
+SAMPLE_ACTIVITY_IDS = tuple(
+    _activity_seed_id(seed_key) for seed_key in SAMPLE_ACTIVITY_SEED_KEYS
+)
+SYDNEY_HARBOUR_GUIDED_WALK_ID = SAMPLE_ACTIVITY_IDS[0]
 
 
 def _location(city: str, street: str, street_number: int) -> dict[str, object]:
@@ -271,13 +295,22 @@ def seed_categories(session: Session) -> int:
 
 
 def seed_activities(session: Session) -> int:
-    if session.scalar(select(func.count()).select_from(Activity)):
-        return 0
-    for payload in SAMPLE_ACTIVITY_DATA:
+    inserted = 0
+    for activity_id, payload in zip(
+        SAMPLE_ACTIVITY_IDS,
+        SAMPLE_ACTIVITY_DATA,
+        strict=True,
+    ):
+        if session.get(Activity, activity_id) is not None:
+            continue
         message = ActivityWrite.model_validate(payload)
-        session.add(Activity.from_message(message))
-    session.commit()
-    return len(SAMPLE_ACTIVITY_DATA)
+        activity = Activity.from_message(message)
+        activity.id = activity_id
+        session.add(activity)
+        inserted += 1
+    if inserted:
+        session.commit()
+    return inserted
 
 
 def seed_database(session: Session) -> int:

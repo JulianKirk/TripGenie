@@ -4,7 +4,11 @@ import sqlite3
 
 import pytest
 from database_service.repository import DatabaseService
-from database_service.seed_data import SEED_ITINERARY_ITEMS, SEED_TRIPS
+from database_service.seed_data import (
+    SEED_ITINERARY_ITEMS,
+    SEED_TRIP_ACTIVITIES,
+    SEED_TRIPS,
+)
 
 
 def create_trip_payload(**overrides: object) -> dict[str, object]:
@@ -49,6 +53,13 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
         first_item_count = connection.execute(
             "SELECT COUNT(*) FROM itinerary_items",
         ).fetchone()[0]
+        first_trip_activities = connection.execute(
+            """
+            SELECT trip_id, activity_id, date, start_time
+            FROM trip_activities
+            ORDER BY trip_id, activity_id
+            """
+        ).fetchall()
 
     service.initialize()
 
@@ -58,6 +69,9 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
         ).fetchone()[0]
         second_item_count = connection.execute(
             "SELECT COUNT(*) FROM itinerary_items",
+        ).fetchone()[0]
+        second_trip_activity_count = connection.execute(
+            "SELECT COUNT(*) FROM trip_activities",
         ).fetchone()[0]
         trip_indexes = set(
             row[1]
@@ -72,8 +86,18 @@ def test_schema_initialisation_and_seed_data_are_idempotent(
 
     assert first_trip_count == len(SEED_TRIPS)
     assert first_item_count == len(SEED_ITINERARY_ITEMS)
+    assert first_trip_activities == [
+        (
+            record["trip_id"],
+            record["activity_id"],
+            record["date"],
+            record["start_time"],
+        )
+        for record in SEED_TRIP_ACTIVITIES
+    ]
     assert second_trip_count == first_trip_count
     assert second_item_count == first_item_count
+    assert second_trip_activity_count == len(SEED_TRIP_ACTIVITIES)
     assert "idx_trips_status_start_date" in trip_indexes
     assert "idx_itinerary_items_trip_date" in item_indexes
     assert "idx_itinerary_items_trip_category_date" in item_indexes
@@ -348,8 +372,9 @@ def test_validation_errors_cover_domain_rules_and_bad_payloads(client) -> None:
         json={"start_date": "2026-10-04"},
     )
     assert invalid_window_update_response.status_code == 422
-    assert "cannot exclude existing itinerary item dates" in (
-        invalid_window_update_response.json()["error"]["details"][0]["issue"]
+    assert (
+        "cannot exclude existing itinerary item dates"
+        in (invalid_window_update_response.json()["error"]["details"][0]["issue"])
     )
 
 

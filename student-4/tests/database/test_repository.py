@@ -75,6 +75,21 @@ def test_seed_database_populates_at_least_ten_rows_per_table(
         assert seed_data.seed_database(session) == 0
 
 
+def test_seed_uses_the_stable_sydney_activity_id(
+    session_factory: sessionmaker[Session],
+) -> None:
+    expected_id = UUID("9982c0e4-5d7a-5508-8a34-43e529576243")
+    assert expected_id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+
+    with session_factory() as session:
+        seed_data.seed_database(session)
+        activity = session.get(Activity, expected_id)
+
+        assert activity is not None
+        assert activity.name == "Sydney Harbour guided walk"
+        assert seed_data.seed_database(session) == 0
+
+
 def test_seed_repairs_missing_categories_without_overwriting_existing_values(
     session_factory: sessionmaker[Session],
 ) -> None:
@@ -109,10 +124,10 @@ def test_seed_preserves_existing_catalogue_while_repairing_categories(
         session.delete(category)
         session.commit()
 
-        assert seed_data.seed_database(session) == 1
+        assert seed_data.seed_database(session) == 11
         rows, total = repository.search(ActivityQueryRequest())
-        assert total == 1
-        assert [row.id for row in rows] == [sentinel.id]
+        assert total == 11
+        assert sentinel.id in {row.id for row in rows}
         assert session.get(Category, CategoryCode.NIGHTLIFE) is not None
 
 

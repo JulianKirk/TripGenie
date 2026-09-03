@@ -27,7 +27,7 @@ from .models import (
     TripTransportRecord,
     TripUpdate,
 )
-from .seed_data import SEED_ITINERARY_ITEMS, SEED_TRIPS
+from .seed_data import SEED_ITINERARY_ITEMS, SEED_TRIP_ACTIVITIES, SEED_TRIPS
 
 TRIP_FIELDS = (
     "id",
@@ -79,6 +79,8 @@ TRIP_TRANSPORT_FIELDS = (
 SEED_MARKER_KEY = "student1_demo_seed_v1"
 SEED_MARKER_COMPLETED = "completed"
 SEED_MARKER_SKIPPED_EXISTING_DATA = "skipped-existing-data"
+CROSS_SERVICE_SEED_MARKER_KEY = "student1_cross_service_seed_v1"
+CROSS_SERVICE_SEED_MARKER_SKIPPED_PREREQUISITES = "skipped-prerequisites"
 
 SCHEMA_STATEMENTS = (
     """
@@ -754,8 +756,7 @@ class DatabaseService:
             with self._write_transaction(connection):
                 self._get_trip_row(connection, trip_id)
                 cursor = connection.execute(
-                    "DELETE FROM trip_transport "
-                    "WHERE trip_id = ? AND transport_id = ?",
+                    "DELETE FROM trip_transport WHERE trip_id = ? AND transport_id = ?",
                     (trip_id, transport_id),
                 )
                 if cursor.rowcount == 0:
@@ -859,20 +860,90 @@ class DatabaseService:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
     def _ensure_seed_data(self, connection: sqlite3.Connection) -> None:
-        if self._get_schema_metadata(connection, SEED_MARKER_KEY) is not None:
+        if self._get_schema_metadata(connection, SEED_MARKER_KEY) is None:
+            if self._database_has_existing_rows(connection):
+                self._set_schema_metadata(
+                    connection,
+                    SEED_MARKER_KEY,
+                    SEED_MARKER_SKIPPED_EXISTING_DATA,
+                )
+            else:
+                self._seed_trips(connection)
+                self._seed_itinerary_items(connection)
+                self._set_schema_metadata(
+                    connection,
+                    SEED_MARKER_KEY,
+                    SEED_MARKER_COMPLETED,
+                )
+
+        self._ensure_cross_service_seed_data(connection)
+
+    def _ensure_cross_service_seed_data(
+        self,
+        connection: sqlite3.Connection,
+    ) -> None:
+        if (
+            self._get_schema_metadata(connection, CROSS_SERVICE_SEED_MARKER_KEY)
+            is not None
+        ):
             return
 
-        if self._database_has_existing_rows(connection):
-            self._set_schema_metadata(
-                connection,
-                SEED_MARKER_KEY,
-                SEED_MARKER_SKIPPED_EXISTING_DATA,
+        skipped_prerequisites = False
+        for record in SEED_TRIP_ACTIVITIES:
+            existing = connection.execute(
+                """
+                SELECT 1
+                FROM trip_activities
+                WHERE trip_id = :trip_id AND activity_id = :activity_id
+                """,
+                record,
+            ).fetchone()
+            if existing is not None:
+                continue
+
+            trip = connection.execute(
+                """
+                SELECT start_date, end_date
+                FROM trips
+                WHERE id = :trip_id
+                """,
+                record,
+            ).fetchone()
+            if (
+                trip is None
+                or str(record["date"]) < str(trip["start_date"])
+                or str(record["date"]) > str(trip["end_date"])
+            ):
+                skipped_prerequisites = True
+                continue
+
+            connection.execute(
+                """
+                INSERT INTO trip_activities (
+                    trip_id,
+                    activity_id,
+                    date,
+                    start_time
+                ) VALUES (
+                    :trip_id,
+                    :activity_id,
+                    :date,
+                    :start_time
+                )
+                """,
+                record,
             )
-            return
 
-        self._seed_trips(connection)
-        self._seed_itinerary_items(connection)
-        self._set_schema_metadata(connection, SEED_MARKER_KEY, SEED_MARKER_COMPLETED)
+        marker_value = (
+            CROSS_SERVICE_SEED_MARKER_SKIPPED_PREREQUISITES
+            if skipped_prerequisites
+            else SEED_MARKER_COMPLETED
+        )
+        self._set_schema_metadata(
+            connection,
+            CROSS_SERVICE_SEED_MARKER_KEY,
+            marker_value,
+        )
 
     def _seed_trips(self, connection: sqlite3.Connection) -> None:
         connection.executemany(INSERT_TRIP_SQL, SEED_TRIPS)
