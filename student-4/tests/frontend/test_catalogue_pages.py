@@ -76,7 +76,10 @@ def test_cards_render_backend_values_faithfully(backend: FakeBackend) -> None:
     client = frontend(backend)
     text = client.get("/").text
 
-    assert "AUD 45.00" in text
+    assert "$45.00" in text
+    assert "Minimum price ($)" in text
+    assert "Maximum price ($)" in text
+    assert "AUD" not in text
     assert "per person" in text
     assert "2h" in text
     assert "Sydney, Australia" in text

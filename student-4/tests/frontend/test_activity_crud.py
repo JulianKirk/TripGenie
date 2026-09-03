@@ -97,6 +97,8 @@ def test_new_form_has_complete_aggregate_controls(backend: FakeBackend) -> None:
 
     assert response.status_code == 200
     assert "Create activity" in response.text
+    assert "Price ($)" in response.text
+    assert "AUD" not in response.text
     for name in (
         "name",
         "description",

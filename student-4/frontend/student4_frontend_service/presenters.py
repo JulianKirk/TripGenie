@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def format_money(value: Decimal) -> str:
-    return f"AUD {value:.2f}"
+    return f"${value:.2f}"
 
 
 def party_total(activity: ActivitySummary, party_size: int | None) -> str | None:

@@ -28,14 +28,14 @@ def detail() -> ActivityDetail:
 def test_money_and_per_person_party_total_use_exact_decimal_math() -> None:
     activity = summary()
 
-    assert format_money(activity.price) == "AUD 45.00"
-    assert party_total(activity, 3) == "AUD 135.00"
+    assert format_money(activity.price) == "$45.00"
+    assert party_total(activity, 3) == "$135.00"
 
 
 def test_flat_admission_party_total_does_not_multiply() -> None:
     activity = summary(price="85.50", pricing_basis="FLAT_ADMISSION")
 
-    assert party_total(activity, 4) == "AUD 85.50"
+    assert party_total(activity, 4) == "$85.50"
 
 
 def test_missing_or_invalid_party_size_has_no_total() -> None:

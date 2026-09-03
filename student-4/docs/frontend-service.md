@@ -161,9 +161,10 @@ HTML keeps it available for progressive enhancement.
 
 ### Price, duration and party suitability
 
-Prices are clearly labelled `AUD`; the frontend does not guess a currency from
-the activity's location. Money arrives from the backend as an exact two-decimal
-string and remains a decimal string when the frontend builds price filters.
+Prices are displayed with a `$` prefix; the frontend does not guess a currency
+from the activity's location. Money arrives from the backend as an exact
+two-decimal string and remains a decimal string when the frontend builds price
+filters.
 Numeric inputs use a `0.01` step and the frontend canonicalizes non-empty values
 to two fractional digits, but the backend remains authoritative for validation.
 
@@ -203,7 +204,8 @@ Each result card displays:
 
 - activity name and description;
 - country and city when resolvable;
-- exact price in AUD, its per-person or flat-admission basis, and duration;
+- exact price with a `$` prefix, its per-person or flat-admission basis, and
+  duration;
 - category labels resolved from the already-loaded category list;
 - participant and age restrictions when present;
 - external-booking indicator; and
