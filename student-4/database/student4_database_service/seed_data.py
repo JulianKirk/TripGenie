@@ -249,6 +249,77 @@ SAMPLE_ACTIVITY_DATA: tuple[dict[str, object], ...] = (
         "categories": ["CULTURE"],
         "availability_schedules": _weekly("MONDAY", "10:00", "15:00"),
     },
+    {
+        "name": "Royal Botanic Garden accessible stroll",
+        "description": (
+            "A relaxed, step-free guided stroll through the harbour-side gardens."
+        ),
+        "price": "22.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 12,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Step-free route with accessible toilets nearby.",
+        "location_details": _location("Sydney", "Mrs Macquaries Road", 1),
+        "categories": ["OUTDOOR", "TOUR", "WELLNESS"],
+        "availability_schedules": _weekly("SUNDAY", "09:00", "12:00"),
+    },
+    {
+        "name": "Sydney Harbour sunrise kayak",
+        "description": (
+            "A guided sunrise paddle with close-up harbour and skyline views."
+        ),
+        "price": "95.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 8,
+        "booking_required": True,
+        "booking_notes": "Advance booking and basic swimming ability required.",
+        "location_details": _location("Sydney", "Hickson Road", 5),
+        "categories": ["ADVENTURE", "OUTDOOR"],
+        "availability_schedules": _weekly("SATURDAY", "06:00", "09:00"),
+    },
+    {
+        "name": "Museum of Contemporary Art highlights tour",
+        "description": (
+            "An accessible guided introduction to contemporary Australian art."
+        ),
+        "price": "30.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 15,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Lift access and accessible toilets are available.",
+        "location_details": _location("Sydney", "George Street", 140),
+        "categories": ["CULTURE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "10:00", "16:00"),
+    },
+    {
+        "name": "The Rocks evening food walk",
+        "description": (
+            "A small-group tasting walk through historic lanes and local eateries."
+        ),
+        "price": "80.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 150,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 10,
+        "booking_required": True,
+        "location_details": _location("Sydney", "Playfair Street", 12),
+        "categories": ["FOOD_DRINK", "NIGHTLIFE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "17:30", "21:00"),
+    },
 )
 
 

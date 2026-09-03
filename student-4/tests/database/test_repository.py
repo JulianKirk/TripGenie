@@ -59,7 +59,7 @@ def test_seed_database_populates_at_least_ten_rows_per_table(
     session_factory: sessionmaker[Session],
 ) -> None:
     with session_factory() as session:
-        assert seed_data.seed_database(session) == 20
+        assert seed_data.seed_database(session) == 24
 
         for model in (
             Activity,
@@ -89,7 +89,7 @@ def test_seed_repairs_missing_categories_without_overwriting_existing_values(
         )
         session.commit()
 
-        assert seed_data.seed_database(session) == 19
+        assert seed_data.seed_database(session) == 23
         existing = session.get(Category, CategoryCode.ADVENTURE)
         assert existing is not None
         assert existing.label == "Custom adventure"
@@ -128,6 +128,10 @@ def test_seed_city_ids_match_the_shared_location_contract() -> None:
         "19a552d3-4191-5f2b-a4ed-db910fc5eb9c",
         "93b2c6d6-5d0e-5151-ae7d-685e08aab942",
         "6b831972-3b36-5af8-a491-78f597f89c18",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
     ]
     actual_city_ids = [
         str(cast("dict[str, object]", payload["location_details"])["city_id"])
@@ -135,6 +139,54 @@ def test_seed_city_ids_match_the_shared_location_contract() -> None:
     ]
 
     assert actual_city_ids == expected_city_ids
+
+
+def test_seeded_catalogue_supports_ai_showcase_filtering(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        seed_data.seed_database(session)
+        repository = ActivityRepository(session)
+
+        accessible_culture, accessible_total = repository.search(
+            ActivityQueryRequest.model_validate(
+                {
+                    "categories": {"codes": ["CULTURE"]},
+                    "price": {"max": "40.00"},
+                    "duration_minutes": {"max": 120},
+                    "party_size": 1,
+                    "accessibility": {"wheelchair_accessible": True},
+                    "is_active": True,
+                }
+            )
+        )
+        sydney_outdoors, sydney_total = repository.search(
+            ActivityQueryRequest.model_validate(
+                {
+                    "location_details": {
+                        "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e"
+                    },
+                    "categories": {"codes": ["OUTDOOR"]},
+                    "price": {"max": "100.00"},
+                    "duration_minutes": {"max": 180},
+                    "party_size": 2,
+                    "is_active": True,
+                }
+            )
+        )
+
+    assert [activity.name for activity in accessible_culture] == [
+        "Canberra national gallery visit",
+        "Melbourne museum discovery",
+        "Museum of Contemporary Art highlights tour",
+    ]
+    assert accessible_total == 3
+    assert [activity.name for activity in sydney_outdoors] == [
+        "Royal Botanic Garden accessible stroll",
+        "Sydney Harbour guided walk",
+        "Sydney Harbour sunrise kayak",
+    ]
+    assert sydney_total == 3
 
 
 def test_repository_contains_populated_sqlite_database() -> None:
@@ -192,13 +244,29 @@ def test_repository_contains_populated_sqlite_database() -> None:
             "Melbourne museum discovery",
             "bc37aae2-9766-5646-93dd-09fc42211aa6",
         ),
+        (
+            "Museum of Contemporary Art highlights tour",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
         ("Perth evening food crawl", "93b2c6d6-5d0e-5151-ae7d-685e08aab942"),
+        (
+            "Royal Botanic Garden accessible stroll",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
         (
             "Salamanca Market food walk",
             "b6b18900-77fa-5ca3-957b-9b2ce5ee5e84",
         ),
         (
             "Sydney Harbour guided walk",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
+        (
+            "Sydney Harbour sunrise kayak",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
+        (
+            "The Rocks evening food walk",
             "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
         ),
     ]
