@@ -5,8 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from student4_database_service.enums import CategoryCode
-from student4_database_service.models import Activity, Category
+from student4_database_service.models import (
+    Activity,
+    ActivityIdAlias,
+    Category,
+)
 from student4_database_service.schemas import ActivityWrite
 
 if TYPE_CHECKING:
@@ -294,7 +301,66 @@ def seed_categories(session: Session) -> int:
     return inserted
 
 
+def _activity_payload(activity: Activity) -> dict[str, object]:
+    return activity.to_record().model_dump(
+        mode="json",
+        exclude={
+            "id": True,
+            "location_details": {"id": True},
+            "availability_schedules": {"__all__": {"id": True}},
+        },
+    )
+
+
+def _migrate_legacy_seed_activities(session: Session) -> None:
+    rows = list(
+        session.scalars(
+            select(Activity).options(
+                selectinload(Activity.location_details),
+                selectinload(Activity.category_links),
+                selectinload(Activity.availability_schedules),
+            )
+        )
+    )
+    legacy_rows: list[Activity] = []
+    messages = [
+        ActivityWrite.model_validate(payload) for payload in SAMPLE_ACTIVITY_DATA
+    ]
+    for message in messages:
+        expected = message.model_dump(mode="json")
+        matches = [
+            row
+            for row in rows
+            if row.id not in SAMPLE_ACTIVITY_IDS and _activity_payload(row) == expected
+        ]
+        # Partial or ambiguous matches may be user-created records, so only
+        # migrate when the complete former catalogue is uniquely identifiable.
+        if len(matches) != 1:
+            return
+        legacy_rows.append(matches[0])
+
+    if len({row.id for row in legacy_rows}) != len(SAMPLE_ACTIVITY_IDS):
+        return
+
+    for activity_id, message, legacy in zip(
+        SAMPLE_ACTIVITY_IDS,
+        messages,
+        legacy_rows,
+        strict=True,
+    ):
+        canonical = session.get(Activity, activity_id)
+        if canonical is None:
+            canonical = Activity.from_message(message)
+            canonical.id = activity_id
+            session.add(canonical)
+            session.flush()
+        session.add(ActivityIdAlias(alias_id=legacy.id, activity_id=activity_id))
+        session.delete(legacy)
+    session.commit()
+
+
 def seed_activities(session: Session) -> int:
+    _migrate_legacy_seed_activities(session)
     inserted = 0
     for activity_id, payload in zip(
         SAMPLE_ACTIVITY_IDS,
