@@ -121,6 +121,25 @@ async def list_accommodation(
     return parse(AccommodationQueryResponse, await _named(body, location))
 
 
+async def search(
+    query: AccommodationQueryRequest, db: DbDep, location: LocationDep
+) -> AccommodationQueryResponse:
+    """Run a search. The QUERY route below is this and nothing else; the ask box
+    in routers/ai.py calls it too, once the model has produced the filters.
+
+    One search path rather than two, so the place-name translation, the empty
+    result for an unknown country and the 502 on drift are the same however the
+    filters were arrived at.
+    """
+    forwarded = await _by_id(query, location)
+    if forwarded is None:
+        # Nobody has accommodation in a country the shared service has never
+        # heard of. That is an answer, not a failure.
+        return EMPTY
+    body = await db.query(forwarded)
+    return parse(AccommodationQueryResponse, await _named(body, location))
+
+
 @router.api_route(
     "",
     methods=["QUERY"],
@@ -130,10 +149,4 @@ async def list_accommodation(
 async def query_accommodation(
     query: AccommodationQueryRequest, db: DbDep, location: LocationDep
 ) -> AccommodationQueryResponse:
-    forwarded = await _by_id(query, location)
-    if forwarded is None:
-        # Nobody has accommodation in a country the shared service has never
-        # heard of. That is an answer, not a failure.
-        return EMPTY
-    body = await db.query(forwarded)
-    return parse(AccommodationQueryResponse, await _named(body, location))
+    return await search(query, db, location)

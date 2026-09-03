@@ -1,0 +1,125 @@
+{#
+  Every filter, the search box and the page-size select, in one form. A single
+  hx-trigger on it covers search-as-you-type and every other control, so there
+  is no per-input wiring.
+
+  Its own partial because the ask box (see app.py) sends this back out of band,
+  filled in with what the model understood -- so after asking a question the
+  page is in exactly the state it would be in had you typed those filters, and
+  the pager, the modal and the filters themselves carry on unchanged.
+
+  `params` is a QueryParams either way: the real one on a GET, and one built
+  from the AI's filters by `form_values()` on an ask.
+#}
+    <form id="filters" class="filters"{% if oob %} hx-swap-oob="true"{% endif %}
+          hx-get="{{ request.url_for('results') }}"
+          hx-trigger="input changed delay:300ms, change"
+          hx-target="#results"
+          hx-swap="innerHTML"
+          hx-indicator="#loading">
+      {# No offset field: changing any filter drops you back to page one,
+         because only the pager links carry an offset. #}
+      <div class="filters__search">
+        <label for="f-name">Search by name</label>
+        <input id="f-name" name="name" type="search" autocomplete="off"
+               placeholder="Start typing…" value="{{ params.get('name', '') }}">
+      </div>
+
+      <details class="filters__more" {% if params and params|length > 1 %}open{% endif %}>
+        <summary>Filters</summary>
+        <div class="filters__grid">
+          <label>Type
+            <select name="type">
+              <option value="">Any</option>
+              {% for value in ["hotel", "hostel", "apartment", "resort", "guesthouse", "camping"] %}
+                <option value="{{ value }}" {% if params.get('type') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>Availability
+            <select name="availability_status">
+              <option value="">Any</option>
+              {% for value in ["available", "unavailable", "sold_out"] %}
+                <option value="{{ value }}" {% if params.get('availability_status') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>Description contains
+            <input name="description" type="search" autocomplete="off" value="{{ params.get('description', '') }}">
+          </label>
+
+          <label>Country
+            <input id="f-country" name="country" type="search" autocomplete="off" value="{{ params.get('country', '') }}">
+          </label>
+
+          <label>City
+            {# The backend rejects a city without a country, so the input stays
+               disabled until there is one -- the 400 is unreachable from here. #}
+            <input name="city" type="search" autocomplete="off"
+                   value="{{ params.get('city', '') }}"
+                   {% if not params.get('country') %}disabled{% endif %}
+                   data-needs="country">
+          </label>
+
+          <label>Street
+            <input name="street" type="search" autocomplete="off" value="{{ params.get('street', '') }}">
+          </label>
+
+          <label>Street number
+            <input name="street_number" type="number" min="0" value="{{ params.get('street_number', '') }}">
+          </label>
+
+          <label>Price from
+            <input name="price_min" type="number" min="0" step="1" value="{{ params.get('price_min', '') }}">
+          </label>
+
+          <label>Price to
+            <input name="price_max" type="number" min="0" step="1" value="{{ params.get('price_max', '') }}">
+          </label>
+
+          <label>Rating from
+            <input name="rating_min" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_min', '') }}">
+          </label>
+
+          <label>Rating to
+            <input name="rating_max" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_max', '') }}">
+          </label>
+
+          <label>Rooms (at least)
+            <input name="room_count_min" type="number" min="0" value="{{ params.get('room_count_min', '') }}">
+          </label>
+
+          <label>Rooms (exactly)
+            <input name="room_count" type="number" min="0" value="{{ params.get('room_count', '') }}">
+          </label>
+
+          <label>Beds (at least)
+            <input name="bed_count_min" type="number" min="0" value="{{ params.get('bed_count_min', '') }}">
+          </label>
+
+          <label>Beds (exactly)
+            <input name="bed_count" type="number" min="0" value="{{ params.get('bed_count', '') }}">
+          </label>
+
+          <label>Room description contains
+            <input name="room_description" type="search" autocomplete="off" value="{{ params.get('room_description', '') }}">
+          </label>
+        </div>
+
+        <fieldset class="filters__amenities">
+          <legend>Amenities (all of them must be present)</legend>
+          {% for amenity in ["wifi", "pool", "gym", "spa", "breakfast", "parking", "kitchen", "laundry", "air_conditioning"] %}
+            <label class="checkbox">
+              <input type="checkbox" name="amenities" value="{{ amenity }}"
+                     {% if amenity in params.getlist('amenities') %}checked{% endif %}>
+              {{ amenity|replace("_", " ")|title }}
+            </label>
+          {% endfor %}
+        </fieldset>
+
+        <a class="button" href="{{ request.url_for('index') }}">Clear all filters</a>
+      </details>
+      <span id="loading" class="htmx-indicator" role="status">Searching…</span>
+    </form>

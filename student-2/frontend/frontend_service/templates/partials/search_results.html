@@ -1,0 +1,9 @@
+{#
+  What an ordinary search, filter change or pager link swaps into #results.
+
+  The same list, plus a blank answer out of band: a question that has been
+  answered stays on the page until the page is searched by hand, and then it is
+  no longer what the results are.
+#}
+{% include "partials/results.html" %}
+{% with oob = true, reply = none %}{% include "partials/ai_answer.html" %}{% endwith %}

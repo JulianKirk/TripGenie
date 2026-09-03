@@ -18,13 +18,16 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend_service.app import create_app
-from backend_service.client import BAD_RESPONSE
 from backend_service.config import (
     DEFAULT_ITINERARY_PREFIX,
     DEFAULT_ITINERARY_URL,
     Settings,
 )
-from backend_service.itinerary_client import UNAVAILABLE, ItineraryClient
+from backend_service.itinerary_client import (
+    BAD_RESPONSE,
+    UNAVAILABLE,
+    ItineraryClient,
+)
 
 ITINERARY_URL = "http://itinerary.test"
 NO_ROUTE = "no route to student 1"

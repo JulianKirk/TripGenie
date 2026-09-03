@@ -69,7 +69,8 @@ TripGenie/
 ├── student-4/
 ├── student-5/
 ├── ai-services/
-│   ├── ai-mode/
+│   ├── ai-mode/            # shared: the only service that talks to Ollama
+│   ├── agentic-loop/
 │   ├── mcp-server/
 │   ├── rag-server/
 │   └── multi-agent-server/

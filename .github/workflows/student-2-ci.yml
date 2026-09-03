@@ -7,6 +7,9 @@ on:
       # The end-to-end tests drive the real shared reference service, so a
       # change there can break this suite.
       - 'shared/**'
+      # The ask box calls the shared AI-Mode service; its contract is what the
+      # backend's fake in tests/backend is a copy of.
+      - 'ai-services/ai-mode/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'
@@ -16,6 +19,9 @@ on:
       # The end-to-end tests drive the real shared reference service, so a
       # change there can break this suite.
       - 'shared/**'
+      # The ask box calls the shared AI-Mode service; its contract is what the
+      # backend's fake in tests/backend is a copy of.
+      - 'ai-services/ai-mode/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - '.github/workflows/student-2-ci.yml'

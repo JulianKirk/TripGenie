@@ -32,6 +32,7 @@ so something has to render the rows. Two further constraints settle it:
 |-------------------|---------------------------------|------------------------------------------|
 | `BACKEND_URL`     | `http://student-2-backend:9000` | Base URL of the backend service          |
 | `BACKEND_TIMEOUT` | `5`                             | Seconds to wait on a backend call        |
+| `AI_TIMEOUT`      | `210`                           | Seconds to wait on the ask box alone, which waits on a model |
 
 ## Running it
 
@@ -50,6 +51,7 @@ These serve HTML, not an API — no other service is a caller.
 | `GET /`                    | The whole page, results already rendered. `?accommodation=<id>` opens that one's modal with the page |
 | `GET /accommodation`       | The results fragment: the table and the pager              |
 | `GET /accommodation/{id}`  | The details modal for one accommodation                    |
+| `POST /accommodation/ai-search` | The results fragment, plus the answer and the filter form out of band |
 | `GET /accommodation/{id}/stay` | The Add-to-Trip form, as a second modal. Re-renders itself on every change to recompute the total |
 | `PUT /accommodation/{id}/itineraries/{itineraryId}` | Stores the stay from the form body |
 | `GET /health`              | `{"status", "service", "backend"}`                         |
@@ -134,6 +136,56 @@ still in the inputs.
 **Not offered here:** taking an accommodation back off a trip. The tick-list
 that carried that control is gone, so removal is currently only reachable
 through the backend's `DELETE` endpoint or student 1's own trip page.
+
+### The ask box
+
+Above the filter form: one input, one button, and a question in English.
+
+```html
+hx-post="/accommodation/ai-search" hx-target="#results" hx-swap="innerHTML"
+```
+
+The backend turns the question into filters and runs the ordinary search (see
+[POST /accommodation/ai-search](./backend-service-api.md#post-accommodationai-search)),
+so what comes back is the same `partials/results.html` every other search
+renders. Two things come back with it, both swapped **out of band**: the answer
+-- the model's own sentence, and a line saying how the question was read as
+filters -- which lands in `#ai-answer` under the ask box rather than in the
+results, because it answers the question rather than being one of the results;
+and the filter form itself:
+
+```html
+<form id="filters" class="filters" hx-swap-oob="true" ...>
+```
+
+An ordinary search, filter change or pager link swaps `#ai-answer` back to
+empty the same way (`partials/search_results.html`): once the page has been
+searched by hand, the answer is no longer what the results are.
+
+While the request is in flight `#asking` is visible -- a label and a bar that
+slides. It is indeterminate on purpose: a generation reports no progress, so a
+bar that pretended to know would be lying. What it is there to say is that a
+20-second wait on a local model is a wait and not a hang. `prefers-reduced-
+motion` gets a full, still bar instead.
+
+That out-of-band swap is the whole design. After asking a question the page is
+in exactly the state it would be in had you typed those filters by hand, so the
+pager (which pulls its filters off the form with `hx-include="#filters"`), the
+details modal and every manual filter carry on working with no special case for
+having asked. It also makes the model's reading visible and editable rather than
+hidden -- if it misread the question, the wrong filter is sitting right there to
+fix.
+
+The form's fields moved into `partials/filters.html` so both paths render the
+one template. It reads a `QueryParams` either way: the real one on a `GET`, and
+one built from the answer by `form_values()` -- the inverse of `query_body()`,
+over the same four field maps, so a filter's form name and message name are
+paired up in exactly one place.
+
+A blank ask is the unfiltered list, not an error, the same answer an empty
+search box gives. An AI failure renders in `partials/error.html` where the
+results would have been, like every other backend failure, and the ask box is
+gone but nothing else on the page is.
 
 ### Filters
 

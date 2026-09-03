@@ -44,6 +44,10 @@ class TestHealth:
             "service": "student-2-backend",
             "database": "ok",
             "location": "ok",
+            # The end-to-end chain runs the real database and shared services;
+            # AI-Mode is deliberately not part of it, and says so rather than
+            # dragging the whole report down to degraded.
+            "ai_mode": "not_configured",
         }
 
 

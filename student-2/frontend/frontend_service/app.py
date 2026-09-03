@@ -19,19 +19,19 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs
 from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
 
 import httpx
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.datastructures import QueryParams
 
 from frontend_service.config import Settings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-
-    from starlette.datastructures import QueryParams
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(PACKAGE_ROOT / "templates"))
@@ -120,6 +120,51 @@ def query_body(params: QueryParams) -> dict[str, Any]:
     body["limit"] = _page_number(params.get("limit"), DEFAULT_LIMIT, 1, max(PAGE_SIZES))
     body["offset"] = _page_number(params.get("offset"), 0, 0, None)
     return body
+
+
+def form_values(body: dict[str, Any]) -> QueryParams:
+    """A QUERY body, back as the filter form that would have produced it.
+
+    The inverse of `query_body`, over the same four field maps, so there is one
+    place where a filter's form name and its message name are paired up. It
+    exists for the ask box: the answer arrives as a search, and the form has to
+    show it.
+
+    A QueryParams rather than a dict because that is what the template already
+    reads -- `.get` for an input, `.getlist` for the amenity boxes -- so the AI
+    path renders the identical partial with no template branching.
+    """
+    match = body.get("accommodation", {})
+    pairs: list[tuple[str, str]] = []
+    for source, fields in (
+        (match, MATCH_FIELDS),
+        (match.get("location_details", {}), LOCATION_FIELDS),
+        (match.get("room_details", {}), ROOM_FIELDS),
+    ):
+        pairs += [
+            (form_field, str(source[message_field]))
+            for form_field, message_field in fields.items()
+            if source.get(message_field) is not None
+        ]
+    pairs += [(field, str(body[field])) for field in BOUND_FIELDS if field in body]
+    pairs += [("amenities", amenity) for amenity in match.get("amenities") or []]
+    if "limit" in body:
+        pairs.append(("limit", str(body["limit"])))
+    return QueryParams(pairs)
+
+
+def understood(params: QueryParams) -> list[str]:
+    """The filters, as the short phrases the notice above the results reads out.
+
+    ponytail: `field: value`, not a sentence per filter. The reader is checking
+    the question was not misread, and the filter form right below says the same
+    thing in full.
+    """
+    return [
+        f"{key.replace('_', ' ')} {value}"
+        for key, value in params.multi_items()
+        if key != "limit"
+    ]
 
 
 def _page_number(raw: str | None, default: int, low: int, high: int | None) -> int:
@@ -224,7 +269,53 @@ async def results(request: Request):
         context = await results_context(request)
     except BackendError as exc:
         return render(request, "partials/error.html", {"error": str(exc)})
-    return render(request, "partials/results.html", context)
+    return render(request, "partials/search_results.html", context)
+
+
+@router.post(f"{PATH}/ai-search")
+async def ai_search(request: Request):
+    """A question in English. The backend turns it into filters and runs the
+    ordinary search; this renders the rows, says how the question was read, and
+    sends the filter form back out of band carrying the same filters.
+
+    A blank ask is the unfiltered list, not an error -- the same answer an empty
+    search box gives.
+    """
+    # ponytail: `parse_qs` rather than `request.form()` or a FastAPI
+    # `Form(...)` parameter. Both of those need python-multipart -- a whole
+    # dependency for the one urlencoded field this page will never send as
+    # multipart. Switch to `Form(...)` if a file upload ever lands here.
+    fields = parse_qs((await request.body()).decode())
+    question = (fields.get("query") or [""])[0].strip()
+    if not question:
+        return await results(request)
+    try:
+        found = await call(
+            request,
+            "POST",
+            f"{PATH}/ai-search",
+            json={"query": question},
+            # Not the page's ordinary 5s: there is a model at the other end.
+            timeout=request.app.state.settings.ai_timeout,
+        )
+    except BackendError as exc:
+        return render(request, "partials/error.html", {"error": str(exc)})
+
+    params = form_values(found["query_used"])
+    return render(
+        request,
+        "partials/ai_results.html",
+        {
+            "accommodations": found["accommodations"],
+            "page_sizes": PAGE_SIZES,
+            "total": found["total"],
+            "limit": found["query_used"]["limit"],
+            "offset": found["query_used"]["offset"],
+            "params": params,
+            "understood": understood(params),
+            "reply": found["reply"],
+        },
+    )
 
 
 @router.get(f"{PATH}/{{accommodation_id:uuid}}")
