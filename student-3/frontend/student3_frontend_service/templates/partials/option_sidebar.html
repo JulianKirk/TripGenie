@@ -11,6 +11,9 @@
     <a href="{{ request.url_for('browse') }}">Browse &amp; filter</a>
     <a href="{{ request.url_for('compare') }}">Compare</a>
     <a href="{{ request.url_for('new_entry_form') }}">Add to a trip</a>
+    <a class="sidebar-nav__ai" href="{{ request.url_for('ai_form') }}">
+      <span aria-hidden="true">&#9733;</span> AI suggestions
+    </a>
   </nav>
 
   {% if option_list_error %}

@@ -13,7 +13,10 @@
 #}
     <form id="filters" class="filters"{% if oob %} hx-swap-oob="true"{% endif %}
           hx-get="{{ request.url_for('results') }}"
-          hx-trigger="input changed delay:300ms, change"
+          {# The last trigger is the write routes' HX-Trigger header: a create,
+             an edit or a delete re-runs the search as it stands, so the list
+             refreshes without any of them having to know the filters. #}
+          hx-trigger="input changed delay:300ms, change, accommodations-changed from:body"
           hx-target="#results"
           hx-swap="innerHTML"
           hx-indicator="#loading">

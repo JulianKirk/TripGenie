@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -62,6 +63,60 @@ def database_transport(
             )
 
         yield httpx.MockTransport(relay)
+
+
+def ai_generate_response(draft: dict[str, object]) -> httpx.Response:
+    """AI-Mode's envelope around a model reply.
+
+    The reply body is a JSON *string*, exactly as the provider returns it, so
+    tests exercise the same parse path production uses.
+    """
+    return httpx.Response(
+        200,
+        json={
+            "data": {
+                "run_id": "run_test_0001",
+                "correlation_id": "student3-transport-test",
+                "model": "llama3.1:8b",
+                "provider": "ollama",
+                "response": json.dumps(draft),
+                "done": True,
+            },
+        },
+    )
+
+
+def make_ai_transport(draft: dict[str, object]) -> httpx.MockTransport:
+    """An AI-Mode that returns one fixed draft."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return ai_generate_response(draft)
+
+    return httpx.MockTransport(handler)
+
+
+def make_ai_error_transport(status_code: int, code: str) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code,
+            json={
+                "error": {
+                    "code": code,
+                    "message": "AI-Mode said no.",
+                    "details": [{"field": "ai_mode", "issue": "stubbed failure"}],
+                },
+            },
+        )
+
+    return httpx.MockTransport(handler)
+
+
+def make_ai_unreachable_transport() -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        message = "connection refused"
+        raise httpx.ConnectError(message, request=request)
+
+    return httpx.MockTransport(handler)
 
 
 @pytest.fixture

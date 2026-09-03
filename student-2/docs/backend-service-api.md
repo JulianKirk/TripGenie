@@ -10,6 +10,9 @@
   - [GET /accommodation](#get-accommodation)
   - [QUERY /accommodation](#query-accommodation)
   - [POST /accommodation/ai-search](#post-accommodationai-search)
+  - [POST /accommodation](#post-accommodation)
+  - [PUT /accommodation/{id}](#put-accommodationid)
+  - [DELETE /accommodation/{id}](#delete-accommodationid)
 - [Itinerary Endpoints](#itinerary-endpoints)
   - [GET /accommodation/{id}/itineraries](#get-accommodationiditineraries)
   - [PUT /accommodation/{id}/itineraries/{itinerary_id}](#put-accommodationiditinerariesitinerary_id)
@@ -114,12 +117,22 @@ docker compose up student-2-backend
 Port `9000` is published, so the examples below work from the host. The
 database service starts alongside it and stays unpublished.
 
-### What is not exposed
+### Writes
 
-`POST` and `PUT` exist on the database service but have no public counterpart.
-The accommodation service's users view and filter accommodations; they do not
-author them. Add the wrappers when there is a caller that writes — they are the
-same passthrough as the read endpoints.
+The full CRUD set is public: `POST /accommodation`, `PUT /accommodation/{id}`
+and `DELETE /accommodation/{id}` alongside the reads. The page in front of this
+service is where an accommodation is authored as well as browsed.
+
+Writes speak the same public contract the reads do, which means a place is
+**named**, not identified — `{"country": "australia", "city": "sydney"}`, never
+an id. The route resolves the two names against the shared reference service on
+the way down. A place the shared service does not know is a `400` here, unlike a
+*search* for one, which is an empty result: you can ask about Narnia, you cannot
+store an accommodation in it.
+
+There is no authentication in front of any of this. Every service in this
+project runs on a closed compose network and none of them authenticate; adding
+it here alone would buy nothing.
 
 ### Errors
 
@@ -578,6 +591,189 @@ calls Ollama with `raw=True` and no chat template, so the model is completing
 text rather than following orders -- and it must not end on whitespace, since
 AI-Mode strips that and a prompt ending on a blank line comes back as `{ }`.
 Both of those are written down in `backend_service/ai_search.py`.
+
+## POST /accommodation
+
+Create an accommodation.
+
+### Request
+
+**Method:** `POST`
+**Endpoint:** `/accommodation`
+**Content-Type:** `application/json`
+
+### Request Body
+
+The accommodation message. `name`, `type`, `description`, `price_per_night`,
+`availability_status` and a `location_details` carrying both `country` and
+`city` are required — the database service stores the place as two non-null
+ids, so neither name can be left out. Everything else is optional. An `id` is
+not accepted; the database service mints it.
+
+### Example Request
+
+```bash
+curl -X POST "http://localhost:9000/accommodation" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "example accommodation",
+    "type": "hotel",
+    "description": "an exemplary hotel for all your travel adventures",
+    "price_per_night": 189.50,
+    "availability_status": "available",
+    "rating": 4.5,
+    "amenities": ["wifi", "pool"],
+    "location_details": {
+      "country": "australia",
+      "city": "sydney",
+      "street": "example street avenue",
+      "street_number": 123
+    },
+    "room_details": {
+      "room_count": 3,
+      "bed_count": 2,
+      "bed_types": ["king", "queen"],
+      "description": "three bedroom hotel space with big beds"
+    }
+  }'
+```
+
+### Example Response `201 Created`
+
+Only what the caller needs to find the row again. The rest is what they just
+sent, and `GET /accommodation/{id}` returns it in full.
+
+```json
+{
+  "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+  "name": "example accommodation"
+}
+```
+
+### Error Responses
+
+| Status | Description                                              |
+|--------|----------------------------------------------------------|
+| 400    | Invalid input, or a country/city the shared service has no record of |
+| 502    | Database or location service answered with something unusable |
+| 503    | Database or location service unreachable                 |
+
+
+## PUT /accommodation/{id}
+
+Update an accommodation.
+
+### Request
+
+**Method:** `PUT`
+**Endpoint:** `/accommodation/{id}`
+**Content-Type:** `application/json`
+
+### Path Parameters
+
+| Name | Type | Required | Description                     |
+|------|------|----------|---------------------------------|
+| id   | uuid | Yes      | Identifier of the accommodation |
+
+### Request Body
+
+The accommodation message with every field optional. A merge: an omitted field
+keeps its stored value, and there is no way to unset one. `location_details` and
+`room_details` merge field by field rather than replacing wholesale.
+
+A `city` still requires a `country` alongside it — "Sydney" alone names more
+than one place. An `id` in the body is not accepted; the path carries it.
+
+### Example Request
+
+```bash
+curl -X PUT "http://localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "price_per_night": 250.00,
+    "availability_status": "sold_out"
+  }'
+```
+
+### Example Response `200 OK`
+
+The whole accommodation as it now stands, place named — the same shape as
+`GET /accommodation/{id}`, so a caller that has just saved needs no second read
+to redraw.
+
+```json
+{
+  "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+  "name": "example accommodation",
+  "type": "hotel",
+  "description": "an exemplary hotel for all your travel adventures",
+  "price_per_night": 250.00,
+  "availability_status": "sold_out",
+  "rating": 4.5,
+  "amenities": ["wifi", "pool"],
+  "location_details": {
+    "country": "australia",
+    "city": "sydney",
+    "street": "example street avenue",
+    "street_number": 123
+  },
+  "room_details": {
+    "room_count": 3,
+    "bed_count": 2,
+    "bed_types": ["king", "queen"],
+    "description": "three bedroom hotel space with big beds"
+  }
+}
+```
+
+### Error Responses
+
+| Status | Description                                              |
+|--------|----------------------------------------------------------|
+| 400    | Invalid input, a city without a country, or a place the shared service has no record of |
+| 404    | Accommodation not found                                  |
+| 502    | Database or location service answered with something unusable |
+| 503    | Database or location service unreachable                 |
+
+
+## DELETE /accommodation/{id}
+
+Delete an accommodation.
+
+### Request
+
+**Method:** `DELETE`
+**Endpoint:** `/accommodation/{id}`
+
+### Path Parameters
+
+| Name | Type | Required | Description                     |
+|------|------|----------|---------------------------------|
+| id   | uuid | Yes      | Identifier of the accommodation |
+
+### Example Request
+
+```bash
+curl -X DELETE "http://localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11"
+```
+
+### Example Response `204 No Content`
+
+No body. A second call is a `404` — a delete that found nothing says so rather
+than reporting success.
+
+Any stay rows student 1 holds against this accommodation are **not** cleaned up:
+they belong to that service and this one does not reach into it. See the
+itinerary endpoints below.
+
+### Error Responses
+
+| Status | Description                                     |
+|--------|-------------------------------------------------|
+| 404    | Accommodation not found                         |
+| 502    | Database service answered with something unusable |
+| 503    | Database service unreachable                    |
+
 
 ## Itinerary Endpoints
 

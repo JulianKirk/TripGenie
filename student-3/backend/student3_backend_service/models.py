@@ -35,6 +35,7 @@ IsoDateTime = Annotated[
     str,
     StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"),
 ]
+CurrencyCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 LongText = Annotated[str, StringConstraints(max_length=2000)]
 Price = Annotated[float, Field(ge=0, le=1_000_000)]
@@ -44,6 +45,7 @@ T = TypeVar("T")
 
 MAX_TRANSPORT_DURATION_MINUTES = 60 * 24 * 90
 MAX_COMPARE_SELECTION = 4
+MAX_AI_RECOMMENDATIONS = 3
 
 _ISO_DATETIME_MESSAGE = "must be a valid ISO timestamp in YYYY-MM-DDTHH:MM format"
 _ISO_DATE_MESSAGE = "must be a valid ISO date in YYYY-MM-DD format"
@@ -341,6 +343,96 @@ class TripDirectory(StrictModel):
     trips: list[TripSummary]
 
 
+class TransportRecommendationRequest(StrictModel):
+    """What a traveller is asking for. Route and trip are both optional.
+
+    Supplying a trip narrows the candidates to that trip's existing plan
+    context; supplying a route narrows them to matching options. With neither,
+    the whole catalogue (capped) is offered as context.
+    """
+
+    trip_id: TripIdentifier | None = None
+    origin: ShortText | None = None
+    destination: ShortText | None = None
+    question: Annotated[str, StringConstraints(min_length=1, max_length=500)]
+
+    @field_validator("origin", "destination", "question")
+    @classmethod
+    def normalise_text(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportSuggestion(StrictModel):
+    """One suggested option. The identifier must be one that was offered."""
+
+    transport_id: Annotated[
+        str,
+        Field(
+            description=(
+                "The id of one candidate transport option, copied exactly from "
+                "the supplied candidates. Never invent an id."
+            ),
+        ),
+    ]
+    reason: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=240),
+        Field(
+            description=(
+                "Why this option suits the request, quoting exact supplied "
+                "duration, price or seat figures."
+            ),
+        ),
+    ]
+
+
+class TransportRecommendationDraft(StrictModel):
+    """The model's advisory output. Nothing here is saved automatically."""
+
+    overview: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=400),
+        Field(
+            description=(
+                "A concise direct answer quoting at least one exact supplied "
+                "figure, and stating any uncertainty honestly."
+            ),
+        ),
+    ]
+    suggestions: list[TransportSuggestion] = Field(
+        min_length=1,
+        max_length=MAX_AI_RECOMMENDATIONS,
+    )
+    considerations: list[
+        Annotated[
+            str,
+            StringConstraints(min_length=1, max_length=180),
+            Field(description="One trade-off supported by the supplied context."),
+        ]
+    ] = Field(default_factory=list, max_length=MAX_AI_RECOMMENDATIONS)
+    disclaimer: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class RecommendedTransport(StrictModel):
+    """A suggestion resolved back to the real option record it names."""
+
+    reason: str
+    option: TransportOptionRecord
+
+
+class TransportRecommendationResponse(StrictModel):
+    """Draft advice plus provenance. Advisory only: the traveller saves it."""
+
+    overview: str
+    recommended: list[RecommendedTransport]
+    considerations: list[str]
+    disclaimer: str
+    advisory_only: bool = True
+    run_id: str
+    model: str
+    provider: str
+
+
 class PlannedTransport(StrictModel):
     """A plan entry joined to the transport option it refers to."""
 
@@ -350,6 +442,7 @@ class PlannedTransport(StrictModel):
 
 class TripTransportSummary(StrictModel):
     trip_id: TripIdentifier
+    currency: CurrencyCode
     entry_count: int = Field(ge=0)
     active_entry_count: int = Field(ge=0)
     estimated_cost_total: Price

@@ -521,6 +521,7 @@ def test_trip_transport_composes_entries_with_their_options(
     summary = _data(client.get(f"/api/trips/{SYDNEY_TRIP}/transport"))
 
     assert summary["trip_id"] == SYDNEY_TRIP
+    assert summary["currency"] == "AUD"
     assert summary["entry_count"] == 2
     assert summary["active_entry_count"] == 2
     # 189.00 x 2 plus 205.50 x 2

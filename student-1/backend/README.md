@@ -17,6 +17,28 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. Must stay between `1` and `10`. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
 | `STUDENT1_BACKEND_SERVICE_NAME` | `student-1-backend` | Service name reported by health endpoints. |
+| `STUDENT1_BACKEND_ACTIVITY_API_BASE_URL` | `http://student-4-backend:8008` | Student 4 public API used to enrich activity selections. |
+| `STUDENT1_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS` | `5` | Student 4 lookup timeout. |
+
+## Activities on a trip
+
+Activities use the same many-to-many ownership pattern as accommodations. The
+Student 1 database owns `trip_activities`; Student 4 calls these public routes
+and never accesses that table directly.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/trips/{tripId}/activities` | Stored activity selections for one trip. |
+| `PUT` | `/api/trips/{tripId}/activities/{activityId}` | Add or replace a selection. |
+| `DELETE` | `/api/trips/{tripId}/activities/{activityId}` | Remove a selection. |
+| `GET` | `/api/activities/{activityId}/trips` | Reverse lookup for itinerary pickers. |
+
+The optional `PUT` body contains `date` and `start_time`. A bodyless request
+defaults to the trip's start date. The date must fall inside the trip window.
+`GET /api/trips/{tripId}` includes `activities`, enriching each stored selection
+with Student 4's `name`, exact `price`, `pricing_basis`, and
+`duration_minutes`. Those four fields become `null` if Student 4 is unavailable;
+the trip itself still returns successfully.
 
 ## Accommodations on a trip
 

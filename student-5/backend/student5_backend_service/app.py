@@ -138,6 +138,10 @@ def create_app(
 
     prefix = settings.api_prefix
 
+    @app.get(f"{prefix}/trips")
+    def list_trips() -> dict[str, Any]:
+        return _json_data(service.list_trips())
+
     @app.get(f"{prefix}/budgets")
     def list_budgets(
         trip_id: Annotated[str | None, Query(min_length=1, max_length=100)] = None,

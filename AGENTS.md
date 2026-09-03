@@ -24,3 +24,13 @@ the current Graphify guidance as the complete project instructions.
 
 - Do not create, amend, or push a commit unless the user explicitly approves it
   after having the opportunity to review the changes locally.
+
+## Linting
+
+- Run service linting and formatting from the repository root with the shared
+  `ruff.toml` configuration: `ruff check <service-path>` and
+  `ruff format --check <service-path>`.
+- A service-specific `pyproject.toml` may add narrowly scoped overrides, but it
+  must extend the root configuration rather than replace the shared rule set.
+- Apply the shared rules to new and modified service code. Existing violations
+  elsewhere in the repository can be handled in a separate cleanup change.

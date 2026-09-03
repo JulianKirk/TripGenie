@@ -1,8 +1,10 @@
 <div class="panel">
   <div class="panel-heading">
-    <div><p class="eyebrow">Trip {{ budget.trip_id }}</p><h2>{{ budget.currency }} {{ budget.total_budget }}</h2></div>
+    <div><p class="eyebrow">Trip {{ budget.trip_id }}</p><h2>{{ budget.trip.name if budget.trip else budget.trip_id }}</h2>{% if budget.trip %}<p class="muted">{{ budget.trip.destination }} &middot; {{ budget.trip.start_date }} to {{ budget.trip.end_date }}</p>{% endif %}</div>
     <div class="actions"><a class="button" href="/budgets/{{ budget.budget_id }}/edit">Edit</a><a class="button button--danger" href="/budgets/{{ budget.budget_id }}/delete">Delete</a></div>
   </div>
+  {% if trip_error %}<div class="banner banner--warning">Live trip details are unavailable. This budget still uses the stored trip reference.</div>{% endif %}
+  <p class="money">{{ budget.currency }} {{ budget.total_budget }}</p>
   {% if summary %}
   <dl class="summary-grid">
     <div><dt>Total</dt><dd>{{ summary.currency }} {{ summary.total_budget }}</dd></div>

@@ -54,6 +54,11 @@ These serve HTML, not an API — no other service is a caller.
 | `POST /accommodation/ai-search` | The results fragment, plus the answer and the filter form out of band |
 | `GET /accommodation/{id}/stay` | The Add-to-Trip form, as a second modal. Re-renders itself on every change to recompute the total |
 | `PUT /accommodation/{id}/itineraries/{itineraryId}` | Stores the stay from the form body |
+| `GET /accommodation/new`   | An empty create form, as a modal                           |
+| `GET /accommodation/{id}/edit` | The same form, filled in with what is stored           |
+| `POST /accommodation`      | Saves a new accommodation from the form body               |
+| `PUT /accommodation/{id}`  | Saves an edit from the form body                           |
+| `DELETE /accommodation/{id}` | Deletes an accommodation                                 |
 | `GET /health`              | `{"status", "service", "backend"}`                         |
 
 `/health` reports `degraded` (still `200`) when the backend is unreachable —
@@ -91,6 +96,48 @@ Accommodation section — the modal is a fragment, so a bare link to
 id the service does not know still returns the list, with a note above it: the
 link came from another service's data, and a stale one is not a reason to lose
 the page.
+
+### Creating, editing and deleting
+
+**Add accommodation** in the masthead fetches `GET /accommodation/new` into
+`#form-modal`; **Edit** in the details modal fetches `GET /accommodation/{id}/edit`
+into the same place. One template serves both — they differ only in where the
+form posts and what it starts out holding, so there is nothing to keep in step
+between two of them.
+
+`#form-modal` is its own container rather than the details modal's `#modal`,
+because an edit opens *over* the details dialog and closing the form has to
+leave that one standing.
+
+The form posts as an ordinary HTML form body; this service turns it into the
+accommodation message the backend documents, over the same field maps the
+filter form uses (`app.py`). Blank inputs are dropped rather than sent — an
+empty box is "not given", not an empty string to store. Numbers stay strings on
+the way out: the backend's schema coerces them, and deciding what a half-typed
+`12.` means is a decision worth making once.
+
+Because the backend's `PUT` is a merge with no way to unset a field, an emptied
+input on the edit form keeps the stored value. The form says so rather than
+looking like it lost it.
+
+On success the response body is nothing but out-of-band fragments, so the swap
+that targets the form's `<dialog>` replaces it with nothing — which is what
+closes it. The same fragment clears `#modal`, since after an edit or a delete
+what it is showing is stale or gone, and drops a toast into `#page-toast` at
+page level (a toast inside a dialog that has just been removed goes with it).
+
+The refreshed list is **not** in that fragment. The response carries
+`HX-Trigger: accommodations-changed`, and the filter form listens for it:
+
+```html
+hx-trigger="input changed delay:300ms, change, accommodations-changed from:body"
+```
+
+So the list comes back through the filters actually on screen — which a fragment
+rendered by a write route could not know. A rejected save re-renders the form
+instead, carrying the backend's message and everything that was typed.
+
+Delete asks first, with `hx-confirm`, because it cannot be undone.
 
 ### Adding one to a trip
 

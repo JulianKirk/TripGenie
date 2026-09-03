@@ -36,6 +36,10 @@ AccommodationIdentifier = Annotated[
     str,
     StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
 ]
+ActivityIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -259,6 +263,45 @@ class TripAccommodationDetail(TripAccommodationRecord):
     total_price: float | None = None
 
 
+class TripActivityRecord(StrictModel):
+    trip_id: TripIdentifier
+    activity_id: ActivityIdentifier
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+class TripActivityCreate(StrictModel):
+    date: IsoDate | None = None
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+class TripActivityDetail(TripActivityRecord):
+    name: str | None = None
+    price: Annotated[str, StringConstraints(pattern=r"^\d+\.\d{2}$")] | None = None
+    pricing_basis: str | None = None
+    duration_minutes: int | None = Field(default=None, gt=0)
+
+
 class TripRecord(TripFields):
     id: TripIdentifier
 
@@ -345,9 +388,8 @@ class TripDay(StrictModel):
 
 class TripDetail(TripRecord):
     days: list[TripDay] = Field(default_factory=list)
-    accommodations: list[TripAccommodationDetail] = Field(
-        default_factory=list
-    )
+    accommodations: list[TripAccommodationDetail] = Field(default_factory=list)
+    activities: list[TripActivityDetail] = Field(default_factory=list)
 
 
 class TripDaySelection(StrictModel):

@@ -42,6 +42,30 @@ def test_observe_flags_status_and_content(monkeypatch):
     assert outcomes["c"].startswith("OK")
 
 
+def test_observe_accepts_documented_status_and_content_alternatives(monkeypatch):
+    monkeypatch.setattr(
+        loop,
+        "measure",
+        lambda _check: (FakeResponse(503, '{"code":"MODEL_UNAVAILABLE"}'), 5.0),
+    )
+    monkeypatch.setattr(
+        loop,
+        "PLAN",
+        {
+            "checks": [
+                {
+                    "label": "ai",
+                    "path": "/ai",
+                    "status": [200, 503, 504],
+                    "contains_any": ["analysis", "MODEL_UNAVAILABLE"],
+                }
+            ]
+        },
+    )
+
+    assert dict(loop.observe())["ai"].startswith("OK: HTTP 503")
+
+
 def test_nfr_ratio(monkeypatch):
     timings = iter([900] + [10] * 19)
     monkeypatch.setattr(loop, "NFR_SAMPLES", 20)

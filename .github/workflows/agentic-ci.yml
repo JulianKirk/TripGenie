@@ -172,6 +172,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       SERVICE_URL: http://127.0.0.1:${{ matrix.port }}
+      BACKEND_URL: http://127.0.0.1:${{ matrix.backend_port || matrix.port }}
       CHECKS_FILE: checks/${{ matrix.service }}.json
       # Optional. Without it the two agent sections print "unavailable" and the
       # deterministic checks still gate the build.

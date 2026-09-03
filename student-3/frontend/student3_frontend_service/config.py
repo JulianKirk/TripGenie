@@ -51,6 +51,11 @@ class Settings:
     backend_base_url: str
     backend_api_prefix: str = "/api"
     backend_timeout_seconds: float = 5.0
+    # Only the AI suggestion route waits this long. It has to clear the
+    # backend's own AI budget, which in turn clears AI-Mode's 90s: a local
+    # 8b model answering a cold prompt spends ~11s loading off disk before
+    # it starts generating.
+    ai_timeout_seconds: float = 150.0
     service_name: str = "student-3-frontend"
 
     @classmethod
@@ -70,6 +75,11 @@ class Settings:
                 os.getenv("STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS",
                 default=5.0,
+            ),
+            ai_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS",
+                default=150.0,
             ),
             service_name=os.getenv(
                 "STUDENT3_FRONTEND_SERVICE_NAME",

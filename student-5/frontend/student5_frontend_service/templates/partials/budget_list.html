@@ -4,12 +4,14 @@
   <p class="muted">Create a budget to compare planned funds, committed transport costs, and recorded expenses.</p>
   <a class="button button--primary" href="/budgets/new">Create budget</a>
 </div>
+{% if trip_error %}<div class="banner banner--warning">Live trip details are unavailable. Stored trip IDs and all local budget actions remain available.</div>{% endif %}
 {% if budgets %}
 <div class="budget-grid">
   {% for budget in budgets %}
   <article class="panel budget-card">
     <p class="eyebrow">{{ budget.currency }}</p>
-    <h3><a href="/budgets/{{ budget.budget_id }}">{{ budget.trip_id }}</a></h3>
+    <h3><a href="/budgets/{{ budget.budget_id }}">{{ budget.trip.name if budget.trip else budget.trip_id }}</a></h3>
+    {% if budget.trip %}<p class="muted">{{ budget.trip.destination }} &middot; {{ budget.trip.start_date }} to {{ budget.trip.end_date }}</p>{% endif %}
     <p class="money">{{ budget.currency }} {{ budget.total_budget }}</p>
     <a href="/budgets/{{ budget.budget_id }}">Open budget &rarr;</a>
   </article>

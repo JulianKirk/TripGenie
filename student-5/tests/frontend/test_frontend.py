@@ -41,6 +41,14 @@ SUMMARY = {
     "remaining_budget_complete": False,
     "providers": {"transport": {"status": "unavailable"}},
 }
+TRIP = {
+    "id": "trip-7",
+    "name": "Sydney Long Weekend",
+    "destination": "Sydney",
+    "start_date": "2026-10-02",
+    "end_date": "2026-10-05",
+    "status": "planned",
+}
 
 
 def response(
@@ -53,6 +61,8 @@ def backend(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if path == "/ready":
         return response(request, {"data": {"status": "ready"}})
+    if path == "/api/v1/trips":
+        return response(request, {"data": [TRIP]})
     if path == "/api/v1/budgets" and request.method == "GET":
         return response(request, {"data": [BUDGET]})
     if path == "/api/v1/budgets" and request.method == "POST":
@@ -104,8 +114,31 @@ def test_health_readiness_and_budget_list() -> None:
         page = client.get("/")
 
     assert "Budget &amp; Expense Management" in page.text
-    assert "trip-7" in page.text
+    assert 'href="http://localhost:8080/theme.css"' in page.text
+    assert "Sydney Long Weekend" in page.text
+    assert "Sydney &middot; 2026-10-02 to 2026-10-05" in page.text
     assert "AUD 2000.00" in page.text
+    assert 'href="http://localhost:8080">Home</a>' in page.text
+    assert 'aria-label="TripGenie modules"' not in page.text
+
+
+def test_budget_form_uses_live_student_1_trip_directory() -> None:
+    with make_client() as client:
+        page = client.get("/budgets/new")
+
+    assert '<option value="trip-7"' in page.text
+    assert "Sydney Long Weekend &middot; Sydney" in page.text
+
+
+def test_budget_card_css_contains_long_trip_ids() -> None:
+    with make_client() as client:
+        css = client.get("/static/css/styles.css")
+
+    assert css.status_code == 200
+    assert "minmax(280px, 1fr)" in css.text
+    assert (
+        ".budget-card h3 a { color: var(--ink); overflow-wrap: anywhere; }" in css.text
+    )
 
 
 def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
@@ -126,6 +159,7 @@ def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
     assert "Committed *" in page.text
     assert "Some provider costs are unavailable" in page.text
     assert "Planned allocations" in page.text
+    assert "Sydney Long Weekend" in page.text
     assert "AUD 800.00" in page.text
     assert "Dinner" in page.text
     expense_request = next(
@@ -134,6 +168,31 @@ def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
     assert expense_request.url.params["trip_id"] == "trip-7"
     assert expense_request.url.params["category"] == "food"
     assert expense_request.url.params["date_from"] == "2026-09-01"
+
+
+def test_trip_directory_failure_preserves_owned_budget_views() -> None:
+    def trips_offline(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/trips":
+            return response(
+                request,
+                {
+                    "error": {
+                        "code": "DEPENDENCY_UNAVAILABLE",
+                        "message": "The trips service is unavailable.",
+                        "details": [],
+                    }
+                },
+                503,
+            )
+        return backend(request)
+
+    with make_client(trips_offline) as client:
+        page = client.get("/")
+
+    assert page.status_code == 200
+    assert "Live trip details are unavailable" in page.text
+    assert "trip-7" in page.text
+    assert "AUD 2000.00" in page.text
 
 
 def test_budget_analysis_action_displays_structured_advice() -> None:
@@ -218,7 +277,55 @@ def test_budget_validation_preserves_submitted_values() -> None:
     assert page.status_code == 200
     assert 'value="trip-preserved"' in page.text
     assert 'value="aud"' in page.text
-    assert "String should match pattern" in page.text
+    assert "Please correct the following:" in page.text
+    assert "Currency must use three uppercase letters, for example AUD." in page.text
+    assert "One or more fields failed validation." not in page.text
+
+
+def test_expense_validation_identifies_each_invalid_field() -> None:
+    def invalid_backend(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/expenses" and request.method == "POST":
+            return response(
+                request,
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "One or more fields failed validation.",
+                        "details": [
+                            {
+                                "field": "amount",
+                                "issue": "Input should be greater than 0",
+                            },
+                            {
+                                "field": "date",
+                                "issue": "Input should be a valid date or datetime",
+                            },
+                        ],
+                    }
+                },
+                422,
+            )
+        return backend(request)
+
+    form = {
+        "trip_id": "trip-7",
+        "category": "food",
+        "description": "Dinner",
+        "amount": "0",
+        "currency": "AUD",
+        "date": "not-a-date",
+        "payment_method": "Card",
+        "notes": "",
+    }
+    with make_client(invalid_backend) as client:
+        page = client.post(f"/budgets/{BUDGET_ID}/expenses", data=form)
+
+    assert page.status_code == 200
+    assert 'value="0"' in page.text
+    assert "Please correct the following:" in page.text
+    assert "Amount must be greater than zero." in page.text
+    assert "Enter a valid date." in page.text
+    assert "One or more fields failed validation." not in page.text
 
 
 def test_create_and_delete_routes_redirect_to_browser_views() -> None:

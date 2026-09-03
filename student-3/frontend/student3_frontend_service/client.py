@@ -14,6 +14,7 @@ from .models import (
     ErrorEnvelope,
     TransportOptionRecord,
     TransportPlanEntryRecord,
+    TransportRecommendation,
     TripDirectory,
     TripTransportSummary,
 )
@@ -42,6 +43,7 @@ class BackendApiClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_prefix = settings.backend_api_prefix
+        self._ai_timeout_seconds = settings.ai_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -217,6 +219,29 @@ class BackendApiClient:
         )
         return envelope.data
 
+    async def recommend_transport(
+        self,
+        payload: dict[str, object],
+    ) -> TransportRecommendation:
+        """Ask the backend for a draft.
+
+        This one call gets its own timeout: a local model answering a cold
+        prompt takes far longer than the few seconds that is generous for
+        every other backend route.
+        """
+        envelope = await self._request_model(
+            "POST",
+            f"{self._api_prefix}/transport-options/recommendations",
+            json=payload,
+            timeout=self._ai_timeout_seconds,
+            expected_statuses={200},
+            response_type=DataEnvelope[TransportRecommendation],
+            malformed_message=(
+                "Backend API returned a malformed recommendation response."
+            ),
+        )
+        return envelope.data
+
     async def trip_directory(self) -> TripDirectory:
         """Trips available for selection. Never raises.
 
@@ -261,8 +286,15 @@ class BackendApiClient:
         expected_statuses: set[int],
         response_type: Any,
         malformed_message: str,
+        timeout: float | None = None,
     ) -> T:
-        response = await self._send(method, path, params=params, json=json)
+        response = await self._send(
+            method,
+            path,
+            params=params,
+            json=json,
+            timeout=timeout,
+        )
         if response.status_code not in expected_statuses:
             self._raise_error_response(response)
 
@@ -287,9 +319,20 @@ class BackendApiClient:
         *,
         params: dict[str, str] | None = None,
         json: dict[str, object] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         try:
-            return await self._client.request(method, path, params=params, json=json)
+            return await self._client.request(
+                method,
+                path,
+                params=params,
+                json=json,
+                # httpx.USE_CLIENT_DEFAULT rather than None: passing None
+                # explicitly would disable the timeout altogether.
+                timeout=(
+                    httpx.USE_CLIENT_DEFAULT if timeout is None else timeout
+                ),
+            )
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
                 "Backend API did not respond before the configured timeout.",

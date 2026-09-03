@@ -49,12 +49,22 @@ return active activities only.
 | `DB_TIMEOUT` | `5` | Database-service timeout in seconds. |
 | `LOCATION_URL` | `http://shared-backend:9100` | Shared location-service base URL. |
 | `LOCATION_TIMEOUT` | `5` | Shared-service timeout in seconds. |
+| `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
+| `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
+| `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
 
 ### Publicly writable data
 
-This release exposes no catalogue mutation endpoints. Activities and seeded
-categories are maintained through the internal database contract or seed data;
-travellers, the frontend and other services only browse and search them.
+Activity catalogue entries support full create, read, replace and delete
+operations through this backend. Categories remain seeded reference data. The
+backend translates public country/city names to shared-service UUIDs before it
+calls the Student 4 database service; callers never send internal location ids
+and never connect to SQLite or the database service directly.
+
+Catalogue `DELETE` is a hard delete. Use `PUT` with `is_active: false` when an
+activity must remain available to administration screens but disappear from the
+default traveller catalogue. `GET /activity` and `QUERY /activity` default to
+active rows; `include_inactive: true` is the explicit management override.
 
 ### Location lookup behaviour
 
@@ -75,7 +85,7 @@ Errors use `{"detail": "..."}`.
 | Status | Meaning |
 |---|---|
 | `400` | Malformed, contradictory or unsupported filter. |
-| `404` | Requested activity does not exist or is inactive. |
+| `404` | Requested activity does not exist. |
 | `502` | An upstream service returned data that violates its contract. |
 | `503` | The database or shared reference service is unavailable or timed out. |
 
@@ -159,37 +169,135 @@ curl "http://localhost:8008/activity/categories"
 {
   "categories": [
     {
+      "code": "ADVENTURE",
+      "label": "Adventure",
+      "description": "High-energy and adventurous experiences",
+      "display_order": 10
+    },
+    {
       "code": "CULTURE",
       "label": "Culture",
       "description": "Museums, galleries and cultural sites",
-      "display_order": 10
+      "display_order": 20
+    },
+    {
+      "code": "FAMILY",
+      "label": "Family",
+      "description": "Experiences suitable for families and children",
+      "display_order": 30
+    },
+    {
+      "code": "FOOD_DRINK",
+      "label": "Food and drink",
+      "description": "Dining, tastings and culinary experiences",
+      "display_order": 40
+    },
+    {
+      "code": "NIGHTLIFE",
+      "label": "Nightlife",
+      "description": "Evening entertainment and social experiences",
+      "display_order": 50
     },
     {
       "code": "OUTDOOR",
       "label": "Outdoor",
       "description": "Activities primarily undertaken outdoors",
-      "display_order": 20
+      "display_order": 60
+    },
+    {
+      "code": "SHOPPING",
+      "label": "Shopping",
+      "description": "Markets, local makers and shopping experiences",
+      "display_order": 70
     },
     {
       "code": "TOUR",
       "label": "Tour",
       "description": "Guided or self-guided tours",
-      "display_order": 30
+      "display_order": 80
+    },
+    {
+      "code": "WELLNESS",
+      "label": "Wellness",
+      "description": "Relaxation, fitness and wellbeing experiences",
+      "display_order": 90
+    },
+    {
+      "code": "WILDLIFE",
+      "label": "Wildlife",
+      "description": "Animal encounters and nature observation",
+      "display_order": 100
     }
   ]
 }
 ```
 
 Categories are not paginated because they are a small, fixed reference list.
+The ten categories also ensure the assignment database contains at least ten
+rows in every table.
 
 | Status | Meaning |
 |---|---|
 | `502` | Invalid database-service response. |
 | `503` | Database service unavailable. |
 
+## POST /activity
+
+Creates an activity and returns its full representation with status `201`.
+The request uses the same fields as a full activity except that activity,
+location and schedule ids are omitted. `location_details.country` and
+`location_details.city` are shared reference names, not UUIDs.
+
+```bash
+curl -X POST "http://localhost:8008/activity" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Harbour Kayak",
+    "description": "Guided paddle on Sydney Harbour.",
+    "price": "89.50",
+    "pricing_basis": "PER_PERSON",
+    "duration_minutes": 120,
+    "minimum_participants": 1,
+    "booking_required": true,
+    "is_active": true,
+    "location_details": {"country": "Australia", "city": "Sydney"},
+    "categories": ["ADVENTURE"],
+    "availability_schedules": [{
+      "recurring_weekly": true,
+      "day_of_week": "MONDAY",
+      "start_time": "09:00",
+      "end_time": "12:00"
+    }]
+  }'
+```
+
+An active activity requires at least one schedule, every schedule interval must
+fit `duration_minutes`, and category codes must come from
+`GET /activity/categories`. An unknown country/city pair is `400`.
+
+## PUT /activity/{id}
+
+Replaces the complete activity aggregate, including its location, categories
+and schedules. It accepts the same body as `POST /activity`, is idempotent, and
+returns the full stored activity. Clients editing an existing row should begin
+with `GET /activity/{id}`, remove generated ids from the location and schedules,
+and send all writable fields. Omitted optional fields are cleared.
+
+## DELETE /activity/{id}
+
+Permanently deletes the activity and returns:
+
+```json
+{"id": "0f2b1c4e-aaaa-bbbb-cccc-000000000004", "deleted": true}
+```
+
+Use `PUT` with `is_active: false` rather than delete when the activity should be
+hidden from travellers but remain editable.
+
 ## GET /activity/{id}
 
-Returns one active activity with its full schedules.
+Returns one activity with its full schedules, including an inactive activity
+when its id is known. This makes the route suitable for an edit form.
 
 | Path parameter | Type | Description |
 |---|---|---|
@@ -235,7 +343,7 @@ curl "http://localhost:8008/activity/5ee3fe1f-62e8-4b1a-bfca-f283781c24fd"
 
 | Status | Meaning |
 |---|---|
-| `404` | Activity does not exist or is inactive. |
+| `404` | Activity does not exist. |
 | `502` | Invalid upstream response. |
 | `503` | Required upstream service unavailable. |
 
@@ -340,6 +448,7 @@ All fields are optional. An empty body has the same filtering semantics as
 | `accessibility` | object | Exact confirmed accessibility facts. |
 | `availability` | object | Local date and optional usable time window. |
 | `sort` | enum | Result ordering; default `NAME_ASC`. |
+| `include_inactive` | boolean | When `true`, include active and inactive rows; default `false`. |
 | `limit` | integer | Page size, 1-100; default 20. |
 | `offset` | integer | Rows to skip; default 0. |
 
@@ -488,3 +597,27 @@ The response has the same shape as `GET /activity`:
 | `400` | Invalid field, enum, range, location pairing or time window. |
 | `502` | Invalid response from the database or shared service. |
 | `503` | Required upstream service unavailable. |
+
+## Itinerary integration
+
+The Student 4 frontend uses these backend routes for its “Add to itinerary”
+picker. The backend calls Student 1; the browser does not call Student 1
+directly. This is the same ownership pattern as Student 2 accommodations.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/activity/{id}/itineraries` | List every itinerary and whether this activity is selected. |
+| `PUT` | `/activity/{id}/itineraries/{trip_id}` | Add or reschedule the activity on the trip. |
+| `DELETE` | `/activity/{id}/itineraries/{trip_id}` | Remove it and return refreshed picker state. |
+
+The optional `PUT` body is:
+
+```json
+{"date": "2027-04-02", "start_time": "09:30"}
+```
+
+Without `date`, Student 1 selects the trip start date. A selected itinerary row
+contains `itinerary_id`, `name`, `selected`, `start_date`, `end_date`, and the
+stored optional `date`/`start_time`. The frontend should bound its date control
+with the returned trip window. Student 1 is authoritative and returns `422` for
+an out-of-window date.

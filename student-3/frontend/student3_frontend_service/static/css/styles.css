@@ -49,6 +49,8 @@ a { color: var(--accent); }
 .site-header__title { margin: 0.25rem 0; font-size: 1.6rem; }
 .site-header__title a { color: #fff; text-decoration: none; }
 .site-header__subtitle { margin: 0; max-width: 70ch; color: #c6d4e0; font-size: 0.9rem; }
+.site-header__home { display: inline-block; margin-top: 1rem; padding: 0.4rem 0.8rem; color: #fff; border: 1px solid #9fb4c7; border-radius: 6px; text-decoration: none; }
+.site-header__home:hover, .site-header__home:focus-visible { color: var(--ink); background: #fff; }
 
 .loading-indicator {
   display: none;
@@ -93,6 +95,17 @@ a { color: var(--accent); }
 }
 
 .sidebar-nav { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.9rem; }
+
+/* AI mode is a headline feature rather than a fourth equivalent tab, so the
+   entry is given weight the plain links do not have. */
+.sidebar-nav__ai {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+}
+.sidebar-nav__ai:hover { background: #eef5fa; }
 
 .option-list, .trip-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .option-list__link {
@@ -200,3 +213,20 @@ td.actions-cell { display: table-cell; }
 .footnote { color: var(--ink-muted); font-size: 0.8rem; max-width: 70ch; }
 .result-count { font-size: 0.85rem; color: var(--ink-muted); }
 .notes { background: var(--surface-sunken); border-left: 3px solid var(--line); padding: 0.5rem 0.75rem; }
+
+/* AI draft panel. Visually set apart so a traveller can see at a glance that
+   this content is generated advice rather than stored TripGenie data. */
+.ai-draft {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  background: #f6fafd;
+}
+.ai-draft__overview { margin-top: 0; font-weight: 600; }
+.ai-draft__list { margin: 0; padding-left: 1.2rem; display: grid; gap: 1rem; }
+.ai-draft__route { margin: 0 0 0.2rem; font-weight: 600; }
+.ai-draft__meta { display: block; font-weight: 400; font-size: 0.8rem; color: var(--ink-muted); }
+.ai-draft__reason { margin: 0 0 0.4rem; }
+.ai-draft__considerations { margin: 0.2rem 0 0.8rem; padding-left: 1.2rem; }
+.ai-draft h4 { margin: 1rem 0 0.2rem; font-size: 0.9rem; }

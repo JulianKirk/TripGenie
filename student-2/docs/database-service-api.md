@@ -9,6 +9,7 @@
   - [QUERY /internal/accommodation](#query-internalaccommodation)
   - [POST /internal/accommodation](#post-internalaccommodation)
   - [PUT /internal/accommodation/{id}](#put-internalaccommodationid)
+  - [DELETE /internal/accommodation/{id}](#delete-internalaccommodationid)
 
 # Accommodation Database Service API
 
@@ -405,7 +406,8 @@ Update an existing accommodation.
 An accommodation message. Every field is optional here — an omitted field is
 left unchanged, and sending `null` does not clear a field (there is no nullable
 column behind one). Nested `location_details` and `room_details` are merged
-field by field, not replaced wholesale.
+field by field, not replaced wholesale. An accommodation stored without room
+details gets them created by an edit that sends some.
 
 ### Example Request
 
@@ -455,3 +457,40 @@ just the fields that changed.
 | 400    | Invalid input / validation error |
 | 404    | Accommodation not found          |
 | 500    | Internal server error            |
+
+
+## DELETE /internal/accommodation/{id}
+
+Delete an accommodation.
+
+### Request
+
+**Method:** `DELETE`
+**Endpoint:** `/internal/accommodation/{id}`
+
+### Path Parameters
+
+| Name | Type | Required | Description                     |
+|------|------|----------|---------------------------------|
+| id   | uuid | Yes      | Identifier of the accommodation |
+
+### Example Request
+
+```bash
+curl -X DELETE "http://localhost:9001/internal/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11"
+```
+
+### Example Response `204 No Content`
+
+No body. The accommodation's `location_details` and `room_details` rows go with
+it — the foreign keys cascade.
+
+Deleting is not idempotent here: a second call is a `404`, the same as reading
+a row that is not there, so a caller that wants to know gets told.
+
+### Error Responses
+
+| Status | Description             |
+|--------|-------------------------|
+| 404    | Accommodation not found |
+| 500    | Internal server error   |

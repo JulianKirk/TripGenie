@@ -13,6 +13,7 @@ from .config import Settings
 from .errors import ApiError, bad_request, validation_error
 from .models import (
     AccommodationIdentifier,
+    ActivityIdentifier,
     DataEnvelope,
     DeleteResponse,
     ErrorBody,
@@ -26,6 +27,8 @@ from .models import (
     ItineraryItemUpdate,
     TripAccommodationCreate,
     TripAccommodationRecord,
+    TripActivityCreate,
+    TripActivityRecord,
     TripCreate,
     TripIdentifier,
     TripRecord,
@@ -434,6 +437,60 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service: DatabaseService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.list_trips_for_accommodation(accommodation_id))
+
+    @router.get(
+        "/trips/{trip_id}/activities",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripActivityRecord]],
+    )
+    def list_trip_activities(
+        trip_id: TripIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trip_activities(trip_id))
+
+    @router.put(
+        "/trips/{trip_id}/activities/{activity_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TripActivityRecord],
+    )
+    def add_trip_activity(
+        trip_id: TripIdentifier,
+        activity_id: ActivityIdentifier,
+        payload: TripActivityCreate,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(
+            service.add_trip_activity(
+                trip_id,
+                activity_id,
+                payload.date,
+                payload.start_time,
+            ),
+        )
+
+    @router.delete(
+        "/trips/{trip_id}/activities/{activity_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[DeleteResponse],
+    )
+    def remove_trip_activity(
+        trip_id: TripIdentifier,
+        activity_id: ActivityIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.remove_trip_activity(trip_id, activity_id))
+
+    @router.get(
+        "/activities/{activity_id}/trips",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripRecord]],
+    )
+    def list_trips_for_activity(
+        activity_id: ActivityIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trips_for_activity(activity_id))
 
     app.include_router(router)
     return app

@@ -1,0 +1,154 @@
+{#
+  Create and edit, as one <dialog>. The two differ only in where the form posts
+  and what it starts out holding, so they are one template rather than two that
+  drift apart.
+
+  `accommodation` is the accommodation message: what the backend returned for an
+  edit, and what the form itself produced when a save came back rejected. Either
+  way the fields below read the same shape.
+
+  ponytail: no client-side validation beyond what the inputs bring themselves --
+  `required`, `type="number"`, `min`/`max`/`step`. The backend validates for
+  real, and its message lands in the error slot above the fields.
+#}
+{% set where = accommodation.location_details or {} %}
+{% set room = accommodation.room_details or {} %}
+{% set editing = accommodation_id is not none %}
+<dialog class="modal modal--form" aria-labelledby="form-title" onclose="this.remove()">
+  <article class="modal__card">
+    <header class="modal__header">
+      <h2 id="form-title">{{ "Edit accommodation" if editing else "New accommodation" }}</h2>
+      <button type="button" class="modal__close" aria-label="Close"
+              onclick="this.closest('dialog').close()">&times;</button>
+    </header>
+
+    {# On success the response is nothing but out-of-band pieces, so this swap
+       replaces the dialog with nothing -- which closes it. On failure it is the
+       same form again, carrying the error and everything typed. #}
+    <form class="stay__form"
+          {% if editing %}
+            hx-put="{{ request.url_for('update_accommodation', accommodation_id=accommodation_id) }}"
+          {% else %}
+            hx-post="{{ request.url_for('create_accommodation') }}"
+          {% endif %}
+          hx-target="closest dialog" hx-swap="outerHTML">
+
+      {% if error %}
+        <p class="error" role="alert">{{ error }}</p>
+      {% endif %}
+
+      {% if editing %}
+        {# The backend's PUT is a merge and has no way to unset a field, so an
+           emptied input leaves the stored value alone rather than clearing it. #}
+        <p class="modal__lede">Blank fields keep their saved value.</p>
+      {% endif %}
+
+      <label class="stay__field">Name
+        <input name="name" value="{{ accommodation.name|default('', true) }}"
+               {% if not editing %}required{% endif %} maxlength="200">
+      </label>
+
+      <label class="stay__field">Description
+        <textarea name="description" rows="3"
+                  {% if not editing %}required{% endif %}>{{ accommodation.description|default('', true) }}</textarea>
+      </label>
+
+      <div class="filters__grid">
+        <label>Type
+          <select name="type" {% if not editing %}required{% endif %}>
+            <option value="">Choose…</option>
+            {% for value in ["hotel", "hostel", "apartment", "resort", "guesthouse", "camping"] %}
+              <option value="{{ value }}" {% if accommodation.type == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Availability
+          <select name="availability_status" {% if not editing %}required{% endif %}>
+            <option value="">Choose…</option>
+            {% for value in ["available", "unavailable", "sold_out"] %}
+              <option value="{{ value }}" {% if accommodation.availability_status == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Price per night
+          <input name="price_per_night" type="number" min="0" step="0.01"
+                 value="{{ accommodation.price_per_night|default('', true) }}"
+                 {% if not editing %}required{% endif %}>
+        </label>
+
+        <label>Rating
+          <input name="rating" type="number" min="0" max="5" step="0.1"
+                 value="{{ accommodation.rating|default('', true) }}">
+        </label>
+
+        {# Country and city are both required on a create: the backend stores a
+           place as two ids and neither column is nullable. #}
+        <label>Country
+          <input name="country" value="{{ where.country|default('', true) }}"
+                 {% if not editing %}required{% endif %}>
+        </label>
+
+        <label>City
+          <input name="city" value="{{ where.city|default('', true) }}"
+                 {% if not editing %}required{% endif %}>
+        </label>
+
+        <label>Street
+          <input name="street" value="{{ where.street|default('', true) }}">
+        </label>
+
+        <label>Street number
+          <input name="street_number" type="number" min="0"
+                 value="{{ where.street_number|default('', true) }}">
+        </label>
+
+        <label>Rooms
+          <input name="room_count" type="number" min="0"
+                 value="{{ room.room_count|default('', true) }}">
+        </label>
+
+        <label>Beds
+          <input name="bed_count" type="number" min="0"
+                 value="{{ room.bed_count|default('', true) }}">
+        </label>
+
+        <label>Room notes
+          <input name="room_description" value="{{ room.description|default('', true) }}">
+        </label>
+      </div>
+
+      <fieldset class="filters__amenities">
+        <legend>Amenities</legend>
+        {% for amenity in ["wifi", "pool", "gym", "spa", "breakfast", "parking", "kitchen", "laundry", "air_conditioning"] %}
+          <label class="checkbox">
+            <input type="checkbox" name="amenities" value="{{ amenity }}"
+                   {% if amenity in accommodation.amenities|default([], true) %}checked{% endif %}>
+            {{ amenity|replace("_", " ")|title }}
+          </label>
+        {% endfor %}
+      </fieldset>
+
+      <fieldset class="filters__amenities">
+        <legend>Bed types</legend>
+        {% for bed in ["single", "double", "queen", "king", "bunk", "sofa_bed"] %}
+          <label class="checkbox">
+            <input type="checkbox" name="bed_types" value="{{ bed }}"
+                   {% if bed in room.bed_types|default([], true) %}checked{% endif %}>
+            {{ bed|replace("_", " ")|title }}
+          </label>
+        {% endfor %}
+      </fieldset>
+
+      <div class="modal__actions">
+        <button type="button" class="button"
+                onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="button button--primary">
+          {{ "Save changes" if editing else "Create accommodation" }}
+        </button>
+      </div>
+    </form>
+  </article>
+</dialog>
+<script>document.querySelector("#form-modal dialog").showModal();</script>

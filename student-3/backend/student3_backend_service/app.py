@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, statu
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import VALIDATION_ERROR_MESSAGE, ApiError, bad_request, validation_error
@@ -30,6 +31,8 @@ from .models import (
     TransportPlanEntryCreate,
     TransportPlanEntryRecord,
     TransportPlanEntryUpdate,
+    TransportRecommendationRequest,
+    TransportRecommendationResponse,
     TransportType,
     TripDirectory,
     TripIdentifier,
@@ -332,6 +335,7 @@ def create_app(
     *,
     transport: httpx.BaseTransport | None = None,
     trips_transport: httpx.BaseTransport | None = None,
+    ai_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -339,18 +343,22 @@ def create_app(
     async def lifespan(app: FastAPI):
         client = DatabaseApiClient(app_settings, transport=transport)
         trips_client = TripsApiClient(app_settings, transport=trips_transport)
+        ai_client = AiModeClient(app_settings, transport=ai_transport)
         app.state.database_client = client
         app.state.trips_client = trips_client
+        app.state.ai_client = ai_client
         app.state.backend_service = BackendService(
             app_settings,
             client,
             trips_client,
+            ai_client,
         )
         try:
             yield
         finally:
             client.close()
             trips_client.close()
+            ai_client.close()
 
     app = FastAPI(
         title="TripGenie Student 3 Transport API",
@@ -464,6 +472,22 @@ def create_app(
         transport_ids: Annotated[list[str], Depends(parse_compare_ids)],
     ) -> dict[str, object]:
         return envelope(service.compare_transport_options(transport_ids))
+
+    @router.post(
+        "/transport-options/recommendations",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TransportRecommendationResponse],
+    )
+    def recommend_transport(
+        payload: TransportRecommendationRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Draft transport advice for a traveller.
+
+        Advisory only. Nothing is written: the traveller reviews the draft and
+        saves through the normal plan-entry route if they want it.
+        """
+        return envelope(service.recommend_transport(payload))
 
     @router.post(
         "/transport-options",

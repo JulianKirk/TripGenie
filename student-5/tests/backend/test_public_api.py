@@ -17,6 +17,22 @@ BUDGETS = "/api/budgets"
 EXPENSES = "/api/expenses"
 
 
+def test_trip_directory_is_read_from_student_1(client: TestClient) -> None:
+    response = client.get("/api/trips")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {
+            "id": "trip_chunk3",
+            "name": "Integration Trip",
+            "destination": "Sydney",
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-10",
+            "status": "planned",
+        }
+    ]
+
+
 def test_budget_crud_is_forwarded(client: TestClient) -> None:
     created = client.post(
         BUDGETS,

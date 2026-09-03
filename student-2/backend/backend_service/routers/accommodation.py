@@ -2,8 +2,8 @@
 
 Each one wraps the matching endpoint on the database service; the client turns
 anything unusable into the documented 502/503, so these bodies stay short.
-POST and PUT exist on the database service but are not exposed: this service's
-users view and filter accommodations, they do not author them.
+The full CRUD set is here -- create, read, update, delete -- because the page in
+front of this service is where an accommodation is authored as well as browsed.
 
 The database service stores a place as the shared reference service's country
 and city *ids*; this service publishes *names*. The two `_named` / `_by_id`
@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from backend_service.client import parse
 from backend_service.dependencies import (  # noqa: TC001  (runtime)
@@ -25,8 +25,10 @@ from backend_service.dependencies import (  # noqa: TC001  (runtime)
 )
 from backend_service.schemas import (
     Accommodation,
+    AccommodationCreateRequest,
     AccommodationQueryRequest,
     AccommodationQueryResponse,
+    AccommodationUpdateRequest,
 )
 
 if TYPE_CHECKING:
@@ -78,6 +80,26 @@ async def _named(body: dict[str, Any], location: LocationClient) -> dict[str, An
     return body
 
 
+async def _place_by_id(place: dict[str, Any] | None, location: LocationClient) -> bool:
+    """Swap a named place for the stored ids, in place. `False` when no such
+    place exists -- what the caller does about that differs between a search and
+    a write, so this only reports it.
+
+    A place with no country is left alone: on a search that is "no place
+    filter", and on an edit it is a street change that names no new city.
+    """
+    if place is None or "country" not in place:
+        return True
+    ids = await location.ids(place.pop("country"), place.pop("city", None))
+    if ids is None:
+        return False
+    country_id, city_id = ids
+    place["country_id"] = str(country_id)
+    if city_id is not None:
+        place["city_id"] = str(city_id)
+    return True
+
+
 async def _by_id(
     query: AccommodationQueryRequest, location: LocationClient
 ) -> dict[str, Any] | None:
@@ -88,15 +110,19 @@ async def _by_id(
     # caller actually set.
     body = query.model_dump(mode="json", exclude_none=True)
     place = body.get("accommodation", {}).get("location_details")
-    if place is None or "country" not in place:
-        return body
-    ids = await location.ids(place.pop("country"), place.pop("city", None))
-    if ids is None:
-        return None
-    country_id, city_id = ids
-    place["country_id"] = str(country_id)
-    if city_id is not None:
-        place["city_id"] = str(city_id)
+    return body if await _place_by_id(place, location) else None
+
+
+async def _stored(payload: Accommodation, location: LocationClient) -> dict[str, Any]:
+    """A write body, as the database service wants it: place named on the way
+    in, identified on the way down.
+
+    Unlike a search, a place nobody has heard of is a 400 and not an empty
+    answer -- you cannot store an accommodation in Narnia.
+    """
+    body = payload.model_dump(mode="json", exclude_none=True)
+    if not await _place_by_id(body.get("location_details"), location):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unknown country or city")
     return body
 
 
@@ -150,3 +176,44 @@ async def query_accommodation(
     query: AccommodationQueryRequest, db: DbDep, location: LocationDep
 ) -> AccommodationQueryResponse:
     return await search(query, db, location)
+
+
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Accommodation,
+    response_model_exclude_none=True,
+)
+async def create_accommodation(
+    payload: AccommodationCreateRequest, db: DbDep, location: LocationDep
+) -> Accommodation:
+    """Store a new accommodation. Answers with the id and name the database
+    service minted -- enough to link to it -- and nothing else, since the rest
+    is what the caller just sent."""
+    return parse(Accommodation, await db.create(await _stored(payload, location)))
+
+
+@router.put(
+    "/{id:uuid}", response_model=Accommodation, response_model_exclude_none=True
+)
+async def update_accommodation(
+    id: UUID, payload: AccommodationUpdateRequest, db: DbDep, location: LocationDep
+) -> Accommodation:
+    """Edit an accommodation. A merge: fields left out keep their stored value.
+
+    Answers with the whole row as it now stands, place named again, so a caller
+    that has just saved does not need a second GET to redraw.
+    """
+    body = await db.update(id, await _stored(payload, location))
+    return parse(Accommodation, await _named(body, location))
+
+
+@router.delete("/{id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_accommodation(id: UUID, db: DbDep) -> Response:
+    """Remove an accommodation. 404 if it was never there -- the database
+    service decides that, and its answer relays through unchanged.
+
+    No location client: nothing is named on the way out of a 204.
+    """
+    await db.delete(id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
