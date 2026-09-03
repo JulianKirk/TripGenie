@@ -13,7 +13,18 @@
     <div class="summary-grid__remaining"><dt>Remaining{% if not summary.remaining_budget_complete %} *{% endif %}</dt><dd>{{ summary.currency }} {{ summary.remaining_budget }}</dd></div>
   </dl>
   {% set unavailable = summary.providers.values() | selectattr('status', 'ne', 'available') | list %}
-  {% if unavailable or not summary.remaining_budget_complete %}<div class="banner banner--warning">Some provider costs are unavailable. Local expenses and budget actions remain available; totals marked * may be incomplete.</div>{% endif %}
+  {% if unavailable %}<div class="banner banner--warning">Provider costs not included:<ul>{% for provider_name, provider in summary.providers.items() %}{% if provider.status != 'available' %}<li><strong>{{ provider_name | title }}</strong>: {{ provider.detail or (provider.status | replace('_', ' ')) }}</li>{% endif %}{% endfor %}</ul>Local expenses and budget actions remain available; totals marked * may be incomplete.</div>
+  {% elif not summary.remaining_budget_complete %}<div class="banner banner--warning">Some recorded expenses could not be converted to {{ summary.currency }}. Totals marked * may be incomplete.</div>{% endif %}
+  <h3 class="section-heading">How remaining is calculated</h3>
+  <div class="table-scroll"><table class="cost-breakdown"><thead><tr><th>Source</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+    <tr><td><strong>Total budget</strong></td><td>Available funds</td><td>{{ summary.currency }} {{ summary.total_budget }}</td></tr>
+    {% for provider_name, provider in summary.providers.items() %}
+    <tr><td><strong>{{ provider_name | title }}</strong>{% if provider['items'] %}<ul class="cost-items">{% for item in provider['items'] %}<li>{{ item.description }} &middot; {{ item.status | title }} &middot; {{ item.currency }} {{ item.amount }}</li>{% endfor %}</ul>{% endif %}</td><td>{{ provider.status | replace('_', ' ') | title }}</td><td>{% if provider.status == 'available' %}&minus; {{ provider.currency }} {{ provider.subtotal }}{% else %}Not included{% endif %}</td></tr>
+    {% endfor %}
+    <tr><td><strong>Recorded expenses</strong></td><td>Actual spending</td><td>&minus; {{ summary.currency }} {{ summary.actual_spending }}</td></tr>
+    <tr class="cost-breakdown__remaining"><td><strong>Remaining budget</strong></td><td>Total minus committed and actual</td><td>{{ summary.currency }} {{ summary.remaining_budget }}</td></tr>
+  </tbody></table></div>
+  <p class="calculation">{{ summary.currency }} {{ summary.total_budget }} &minus; {{ summary.currency }} {{ summary.committed_costs }} committed &minus; {{ summary.currency }} {{ summary.actual_spending }} actual = <strong>{{ summary.currency }} {{ summary.remaining_budget }}</strong></p>
   {% elif summary_error %}<div class="banner banner--warning">Live summary unavailable: {{ summary_error }} Local budget and expense records are still available.</div>{% endif %}
   <h3 class="section-heading">Planned allocations</h3>
   <dl class="allocation-grid">

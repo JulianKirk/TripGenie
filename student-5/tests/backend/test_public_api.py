@@ -185,6 +185,15 @@ def test_summary_matches_hand_calculation_and_reports_partial_providers(
     assert summary["committed_costs"] == "200.20"
     assert summary["remaining_budget"] == "699.70"
     assert summary["providers"]["transport"]["status"] == "available"
+    assert summary["providers"]["transport"]["items"] == [
+        {
+            "item_id": "booking_ferry",
+            "description": "Harbour Ferry: Sydney to Manly",
+            "status": "pending",
+            "amount": "200.20",
+            "currency": "AUD",
+        }
+    ]
     assert summary["providers"]["accommodation"]["status"] == "unavailable"
     assert summary["committed_costs_complete"] is False
 

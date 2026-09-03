@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .config import Settings
-from .models import CurrencyCode, Money, ProviderCost
+from .models import CurrencyCode, Money, ProviderCost, ProviderCostItem
+
+ACTIVE_TRANSPORT_STATUSES = {"pending", "confirmed", "completed"}
+
+
+class TransportPlanEntryResponse(BaseModel):
+    id: str
+    booking_status: str
+    estimated_cost: Money
+
+
+class TransportOptionResponse(BaseModel):
+    provider: str
+    origin: str
+    destination: str
+
+
+class PlannedTransportResponse(BaseModel):
+    entry: TransportPlanEntryResponse
+    option: TransportOptionResponse
 
 
 class TransportCostResponse(BaseModel):
@@ -12,6 +31,7 @@ class TransportCostResponse(BaseModel):
 
     estimated_cost_total: Money
     currency: CurrencyCode
+    planned: list[PlannedTransportResponse] = Field(default_factory=list)
 
 
 class TransportApiClient:
@@ -64,9 +84,24 @@ class TransportApiClient:
                 currency=payload.currency,
                 detail=f"cannot convert {payload.currency} to {currency}",
             )
+        items = [
+            ProviderCostItem(
+                item_id=item.entry.id,
+                description=(
+                    f"{item.option.provider}: {item.option.origin} to "
+                    f"{item.option.destination}"
+                ),
+                status=item.entry.booking_status,
+                amount=item.entry.estimated_cost,
+                currency=payload.currency,
+            )
+            for item in payload.planned
+            if item.entry.booking_status in ACTIVE_TRANSPORT_STATUSES
+        ]
         return ProviderCost(
             provider="transport",
             status="available",
             subtotal=payload.estimated_cost_total,
             currency=payload.currency,
+            items=items,
         )

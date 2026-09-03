@@ -53,6 +53,25 @@ def test_expense_rejects_unknown_category_currency_and_date() -> None:
         )
 
 
+def test_expense_accepts_blank_optional_text() -> None:
+    expense = ExpenseCreate(
+        trip_id="trip_demo",
+        category="food",
+        description="Lunch",
+        amount="20.00",
+        currency="AUD",
+        date="2026-09-02",
+        payment_method="",
+        notes="",
+    )
+    update = ExpenseUpdate(payment_method="", notes="")
+
+    assert expense.payment_method is None
+    assert expense.notes is None
+    assert update.payment_method is None
+    assert update.notes is None
+
+
 def test_update_models_track_an_empty_patch() -> None:
     assert BudgetUpdate().model_fields_set == set()
     assert ExpenseUpdate().model_fields_set == set()
