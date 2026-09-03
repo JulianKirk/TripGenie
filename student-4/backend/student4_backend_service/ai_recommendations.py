@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 
 from .activity_routes import _public_activity, _query
+from .prompt_filters import apply_explicit_filters
 from .schemas import (
     Activity,
     ActivityEvaluationDraft,
@@ -69,6 +70,16 @@ def _plan_schema() -> dict[str, Any]:
     location = schema["$defs"]["LocationFilter"]["properties"]
     location.pop("street", None)
     return schema
+
+
+def _trip_summary(summary: str, trip: ItineraryTrip) -> str:
+    base = summary.strip().rstrip(".")
+    if base.casefold() == "no filters applied":
+        base = "activities"
+    return (
+        f"{base} for {trip.name} in {trip.destination} "
+        f"({trip.traveller_count} travellers)"
+    )
 
 
 async def _generate_plan_draft(
@@ -136,7 +147,23 @@ async def plan_search(
         )
     draft = await _generate_plan_draft(prompt, ai=ai, settings=settings)
 
-    query_body = draft.query.model_dump(mode="json", exclude_none=True)
+    destination = (
+        await location.destination_filter(trip.destination)
+        if trip is not None
+        else None
+    )
+    query_seed = draft.query.model_dump(mode="json", exclude_none=True)
+    if destination is not None:
+        query_seed["location"] = destination
+    query_body, recovered_filters = apply_explicit_filters(
+        payload.question,
+        query_seed,
+        implicit_date=(
+            trip.start_date.isoformat()
+            if trip is not None and trip.start_date == trip.end_date
+            else None
+        ),
+    )
     query_body.update(
         sort="NAME_ASC",
         include_inactive=False,
@@ -144,7 +171,6 @@ async def plan_search(
         offset=0,
     )
     if trip is not None:
-        destination = await location.destination_filter(trip.destination)
         if destination is not None:
             query_body["location"] = destination
         query_body["party_size"] = trip.traveller_count
@@ -157,11 +183,12 @@ async def plan_search(
             query_body.pop("availability")
 
     summary = draft.summary
-    if trip is not None:
+    if summary.strip().rstrip(".").casefold() == "no filters applied":
         summary = (
-            f"{summary} for {trip.name} in {trip.destination} "
-            f"({trip.traveller_count} travellers)"
+            payload.question.strip().rstrip(".") if recovered_filters else "activities"
         )
+    if trip is not None:
+        summary = _trip_summary(summary, trip)
 
     return RecommendationPlan(
         question=payload.question,

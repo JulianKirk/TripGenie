@@ -125,6 +125,13 @@ trip context was loaded. A selected trip's resolvable destination and traveller
 count are applied after model output. Paging is fixed to the first 20 active
 activities.
 
+The planning prompt documents every supported filter and requires all explicit
+constraints to be represented structurally. Before validation, the backend also
+reconciles unambiguous category, price, duration, party, age, accessibility and
+booking phrases from the original question. This prevents a small model from
+silently omitting or contradicting a constraint such as “outdoor”, “under $100”
+or “no more than three hours”.
+
 ### POST /activity/recommendations/evaluate
 
 ```json

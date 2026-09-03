@@ -36,8 +36,8 @@
   <nav class="pager" aria-label="Results pages">
     <p>Showing {{ first }}–{{ last }} of {{ page.total }}</p>
     <div class="actions">
-      {% if page.offset > 0 %}<button class="button" name="offset" value="{{ [page.offset - page.limit, 0]|max }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Previous</button>{% endif %}
-      {% if page.offset + page.limit < page.total %}<button class="button" name="offset" value="{{ page.offset + page.limit }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Next</button>{% endif %}
+      {% if page.offset > 0 %}<button class="button" type="submit" form="activity-filters" formaction="/" name="offset" value="{{ [page.offset - page.limit, 0]|max }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Previous</button>{% endif %}
+      {% if page.offset + page.limit < page.total %}<button class="button" type="submit" form="activity-filters" formaction="/" name="offset" value="{{ page.offset + page.limit }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Next</button>{% endif %}
     </div>
   </nav>
 {% endif %}

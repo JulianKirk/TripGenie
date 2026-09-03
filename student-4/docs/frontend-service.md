@@ -141,9 +141,10 @@ immediately through the `change` trigger. The form submits ordinary query
 parameters to this frontend route; the frontend builds the JSON body described
 by [`QUERY /activity`](./backend-service-api.md#query-activity).
 
-`offset` is not a form control. Pager buttons carry their own offset and use
-`hx-include="#activity-filters"`. Changing a filter therefore returns to the
-first page automatically.
+Pager buttons are associated with the filter form, carry their own offset and
+use `hx-include="#activity-filters"`. They therefore work as ordinary form
+submissions as well as HTMX requests. Changing a filter returns to the first
+page automatically because the filter form itself has no offset value.
 
 ## Filter controls
 
@@ -172,11 +173,9 @@ strings or explicit nulls.
 ### Text and location
 
 The search box matches activity names and descriptions. Country and city use
-the public names accepted by the backend. With JavaScript, city is disabled
-until a country is present because a city name without its country is
-ambiguous. Baseline HTML leaves it enabled so country and city can be submitted
-together without JavaScript. The frontend drops an unpaired city server-side
-as a second line of defence.
+the public names accepted by the backend. A city name without its country is
+ambiguous, but the control remains enabled so travellers can enter the fields
+in either order. The frontend drops an unpaired city server-side.
 
 Street is free text because exact addresses belong to Student 4 rather than the
 shared location service. It is labelled "Street or address" so it also makes
@@ -192,8 +191,7 @@ rendered as supporting help text but are never used as filter values.
 
 An adjacent selector controls whether selected values use `ANY` or `ALL`
 matching. `ANY` is the default because it produces the least surprising broad
-search. JavaScript disables the control when no category is selected; baseline
-HTML keeps it available for progressive enhancement.
+search. The selector remains available while categories are being chosen.
 
 ### Price, duration and party suitability
 
@@ -320,7 +318,7 @@ The results header shows `total` matches. Previous and next controls calculate
 offsets from the response's `limit` and `offset`, retain every active filter via
 `hx-include`, and target only the results region.
 
-Controls that would move before zero or beyond `total` are disabled. Backend
+Controls that would move before zero or beyond `total` are omitted. Backend
 ordering is used as returned; the frontend never re-sorts a page locally because
 that would make pagination inconsistent.
 
