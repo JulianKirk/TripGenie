@@ -1,0 +1,16 @@
+:root {
+  color-scheme: light;
+  --tg-ink: #17202a;
+  --tg-muted: #617080;
+  --tg-surface: #ffffff;
+  --tg-canvas: #f2f5f3;
+  --tg-line: #d7dfda;
+  --tg-accent: #08785d;
+  --tg-accent-strong: #075b49;
+  --tg-danger: #a12828;
+  --tg-warning: #fff4d6;
+  --tg-error: #fde8e8;
+  --tg-radius: 8px;
+  --tg-font-body: Georgia, "Times New Roman", serif;
+  --tg-font-ui: "Trebuchet MS", sans-serif;
+}
