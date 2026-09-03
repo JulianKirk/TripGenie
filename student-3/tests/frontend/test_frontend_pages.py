@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from student3_frontend_service.config import Settings as FrontendSettings
 
 SHUTTLE_ID = "transport_2027_zqn_snow_shuttle"
 FLIGHT_ID = "transport_2026_qf401_mel_syd"
@@ -820,3 +822,168 @@ def test_picking_from_the_dropdowns_creates_a_plan_entry(
 
     assert response.status_code == 303, response.text
     assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"
+
+
+# ------------------------------------------------------------- AI suggestions
+
+
+def test_ai_form_renders_with_a_clear_advisory_framing(ai_client: TestClient) -> None:
+    response = ai_client.get("/suggestions")
+
+    assert response.status_code == 200
+    assert "Ask for transport suggestions" in response.text
+    assert "advice only" in response.text
+    # The template wraps its copy, so compare on collapsed whitespace.
+    collapsed = " ".join(response.text.split())
+    assert "nothing is added to a trip until you choose to add it" in collapsed
+    assert '<textarea id="question"' in response.text
+
+
+def test_ai_link_is_in_the_shell_navigation(ai_client: TestClient) -> None:
+    response = ai_client.get("/")
+
+    assert "AI suggestions" in response.text
+
+
+def test_asking_renders_the_draft_suggestions(ai_client: TestClient) -> None:
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {
+            "trip_id": "",
+            "origin": "",
+            "destination": "",
+            "question": "What is the cheapest way to get around?",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "Draft suggestions" in response.text
+    assert "Adelaide Airport" in response.text
+    assert "Cheapest at $6.50 per traveller" in response.text
+    assert "Fares are tapped on board." in response.text
+
+
+def test_the_draft_is_labelled_advisory_and_cites_its_run(
+    ai_client: TestClient,
+) -> None:
+    """A traveller must be able to see this is generated, not stored, data."""
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": "Cheapest?"},
+    )
+
+    assert "advisory only" in response.text
+    assert "llama3.1:8b" in response.text
+    assert "run_ui_0001" in response.text
+    assert "Nothing has been saved." in response.text
+
+
+def test_a_suggestion_links_to_human_review_not_a_save(
+    ai_client: TestClient,
+) -> None:
+    """The only way into the plan is the normal form, with the id prefilled."""
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": "Cheapest?"},
+    )
+
+    assert "Review and add to a trip" in response.text
+    assert "/plan/new?transport_id=transport_2027_adl_metro_bus" in response.text
+
+
+def test_asking_does_not_save_anything(ai_client: TestClient) -> None:
+    before = ai_client.get(f"/trips/{QUEENSTOWN_TRIP}/transport").text
+
+    _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": QUEENSTOWN_TRIP, "origin": "", "destination": "", "question": "?"},
+    )
+
+    after = ai_client.get(f"/trips/{QUEENSTOWN_TRIP}/transport").text
+    assert before == after
+
+
+def test_a_missing_question_is_reported_on_the_form(ai_client: TestClient) -> None:
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": ""},
+    )
+
+    assert response.status_code == 200
+    assert "VALIDATION_ERROR" in response.text
+    # The form is still usable rather than replaced by an error page.
+    assert '<textarea id="question"' in response.text
+
+
+def test_an_unmatchable_route_explains_itself(ai_client: TestClient) -> None:
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {
+            "trip_id": "",
+            "origin": "Nowhere",
+            "destination": "Neverland",
+            "question": "Anything?",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "no available option" in response.text
+
+
+def test_an_unreachable_ai_mode_is_reported_without_losing_the_form(
+    ai_down_client: TestClient,
+) -> None:
+    response = _post(
+        ai_down_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": "Cheapest?"},
+    )
+
+    assert response.status_code == 200
+    assert "DEPENDENCY_UNAVAILABLE" in response.text
+    assert '<textarea id="question"' in response.text
+    assert "Draft suggestions" not in response.text
+
+
+def test_the_ai_page_never_promises_a_booking(ai_client: TestClient) -> None:
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": "Cheapest?"},
+    )
+    lowered = response.text.lower()
+
+    for phrase in ("book now", "reserve now", "confirm booking", "pay now"):
+        assert phrase not in lowered
+
+
+def test_the_ai_page_shares_the_shell(ai_client: TestClient) -> None:
+    response = ai_client.get("/suggestions", headers=HTMX_HEADERS)
+
+    assert response.status_code == 200
+    assert 'id="app-shell"' in response.text
+    assert 'class="site-header"' not in response.text
+
+
+def test_the_ai_route_waits_longer_than_the_others() -> None:
+    """A local model is slow; the rest of the UI should still fail fast.
+
+    Pinned because a single shared timeout would either abandon a generation
+    that was going to succeed, or leave an ordinary page hanging for minutes.
+    """
+    settings = FrontendSettings(backend_base_url="http://student-3-backend:8003")
+
+    assert settings.ai_timeout_seconds > settings.backend_timeout_seconds
+
+
+def test_the_ai_timeout_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STUDENT3_FRONTEND_BACKEND_BASE_URL", "http://backend:8003")
+    monkeypatch.setenv("STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS", "45.5")
+
+    assert FrontendSettings.from_env().ai_timeout_seconds == 45.5

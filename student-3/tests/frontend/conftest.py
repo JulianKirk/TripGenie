@@ -13,6 +13,7 @@ while the backend reaches the database through a relay into its ``TestClient``.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -87,6 +88,52 @@ def unreachable_trips_transport() -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
+# A draft AI-Mode would return. The Adelaide bus is the cheapest seeded option
+# and is always a candidate, so it is a safe id for the stub to name.
+STUB_AI_DRAFT = {
+    "overview": "The Adelaide airport bus at $6.50 per traveller is cheapest.",
+    "suggestions": [
+        {
+            "transport_id": "transport_2027_adl_metro_bus",
+            "reason": "Cheapest at $6.50 per traveller and only 35m.",
+        },
+    ],
+    "considerations": ["Fares are tapped on board."],
+    "disclaimer": "Advisory only. Review before adding to your trip.",
+}
+
+
+@pytest.fixture
+def ai_transport() -> httpx.MockTransport:
+    """Stands in for the shared AI-Mode service."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "run_id": "run_ui_0001",
+                    "correlation_id": "student3-transport-ui",
+                    "model": "llama3.1:8b",
+                    "provider": "ollama",
+                    "response": json.dumps(STUB_AI_DRAFT),
+                    "done": True,
+                },
+            },
+        )
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def unreachable_ai_transport() -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        message = "connection refused"
+        raise httpx.ConnectError(message, request=request)
+
+    return httpx.MockTransport(handler)
+
+
 @pytest.fixture
 def database_path(tmp_path: Path) -> Path:
     return tmp_path / "tripgenie.db"
@@ -95,6 +142,7 @@ def database_path(tmp_path: Path) -> Path:
 def _build_backend(
     database_path: Path,
     trips_transport: httpx.BaseTransport | None,
+    ai_transport: httpx.BaseTransport | None = None,
 ) -> Iterator[object]:
     """The real backend, backed by the real database, both seeded."""
     database_app = create_database_app(DatabaseSettings(sqlite_path=database_path))
@@ -123,6 +171,7 @@ def _build_backend(
             BackendSettings(database_api_base_url=DATABASE_BASE_URL),
             transport=httpx.MockTransport(relay),
             trips_transport=trips_transport,
+            ai_transport=ai_transport,
         )
         # Entering the backend TestClient runs its lifespan, which builds the
         # service the ASGITransport requests will look for on app.state.
@@ -145,6 +194,55 @@ def backend_app_with_trips(
     trips_transport: httpx.MockTransport,
 ) -> Iterator[object]:
     yield from _build_backend(database_path, trips_transport)
+
+
+@pytest.fixture
+def backend_app_with_ai(
+    database_path: Path,
+    trips_transport: httpx.MockTransport,
+    ai_transport: httpx.MockTransport,
+) -> Iterator[object]:
+    yield from _build_backend(database_path, trips_transport, ai_transport)
+
+
+@pytest.fixture
+def backend_app_without_ai(
+    database_path: Path,
+    trips_transport: httpx.MockTransport,
+    unreachable_ai_transport: httpx.MockTransport,
+) -> Iterator[object]:
+    yield from _build_backend(
+        database_path,
+        trips_transport,
+        unreachable_ai_transport,
+    )
+
+
+@pytest.fixture
+def ai_client(
+    frontend_settings: FrontendSettings,
+    backend_app_with_ai: object,
+) -> Iterator[TestClient]:
+    """A frontend whose backend can reach a stubbed AI-Mode."""
+    app = create_frontend_app(
+        frontend_settings,
+        transport=httpx.ASGITransport(app=backend_app_with_ai),
+    )
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def ai_down_client(
+    frontend_settings: FrontendSettings,
+    backend_app_without_ai: object,
+) -> Iterator[TestClient]:
+    app = create_frontend_app(
+        frontend_settings,
+        transport=httpx.ASGITransport(app=backend_app_without_ai),
+    )
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture

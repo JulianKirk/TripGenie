@@ -30,6 +30,7 @@ Plan states are shown in the traveller's language rather than raw enum values:
 | `STUDENT3_FRONTEND_BACKEND_BASE_URL` | `http://student-3-backend:8003` | Student 3 backend API. |
 | `STUDENT3_FRONTEND_BACKEND_API_PREFIX` | `/api` | Backend API prefix. |
 | `STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS` | `5` | Timeout for frontend-to-backend calls. |
+| `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `150` | Timeout for the AI suggestion route only. |
 | `STUDENT3_FRONTEND_SERVICE_NAME` | `student-3-frontend` | Name reported by health endpoints. |
 
 ## Ports
@@ -51,6 +52,7 @@ Student 3.
 | `GET /plan/new`, `POST /plan` | Add transport to a trip |
 | `GET,POST /plan/{id}/edit` | Edit a plan entry |
 | `GET,POST /plan/{id}/delete` | Remove a plan entry, with a confirmation step |
+| `GET,POST /suggestions` | Ask for AI transport suggestions. Saves nothing |
 | `GET /health` | Service status plus the backend dependency. Always `200`. |
 | `GET /ready` | `200` when the backend is reachable, `503` otherwise. |
 
@@ -76,6 +78,25 @@ use real controls wherever the value allows one:
 The trip picker is the only one with an external dependency. If Student 1's
 service is unreachable the field degrades to a text input with a note, so
 transport planning still works during their outage.
+
+## AI suggestions
+
+`/suggestions` asks the backend for advisory guidance drafted by a local model
+from options already in TripGenie. The screen is built so a traveller can never
+mistake advice for stored data:
+
+- The draft panel is tagged **advisory only** and states that nothing has been
+  saved, naming the model, provider and run id that produced it.
+- Each suggestion's action is **"Review and add to a trip"** — a link to the
+  ordinary planning form with the option prefilled, never a save. Adding
+  transport stays a deliberate human act.
+- Suggestions render as the real option records, so every figure shown is the
+  stored one rather than something the model wrote.
+- When AI-Mode is unavailable the error renders in the panel with the form
+  intact and the shell navigable; every other screen is unaffected.
+
+Only this route gets the long timeout, because a local model answering a cold
+prompt takes far longer than the few seconds that is generous elsewhere.
 
 ## Design notes
 

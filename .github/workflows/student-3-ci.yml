@@ -114,10 +114,16 @@ jobs:
         run: docker compose config --quiet
       # Targets the frontend rather than the `student-3` grouping service:
       # that group is a container that exits immediately, and --wait treats an
-      # exited container as a failure. depends_on still brings the backend and
-      # database up and waits for their health first.
+      # exited container as a failure.
+      #
+      # --no-deps with all three named explicitly, because the backend now
+      # declares AI-Mode as a dependency and following it would pull the
+      # multi-gigabyte Ollama image for a slice that does not need it. AI
+      # suggestions are advisory: the rest of the feature is expected to work
+      # with AI-Mode absent, so a run without it is the more useful check.
       - name: Bring the Student 3 slice up and wait for health
-        run: docker compose up -d --build --wait student-3-frontend
+        run: |
+          docker compose up -d --build --wait --no-deps             student-3-database student-3-backend student-3-frontend
       - name: Check the frontend answers on its published port
         run: |
           port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
