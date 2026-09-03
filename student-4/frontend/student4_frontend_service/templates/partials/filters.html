@@ -1,0 +1,66 @@
+<form id="activity-filters" action="/" method="get"
+      hx-get="/activity" hx-trigger="input changed delay:300ms, change"
+      hx-target="#activity-results" hx-swap="innerHTML"
+      hx-indicator="#global-loading">
+  <div class="panel-heading"><h2>Search &amp; filter</h2><a href="/">Clear</a></div>
+  <label class="field" for="text">Search activities
+    <input id="text" name="text" type="search" value="{{ params.get('text', '') }}" placeholder="Name or description">
+  </label>
+  <div class="form-grid">
+    <label class="field" for="country">Country
+      <input id="country" name="country" value="{{ params.get('country', '') }}">
+    </label>
+    <label class="field" for="city">City
+      <input id="city" name="city" value="{{ params.get('city', '') }}">
+    </label>
+  </div>
+  <label class="field" for="street">Street or address
+    <input id="street" name="street" value="{{ params.get('street', '') }}">
+  </label>
+  <fieldset><legend>Categories</legend>
+    {% if categories_error %}<p class="field-error">{{ categories_error }}</p>
+    {% elif categories %}
+      <div class="checkbox-list">
+      {% for category in categories.categories %}
+        <label><input type="checkbox" name="category" value="{{ category.code }}" {% if category.code in params.getlist('category') %}checked{% endif %}> <span><strong>{{ category.label }}</strong>{% if category.description %}<small>{{ category.description }}</small>{% endif %}</span></label>
+      {% endfor %}
+      </div>
+    {% endif %}
+  </fieldset>
+  <label class="field" for="category_match">Category matching
+    <select id="category_match" name="category_match">
+      <option value="ANY">Any selected category</option>
+      <option value="ALL" {% if params.get('category_match') == 'ALL' %}selected{% endif %}>All selected categories</option>
+    </select>
+  </label>
+  <div class="form-grid">
+    <label class="field" for="price_min">Minimum price (AUD)<input id="price_min" name="price_min" type="number" min="0" step="0.01" value="{{ params.get('price_min', '') }}"></label>
+    <label class="field" for="price_max">Maximum price (AUD)<input id="price_max" name="price_max" type="number" min="0" step="0.01" value="{{ params.get('price_max', '') }}"></label>
+    <label class="field" for="duration_min">Minimum duration (minutes)<input id="duration_min" name="duration_min" type="number" min="1" value="{{ params.get('duration_min', '') }}"></label>
+    <label class="field" for="duration_max">Maximum duration (minutes)<input id="duration_max" name="duration_max" type="number" min="1" value="{{ params.get('duration_max', '') }}"></label>
+    <label class="field" for="party_size">Party size<input id="party_size" name="party_size" type="number" min="1" value="{{ params.get('party_size', '') }}"></label>
+    <label class="field" for="youngest_age">Youngest age<input id="youngest_age" name="youngest_age" type="number" min="0" value="{{ params.get('youngest_age', '') }}"></label>
+    <label class="field" for="oldest_age">Oldest age<input id="oldest_age" name="oldest_age" type="number" min="0" value="{{ params.get('oldest_age', '') }}"></label>
+    <label class="field" for="booking_required">Booking
+      <select id="booking_required" name="booking_required"><option value="">Any</option><option value="true" {% if params.get('booking_required') == 'true' %}selected{% endif %}>Required externally</option><option value="false" {% if params.get('booking_required') == 'false' %}selected{% endif %}>No booking required</option></select>
+    </label>
+  </div>
+  <fieldset><legend>Required accessibility</legend>
+    <label><input type="checkbox" name="wheelchair_accessible" {% if params.get('wheelchair_accessible') %}checked{% endif %}> Wheelchair accessible</label>
+    <label><input type="checkbox" name="step_free_access" {% if params.get('step_free_access') %}checked{% endif %}> Step-free access</label>
+    <label><input type="checkbox" name="accessible_toilet" {% if params.get('accessible_toilet') %}checked{% endif %}> Accessible toilet</label>
+  </fieldset>
+  <div class="form-grid">
+    <label class="field" for="date">Available date<input id="date" name="date" type="date" value="{{ params.get('date', '') }}"></label>
+    <label class="field" for="start_time">Earliest time<input id="start_time" name="start_time" type="time" value="{{ params.get('start_time', '') }}"></label>
+    <label class="field" for="end_time">Latest time<input id="end_time" name="end_time" type="time" value="{{ params.get('end_time', '') }}"></label>
+    <label class="field" for="sort">Sort
+      <select id="sort" name="sort"><option value="NAME_ASC" {% if params.get('sort', 'NAME_ASC') == 'NAME_ASC' %}selected{% endif %}>Name</option><option value="PRICE_ASC" {% if params.get('sort') == 'PRICE_ASC' %}selected{% endif %}>Price: low to high</option><option value="PRICE_DESC" {% if params.get('sort') == 'PRICE_DESC' %}selected{% endif %}>Price: high to low</option><option value="DURATION_ASC" {% if params.get('sort') == 'DURATION_ASC' %}selected{% endif %}>Duration: short to long</option><option value="DURATION_DESC" {% if params.get('sort') == 'DURATION_DESC' %}selected{% endif %}>Duration: long to short</option></select>
+    </label>
+    <label class="field" for="limit">Page size
+      <select id="limit" name="limit">{% for size in [10, 20, 50, 100] %}<option value="{{ size }}" {% if selected_limit|default(20) == size %}selected{% endif %}>{{ size }}</option>{% endfor %}</select>
+    </label>
+  </div>
+  <p class="field-hint">Times are local to the activity.</p>
+  <button class="button button--primary" type="submit">Apply filters</button>
+</form>

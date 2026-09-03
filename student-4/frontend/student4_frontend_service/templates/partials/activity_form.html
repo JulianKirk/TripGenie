@@ -1,0 +1,30 @@
+{% from "macros/forms.html" import schedule_row %}
+<dialog class="activity-dialog activity-dialog--wide" aria-labelledby="activity-form-title"><div class="dialog-content">
+  <div class="panel-heading"><div><p class="eyebrow">Catalogue administration</p><h2 id="activity-form-title">{{ 'Edit activity' if activity_id else 'Create activity' }}</h2></div><button type="button" class="button" data-close-dialog>Close</button></div>
+  {% if errors.get('general') %}<div class="banner banner--error" role="alert">{% for error in errors.general %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+  <form class="activity-form" action="{{ '/manage/activity/' ~ activity_id if activity_id else '/manage/activity' }}" method="post" {% if activity_id %}hx-put="/manage/activity/{{ activity_id }}"{% else %}hx-post="/manage/activity"{% endif %} hx-target="#activity-dialog">
+    <label class="field field--wide">Name<input name="name" required value="{{ values.get('name', '') }}"></label>
+    <label class="field field--wide">Description<textarea name="description" required>{{ values.get('description', '') }}</textarea></label>
+    <div class="form-grid">
+      <label class="field">Price (AUD)<input name="price" type="number" min="0" step="0.01" required value="{{ values.get('price', '') }}"></label>
+      <label class="field">Pricing basis<select name="pricing_basis"><option value="PER_PERSON" {% if values.get('pricing_basis', 'PER_PERSON') == 'PER_PERSON' %}selected{% endif %}>Per person</option><option value="FLAT_ADMISSION" {% if values.get('pricing_basis') == 'FLAT_ADMISSION' %}selected{% endif %}>Flat admission</option></select></label>
+      <label class="field">Duration (minutes)<input name="duration_minutes" type="number" min="1" required value="{{ values.get('duration_minutes', '') }}"></label>
+      <label class="field">Minimum participants<input name="minimum_participants" type="number" min="1" required value="{{ values.get('minimum_participants', 1) }}"></label>
+      <label class="field">Maximum participants<input name="maximum_participants" type="number" min="1" value="{{ values.get('maximum_participants', '') }}"></label>
+      <label class="field">Minimum age<input name="minimum_age" type="number" min="0" value="{{ values.get('minimum_age', '') }}"></label>
+      <label class="field">Maximum age<input name="maximum_age" type="number" min="0" value="{{ values.get('maximum_age', '') }}"></label>
+    </div>
+    <fieldset><legend>Location</legend><div class="form-grid"><label class="field">Country<input name="country" required value="{{ values.get('country', '') }}"></label><label class="field">City<input name="city" required value="{{ values.get('city', '') }}"></label><label class="field">Street<input name="street" value="{{ values.get('street', '') }}"></label><label class="field">Street number<input name="street_number" type="number" min="0" value="{{ values.get('street_number', '') }}"></label></div></fieldset>
+    <fieldset><legend>Categories</legend><div class="checkbox-list">{% if categories %}{% for category in categories.categories %}<label><input type="checkbox" name="category" value="{{ category.code }}" {% if category.code in values.get('categories', []) %}checked{% endif %}> {{ category.label }}</label>{% endfor %}{% endif %}</div></fieldset>
+    <fieldset><legend>Booking and accessibility</legend>
+      <label><input type="checkbox" name="booking_required" {% if values.get('booking_required') in [true, 'on', 'true'] %}checked{% endif %}> Booking required externally</label>
+      <label class="field">Booking notes<textarea name="booking_notes">{{ values.get('booking_notes', '') }}</textarea></label>
+      <div class="form-grid">{% for name, label in [('wheelchair_accessible', 'Wheelchair accessible'), ('step_free_access', 'Step-free access'), ('accessible_toilet', 'Accessible toilet')] %}<label class="field">{{ label }}<select name="{{ name }}"><option value="unknown">Unknown</option><option value="true" {% if values.get(name) in [true, 'true'] %}selected{% endif %}>Yes</option><option value="false" {% if values.get(name) in [false, 'false'] %}selected{% endif %}>No</option></select></label>{% endfor %}</div>
+      <label class="field">Accessibility notes<textarea name="accessibility_notes">{{ values.get('accessibility_notes', '') }}</textarea></label>
+    </fieldset>
+    <fieldset><legend>Availability schedules</legend><div id="schedule-rows">{% for schedule in values.get('availability_schedules', []) %}{{ schedule_row(schedule, loop.index0) }}{% endfor %}</div><template id="schedule-row-template">{{ schedule_row({'recurring_weekly': 'true', 'day_of_week': 'MONDAY'}, '__INDEX__') }}</template><button class="button" type="button" data-add-schedule>Add schedule</button></fieldset>
+    <label><input type="checkbox" name="is_active" {% if values.get('is_active', true) in [true, 'on', 'true'] %}checked{% endif %}> Active and visible to travellers</label>
+    {% if errors %}<div class="banner banner--error" role="alert">{% for field, messages in errors.items() if field != 'general' %}{% for message in messages %}<p><strong>{{ field }}</strong>: {{ message }}</p>{% endfor %}{% endfor %}</div>{% endif %}
+    <div class="actions form-actions"><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button button--primary">{{ 'Save changes' if activity_id else 'Create activity' }}</button></div>
+  </form>
+</div></dialog>

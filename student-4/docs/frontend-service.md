@@ -4,19 +4,16 @@
 
 ## Service scope
 
-This document is the implementation contract for Student 4's future
-activities-and-attractions webpage. The current backend-focused branch does not
-implement that frontend; `student-4-service` remains a placeholder static
-server. When implemented, the frontend talks only to the
-[Student 4 backend](./backend-service-api.md), never to the database or shared
-reference services.
+This service renders Student 4's traveller catalogue and management interface. It
+talks only to the [Student 4 backend](./backend-service-api.md), never to the
+database or shared reference services.
 
 ```text
               browser
-                 |  :8084  HTML GET
+                 |  :8094 host / :8084 container  HTML
                  v
        student-4-frontend -- Jinja templates + HTMX
-                 |  :8008  GET|QUERY /activity
+                 |  :8008  activity and itinerary-proxy routes
                  v
         student-4-backend
 ```
@@ -37,15 +34,14 @@ booking or payment workflow.
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend-service base URL. |
 | `BACKEND_TIMEOUT` | `5` | Backend request timeout in seconds. |
 
-Run the backend and its dependencies with:
+Run the frontend with:
 
 ```bash
-docker compose up student-4-backend
+docker compose up student-4-frontend
 ```
 
-Open `http://localhost:8008/docs` to inspect and exercise the backend contract.
-Port `8084` does not provide the UI described below until the frontend is
-implemented on its own branch.
+Then open `http://localhost:8094`. The separate port keeps the new service
+available while the legacy Student 4 placeholder still owns port 8084.
 
 ## HTML routes
 
@@ -56,6 +52,16 @@ These routes return pages or fragments, not a public JSON API.
 | `GET /` | Full page with filters, category options and first result page. |
 | `GET /activity` | Results-and-pagination HTML fragment. |
 | `GET /activity/{id}` | Full activity-detail dialog fragment. |
+| `GET /activity/{id}/itineraries` | Itinerary picker fragment from the Student 4 proxy. |
+| `PUT /activity/{id}/itineraries/{trip_id}` | Add or reschedule an itinerary selection. |
+| `DELETE /activity/{id}/itineraries/{trip_id}` | Remove an itinerary selection. |
+| `GET /manage` | Catalogue management page, including inactive entries. |
+| `GET /manage/activity/new` | Create-activity form fragment. |
+| `POST /manage/activity` | Create a complete activity aggregate. |
+| `GET /manage/activity/{id}/edit` | Prefilled edit form fragment. |
+| `PUT /manage/activity/{id}` | Replace a complete activity aggregate. |
+| `GET /manage/activity/{id}/delete` | Permanent-delete confirmation fragment. |
+| `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
@@ -63,14 +69,15 @@ reached, matching the other frontend services.
 
 ## Page structure
 
-The page has five regions:
+The traveller page has four regions:
 
 1. A heading explaining that attractions and activities share one catalogue.
 2. One search-and-filter form.
 3. An `aria-live` results region containing cards, count and pager.
-4. A dialog target populated when a user opens or edits an activity.
-5. An administration region for creating, replacing, deactivating and deleting
-   catalogue entries.
+4. A dialog target populated when a user opens an activity.
+
+The separate `/manage` page provides catalogue creation, replacement,
+deactivation and deletion controls.
 
 The initial `GET /` concurrently requests the backend's first activity page and
 `GET /activity/categories`. Category rows are rendered in the backend-provided
@@ -127,26 +134,28 @@ strings or explicit nulls.
 ### Text and location
 
 The search box matches activity names and descriptions. Country and city use
-the public names accepted by the backend. City remains disabled until a country
-is present, because a city name without its country is ambiguous. The frontend
-drops an unpaired city server-side as a second line of defence.
+the public names accepted by the backend. With JavaScript, city is disabled
+until a country is present because a city name without its country is
+ambiguous. Baseline HTML leaves it enabled so country and city can be submitted
+together without JavaScript. The frontend drops an unpaired city server-side
+as a second line of defence.
 
 Street is free text because exact addresses belong to Student 4 rather than the
 shared location service. It is labelled "Street or address" so it also makes
 sense for parks, trails and landmarks without a conventional street number.
 
-### Category dropdown
+### Category selection
 
-Categories appear in a multi-select dropdown populated exclusively from
-`GET /activity/categories`. The dropdown uses a native disclosure containing a
-labelled checkbox for each category, so selecting several values remains
+Categories appear as a checkbox group populated exclusively from
+`GET /activity/categories`, so selecting several values remains
 keyboard-accessible without a JavaScript widget. Checkbox values are stable
 codes, while visible text uses the corresponding label. Descriptions may be
 rendered as supporting help text but are never used as filter values.
 
 An adjacent selector controls whether selected values use `ANY` or `ALL`
 matching. `ANY` is the default because it produces the least surprising broad
-search. The control is disabled when no category is selected.
+search. JavaScript disables the control when no category is selected; baseline
+HTML keeps it available for progressive enhancement.
 
 ### Price, duration and party suitability
 
@@ -178,9 +187,9 @@ not misrepresented as inaccessibility.
 
 ### Date and time
 
-Date may be used alone. Start and end times are enabled only once a date is
-chosen and must be supplied together. The UI explains that all times are local
-to the activity.
+Date may be used alone. JavaScript enables start and end times once a date is
+chosen; baseline HTML leaves them usable. They must be supplied together. The
+UI explains that all times are local to the activity.
 
 The frontend does not attempt to expand weekly schedules or determine valid
 starts. It sends the requested window to the backend, which applies activity
@@ -200,19 +209,19 @@ Each result card displays:
 
 There are no placeholder images. A card's activity name is a real button whose
 `hx-get` loads `GET /activity/{id}` into the dialog target. The returned fragment
-uses a native `<dialog open>` and shows the full description, exact address,
+uses a native modal `<dialog>` and shows the full description, exact address,
 restrictions, booking notes, accessibility notes and availability schedules.
 
 Recurring schedules are grouped by weekday for readability. One-off schedules
 show their ISO date. Times remain in local `HH:MM` form. The page does not invent
 bookable time slots from a flexible interval.
 
-Every card and detail dialog also offers an **Add to itinerary** button. It
-loads `GET /activity/{id}/itineraries` from the Student 4 backend, shows each
-trip with a checkbox plus date and optional start-time controls, and sends
-`PUT` or `DELETE` to that same Student 4 backend. Dates are bounded by each
-row's returned `start_date` and `end_date`. The frontend never calls Student 1
-directly.
+Each card opens the detail dialog, where an **Add to itinerary** or **Manage
+itinerary** button loads `GET /activity/{id}/itineraries` from the Student 4
+backend. Each trip has add/update and remove actions plus optional date and
+start-time controls. Those actions send `PUT` or `DELETE` to that same Student
+4 backend. Dates are bounded by each row's returned `start_date` and
+`end_date`. The frontend never calls Student 1 directly.
 
 ## Catalogue CRUD
 
@@ -236,6 +245,33 @@ leaving out an optional value intentionally clears it. Destructive delete has
 a confirmation step and deactivation is presented as the safer reversible
 choice.
 
+### Itinerary selection
+
+The detail dialog can load the traveller's itineraries through the Student 4
+backend. A selection can be added, rescheduled, or removed with an optional
+date and local start time. The browser never calls Student 1 directly; Student
+4 remains the only API boundary for itinerary changes.
+
+## Catalogue management
+
+`GET /manage` uses the same backend query with `include_inactive: true` so an
+administrator can see and reactivate hidden records. The management list is
+paginated using the backend's total, limit, and offset metadata. Create and edit
+forms cover the complete activity aggregate: description, exact price and
+pricing basis, duration, participant and age limits, location, categories,
+booking and accessibility details, activation state, and weekly or one-off
+schedules.
+
+Writes are allow-listed and validated into the frontend's strict schema before
+being sent to Student 4. The backend remains authoritative for cross-field and
+reference-data validation. Edit uses full replacement because the backend API
+defines `PUT /activity/{id}`, not a partial patch.
+
+Permanent deletion requires a separate confirmation fragment that names the
+activity and warns that the action cannot be undone. Deactivation is available
+through edit and is the normal choice when an activity should merely disappear
+from traveller search.
+
 ## Pagination
 
 The results header shows `total` matches. Previous and next controls calculate
@@ -256,10 +292,12 @@ The results region has explicit states for:
 - activity or category data unavailable; and
 - malformed upstream data.
 
-Backend `400`, `404`, `502` and `503` responses carry `{"detail": "..."}`. The
-frontend renders a safe text message in the affected fragment and preserves the
-form so the user can revise or retry. Network failures use the same results
-error region rather than turning into an unhandled page-level `500`.
+Backend `400`, `404`, `502` and `503` responses carry a `detail` value. Request
+validation may return a structured list; other errors normally use a string.
+The frontend extracts safe client-error text, renders it in the affected
+fragment and preserves the form so the user can revise or retry. Network
+failures use the same results error region rather than turning into an
+unhandled page-level `500`.
 
 A missing detail activity closes or replaces only the dialog. It does not erase
 the current search results.
@@ -272,9 +310,9 @@ Cards and the detail dialog are keyboard reachable, and status is never
 communicated by colour alone.
 
 The initial page and explicit submit button work with ordinary HTTP without
-JavaScript. HTMX adds live fragment replacement and pagination. The only custom
-script required is the small dependency rule that disables city without country
-and prevents a partial start/end time pair; the server repeats both checks.
+JavaScript. HTMX adds live fragment replacement and pagination. The small
+custom script manages dependent controls, repeatable schedule rows, modal
+dialog lifecycle, and close actions; the server repeats all validation checks.
 
 ## Frontend boundaries
 
@@ -284,6 +322,6 @@ The frontend:
 - does not call the shared reference service;
 - does not implement activity filtering or schedule calculations;
 - does not maintain a separate category list;
-- does not create bookings, take payments or track availability inventory; and
+- does not create bookings, take payments or track availability inventory;
 - performs catalogue CRUD only through the Student 4 backend; and
 - performs itinerary selection only through the Student 4 backend.

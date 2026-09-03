@@ -304,6 +304,21 @@ services:
     depends_on:
       - student-4-database
       - shared-backend
+      - student-1-backend
+
+  # HTMX frontend. Kept alongside the legacy placeholder until the team
+  # retires the old student-4-service entry.
+  student-4-frontend:
+    build:
+      context: ./student-4/frontend
+      dockerfile: Dockerfile
+    environment:
+      BACKEND_URL: "${STUDENT4_FRONTEND_BACKEND_URL:-http://student-4-backend:8008}"
+      BACKEND_TIMEOUT: "${STUDENT4_FRONTEND_BACKEND_TIMEOUT:-5}"
+    ports:
+      - "8094:8084"
+    depends_on:
+      - student-4-backend
 
   # Internal-only database. The backend reaches it at
   # http://student-4-database:8009 on the Compose network.

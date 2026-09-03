@@ -1,0 +1,14 @@
+{% if error %}<div class="banner banner--error" role="alert"><strong>Itinerary unavailable</strong><p>{{ error }}</p></div>
+{% elif not picker.itineraries %}<div class="empty-state"><p>No trip itineraries are available.</p></div>
+{% else %}<div class="itinerary-list">
+{% for row in picker.itineraries %}
+  <article class="itinerary-row">
+    <div><h4>{{ row.name }}</h4><p>{{ row.start_date.strftime('%-d %b %Y') }} to {{ row.end_date.strftime('%-d %b %Y') }}</p>{% if row.selected %}<p class="pill">Added to this itinerary{% if row.date %} · {{ row.date.strftime('%-d %b %Y') }}{% endif %}{% if row.start_time %} at {{ row.start_time.strftime('%H:%M') }}{% endif %}</p>{% endif %}</div>
+    {% if is_active or row.selected %}<form action="/activity/{{ activity_id }}/itineraries/{{ row.itinerary_id }}" method="post" hx-put="/activity/{{ activity_id }}/itineraries/{{ row.itinerary_id }}" hx-target="#itinerary-picker">
+      <label class="field">Activity date (optional)<input name="date" type="date" min="{{ row.start_date.isoformat() }}" max="{{ row.end_date.isoformat() }}" value="{{ row.date.isoformat() if row.date else '' }}"></label>
+      <label class="field">Local start time (optional)<input name="start_time" type="time" value="{{ row.start_time.strftime('%H:%M') if row.start_time else '' }}"></label>
+      <button class="button button--primary" type="submit">{{ 'Update' if row.selected else 'Add' }}</button>
+    </form>{% else %}<p class="field-hint">This activity must be active before it can be added.</p>{% endif %}
+    {% if row.selected %}<form action="/activity/{{ activity_id }}/itineraries/{{ row.itinerary_id }}/remove" method="post" hx-delete="/activity/{{ activity_id }}/itineraries/{{ row.itinerary_id }}" hx-target="#itinerary-picker"><button class="button button--danger" type="submit">Remove</button></form>{% endif %}
+  </article>
+{% endfor %}</div>{% endif %}

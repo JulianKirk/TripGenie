@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="app-shell">
+  <section class="intro panel">
+    <p class="eyebrow">One catalogue</p>
+    <h2>Find something memorable to do</h2>
+    <p>Activities and attractions share the same search, with prices shown in AUD and times local to each place.</p>
+  </section>
+  <div class="app-layout">
+    <aside class="panel filters-panel" aria-label="Activity filters">
+      {% include "partials/filters.html" %}
+    </aside>
+    <section class="panel results-panel">
+      <div id="activity-results" aria-live="polite">
+        {% include "partials/results.html" %}
+      </div>
+    </section>
+  </div>
+  <div id="activity-dialog"></div>
+</main>
+{% endblock %}
