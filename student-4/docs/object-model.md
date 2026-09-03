@@ -78,9 +78,10 @@ total. Callers that need a total, including the itinerary and budget services,
 apply the formula above.
 
 `price` is represented with Python `Decimal`, limited to two fractional digits,
-and stored in SQLite as canonical text such as `"45.00"`. The database casts
-that value to numeric for range filtering and sorting; application arithmetic
-never uses binary floating point. Public and internal APIs serialize money as
+and stored in SQLite as canonical text such as `"45.00"`. The database compares
+integer-part length and then canonical lexical value for exact range filtering
+and sorting; application arithmetic never uses binary floating point. Public
+and internal APIs serialize money as
 a JSON string so the exact value survives every service boundary. Following the
 repository-wide convention, the base value is in AUD. The backend may use the
 shared reference service's currency and conversion-rate data to show an
@@ -128,6 +129,10 @@ Their stable codes are also declared as an enum in the service's wire schemas.
 There are no category create, update or delete operations in this release. The
 backend can return the ordered rows for the frontend's search dropdown without
 requiring the frontend to duplicate labels or ordering.
+
+The starter dataset defines ten categories and ten activity aggregates. Each
+aggregate owns one location and at least one schedule, and the category links
+provide at least ten rows in every Student 4 table.
 
 ### ActivityCategory
 

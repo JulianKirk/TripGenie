@@ -247,12 +247,40 @@ services:
       start_period: 10s
 
   # Student 4: Activities & Attractions Management
+  # Existing placeholder webpage; retained until the real Student 4 frontend
+  # replaces it.
   student-4-service:
     build:
       context: ./student-4
       dockerfile: Dockerfile
     ports:
       - "8084:8084"
+
+  # Internal-only database. The future backend will reach it at
+  # http://student-4-database:8009 on the Compose network.
+  student-4-database:
+    build:
+      context: ./student-4
+      dockerfile: database/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////data/student-4/activities.db
+      SEED_DATA: "1"
+    expose:
+      - "8009"
+    volumes:
+      - student-4-sqlite:/data/student-4
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8009/internal/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Student 5: Budget & Expense Management
   # Grouping target for the complete Student 5 slice:
@@ -382,4 +410,5 @@ volumes:
   student-1-db:
   student-2-db:
   student-3-sqlite:
+  student-4-sqlite:
   student-5-sqlite:
