@@ -35,7 +35,6 @@ TripGenie/
 │       ├── student-4-ci.yml
 │       ├── student-5-ci.yml
 │       ├── shared-ci.yml
-│       ├── integration-ci.yml
 │       └── cloud-deployment.yml
 ├── README.md
 ├── .gitignore
@@ -129,3 +128,62 @@ This workflow intentionally performs code-only extraction, which is
 deterministic and does not need an API key. Documentation, paper, and image
 changes still require semantic extraction with a supported LLM backend before
 their relationships can be added to the committed graph.
+
+## Release 0 local Docker Compose
+
+Ollama is a **host-managed prerequisite**, not a Compose service. Before
+starting TripGenie, start Ollama on the host and install the model selected by
+`docker-compose.yml`:
+
+```bash
+ollama serve
+ollama pull llama3.1:8b
+curl http://localhost:11434/api/tags
+```
+
+On native Linux, Ollama must listen on an address reachable through Docker's
+host gateway rather than loopback only:
+
+```bash
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+Restrict port `11434` to the local Docker bridge with the host firewall; do not
+expose it to untrusted networks.
+
+If the operating system already manages Ollama as a service, do not start a
+second process; only confirm that `/api/tags` responds and lists the model.
+Then build and start the integrated application:
+
+```bash
+docker compose --env-file shared/configuration/.env.example up --build -d
+```
+
+The shared portal is available at `http://localhost:8080` and links to the
+Student 1 frontend at `http://localhost:8081`. Student 1 backend, database, and
+shared AI-Mode ports remain internal to Compose. The shared `ai-mode` container
+reaches host Ollama through `host.docker.internal:11434`; the Linux
+`host-gateway` mapping is included in Compose.
+
+Trip and itinerary CRUD remains available when Ollama is stopped or its model
+is absent. AI suggestion requests report the dependency failure separately.
+
+Useful status and log commands:
+
+```bash
+docker compose --env-file shared/configuration/.env.example ps
+docker compose --env-file shared/configuration/.env.example logs -f student-1-frontend student-1-backend student-1-database ai-mode
+curl http://localhost:8081/health
+curl http://localhost:8081/ready
+```
+
+Reset Compose containers and persisted application volumes with:
+
+```bash
+docker compose --env-file shared/configuration/.env.example down -v --remove-orphans
+```
+
+This does not remove Ollama or models installed on the host. If AI-Mode cannot
+reach Ollama, verify the host binding and firewall access to port `11434`. On
+native Linux, confirm that the service is not listening on loopback only.
+Compose never installs Ollama or downloads models.
