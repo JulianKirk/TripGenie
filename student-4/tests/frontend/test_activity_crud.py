@@ -159,6 +159,18 @@ def test_create_posts_complete_payload_and_redirects(backend: FakeBackend) -> No
     assert json.loads(request.content)["categories"] == ["ADVENTURE", "OUTDOOR"]
 
 
+def test_htmx_create_refreshes_catalogue_after_success(backend: FakeBackend) -> None:
+    response = frontend(backend).post(
+        "/manage/activity",
+        data=form_post_data(complete_form()),
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 204
+    assert response.headers["HX-Refresh"] == "true"
+    assert "HX-Redirect" not in response.headers
+
+
 def test_invalid_create_replays_values_in_htmx_form(backend: FakeBackend) -> None:
     form = complete_form(price="10.123")
 
@@ -185,6 +197,18 @@ def test_edit_uses_complete_put_and_redirects(backend: FakeBackend) -> None:
     request = next(item for item in backend.requests if item.method == "PUT")
     assert json.loads(request.content)["name"] == "Updated Harbour Kayak"
     assert response.status_code == 303
+
+
+def test_htmx_edit_refreshes_catalogue_after_success(backend: FakeBackend) -> None:
+    response = frontend(backend).post(
+        f"/manage/activity/{ACTIVITY_ID}",
+        data=form_post_data(complete_form(name="Updated Harbour Kayak")),
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 204
+    assert response.headers["HX-Refresh"] == "true"
+    assert "HX-Redirect" not in response.headers
 
 
 def test_delete_requires_confirmation_then_calls_backend(backend: FakeBackend) -> None:

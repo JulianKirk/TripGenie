@@ -128,7 +128,7 @@ async def _form_response(
     if request.headers.get("HX-Request", "").lower() == "true":
         return Response(
             status_code=204,
-            headers={"HX-Redirect": f"/#activity-{activity.id}"},
+            headers={"HX-Refresh": "true"},
         )
     return _redirect(activity.id)
 
