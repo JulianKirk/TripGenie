@@ -134,6 +134,10 @@ def test_health_readiness_and_budget_list() -> None:
 
     assert "Budget &amp; Expense Management" in page.text
     assert 'href="http://localhost:8080/theme.css"' in page.text
+    assert (
+        '<a class="site-header__home" href="http://localhost:8080">Home</a>'
+        in page.text
+    )
     assert "Sydney Long Weekend" in page.text
     assert "Sydney &middot; 2026-10-02 to 2026-10-05" in page.text
     assert "AUD 2000.00" in page.text

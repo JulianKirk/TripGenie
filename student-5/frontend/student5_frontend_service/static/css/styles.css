@@ -7,10 +7,13 @@
 body { margin: 0; color: var(--ink); background: var(--canvas); font-family: var(--tg-font-body); line-height: 1.5; }
 a { color: var(--accent-dark); }
 .site-header { padding: 1.4rem 1rem; color: white; background: #172d2a; border-bottom: 4px solid #e0b84f; }
-.site-header__inner { max-width: 1180px; margin: auto; }
+.site-header__inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; max-width: 1180px; margin: auto; }
 .site-header h1 { margin: .15rem 0; font-size: 1.7rem; letter-spacing: 0; }
 .site-header h1 a { color: white; text-decoration: none; }
 .site-header p { margin: 0; color: #d6e0dd; }
+.site-header__home { padding: .5rem .85rem; color: #172d2a; background: white; border: 2px solid white; border-radius: 6px; font-family: var(--tg-font-ui); font-weight: 700; text-decoration: none; }
+.site-header__home:hover { background: #e0b84f; border-color: #e0b84f; }
+.site-header__home:focus-visible { outline: 3px solid #e0b84f; outline-offset: 3px; }
 .eyebrow { margin: 0; color: var(--muted); font-family: var(--tg-font-ui); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .site-header .eyebrow { color: #a9c6bd; }
 .loading { display: none; padding: .5rem 1rem; background: var(--warning); text-align: center; font-family: var(--tg-font-ui); }
