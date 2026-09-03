@@ -71,6 +71,40 @@ def _plan_schema() -> dict[str, Any]:
     return schema
 
 
+async def _generate_plan_draft(
+    prompt: str,
+    *,
+    ai: AiModeClient,
+    settings: Settings,
+) -> ActivitySearchPlanDraft:
+    last_error: ValueError | ValidationError | None = None
+    for output_attempt in (1, 2):
+        attempt_prompt = prompt
+        if output_attempt == 2:
+            attempt_prompt += (
+                "\nYour previous answer could not be used. Start again and return "
+                "only JSON matching the supplied schema."
+            )
+        generated = await ai.generate(
+            prompt=attempt_prompt,
+            schema=_plan_schema(),
+            correlation_id=f"student4-plan-{uuid4().hex[:16]}",
+            metadata={
+                "service": settings.service_name,
+                "feature": "activity-search-plan",
+                "output_attempt": str(output_attempt),
+            },
+        )
+        try:
+            return ActivitySearchPlanDraft.model_validate_json(generated.response)
+        except (ValueError, ValidationError) as exc:
+            last_error = exc
+    raise HTTPException(
+        status.HTTP_502_BAD_GATEWAY,
+        "The AI returned an unusable activity search.",
+    ) from last_error
+
+
 async def plan_search(
     payload: RecommendationPlanRequest,
     *,
@@ -100,19 +134,7 @@ async def plan_search(
             status.HTTP_400_BAD_REQUEST,
             "There is too much context for one AI request.",
         )
-    generated = await ai.generate(
-        prompt=prompt,
-        schema=_plan_schema(),
-        correlation_id=f"student4-plan-{uuid4().hex[:16]}",
-        metadata={"service": settings.service_name, "feature": "activity-search-plan"},
-    )
-    try:
-        draft = ActivitySearchPlanDraft.model_validate_json(generated.response)
-    except (ValueError, ValidationError) as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "The AI returned an unusable activity search.",
-        ) from exc
+    draft = await _generate_plan_draft(prompt, ai=ai, settings=settings)
 
     query_body = draft.query.model_dump(mode="json", exclude_none=True)
     query_body.update(
@@ -184,6 +206,7 @@ def _evaluation_schema() -> dict[str, Any]:
     query = schema["$defs"]["ActivityQuery"]["properties"]
     for field in ("sort", "include_inactive", "limit", "offset"):
         query.pop(field, None)
+    schema["$defs"]["LocationFilter"]["properties"].pop("street", None)
     return schema
 
 
@@ -201,8 +224,15 @@ async def _reject_weakened_trip_constraints(
         if query.location is not None
         else None
     )
-    location_changed = destination is not None and supplied_location != destination
-    party_changed = query.party_size != trip.traveller_count
+    location_changed = (
+        destination is not None
+        and "location" in query.model_fields_set
+        and supplied_location != destination
+    )
+    party_changed = (
+        "party_size" in query.model_fields_set
+        and query.party_size != trip.traveller_count
+    )
     if location_changed or party_changed:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,

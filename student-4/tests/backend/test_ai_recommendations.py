@@ -12,6 +12,7 @@ from student4_backend_service.ai_mode_client import AiModeClient
 from student4_backend_service.config import Settings
 from student4_backend_service.schemas import (
     ActivityEvaluationDraft,
+    RecommendationEvaluationResponse,
     RecommendationPlanRequest,
 )
 
@@ -75,6 +76,28 @@ def test_ai_request_and_evaluation_draft_are_strict() -> None:
                 "revision_explanation": "Allow a longer activity.",
             }
         )
+
+    response = {
+        "status": "retry",
+        "attempt": 2,
+        "query": {},
+        "summary": "broader activities",
+        "matched_count": 0,
+        "evaluated_count": 0,
+        "recommended": [],
+        "overview": "The first search was too narrow.",
+        "considerations": [],
+        "disclaimer": "Review the revised search.",
+        "run_id": "run-1",
+        "model": "model-1",
+        "provider": "provider-1",
+    }
+    with pytest.raises(ValidationError, match="retry responses require"):
+        RecommendationEvaluationResponse.model_validate(response)
+
+    response.update(status="complete", attempt=1)
+    with pytest.raises(ValidationError, match="complete responses require"):
+        RecommendationEvaluationResponse.model_validate(response)
 
 
 def test_ai_client_returns_generated_json_with_provenance() -> None:
@@ -172,8 +195,49 @@ def test_plan_endpoint_applies_selected_trip_constraints() -> None:
     )
     assert "Sydney Getaway" in ai_requests[0]["prompt"]
     assert "2027-04-01" in ai_requests[0]["prompt"]
+    assert "multi-day trip range alone" in ai_requests[0]["prompt"]
     query_schema = ai_requests[0]["schema"]["$defs"]["ActivityQuery"]["properties"]
     assert "sort" not in query_schema
+
+
+def test_plan_retries_once_after_an_unusable_ai_answer() -> None:
+    from student4_backend_service.app import create_app
+
+    requests: list[dict[str, Any]] = []
+
+    def ai(request: httpx.Request) -> httpx.Response:
+        body = cast("dict[str, Any]", json.loads(request.content))
+        requests.append(body)
+        response = (
+            {"not": "a search plan"}
+            if len(requests) == 1
+            else {
+                "query": {"duration_minutes": {"max": 120}},
+                "summary": "short activities",
+            }
+        )
+        return httpx.Response(200, json=_ai_response(response))
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(FakeDatabase().handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(FakeItinerary().handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/activity/recommendations/plan",
+            json={"question": "Something short"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["query"]["duration_minutes"] == {"max": 120}
+    assert [request["metadata"]["output_attempt"] for request in requests] == [
+        "1",
+        "2",
+    ]
+    assert "previous answer could not be used" in requests[1]["prompt"]
 
 
 def test_trip_directory_supports_the_optional_ai_context_picker() -> None:
@@ -198,8 +262,10 @@ def test_evaluation_searches_real_rows_and_grounds_recommendations() -> None:
     from student4_backend_service.app import create_app
 
     database = FakeDatabase()
+    ai_requests: list[dict[str, Any]] = []
 
-    def ai(_request: httpx.Request) -> httpx.Response:
+    def ai(request: httpx.Request) -> httpx.Response:
+        ai_requests.append(cast("dict[str, Any]", json.loads(request.content)))
         return httpx.Response(
             200,
             json=_ai_response(
@@ -248,12 +314,17 @@ def test_evaluation_searches_real_rows_and_grounds_recommendations() -> None:
     assert result["recommended"][0]["activity"]["name"] == "Harbour Kayak"
     assert result["recommended"][0]["reason"].startswith("It is a two-hour")
     assert {method for method, _, _ in database.calls} == {"QUERY", "GET"}
+    location_schema = ai_requests[0]["schema"]["$defs"]["LocationFilter"]["properties"]
+    assert "street" not in location_schema
 
 
 def test_first_evaluation_can_return_one_revised_search() -> None:
     from student4_backend_service.app import create_app
 
-    def ai(_request: httpx.Request) -> httpx.Response:
+    prompts: list[str] = []
+
+    def ai(request: httpx.Request) -> httpx.Response:
+        prompts.append(cast("dict[str, Any]", json.loads(request.content))["prompt"])
         return httpx.Response(
             200,
             json=_ai_response(
@@ -295,6 +366,9 @@ def test_first_evaluation_can_return_one_revised_search() -> None:
     assert response.json()["revision_explanation"] == (
         "Allow activities up to three hours."
     )
+    assert "zero candidates, you must propose a revised search" in prompts[0]
+    assert "Put suitable matches in the `suggestions` array" in prompts[0]
+    assert "suggestions` array must not be empty" in prompts[0]
 
 
 def test_trip_retry_cannot_weaken_destination_or_party_size() -> None:
@@ -344,6 +418,58 @@ def test_trip_retry_cannot_weaken_destination_or_party_size() -> None:
 
     assert response.status_code == 502
     assert response.json()["detail"] == "The revised search weakened trip constraints."
+
+
+def test_trip_retry_can_omit_server_owned_trip_constraints() -> None:
+    from student4_backend_service.app import create_app
+
+    def ai(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_ai_response(
+                {
+                    "overview": "Try a longer activity.",
+                    "suggestions": [],
+                    "considerations": [],
+                    "disclaimer": "Review the revised search.",
+                    "revised_query": {"duration_minutes": {"max": 180}},
+                    "revised_summary": "activities lasting up to three hours",
+                    "revision_explanation": "Allow activities up to three hours.",
+                }
+            ),
+        )
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(FakeDatabase().handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(FakeItinerary().handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/activity/recommendations/evaluate",
+            json={
+                "question": "Something relaxed",
+                "trip_id": SYDNEY,
+                "query": {
+                    "location": {"country": "australia", "city": "sydney"},
+                    "party_size": 2,
+                    "duration_minutes": {"max": 60},
+                },
+                "summary": "short Sydney activities",
+                "attempt": 1,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "retry"
+    assert response.json()["query"]["location"] == {
+        "country": "australia",
+        "city": "sydney",
+    }
+    assert response.json()["query"]["party_size"] == 2
+    assert response.json()["query"]["duration_minutes"] == {"max": 180}
 
 
 def test_inactive_hydrated_candidates_do_not_reach_ai() -> None:

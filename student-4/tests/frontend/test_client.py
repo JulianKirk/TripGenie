@@ -332,3 +332,41 @@ def test_non_json_backend_error_does_not_leak_body(
         run(backend_client.activity(UUID(ACTIVITY_ID)))
 
     assert "secret proxy dump" not in raised.value.detail
+
+
+def test_inconsistent_ai_status_payload_is_rejected(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    backend.overrides[("POST", "/activity/recommendations/evaluate")] = httpx.Response(
+        200,
+        json={
+            "status": "retry",
+            "attempt": 2,
+            "query": {},
+            "summary": "broader activities",
+            "matched_count": 0,
+            "evaluated_count": 0,
+            "recommended": [],
+            "overview": "The first search was too narrow.",
+            "considerations": [],
+            "disclaimer": "Review the revised search.",
+            "run_id": "run-1",
+            "model": "model-1",
+            "provider": "provider-1",
+        },
+    )
+
+    with pytest.raises(FrontendError) as raised:
+        run(
+            backend_client.evaluate_recommendations(
+                {
+                    "question": "Outdoor ideas",
+                    "query": {},
+                    "summary": "outdoor activities",
+                    "attempt": 1,
+                }
+            )
+        )
+
+    assert raised.value.kind == "malformed_upstream"

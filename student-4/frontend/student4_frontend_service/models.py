@@ -399,3 +399,20 @@ class RecommendationEvaluation(StrictModel):
     run_id: str
     model: str
     provider: str
+
+    @model_validator(mode="after")
+    def consistent_status(self) -> Self:
+        if self.status == "complete" and not self.recommended:
+            message = "complete responses require at least one recommendation"
+            raise ValueError(message)
+        if self.status == "retry" and (
+            self.recommended or self.revision_explanation is None or self.attempt != 2
+        ):
+            message = "retry responses require attempt two and a revision explanation"
+            raise ValueError(message)
+        if self.status == "no_match" and (
+            self.recommended or self.revision_explanation is not None
+        ):
+            message = "no-match responses cannot contain recommendations or a revision"
+            raise ValueError(message)
+        return self
