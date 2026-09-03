@@ -30,12 +30,16 @@ but its public API accepts and returns their names. The backend performs that
 translation over HTTP, following the existing accommodation-service convention.
 
 The backend and database service declare independent wire schemas so they remain
-independently deployable. A database response that does not satisfy the public
-contract is a `502`; end-to-end contract tests must detect schema drift.
+independently deployable. Their boundary is specified by the
+[database service API](./database-service-api.md). A database response that does
+not satisfy the backend's independently declared internal-client schema is a
+`502`; end-to-end contract tests must detect schema drift.
 
-All prices in this API are non-negative numeric AUD values. Dates and times are
-local to the activity's location and do not carry a timezone. Public catalogue
-operations return active activities only.
+All prices in this API are exact AUD decimal strings with two fractional digits,
+such as `"45.00"`. `pricing_basis` says whether that value is per person or the
+one flat admission charge for the party. Dates and times are local to the
+activity's location and do not carry a timezone. Public catalogue operations
+return active activities only.
 
 ### Configuration
 
@@ -89,7 +93,8 @@ List and search operations return compact summaries:
 | `id` | UUID | Activity identifier. |
 | `name` | string | Display name. |
 | `description` | string | Activity description. |
-| `price` | float | Numeric price in AUD. |
+| `price` | decimal string | Exact listed price in AUD, such as `"45.00"`. |
+| `pricing_basis` | string | `PER_PERSON` or `FLAT_ADMISSION`. |
 | `duration_minutes` | integer | Expected duration. |
 | `minimum_age` | integer \| omitted | Inclusive minimum age when known. |
 | `maximum_age` | integer \| omitted | Inclusive maximum age when known. |
@@ -113,7 +118,6 @@ Each availability schedule contains:
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | UUID | Schedule identifier. |
 | `recurring_weekly` | boolean | Weekly rule when true; one-off date when false. |
 | `day_of_week` | string \| omitted | `MONDAY` through `SUNDAY`; weekly rows only. |
 | `date` | date \| omitted | ISO `YYYY-MM-DD`; one-off rows only. |
@@ -200,7 +204,8 @@ curl "http://localhost:8008/activity/5ee3fe1f-62e8-4b1a-bfca-f283781c24fd"
   "id": "5ee3fe1f-62e8-4b1a-bfca-f283781c24fd",
   "name": "Sydney Harbour guided walk",
   "description": "A guided walk around the harbour foreshore.",
-  "price": 45.0,
+  "price": "45.00",
+  "pricing_basis": "PER_PERSON",
   "duration_minutes": 120,
   "minimum_age": 8,
   "minimum_participants": 1,
@@ -219,7 +224,6 @@ curl "http://localhost:8008/activity/5ee3fe1f-62e8-4b1a-bfca-f283781c24fd"
   "categories": ["OUTDOOR", "TOUR"],
   "availability_schedules": [
     {
-      "id": "80b4431a-fee9-48c8-953a-b256e4df43cd",
       "recurring_weekly": true,
       "day_of_week": "SATURDAY",
       "start_time": "09:00",
@@ -257,7 +261,8 @@ curl "http://localhost:8008/activity?limit=10&offset=0"
       "id": "5ee3fe1f-62e8-4b1a-bfca-f283781c24fd",
       "name": "Sydney Harbour guided walk",
       "description": "A guided walk around the harbour foreshore.",
-      "price": 45.0,
+      "price": "45.00",
+      "pricing_basis": "PER_PERSON",
       "duration_minutes": 120,
       "minimum_age": 8,
       "minimum_participants": 1,
@@ -300,7 +305,7 @@ curl -X QUERY "http://localhost:8008/activity" \
     "text": "harbour",
     "location": {"country": "australia", "city": "sydney"},
     "categories": {"codes": ["OUTDOOR", "TOUR"], "match": "ALL"},
-    "price": {"max": 100},
+    "price": {"max": "100.00"},
     "duration_minutes": {"min": 60, "max": 180},
     "party_size": 4,
     "youngest_age": 12,
@@ -326,7 +331,7 @@ All fields are optional. An empty body has the same filtering semantics as
 | `text` | string | Case-insensitive substring across name and description. |
 | `location` | object | Country/city names and optional street substring. |
 | `categories` | object | Category codes and `ANY`/`ALL` matching. |
-| `price` | range | Inclusive AUD `min` and/or `max`. |
+| `price` | decimal range | Inclusive listed-price `min` and/or `max` in canonical AUD decimal strings. |
 | `duration_minutes` | range | Inclusive integer `min` and/or `max`. |
 | `party_size` | integer | Match activities whose participant bounds include this value. |
 | `youngest_age` | integer | Match activities whose minimum-age rule permits this age. |
@@ -378,8 +383,22 @@ activities produces an empty page.
 
 ### Numeric and suitability filters
 
-Ranges use inclusive `min` and `max` values. Price values are AUD. Bounds must
-be non-negative and `min` cannot exceed `max`.
+Ranges use inclusive `min` and `max` values. Price bounds are exact AUD decimal
+strings with two fractional digits. They compare the listed base price rather
+than a party total. Bounds must be non-negative and `min` cannot exceed `max`.
+
+Consumers calculate an estimated party total from the returned price and the
+requested party size:
+
+```text
+PER_PERSON:     price * party_size
+FLAT_ADMISSION: price
+```
+
+Providers use `PER_PERSON` whenever they publish a per-person price;
+`FLAT_ADMISSION` is reserved for an activity offered solely for one flat charge
+covering the admitted party. All arithmetic uses decimal values rather than
+binary floating point.
 
 `party_size` matches when:
 
@@ -469,4 +488,3 @@ The response has the same shape as `GET /activity`:
 | `400` | Invalid field, enum, range, location pairing or time window. |
 | `502` | Invalid response from the database or shared service. |
 | `503` | Required upstream service unavailable. |
-

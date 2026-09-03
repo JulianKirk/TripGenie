@@ -144,8 +144,16 @@ search. The control is disabled when no category is selected.
 ### Price, duration and party suitability
 
 Prices are clearly labelled `AUD`; the frontend does not guess a currency from
-the activity's location. Numeric inputs use suitable minimums and steps, but
-the backend remains authoritative for validation.
+the activity's location. Money arrives from the backend as an exact two-decimal
+string and remains a decimal string when the frontend builds price filters.
+Numeric inputs use a `0.01` step and the frontend canonicalizes non-empty values
+to two fractional digits, but the backend remains authoritative for validation.
+
+Every displayed price also says `per person` or `flat admission` from the
+activity's `pricing_basis`. When a party size is present, the card may show an
+estimated party total: `price * party_size` for `PER_PERSON`, or the unchanged
+price for `FLAT_ADMISSION`. That calculation uses decimal arithmetic and is
+display-only; the backend remains the source of catalogue data.
 
 `party_size` asks whether the activity supports the whole group. Youngest and
 oldest ages describe the actual travelling party rather than exposing users to
@@ -177,7 +185,7 @@ Each result card displays:
 
 - activity name and description;
 - country and city when resolvable;
-- price in AUD and duration;
+- exact price in AUD, its per-person or flat-admission basis, and duration;
 - category labels resolved from the already-loaded category list;
 - participant and age restrictions when present;
 - external-booking indicator; and

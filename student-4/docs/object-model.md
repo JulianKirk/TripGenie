@@ -35,7 +35,8 @@ The stable catalogue entry displayed and selected by users.
 | `name` | string | Yes | Human-readable activity name. |
 | `description` | string | Yes | Full description used by detail views and text search. |
 | `location_details` | LocationDetails | Yes | Composed location containing shared country/city references and locally owned address details. |
-| `price` | float/double | Yes | Non-negative price in AUD. Stored as a directly filterable numeric SQL column, not JSON. |
+| `price` | decimal | Yes | Non-negative price in AUD with exactly two decimal places. Stored as canonical decimal text in SQLite and serialized as a JSON string. |
+| `pricing_basis` | PricingBasis | Yes | `PER_PERSON` when the published price is available per traveller; otherwise `FLAT_ADMISSION` for the one flat charge covering the admitted party. |
 | `duration_minutes` | integer | Yes | Positive expected duration. Also determines the valid starting range inside a schedule. |
 | `minimum_age` | integer \| null | No | Inclusive minimum participant age; `null` means no known minimum. |
 | `maximum_age` | integer \| null | No | Inclusive maximum participant age; `null` means no known maximum. |
@@ -61,12 +62,30 @@ Age and participant bounds follow these invariants:
 - `maximum_participants`, when present, cannot be less than
   `minimum_participants`.
 
-`price` is stored as a normal SQL floating-point column (`REAL` in SQLite), so
-the database can apply indexed numeric equality and minimum/maximum filters
-directly. It is not stored in a JSON column. Following the repository-wide
-convention, this base value is in AUD. The backend may use the shared reference
-service's currency and conversion-rate data to show an approximate local value,
-but filtering and exchanges with the budget service use the stored AUD value.
+`PricingBasis` has the values `PER_PERSON` and `FLAT_ADMISSION`. A per-person
+price must be used whenever the provider publishes one. `FLAT_ADMISSION` is
+used only when the provider offers the activity solely for one flat charge
+covering the admitted party. For a requested `party_size`, the estimated cost
+in AUD is:
+
+```text
+PER_PERSON:     price * party_size
+FLAT_ADMISSION: price
+```
+
+Price filters always compare the listed `price`, not the calculated party
+total. Callers that need a total, including the itinerary and budget services,
+apply the formula above.
+
+`price` is represented with Python `Decimal`, limited to two fractional digits,
+and stored in SQLite as canonical text such as `"45.00"`. The database casts
+that value to numeric for range filtering and sorting; application arithmetic
+never uses binary floating point. Public and internal APIs serialize money as
+a JSON string so the exact value survives every service boundary. Following the
+repository-wide convention, the base value is in AUD. The backend may use the
+shared reference service's currency and conversion-rate data to show an
+approximate local value, but filtering and exchanges with the budget service
+use the stored AUD value.
 
 ### LocationDetails
 
@@ -206,7 +225,8 @@ service. Student 4 stores only the shared country and city UUIDs alongside its
 own address details. This is a cross-service reference rather than a database
 relationship: neither service reads or joins the other's SQLite database.
 
-The database layer will use SQLAlchemy models. Cross-field and cross-table
+The database layer will use SQLAlchemy models and the internal contract in the
+[database service API](./database-service-api.md). Cross-field and cross-table
 rules that SQLite cannot express cleanly as `CHECK` constraints—particularly
 comparing a schedule interval with its parent activity's duration—are enforced
 by the database service before a transaction is committed.
@@ -220,7 +240,7 @@ between the internal database response and the backend's public representation.
 
 ```mermaid
 erDiagram
-    ACTIVITY ||--|{ ACTIVITY_AVAILABILITY_SCHEDULE : "has availability"
+    ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "has availability"
     ACTIVITY ||--|{ ACTIVITY_CATEGORY : "classified by"
     ACTIVITY ||--|| LOCATION_DETAILS : "takes place at"
     CATEGORY ||--o{ ACTIVITY_CATEGORY : "classifies"
@@ -229,7 +249,8 @@ erDiagram
         UUID id PK
         string name
         string description
-        float price
+        decimal price
+        string pricing_basis
         int duration_minutes
         int minimum_age "nullable"
         int maximum_age "nullable"
