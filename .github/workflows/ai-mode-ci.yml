@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - 'ai-services/ai-mode/**'
-      - 'student-1/**'
       - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
       - 'shared/configuration/**'
@@ -12,7 +11,6 @@ on:
   pull_request:
     paths:
       - 'ai-services/ai-mode/**'
-      - 'student-1/**'
       - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
       - 'shared/configuration/**'
