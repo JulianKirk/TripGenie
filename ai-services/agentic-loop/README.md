@@ -20,9 +20,10 @@ can also span services), `method`, `status` (default 200), `form`/`json` body,
 `contains` (substrings the body must have), `nfr_ms` (latency budget, 95% of 20
 samples must be under it), `timeout`.
 
-Students 4 and 5 have no backend yet -- their images serve a static directory,
-so their files check only that the container answers. Replace those with real
-endpoint checks when the backends land.
+Student 4's loop starts its database, backend, and frontend with `--no-deps`.
+Its shared-location, itinerary, and AI integrations are optional for the
+read-only checks, so `/health` is expected to be degraded while `/ready` proves
+the owned database path is available.
 
 ## Run it
 
@@ -33,8 +34,8 @@ docker compose -f ../../docker-compose.yml -f docker-compose.agentic.yml \
 SERVICE_URL=http://127.0.0.1:8001 CHECKS_FILE=checks/student-1.json python agentic_loop.py
 ```
 
-The overlay publishes student 3's backend, which is internal-only in the main
-compose file; every other service already publishes its port.
+The overlay publishes the internal-only Student 3, Student 4, and Student 5
+backends while the loop runs. They remain private in the main Compose file.
 
 `--ci` skips the human-review prompt.
 
@@ -51,9 +52,10 @@ the run still passes or fails on the checks, so CI works either way (add
 
 `.github/workflows/agentic-ci.yml` runs on push and pull request as three jobs:
 
-- **Loop unit tests** -- `pytest` on the loop itself. Always runs, needs no
-  docker, and is the reason a change to `agentic_loop.py` still gets tested when
-  every service below is skipped.
+- **Loop unit tests** -- `pytest` on the loop itself. Always runs, starts no
+  containers, and is the reason a change to `agentic_loop.py` still gets tested
+  when every service below is skipped. One registry-contract test uses
+  `docker compose config`, which is available on the GitHub runner.
 - **Pick services** -- the gate. For each service it polls that service's own
   build-and-validate workflow for this commit and decides whether the loop runs.
 - **One job per chosen service** -- the loop.
