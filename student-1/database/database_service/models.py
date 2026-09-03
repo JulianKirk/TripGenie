@@ -36,6 +36,12 @@ AccommodationIdentifier = Annotated[
     str,
     StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
 ]
+# Activity ids are minted by Student 4. Keep the same cross-service boundary as
+# accommodation ids: Student 1 stores an opaque, bounded identifier.
+ActivityIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -248,6 +254,42 @@ class TripAccommodationCreate(StrictModel):
         if self.check_out is not None and self.check_out < self.date:
             raise ValueError("check_out must be on or after date")
         return self
+
+
+class TripActivityRecord(StrictModel):
+    """One Student 4 activity selected for one Student 1 trip."""
+
+    trip_id: TripIdentifier
+    activity_id: ActivityIdentifier
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+class TripActivityCreate(StrictModel):
+    """Resolved activity selection sent by the Student 1 backend."""
+
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
 
 
 class TripRecord(TripFields):

@@ -20,6 +20,7 @@ from .models import (
     ItineraryItemRecord,
     ItineraryItemUpdate,
     TripAccommodationRecord,
+    TripActivityRecord,
     TripCreate,
     TripRecord,
     TripStatus,
@@ -57,6 +58,13 @@ TRIP_ACCOMMODATION_FIELDS = (
     "check_in_time",
     "check_out",
     "check_out_time",
+)
+
+TRIP_ACTIVITY_FIELDS = (
+    "trip_id",
+    "activity_id",
+    "date",
+    "start_time",
 )
 
 SEED_MARKER_KEY = "student1_demo_seed_v1"
@@ -115,6 +123,15 @@ CREATE TABLE IF NOT EXISTS trip_accommodations (
 )
 """,
     """
+CREATE TABLE IF NOT EXISTS trip_activities (
+    trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    activity_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    start_time TEXT,
+    PRIMARY KEY (trip_id, activity_id)
+)
+""",
+    """
 CREATE TABLE IF NOT EXISTS schema_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -139,6 +156,10 @@ CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_category_date
     """
 CREATE INDEX IF NOT EXISTS idx_trip_accommodations_accommodation
     ON trip_accommodations (accommodation_id)
+""",
+    """
+CREATE INDEX IF NOT EXISTS idx_trip_activities_activity
+    ON trip_activities (activity_id)
 """,
 )
 
@@ -344,6 +365,7 @@ class DatabaseService:
                 merged = existing | updates
                 self._validate_trip_record(merged)
                 self._ensure_trip_window_covers_items(connection, merged)
+                self._ensure_trip_window_covers_activities(connection, merged)
                 self._normalise_empty_payload(merged)
                 connection.execute(UPDATE_TRIP_SQL, merged)
 
@@ -552,6 +574,91 @@ class DatabaseService:
 
         return [self._serialise_trip(row) for row in rows]
 
+    def list_trip_activities(self, trip_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            self._get_trip_row(connection, trip_id)
+            rows = connection.execute(
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                "FROM trip_activities WHERE trip_id = ? "
+                "ORDER BY date ASC, activity_id ASC",
+                (trip_id,),
+            ).fetchall()
+
+        return [self._serialise_trip_activity(row) for row in rows]
+
+    def add_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+        date: str,
+        start_time: str | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                trip = self._get_trip_row(connection, trip_id)
+                if date < trip["start_date"] or date > trip["end_date"]:
+                    raise validation_error(
+                        "One or more fields failed validation.",
+                        [
+                            {
+                                "field": "date",
+                                "issue": (
+                                    f"must fall between {trip['start_date']} "
+                                    f"and {trip['end_date']}"
+                                ),
+                            }
+                        ],
+                    )
+                connection.execute(
+                    "INSERT INTO trip_activities "
+                    "(trip_id, activity_id, date, start_time) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (trip_id, activity_id) DO UPDATE SET "
+                    "date = excluded.date, start_time = excluded.start_time",
+                    (trip_id, activity_id, date, start_time),
+                )
+
+            row = connection.execute(
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                "FROM trip_activities WHERE trip_id = ? AND activity_id = ?",
+                (trip_id, activity_id),
+            ).fetchone()
+
+        return self._serialise_trip_activity(row)
+
+    def remove_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                self._get_trip_row(connection, trip_id)
+                cursor = connection.execute(
+                    "DELETE FROM trip_activities WHERE trip_id = ? AND activity_id = ?",
+                    (trip_id, activity_id),
+                )
+                if cursor.rowcount == 0:
+                    raise not_found("Trip activity", activity_id)
+
+        return {"id": activity_id, "deleted": True}
+
+    def list_trips_for_activity(
+        self,
+        activity_id: str,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                "FROM trips JOIN trip_activities "
+                "ON trip_activities.trip_id = trips.id "
+                "WHERE trip_activities.activity_id = ? "
+                "ORDER BY trips.start_date ASC, trips.name COLLATE NOCASE ASC, "
+                "trips.id ASC",
+                (activity_id,),
+            ).fetchall()
+
+        return [self._serialise_trip(row) for row in rows]
+
     def _get_trip_row(
         self,
         connection: sqlite3.Connection,
@@ -721,6 +828,38 @@ class DatabaseService:
             ],
         )
 
+    def _ensure_trip_window_covers_activities(
+        self,
+        connection: sqlite3.Connection,
+        record: dict[str, object],
+    ) -> None:
+        conflicting_rows = connection.execute(
+            """
+            SELECT activity_id, date
+            FROM trip_activities
+            WHERE trip_id = ?
+              AND (date < ? OR date > ?)
+            ORDER BY date ASC, activity_id ASC
+            LIMIT 3
+            """,
+            (record["id"], record["start_date"], record["end_date"]),
+        ).fetchall()
+        if not conflicting_rows:
+            return
+
+        sample_dates = ", ".join(row["date"] for row in conflicting_rows)
+        raise validation_error(
+            "One or more fields failed validation.",
+            [
+                {
+                    "field": "start_date",
+                    "issue": (
+                        f"cannot exclude existing activity dates ({sample_dates})"
+                    ),
+                },
+            ],
+        )
+
     def _validate_item_record(
         self,
         record: dict[str, object],
@@ -796,3 +935,7 @@ class DatabaseService:
     @staticmethod
     def _serialise_trip_accommodation(row: sqlite3.Row) -> dict[str, object]:
         return TripAccommodationRecord.model_validate(dict(row)).model_dump(mode="json")
+
+    @staticmethod
+    def _serialise_trip_activity(row: sqlite3.Row) -> dict[str, object]:
+        return TripActivityRecord.model_validate(dict(row)).model_dump(mode="json")

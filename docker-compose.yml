@@ -61,6 +61,7 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
+      STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
     ports:
       - "8001:8001"
     depends_on:
@@ -274,7 +275,23 @@ services:
     ports:
       - "8084:8084"
 
-  # Internal-only database. The future backend will reach it at
+  # Public activity API. It is the only caller of the Student 4 database
+  # service and proxies itinerary choices to Student 1.
+  student-4-backend:
+    build:
+      context: ./student-4
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: http://student-4-database:8009
+      LOCATION_URL: http://shared-backend:9100
+      ITINERARY_URL: http://student-1-backend:8001
+    ports:
+      - "8008:8008"
+    depends_on:
+      - student-4-database
+      - shared-backend
+
+  # Internal-only database. The backend reaches it at
   # http://student-4-database:8009 on the Compose network.
   student-4-database:
     build:

@@ -28,7 +28,9 @@ jobs:
           cache: pip
           cache-dependency-path: student-4/pyproject.toml
       - name: Install database and development dependencies
-        run: python -m pip install -e "./student-4[dev]"
+        run: |
+          python -m pip install -e "./student-4[dev]"
+          python -m pip install -e "./student-4/backend"
       - name: Validate the installed package
         run: python -c "import student4_database_service"
       - name: Lint and check formatting
@@ -41,7 +43,13 @@ jobs:
             student-4/database/student4_database_service \
             student-4/tests/database
       - name: Run database tests
-        run: pytest student-4/tests/database -q
+        run: pytest student-4/tests -q
+      - name: Build backend image
+        run: |
+          docker build \
+            -f student-4/backend/Dockerfile \
+            -t student-4-backend \
+            student-4
       - name: Build database image
         run: |
           docker build \
