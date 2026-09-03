@@ -1,0 +1,15 @@
+{#
+  A write landed. The main swap target is the form's <dialog>, so this body
+  being nothing but out-of-band pieces is what removes it -- the same trick
+  stay_done.html uses.
+
+  #modal is cleared too: an edit or a delete was launched from the details
+  dialog, and after either one what it is showing is stale or gone. Clearing it
+  when there is nothing there is a no-op, so the create path needs no branch.
+
+  The results list is not here. It comes back through the filter form, which
+  the HX-Trigger header on this response fires -- so the refreshed list is the
+  one matching the filters on screen, which this fragment cannot know.
+#}
+<div id="modal" hx-swap-oob="true"></div>
+<p id="page-toast" class="toast" role="status" hx-swap-oob="true">{{ message }}</p>

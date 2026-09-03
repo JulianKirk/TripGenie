@@ -1,0 +1,6 @@
+{% if dialog %}<dialog class="activity-dialog"><div class="dialog-content">{% endif %}
+<div class="banner banner--error" role="alert">
+  <strong>Activity data unavailable</strong>
+  <p>{{ error }}</p>
+</div>
+{% if dialog %}<button type="button" class="button" data-close-dialog>Close</button></div></dialog>{% endif %}

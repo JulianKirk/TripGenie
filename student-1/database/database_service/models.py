@@ -36,6 +36,18 @@ AccommodationIdentifier = Annotated[
     str,
     StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
 ]
+# Activity ids are minted by Student 4. Keep the same cross-service boundary as
+# accommodation ids: Student 1 stores an opaque, bounded identifier.
+ActivityIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
+# Transport ids are minted by Student 3. Same cross-service boundary as
+# accommodation and activity ids: an opaque, bounded identifier.
+TransportIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -83,6 +95,19 @@ class TripStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class TripTransportStatus(str, Enum):
+    """Plan states for a transport selection.
+
+    TripGenie does not book transport, so these describe where a chosen option
+    sits in the traveller's plan, not anything agreed with a carrier.
+    """
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
 
 
 class ItineraryCategory(str, Enum):
@@ -248,6 +273,104 @@ class TripAccommodationCreate(StrictModel):
         if self.check_out is not None and self.check_out < self.date:
             raise ValueError("check_out must be on or after date")
         return self
+
+
+class TripActivityRecord(StrictModel):
+    """One Student 4 activity selected for one Student 1 trip."""
+
+    trip_id: TripIdentifier
+    activity_id: ActivityIdentifier
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+class TripActivityCreate(StrictModel):
+    """Resolved activity selection sent by the Student 1 backend."""
+
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+
+class TripTransportRecord(StrictModel):
+    """One Student 3 transport option selected for one Student 1 trip.
+
+    There is no date column, unlike the accommodation and activity links: a
+    transport option already carries its own departure and arrival times, and
+    a second date stored here could only ever disagree with them.
+
+    `traveller_count` is stored because Student 3 prices per traveller and
+    cannot work the figure out from the trip alone -- transport may be chosen
+    for some of the party rather than all of it. Cost itself is not stored: it
+    is Student 3's to derive from its own prices.
+    """
+
+    trip_id: TripIdentifier
+    transport_id: TransportIdentifier
+    traveller_count: int = Field(ge=1, le=1000)
+    plan_status: TripTransportStatus = TripTransportStatus.PENDING
+    added_on: IsoDate
+    notes: LongText | None = None
+
+    @field_validator("added_on")
+    @classmethod
+    def validate_added_on(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportTravellerTotal(StrictModel):
+    """Travellers pinned to one transport option, across every trip.
+
+    Exists so Student 3 can derive `seats_remaining` in one request instead of
+    one per option.
+    """
+
+    transport_id: TransportIdentifier
+    travellers: int = Field(ge=0)
+
+
+class TripTransportCreate(StrictModel):
+    """A transport selection sent by the Student 1 backend."""
+
+    traveller_count: int = Field(ge=1, le=1000)
+    plan_status: TripTransportStatus = TripTransportStatus.PENDING
+    added_on: IsoDate
+    notes: LongText | None = None
+
+    @field_validator("added_on")
+    @classmethod
+    def validate_added_on(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
 
 
 class TripRecord(TripFields):

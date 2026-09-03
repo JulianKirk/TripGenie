@@ -1,6 +1,7 @@
 <div class="panel">
   <div class="panel-heading"><div><p class="eyebrow">Budget</p><h2>{{ heading }}</h2></div></div>
-  {% if form_error %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  {% if form_error and not errors %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  {% if errors %}<div class="banner banner--error" role="alert"><strong>Please correct the following:</strong><ul>{% for issues in errors.values() %}{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
   {% if trip_error %}<div class="banner banner--warning">The trip directory is unavailable. You can still use a known Trip ID.</div>{% endif %}
   <form method="post" action="{{ action }}">
     <div class="form-grid">

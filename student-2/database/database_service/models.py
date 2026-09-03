@@ -213,8 +213,13 @@ class Accommodation(Base):
                 setattr(self, field, value)
         if message.location_details is not None:
             self.location_details.update_from(message.location_details)
-        if message.room_details is not None and self.room_details is not None:
-            self.room_details.update_from(message.room_details)
+        if message.room_details is not None:
+            # An accommodation created without room details can be given some
+            # by an edit -- there is nothing to merge into, so build the row.
+            if self.room_details is None:
+                self.room_details = RoomDetails.from_message(message.room_details)
+            else:
+                self.room_details.update_from(message.room_details)
 
     def to_message(self) -> schemas.Accommodation:
         """The full row as a message. Callers that want the trimmed result-list

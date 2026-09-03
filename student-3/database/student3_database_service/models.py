@@ -14,14 +14,6 @@ TransportIdentifier = Annotated[
         pattern=r"^transport_[A-Za-z0-9][A-Za-z0-9_-]{2,53}$",
     ),
 ]
-BookingIdentifier = Annotated[
-    str,
-    StringConstraints(
-        min_length=9,
-        max_length=64,
-        pattern=r"^booking_[A-Za-z0-9][A-Za-z0-9_-]{2,55}$",
-    ),
-]
 TripIdentifier = Annotated[
     str,
     StringConstraints(
@@ -100,6 +92,19 @@ class TransportType(str, Enum):
     TRANSFER = "transfer"
 
 
+class PricingBasis(str, Enum):
+    """Whether `price` multiplies by the party size.
+
+    Not derivable from `type`: the seeded ski shuttle is a transfer sold per
+    seat, while a car hire of the same capacity is sold per vehicle. A consumer
+    that guessed from the type would overstate a hire by the traveller count,
+    so this is stored per option rather than inferred.
+    """
+
+    PER_TRAVELLER = "per_traveller"
+    PER_VEHICLE = "per_vehicle"
+
+
 class AvailabilityStatus(str, Enum):
     AVAILABLE = "available"
     LIMITED = "limited"
@@ -107,20 +112,9 @@ class AvailabilityStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class BookingStatus(str, Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
-
-
 BOOKABLE_AVAILABILITY_STATUSES = frozenset(
     {AvailabilityStatus.AVAILABLE, AvailabilityStatus.LIMITED},
 )
-CAPACITY_CONSUMING_BOOKING_STATUSES = frozenset(
-    {BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.COMPLETED},
-)
-
 
 class ErrorDetail(StrictModel):
     field: str
@@ -164,6 +158,7 @@ class TransportOptionFields(StrictModel):
     price: Price
     capacity: int = Field(ge=1, le=10_000)
     availability_status: AvailabilityStatus
+    pricing_basis: PricingBasis = PricingBasis.PER_TRAVELLER
     notes: LongText | None = None
 
     @field_validator("departure_time", "arrival_time")
@@ -198,6 +193,7 @@ class TransportOptionUpdate(StrictModel):
     price: Price | None = None
     capacity: int | None = Field(default=None, ge=1, le=10_000)
     availability_status: AvailabilityStatus | None = None
+    pricing_basis: PricingBasis | None = None
     notes: LongText | None = None
 
     @field_validator("departure_time", "arrival_time")
@@ -230,74 +226,12 @@ class TransportOptionStored(TransportOptionFields):
 
 
 class TransportOptionRecord(TransportOptionStored):
-    """A stored option plus the seat count derived from live bookings."""
+    """What this service returns for an option.
 
-    seats_remaining: int = Field(ge=0)
-
-
-class TransportBookingFields(StrictModel):
-    trip_id: TripIdentifier
-    transport_id: TransportIdentifier
-    traveller_count: int = Field(ge=1, le=1000)
-    booking_date: IsoDate
-    booking_status: BookingStatus
-    notes: LongText | None = None
-
-    @field_validator("booking_date")
-    @classmethod
-    def validate_booking_date(cls, value: str) -> str:
-        return _validate_iso_date(value)
-
-    @field_validator("notes")
-    @classmethod
-    def normalise_notes(cls, value: str | None) -> str | None:
-        return _normalise_optional_text(value)
+    Identical to the stored shape. `seats_remaining` used to live here, derived
+    from a selections table this service owned; selections now belong to the
+    itinerary service, so the backend derives the seat count instead. The name
+    is kept so callers that read a "record" still have one.
+    """
 
 
-class TransportBookingCreate(TransportBookingFields):
-    id: BookingIdentifier | None = None
-    estimated_cost: Price | None = None
-
-    @field_validator("estimated_cost")
-    @classmethod
-    def validate_estimated_cost(cls, value: float | None) -> float | None:
-        if value is None:
-            return None
-
-        return _validate_money(value)
-
-
-class TransportBookingUpdate(StrictModel):
-    trip_id: TripIdentifier | None = None
-    transport_id: TransportIdentifier | None = None
-    traveller_count: int | None = Field(default=None, ge=1, le=1000)
-    booking_date: IsoDate | None = None
-    booking_status: BookingStatus | None = None
-    estimated_cost: Price | None = None
-    notes: LongText | None = None
-
-    @field_validator("estimated_cost")
-    @classmethod
-    def validate_estimated_cost(cls, value: float | None) -> float | None:
-        if value is None:
-            return None
-
-        return _validate_money(value)
-
-    @field_validator("booking_date")
-    @classmethod
-    def validate_booking_date(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-
-        return _validate_iso_date(value)
-
-    @field_validator("notes")
-    @classmethod
-    def normalise_notes(cls, value: str | None) -> str | None:
-        return _normalise_optional_text(value)
-
-
-class TransportBookingRecord(TransportBookingFields):
-    id: BookingIdentifier
-    estimated_cost: Price

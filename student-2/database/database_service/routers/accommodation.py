@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 
 from database_service.dependencies import SessionDep, get_or_404
 from database_service.models import Accommodation
@@ -78,3 +78,18 @@ def update_accommodation(
     accommodation.update_from(payload)
     # add() on an already-persistent instance is a no-op plus the commit.
     return accommodations.add(accommodation).to_message()
+
+
+@router.delete("/{id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_accommodation(id: UUID, session: SessionDep) -> Response:
+    """Gone, along with its location and room rows -- the relationships cascade.
+
+    `get_or_404` first, so deleting something that is not there is the same 404
+    as reading it, rather than a silent success. The repository's own delete is
+    a no-op on a missing id, which is the wrong answer for a caller that wants
+    to know.
+    """
+    accommodations = AccommodationRepository(session)
+    get_or_404(accommodations, id, "accommodation")
+    accommodations.delete(id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

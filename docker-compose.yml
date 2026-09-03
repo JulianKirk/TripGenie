@@ -61,6 +61,8 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
+      STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
+      STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
     ports:
       - "8001:8001"
     depends_on:
@@ -184,6 +186,9 @@ services:
       STUDENT3_FRONTEND_BACKEND_BASE_URL: "${STUDENT3_FRONTEND_BACKEND_BASE_URL:-http://student-3-backend:8003}"
       STUDENT3_FRONTEND_BACKEND_API_PREFIX: "${STUDENT3_FRONTEND_BACKEND_API_PREFIX:-/api}"
       STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS:-5}"
+      # The AI suggestion route only; every other backend call keeps the
+      # short timeout above.
+      STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS:-150}"
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
@@ -220,11 +225,30 @@ services:
       STUDENT3_BACKEND_VERIFY_TRIP_EXISTS: "${STUDENT3_BACKEND_VERIFY_TRIP_EXISTS:-false}"
       STUDENT3_BACKEND_SERVICE_NAME: "${STUDENT3_BACKEND_SERVICE_NAME:-student-3-backend}"
       STUDENT3_BACKEND_CURRENCY: "${STUDENT3_BACKEND_CURRENCY:-AUD}"
+      STUDENT3_BACKEND_AI_MODE_BASE_URL: "${STUDENT3_BACKEND_AI_MODE_BASE_URL:-http://ai-mode:8006}"
+      # Deliberately longer than AI-Mode's own budget so a slow generation
+      # comes back as its error rather than as a timeout here.
+      STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS:-120}"
+      STUDENT3_BACKEND_AI_PROMPT_ASSET: "${STUDENT3_BACKEND_AI_PROMPT_ASSET:-transport_recommendations_v1.md}"
+      STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS: "${STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
+      STUDENT3_BACKEND_AI_MAX_CANDIDATES: "${STUDENT3_BACKEND_AI_MAX_CANDIDATES:-12}"
     expose:
       - "8003"
     depends_on:
       student-3-database:
         condition: service_healthy
+      # Started, not healthy: AI suggestions are advisory, so transport
+      # browsing and planning must keep working when AI-Mode does not.
+      ai-mode:
+        condition: service_started
+      # The itinerary service holds which transport belongs to which trip, so
+      # every selection and every seat count goes through it. Declared for the
+      # same reason student-2-backend declares it: this service reads Student
+      # 1's API, and bringing it up alone would leave those routes answering
+      # 503. Started rather than healthy, so browsing and comparing still work
+      # when Student 1 is unwell.
+      student-1-backend:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -274,7 +298,38 @@ services:
     ports:
       - "8084:8084"
 
-  # Internal-only database. The future backend will reach it at
+  # Public activity API. It is the only caller of the Student 4 database
+  # service and proxies itinerary choices to Student 1.
+  student-4-backend:
+    build:
+      context: ./student-4
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: http://student-4-database:8009
+      LOCATION_URL: http://shared-backend:9100
+      ITINERARY_URL: http://student-1-backend:8001
+    ports:
+      - "8008:8008"
+    depends_on:
+      - student-4-database
+      - shared-backend
+      - student-1-backend
+
+  # HTMX frontend. Kept alongside the legacy placeholder until the team
+  # retires the old student-4-service entry.
+  student-4-frontend:
+    build:
+      context: ./student-4/frontend
+      dockerfile: Dockerfile
+    environment:
+      BACKEND_URL: "${STUDENT4_FRONTEND_BACKEND_URL:-http://student-4-backend:8008}"
+      BACKEND_TIMEOUT: "${STUDENT4_FRONTEND_BACKEND_TIMEOUT:-5}"
+    ports:
+      - "8094:8084"
+    depends_on:
+      - student-4-backend
+
+  # Internal-only database. The backend reaches it at
   # http://student-4-database:8009 on the Compose network.
   student-4-database:
     build:

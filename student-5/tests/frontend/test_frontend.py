@@ -135,12 +135,14 @@ def test_health_readiness_and_budget_list() -> None:
     assert "Budget &amp; Expense Management" in page.text
     assert 'href="http://localhost:8080/theme.css"' in page.text
     assert (
-        '<a class="site-header__home" href="http://localhost:8080">Home</a>'
+        '<a class="site-home" href="http://localhost:8080">Home</a>'
         in page.text
     )
     assert "Sydney Long Weekend" in page.text
     assert "Sydney &middot; 2026-10-02 to 2026-10-05" in page.text
     assert "AUD 2000.00" in page.text
+    assert 'href="http://localhost:8080">Home</a>' in page.text
+    assert 'aria-label="TripGenie modules"' not in page.text
 
 
 def test_budget_form_uses_live_student_1_trip_directory() -> None:
@@ -160,8 +162,7 @@ def test_budget_card_css_contains_long_trip_ids() -> None:
     assert css.status_code == 200
     assert "minmax(280px, 1fr)" in css.text
     assert (
-        ".budget-card h3 a { color: var(--ink); overflow-wrap: anywhere; }"
-        in css.text
+        ".budget-card h3 a { color: var(--ink); overflow-wrap: anywhere; }" in css.text
     )
 
 
@@ -309,7 +310,55 @@ def test_budget_validation_preserves_submitted_values() -> None:
     assert page.status_code == 200
     assert 'value="trip-preserved"' in page.text
     assert 'value="aud"' in page.text
-    assert "String should match pattern" in page.text
+    assert "Please correct the following:" in page.text
+    assert "Currency must use three uppercase letters, for example AUD." in page.text
+    assert "One or more fields failed validation." not in page.text
+
+
+def test_expense_validation_identifies_each_invalid_field() -> None:
+    def invalid_backend(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/expenses" and request.method == "POST":
+            return response(
+                request,
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "One or more fields failed validation.",
+                        "details": [
+                            {
+                                "field": "amount",
+                                "issue": "Input should be greater than 0",
+                            },
+                            {
+                                "field": "date",
+                                "issue": "Input should be a valid date or datetime",
+                            },
+                        ],
+                    }
+                },
+                422,
+            )
+        return backend(request)
+
+    form = {
+        "trip_id": "trip-7",
+        "category": "food",
+        "description": "Dinner",
+        "amount": "0",
+        "currency": "AUD",
+        "date": "not-a-date",
+        "payment_method": "Card",
+        "notes": "",
+    }
+    with make_client(invalid_backend) as client:
+        page = client.post(f"/budgets/{BUDGET_ID}/expenses", data=form)
+
+    assert page.status_code == 200
+    assert 'value="0"' in page.text
+    assert "Please correct the following:" in page.text
+    assert "Amount must be greater than zero." in page.text
+    assert "Enter a valid date." in page.text
+    assert "One or more fields failed validation." not in page.text
 
 
 def test_create_and_delete_routes_redirect_to_browser_views() -> None:

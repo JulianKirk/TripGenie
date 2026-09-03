@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 from fastapi.testclient import TestClient
+from student3_backend_service.app import create_app
+from student3_backend_service.config import Settings
 
 HEALTH_PATH = "/health"
 READY_PATH = "/ready"
 OPTIONS_PATH = "/api/transport-options"
 COMPARE_PATH = "/api/transport-options/compare"
-ENTRIES_PATH = "/api/transport-bookings"
 
 SHUTTLE_ID = "transport_2027_zqn_snow_shuttle"
+FLIGHT_ID = "transport_2026_qf401_mel_syd"
+HIRE_ID = "transport_2026_europcar_gold_coast"
+SOLD_OUT_ID = "transport_2026_sq232_syd_sin"
 SYDNEY_TRIP = "trip_2026_sydney_long_weekend"
 QUEENSTOWN_TRIP = "trip_2027_queenstown_ski_escape"
 
@@ -30,6 +35,12 @@ NEW_OPTION: dict[str, Any] = {
 
 def _data(response) -> Any:
     return response.json()["data"]
+
+
+def _selection(response, trip_id: str) -> dict[str, Any]:
+    """One trip's row out of a tick-list response."""
+    rows = _data(response)["itineraries"]
+    return next(row for row in rows if row["trip_id"] == trip_id)
 
 
 def _error(response) -> dict[str, Any]:
@@ -219,13 +230,6 @@ def test_delete_option_without_entries_succeeds(client: TestClient) -> None:
     assert client.get(f"{OPTIONS_PATH}/{created['id']}").status_code == 404
 
 
-def test_delete_option_with_entries_conflicts(client: TestClient) -> None:
-    response = client.delete(f"{OPTIONS_PATH}/transport_2026_qf401_mel_syd")
-
-    assert response.status_code == 409
-    assert _error(response)["code"] == "CONFLICT"
-
-
 def test_unknown_option_returns_not_found(client: TestClient) -> None:
     response = client.get(f"{OPTIONS_PATH}/transport_missing_service")
 
@@ -373,162 +377,7 @@ def test_compare_rejects_a_malformed_identifier(client: TestClient) -> None:
 # ------------------------------------------------------------ plan entries
 
 
-def test_seeded_plan_entries_are_served(client: TestClient) -> None:
-    entries = _data(client.get(ENTRIES_PATH))
-
-    assert len(entries) >= 10
-    assert all("estimated_cost" in entry for entry in entries)
-    assert all("traveller_count" in entry for entry in entries)
-
-
-def test_filter_entries_by_trip_and_status(client: TestClient) -> None:
-    entries = _data(
-        client.get(
-            ENTRIES_PATH,
-            params={
-                "trip_id": "trip_2026_melbourne_food_trail",
-                "booking_status": "pending",
-            },
-        ),
-    )
-
-    assert [entry["id"] for entry in entries] == [
-        "booking_2026_melbourne_geelong_train",
-    ]
-
-
-def test_create_entry_derives_the_estimated_cost(client: TestClient) -> None:
-    response = client.post(
-        ENTRIES_PATH,
-        json={
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": 2,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 201, response.text
-    assert _data(response)["estimated_cost"] == 56.00
-
-
-def test_create_entry_accepts_an_explicit_estimated_cost(
-    client: TestClient,
-) -> None:
-    response = client.post(
-        ENTRIES_PATH,
-        json={
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": 2,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-            "estimated_cost": 40.00,
-        },
-    )
-
-    assert response.status_code == 201
-    assert _data(response)["estimated_cost"] == 40.00
-
-
-def test_entry_for_unknown_option_returns_not_found(client: TestClient) -> None:
-    response = client.post(
-        ENTRIES_PATH,
-        json={
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": "transport_missing_service",
-            "traveller_count": 1,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 404
-
-
-def test_entry_beyond_remaining_capacity_conflicts(client: TestClient) -> None:
-    response = client.post(
-        ENTRIES_PATH,
-        json={
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": 9,
-            "booking_date": "2027-05-03",
-            "booking_status": "confirmed",
-        },
-    )
-
-    assert response.status_code == 409
-    assert _detail_fields(response) == ["traveller_count"]
-
-
-def test_entry_after_departure_is_rejected(client: TestClient) -> None:
-    response = client.post(
-        ENTRIES_PATH,
-        json={
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": 1,
-            "booking_date": "2027-07-11",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 422
-    assert _detail_fields(response) == ["booking_date"]
-
-
-def test_patch_entry_recomputes_the_estimated_cost(client: TestClient) -> None:
-    response = client.patch(
-        f"{ENTRIES_PATH}/booking_2027_queenstown_transfer",
-        json={"traveller_count": 4},
-    )
-
-    assert response.status_code == 200
-    assert _data(response)["estimated_cost"] == 112.00
-
-
-def test_delete_entry_succeeds(client: TestClient) -> None:
-    response = client.delete(f"{ENTRIES_PATH}/booking_2027_adelaide_airport_bus")
-
-    assert response.status_code == 200
-    assert _data(response)["deleted"] is True
-
-
-def test_entries_for_one_option(client: TestClient) -> None:
-    entries = _data(
-        client.get(f"{OPTIONS_PATH}/transport_2026_qf401_mel_syd/plan-entries"),
-    )
-
-    assert [entry["id"] for entry in entries] == [
-        "booking_2026_sydney_outbound_flight",
-    ]
-
-
-def test_unknown_entry_returns_not_found(client: TestClient) -> None:
-    response = client.get(f"{ENTRIES_PATH}/booking_missing_reference")
-
-    assert response.status_code == 404
-
-
 # ------------------------------------------------------- trip transport view
-
-
-def test_trip_transport_composes_entries_with_their_options(
-    client: TestClient,
-) -> None:
-    summary = _data(client.get(f"/api/trips/{SYDNEY_TRIP}/transport"))
-
-    assert summary["trip_id"] == SYDNEY_TRIP
-    assert summary["currency"] == "AUD"
-    assert summary["entry_count"] == 2
-    assert summary["active_entry_count"] == 2
-    # 189.00 x 2 plus 205.50 x 2
-    assert summary["estimated_cost_total"] == 789.00
-    assert len(summary["planned"]) == 2
-    for planned in summary["planned"]:
-        assert planned["entry"]["transport_id"] == planned["option"]["id"]
 
 
 def test_trip_transport_is_ordered_by_departure(client: TestClient) -> None:
@@ -538,36 +387,181 @@ def test_trip_transport_is_ordered_by_departure(client: TestClient) -> None:
     assert departures == sorted(departures)
 
 
-def test_trip_transport_excludes_cancelled_entries_from_the_total(
-    client: TestClient,
-) -> None:
-    before = _data(client.get(f"/api/trips/{SYDNEY_TRIP}/transport"))
-    assert before["active_entry_count"] == 2
-
-    cancelled = client.patch(
-        f"{ENTRIES_PATH}/booking_2026_sydney_outbound_flight",
-        json={"booking_status": "cancelled"},
-    )
-    assert cancelled.status_code == 200
-
-    after = _data(client.get(f"/api/trips/{SYDNEY_TRIP}/transport"))
-    assert after["entry_count"] == 2
-    assert after["active_entry_count"] == 1
-    assert after["estimated_cost_total"] == 411.00
-
-
-def test_trip_transport_is_empty_for_a_trip_with_no_entries(
-    client: TestClient,
-) -> None:
-    summary = _data(client.get("/api/trips/trip_2030_unplanned_trip/transport"))
-
-    assert summary["entry_count"] == 0
-    assert summary["active_entry_count"] == 0
-    assert summary["estimated_cost_total"] == 0
-    assert summary["planned"] == []
-
-
 def test_trip_transport_rejects_a_malformed_trip_id(client: TestClient) -> None:
     response = client.get("/api/trips/melbourne/transport")
 
     assert response.status_code == 422
+
+
+# ------------------------------------------------------------- selections
+#
+# Which transport belongs to which trip is stored by the itinerary service.
+# These pin the parts this service is still answerable for: pricing a
+# selection, refusing one that cannot be honoured, and never inventing a
+# seat count it cannot know.
+
+
+def test_the_tick_list_offers_every_trip(client: TestClient) -> None:
+    body = _data(client.get(f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries"))
+
+    assert len(body["itineraries"]) == 2
+    assert not any(row["selected"] for row in body["itineraries"])
+    assert body["seats_remaining"] == 180
+
+
+def test_adding_marks_the_trip_and_prices_it(client: TestClient) -> None:
+    response = client.put(
+        f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 3},
+    )
+
+    assert response.status_code == 200, response.text
+    row = _selection(response, QUEENSTOWN_TRIP)
+    assert row["selected"] is True
+    assert row["traveller_count"] == 3
+    assert row["estimated_cost"] == 567.00
+    assert _data(response)["seats_remaining"] == 177
+
+
+def test_a_per_vehicle_option_is_not_multiplied(client: TestClient) -> None:
+    """A car hire costs the same for one traveller or five.
+
+    The bug this prevents is arithmetic, not presentation: multiplying a
+    whole-vehicle rate by the party size overstates a trip's transport budget,
+    which Student 5's feature then reports as fact.
+    """
+    response = client.put(
+        f"{OPTIONS_PATH}/{HIRE_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 4},
+    )
+
+    row = _selection(response, QUEENSTOWN_TRIP)
+    assert row["estimated_cost"] == 612.00
+
+
+def test_adding_the_same_trip_twice_replaces_rather_than_duplicates(
+    client: TestClient,
+) -> None:
+    """PUT is idempotent, so a double submit cannot double-count a party."""
+    path = f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}"
+    client.put(path, json={"traveller_count": 2})
+    response = client.put(path, json={"traveller_count": 5})
+
+    body = _data(response)
+    assert sum(1 for row in body["itineraries"] if row["selected"]) == 1
+    assert _selection(response, QUEENSTOWN_TRIP)["traveller_count"] == 5
+    assert body["seats_remaining"] == 175
+
+
+def test_a_party_larger_than_the_service_is_refused(client: TestClient) -> None:
+    response = client.put(
+        f"{OPTIONS_PATH}/{HIRE_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 99},
+    )
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "CONFLICT"
+    assert "seat(s) remain" in error["details"][0]["issue"]
+
+
+def test_capacity_counts_other_trips_but_not_this_one(client: TestClient) -> None:
+    """Re-sizing a party must not be blocked by the party it replaces.
+
+    The naive check sums every selection including the one being changed, so
+    raising 4 travellers to 5 on a 5-seat vehicle would wrongly need 9 seats.
+    """
+    client.put(
+        f"{OPTIONS_PATH}/{HIRE_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 4},
+    )
+
+    response = client.put(
+        f"{OPTIONS_PATH}/{HIRE_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 5},
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_an_unusable_option_cannot_be_added(client: TestClient) -> None:
+    response = client.put(
+        f"{OPTIONS_PATH}/{SOLD_OUT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 1},
+    )
+
+    assert response.status_code == 409
+    assert "sold_out" in response.json()["error"]["details"][0]["issue"]
+
+
+def test_removing_gives_the_seats_back(client: TestClient) -> None:
+    client.put(
+        f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 3},
+    )
+
+    response = client.delete(
+        f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+    )
+
+    assert response.status_code == 200
+    assert _selection(response, QUEENSTOWN_TRIP)["selected"] is False
+    assert _data(response)["seats_remaining"] == 180
+
+
+def test_seats_are_unknown_rather_than_zero_when_the_itinerary_is_down(
+    settings: Settings,
+    database_transport: httpx.MockTransport,
+    unreachable_trips_transport: httpx.MockTransport,
+) -> None:
+    """None, not 0. Reporting a full service during an outage would be a lie."""
+    app = create_app(
+        settings,
+        transport=database_transport,
+        trips_transport=unreachable_trips_transport,
+    )
+    with TestClient(app) as client:
+        option = _data(client.get(f"{OPTIONS_PATH}/{FLIGHT_ID}"))
+
+    assert option["seats_remaining"] is None
+
+
+def test_the_trip_view_keeps_the_shape_student_5_reads(client: TestClient) -> None:
+    """Selections moved, but this contract must not.
+
+    Student 5's budget feature reads these two fields off this route. It should
+    not have to know that the underlying rows now live somewhere else.
+    """
+    client.put(
+        f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 2},
+    )
+
+    body = _data(client.get(f"/api/trips/{QUEENSTOWN_TRIP}/transport"))
+
+    assert body["estimated_cost_total"] == 378.00
+    assert body["currency"] == "AUD"
+    assert body["entry_count"] == 1
+    assert body["active_entry_count"] == 1
+    assert body["planned"][0]["option"]["id"] == FLIGHT_ID
+
+
+def test_an_option_a_trip_holds_cannot_be_deleted(client: TestClient) -> None:
+    """The guard a foreign key used to give, re-made across the boundary.
+
+    Without it, deleting an option leaves Student 1 holding rows that point at
+    nothing, and a trip page showing a journey it cannot name.
+    """
+    client.put(
+        f"{OPTIONS_PATH}/{FLIGHT_ID}/itineraries/{QUEENSTOWN_TRIP}",
+        json={"traveller_count": 2},
+    )
+
+    response = client.delete(f"{OPTIONS_PATH}/{FLIGHT_ID}")
+
+    assert response.status_code == 409
+    assert "still hold it" in response.json()["error"]["details"][0]["issue"]
+
+
+def test_an_unheld_option_deletes_normally(client: TestClient) -> None:
+    assert client.delete(f"{OPTIONS_PATH}/{FLIGHT_ID}").status_code == 200

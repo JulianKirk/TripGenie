@@ -1,6 +1,7 @@
 <div class="panel">
   <p class="eyebrow">Trip {{ form.get('trip_id', '') }}</p><h2>{{ heading }}</h2>
-  {% if form_error %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  {% if form_error and not errors %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  {% if errors %}<div class="banner banner--error" role="alert"><strong>Please correct the following:</strong><ul>{% for issues in errors.values() %}{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
   <form method="post" action="{{ action }}">
     <input type="hidden" name="trip_id" value="{{ form.get('trip_id', '') }}">
     <div class="form-grid">

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from .accommodation_client import AccommodationClient
+from .activity_client import ActivityClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, validation_error
@@ -16,14 +17,20 @@ from .models import (
     ItineraryItemUpdate,
     TripAccommodationDetail,
     TripAccommodationRecord,
+    TripActivityDetail,
+    TripActivityRecord,
     TripCreate,
     TripDay,
     TripDaySelection,
     TripDetail,
     TripRecord,
     TripStatus,
+    TripTransportCreate,
+    TripTransportDetail,
+    TripTransportRecord,
     TripUpdate,
 )
+from .transport_client import TransportClient
 from .trip_rules import (
     ensure_trip_detail_supported,
     validate_stay_window,
@@ -39,10 +46,14 @@ class BackendService:
         client: DatabaseApiClient,
         settings: Settings,
         accommodations: AccommodationClient | None = None,
+        activities: ActivityClient | None = None,
+        transport: TransportClient | None = None,
     ) -> None:
         self._client = client
         self._settings = settings
         self._accommodations = accommodations
+        self._activities = activities
+        self._transport = transport
 
     def list_trips(
         self,
@@ -60,9 +71,9 @@ class BackendService:
             message=VALIDATION_ERROR_MESSAGE,
         )
         created_trip = self._client.create_trip(payload)
-        return self._build_trip_detail(created_trip, [], [])
+        return self._build_trip_detail(created_trip, [], [], [], [])
 
-    def _enrich(
+    def _enrich_accommodations(
         self,
         accommodations: list[TripAccommodationRecord],
     ) -> list[TripAccommodationDetail]:
@@ -97,12 +108,143 @@ class BackendService:
             )
         return detailed
 
+    def _enrich_activities(
+        self,
+        activities: list[TripActivityRecord],
+    ) -> list[TripActivityDetail]:
+        if not activities:
+            return []
+        found = (
+            self._activities.details([record.activity_id for record in activities])
+            if self._activities is not None
+            else {}
+        )
+        return [
+            TripActivityDetail(
+                **record.model_dump(mode="json"),
+                name=(
+                    found[record.activity_id].name
+                    if record.activity_id in found
+                    else None
+                ),
+                price=(
+                    found[record.activity_id].price
+                    if record.activity_id in found
+                    else None
+                ),
+                pricing_basis=(
+                    found[record.activity_id].pricing_basis
+                    if record.activity_id in found
+                    else None
+                ),
+                duration_minutes=(
+                    found[record.activity_id].duration_minutes
+                    if record.activity_id in found
+                    else None
+                ),
+            )
+            for record in activities
+        ]
+
+    def _enrich_transport(
+        self,
+        transport: list[TripTransportRecord],
+    ) -> list[TripTransportDetail]:
+        """The pinned transport, labelled with what Student 3 owns.
+
+        A trip stores the option id and the party size. The route, the times
+        and the price live in the transport service, and `estimated_cost` is
+        worked out there too -- per-vehicle hire must not be multiplied by the
+        traveller count. When that service cannot be reached the labels stay
+        None and the page shows the selection without them.
+        """
+        if not transport:
+            return []
+
+        found = (
+            self._transport.details([record.transport_id for record in transport])
+            if self._transport is not None
+            else {}
+        )
+        detailed: list[TripTransportDetail] = []
+        for record in transport:
+            extra = found.get(record.transport_id)
+            detailed.append(
+                TripTransportDetail(
+                    **record.model_dump(mode="json"),
+                    origin=extra.origin if extra else None,
+                    destination=extra.destination if extra else None,
+                    provider=extra.provider if extra else None,
+                    type=extra.type if extra else None,
+                    departure_time=extra.departure_time if extra else None,
+                    arrival_time=extra.arrival_time if extra else None,
+                    duration_minutes=extra.duration_minutes if extra else None,
+                    price=extra.price if extra else None,
+                    pricing_basis=extra.pricing_basis if extra else None,
+                    estimated_cost=(
+                        extra.cost_for(record.traveller_count) if extra else None
+                    ),
+                )
+            )
+        # Departure order is the only order a traveller reads a journey in.
+        # Rows with no detail sink to the end rather than jumbling the rest.
+        detailed.sort(key=lambda row: (row.departure_time is None, row.departure_time))
+        return detailed
+
+    def list_trip_transport(self, trip_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trip_transport(trip_id)
+        return [
+            record.model_dump(mode="json")
+            for record in self._enrich_transport(records)
+        ]
+
+    def add_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+        payload: TripTransportCreate,
+    ) -> dict[str, object]:
+        trip = self._client.get_trip(trip_id)
+        record = self._client.add_trip_transport(
+            trip_id,
+            transport_id,
+            payload.traveller_count,
+            payload.plan_status.value,
+            payload.added_on or trip.start_date,
+            payload.notes,
+        )
+        return self._enrich_transport([record])[0].model_dump(mode="json")
+
+    def remove_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+    ) -> dict[str, object]:
+        deleted = self._client.remove_trip_transport(trip_id, transport_id)
+        return deleted.model_dump(mode="json")
+
+    def list_trips_for_transport(self, transport_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trips_for_transport(transport_id)
+        return [record.model_dump(mode="json") for record in records]
+
+    def transport_traveller_totals(self) -> list[dict[str, object]]:
+        records = self._client.transport_traveller_totals()
+        return [record.model_dump(mode="json") for record in records]
+
     def get_trip(self, trip_id: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
         ensure_trip_detail_supported(trip)
         items = self._client.list_itinerary_items(trip_id)
         accommodations = self._client.list_trip_accommodations(trip_id)
-        return self._build_trip_detail(trip, items, self._enrich(accommodations))
+        activities = self._client.list_trip_activities(trip_id)
+        transport = self._client.list_trip_transport(trip_id)
+        return self._build_trip_detail(
+            trip,
+            items,
+            self._enrich_accommodations(accommodations),
+            self._enrich_activities(activities),
+            self._enrich_transport(transport),
+        )
 
     def get_trip_day(self, trip_id: str, trip_day: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
@@ -132,6 +274,8 @@ class BackendService:
         )
         existing_items = self._client.list_itinerary_items(trip_id)
         self._ensure_trip_window_covers_items(merged_trip, existing_items)
+        existing_activities = self._client.list_trip_activities(trip_id)
+        self._ensure_trip_window_covers_activities(merged_trip, existing_activities)
 
         # The current internal API does not expose versioned writes, so PATCH remains
         # read-merge-write across services. Re-reading after the write reduces stale
@@ -140,8 +284,14 @@ class BackendService:
         ensure_trip_detail_supported(updated_trip)
         refreshed_items = self._client.list_itinerary_items(trip_id)
         accommodations = self._client.list_trip_accommodations(trip_id)
+        activities = self._client.list_trip_activities(trip_id)
+        transport = self._client.list_trip_transport(trip_id)
         return self._build_trip_detail(
-            updated_trip, refreshed_items, self._enrich(accommodations)
+            updated_trip,
+            refreshed_items,
+            self._enrich_accommodations(accommodations),
+            self._enrich_activities(activities),
+            self._enrich_transport(transport),
         )
 
     def delete_trip(self, trip_id: str) -> dict[str, object]:
@@ -206,6 +356,40 @@ class BackendService:
         """The reverse lookup. One query answers which boxes the accommodation
         service's picker should show ticked, instead of one call per trip."""
         trips = self._client.list_trips_for_accommodation(accommodation_id)
+        return [trip.model_dump(mode="json") for trip in trips]
+
+    def list_trip_activities(self, trip_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trip_activities(trip_id)
+        return [record.model_dump(mode="json") for record in records]
+
+    def add_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+        activity_date: str | None = None,
+        start_time: str | None = None,
+    ) -> dict[str, object]:
+        trip = self._client.get_trip(trip_id)
+        activity_date = activity_date or trip.start_date
+        self._ensure_date_within_trip(activity_date, trip)
+        record = self._client.add_trip_activity(
+            trip_id,
+            activity_id,
+            activity_date,
+            start_time,
+        )
+        return record.model_dump(mode="json")
+
+    def remove_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+    ) -> dict[str, object]:
+        removed = self._client.remove_trip_activity(trip_id, activity_id)
+        return removed.model_dump(mode="json")
+
+    def list_trips_for_activity(self, activity_id: str) -> list[dict[str, object]]:
+        trips = self._client.list_trips_for_activity(activity_id)
         return [trip.model_dump(mode="json") for trip in trips]
 
     def list_itinerary_items(
@@ -336,6 +520,34 @@ class BackendService:
         )
 
     @staticmethod
+    def _ensure_trip_window_covers_activities(
+        merged_trip: dict[str, object],
+        activities: list[TripActivityRecord],
+    ) -> None:
+        conflicting_dates = sorted(
+            {
+                activity.date
+                for activity in activities
+                if activity.date < str(merged_trip["start_date"])
+                or activity.date > str(merged_trip["end_date"])
+            }
+        )
+        if not conflicting_dates:
+            return
+        sample_dates = ", ".join(conflicting_dates[:3])
+        raise validation_error(
+            VALIDATION_ERROR_MESSAGE,
+            [
+                {
+                    "field": "start_date",
+                    "issue": (
+                        f"cannot exclude existing activity dates ({sample_dates})"
+                    ),
+                }
+            ],
+        )
+
+    @staticmethod
     def _validate_item_record(
         record: dict[str, object],
         trip: TripRecord,
@@ -372,6 +584,8 @@ class BackendService:
         trip: TripRecord,
         items: list[ItineraryItemRecord],
         accommodations: list[TripAccommodationDetail],
+        activities: list[TripActivityDetail],
+        transport: list[TripTransportDetail],
     ) -> dict[str, object]:
         ensure_trip_detail_supported(trip)
         items_by_date: dict[str, list[ItineraryItemRecord]] = {}
@@ -390,6 +604,8 @@ class BackendService:
             **trip.model_dump(mode="json"),
             days=days,
             accommodations=accommodations,
+            activities=activities,
+            transport=transport,
         ).model_dump(mode="json")
 
     def _probe_database(self) -> DependencyStatus:

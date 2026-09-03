@@ -25,6 +25,7 @@ def test_dashboard_renders_full_page_theme_and_accessible_controls(client) -> No
     assert "Generate suggestions in issue #12" in response.text
     assert "<fieldset disabled>" in response.text
     assert "Delete trip" in response.text
+    assert 'href="http://localhost:8080">Home</a>' in response.text
 
 
 def test_htmx_trip_navigation_returns_shell_fragment_only(client) -> None:

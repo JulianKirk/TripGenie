@@ -10,26 +10,26 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, statu
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import VALIDATION_ERROR_MESSAGE, ApiError, bad_request, validation_error
 from .models import (
     AvailabilityStatus,
-    BookingIdentifier,
-    BookingStatus,
     DataEnvelope,
     DeleteResponse,
     ErrorBody,
     ErrorDetail,
     ErrorEnvelope,
     HealthResponse,
+    ItinerarySelectionRequest,
+    ItinerarySelectionResponse,
     TransportIdentifier,
     TransportOptionCreate,
     TransportOptionRecord,
     TransportOptionUpdate,
-    TransportPlanEntryCreate,
-    TransportPlanEntryRecord,
-    TransportPlanEntryUpdate,
+    TransportRecommendationRequest,
+    TransportRecommendationResponse,
     TransportType,
     TripDirectory,
     TripIdentifier,
@@ -40,7 +40,6 @@ from .trips_client import TripsApiClient
 
 TRANSPORT_TYPE_VALUES = ", ".join(item.value for item in TransportType)
 AVAILABILITY_STATUS_VALUES = ", ".join(item.value for item in AvailabilityStatus)
-BOOKING_STATUS_VALUES = ", ".join(item.value for item in BookingStatus)
 ISO_DATETIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
 TRIP_ID_PATTERN = re.compile(r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
 TRANSPORT_ID_PATTERN = re.compile(r"^transport_[A-Za-z0-9][A-Za-z0-9_-]{2,53}$")
@@ -276,17 +275,6 @@ def parse_transport_id_filter(
     )
 
 
-def parse_booking_status_filter(
-    value: Annotated[str | None, Query(alias="booking_status")] = None,
-) -> BookingStatus | None:
-    return _parse_enum_filter(
-        value,
-        field="booking_status",
-        enum_type=BookingStatus,
-        allowed=BOOKING_STATUS_VALUES,
-    )
-
-
 def parse_compare_ids(
     value: Annotated[list[str] | None, Query(alias="ids")] = None,
 ) -> list[str]:
@@ -321,10 +309,6 @@ AvailabilityFilter = Annotated[
     AvailabilityStatus | None,
     Depends(parse_availability_filter),
 ]
-BookingStatusFilter = Annotated[
-    BookingStatus | None,
-    Depends(parse_booking_status_filter),
-]
 
 
 def create_app(
@@ -332,6 +316,7 @@ def create_app(
     *,
     transport: httpx.BaseTransport | None = None,
     trips_transport: httpx.BaseTransport | None = None,
+    ai_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -339,18 +324,22 @@ def create_app(
     async def lifespan(app: FastAPI):
         client = DatabaseApiClient(app_settings, transport=transport)
         trips_client = TripsApiClient(app_settings, transport=trips_transport)
+        ai_client = AiModeClient(app_settings, transport=ai_transport)
         app.state.database_client = client
         app.state.trips_client = trips_client
+        app.state.ai_client = ai_client
         app.state.backend_service = BackendService(
             app_settings,
             client,
             trips_client,
+            ai_client,
         )
         try:
             yield
         finally:
             client.close()
             trips_client.close()
+            ai_client.close()
 
     app = FastAPI(
         title="TripGenie Student 3 Transport API",
@@ -398,10 +387,6 @@ def create_app(
             "departure_to",
         ),
     )
-    entry_query_params = Depends(
-        allow_query_params("trip_id", "transport_id", "booking_status"),
-    )
-    option_entry_query_params = Depends(allow_query_params("booking_status"))
     compare_query_params = Depends(allow_query_params("ids"))
 
     @app.get(
@@ -466,6 +451,22 @@ def create_app(
         return envelope(service.compare_transport_options(transport_ids))
 
     @router.post(
+        "/transport-options/recommendations",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TransportRecommendationResponse],
+    )
+    def recommend_transport(
+        payload: TransportRecommendationRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Draft transport advice for a traveller.
+
+        Advisory only. Nothing is written: the traveller reviews the draft and
+        saves through the normal plan-entry route if they want it.
+        """
+        return envelope(service.recommend_transport(payload))
+
+    @router.post(
         "/transport-options",
         dependencies=[no_query_params],
         response_model=DataEnvelope[TransportOptionRecord],
@@ -512,88 +513,6 @@ def create_app(
         return envelope(service.delete_transport_option(transport_id))
 
     @router.get(
-        "/transport-options/{transport_id}/plan-entries",
-        dependencies=[option_entry_query_params],
-        response_model=DataEnvelope[list[TransportPlanEntryRecord]],
-    )
-    def list_entries_for_option(
-        transport_id: TransportIdentifier,
-        service: ServiceDep,
-        booking_status: BookingStatusFilter,
-    ) -> dict[str, object]:
-        return envelope(
-            service.list_entries_for_option(
-                transport_id,
-                booking_status=booking_status,
-            ),
-        )
-
-    @router.get(
-        "/transport-bookings",
-        dependencies=[entry_query_params],
-        response_model=DataEnvelope[list[TransportPlanEntryRecord]],
-    )
-    def list_plan_entries(
-        service: ServiceDep,
-        trip_id: Annotated[str | None, Depends(parse_trip_id_filter)],
-        transport_id: Annotated[str | None, Depends(parse_transport_id_filter)],
-        booking_status: BookingStatusFilter,
-    ) -> dict[str, object]:
-        return envelope(
-            service.list_plan_entries(
-                trip_id=trip_id,
-                transport_id=transport_id,
-                booking_status=booking_status,
-            ),
-        )
-
-    @router.post(
-        "/transport-bookings",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportPlanEntryRecord],
-        status_code=status.HTTP_201_CREATED,
-    )
-    def create_plan_entry(
-        payload: TransportPlanEntryCreate,
-        service: ServiceDep,
-    ) -> dict[str, object]:
-        return envelope(service.create_plan_entry(payload))
-
-    @router.get(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportPlanEntryRecord],
-    )
-    def get_plan_entry(
-        booking_id: BookingIdentifier,
-        service: ServiceDep,
-    ) -> dict[str, object]:
-        return envelope(service.get_plan_entry(booking_id))
-
-    @router.patch(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportPlanEntryRecord],
-    )
-    def update_plan_entry(
-        booking_id: BookingIdentifier,
-        payload: TransportPlanEntryUpdate,
-        service: ServiceDep,
-    ) -> dict[str, object]:
-        return envelope(service.update_plan_entry(booking_id, payload))
-
-    @router.delete(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[DeleteResponse],
-    )
-    def delete_plan_entry(
-        booking_id: BookingIdentifier,
-        service: ServiceDep,
-    ) -> dict[str, object]:
-        return envelope(service.delete_plan_entry(booking_id))
-
-    @router.get(
         "/trip-directory",
         dependencies=[no_query_params],
         response_model=DataEnvelope[TripDirectory],
@@ -616,7 +535,55 @@ def create_app(
         trip_id: TripIdentifier,
         service: ServiceDep,
     ) -> dict[str, object]:
+        """Everything selected for one trip, priced.
+
+        The selections are held by the itinerary service now; the shape of this
+        response is deliberately unchanged, because Student 5's budget feature
+        reads it.
+        """
         return envelope(service.trip_transport(trip_id))
+
+    @router.get(
+        "/transport-options/{transport_id}/itineraries",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[ItinerarySelectionResponse],
+    )
+    def list_itineraries_for_option(
+        transport_id: TransportIdentifier,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Every trip, ticked where it already holds this option."""
+        return envelope(service.itinerary_selections(transport_id))
+
+    @router.put(
+        "/transport-options/{transport_id}/itineraries/{trip_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[ItinerarySelectionResponse],
+    )
+    def add_option_to_itinerary(
+        transport_id: TransportIdentifier,
+        trip_id: TripIdentifier,
+        payload: ItinerarySelectionRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """PUT, not POST, matching how accommodation and activities attach.
+
+        Sending the same trip twice replaces the selection rather than creating
+        a second one, so a double submit cannot double-book a party.
+        """
+        return envelope(service.add_to_itinerary(transport_id, trip_id, payload))
+
+    @router.delete(
+        "/transport-options/{transport_id}/itineraries/{trip_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[ItinerarySelectionResponse],
+    )
+    def remove_option_from_itinerary(
+        transport_id: TransportIdentifier,
+        trip_id: TripIdentifier,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        return envelope(service.remove_from_itinerary(transport_id, trip_id))
 
     app.include_router(router)
     return app

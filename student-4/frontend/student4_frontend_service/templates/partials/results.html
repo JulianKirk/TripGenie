@@ -1,0 +1,43 @@
+<div class="panel-heading"><div><p class="eyebrow">Catalogue</p>{% if page %}<h2>{{ page.total }} result{% if page.total != 1 %}s{% endif %}</h2>{% endif %}</div><button class="button button--primary" type="button" hx-get="/manage/activity/new" hx-target="#activity-dialog">Add new activity</button></div>
+{% if error %}
+  {% include "partials/error_state.html" %}
+{% elif not page.activities %}
+  <div class="empty-state"><h2>No activities match these filters</h2><p>Try clearing one or more filters.</p></div>
+{% else %}
+  <div class="activity-grid">
+  {% for activity in page.activities %}
+    <article class="activity-card" id="activity-{{ activity.id }}">
+      <div class="activity-card__heading">
+        <button type="button" class="activity-title" hx-get="/activity/{{ activity.id }}" hx-target="#activity-dialog" hx-swap="innerHTML">{{ activity.name }}</button>
+        <div class="card-controls">{% if not activity.is_active %}<span class="pill pill--muted">Inactive</span>{% endif %}<button class="button icon-button" type="button" aria-label="Edit {{ activity.name }}" title="Edit activity" hx-get="/manage/activity/{{ activity.id }}/edit" hx-target="#activity-dialog">✎</button></div>
+      </div>
+      <p>{{ activity.description }}</p>
+      <dl class="facts">
+        <div><dt>Location</dt><dd>{{ activity.location_details|location or 'Location unavailable' }}</dd></div>
+        <div><dt>Price</dt><dd>{{ activity.price|money }} · {{ 'per person' if activity.pricing_basis == 'PER_PERSON' else 'flat admission' }}</dd></div>
+        <div><dt>Duration</dt><dd>{{ activity.duration_minutes|duration }}</dd></div>
+        {% set total = party_total(activity, party_size|int) if party_size else none %}
+        {% if total %}<div><dt>Estimated party total</dt><dd>{{ total }}</dd></div>{% endif %}
+      </dl>
+      <div class="pills">{% for code in activity.categories %}<span class="pill">{{ labels.get(code, code|replace('_', ' ')|title) }}</span>{% endfor %}</div>
+      <ul class="plain-list">
+        <li>{{ activity.minimum_participants }}{% if activity.maximum_participants %}–{{ activity.maximum_participants }}{% else %}+{% endif %} participants</li>
+        {% if activity.minimum_age is not none or activity.maximum_age is not none %}<li>Ages {{ activity.minimum_age|default(0, true) }}{% if activity.maximum_age is not none %}–{{ activity.maximum_age }}{% else %}+{% endif %}</li>{% endif %}
+        {% if activity.booking_required %}<li>Booking required externally</li>{% endif %}
+        {% if activity.wheelchair_accessible %}<li>Wheelchair accessible</li>{% endif %}
+        {% if activity.step_free_access %}<li>Step-free access</li>{% endif %}
+        {% if activity.accessible_toilet %}<li>Accessible toilet</li>{% endif %}
+      </ul>
+      {% if activity.is_active %}<div class="actions card-actions"><button class="button button--compact" type="button" aria-label="Add {{ activity.name }} to trip" hx-get="/activity/{{ activity.id }}/itineraries/dialog" hx-target="#activity-dialog">Add to trip</button></div>{% endif %}
+    </article>
+  {% endfor %}
+  </div>
+  {% set first = page.offset + 1 %}{% set last = [page.offset + page.limit, page.total]|min %}
+  <nav class="pager" aria-label="Results pages">
+    <p>Showing {{ first }}–{{ last }} of {{ page.total }}</p>
+    <div class="actions">
+      {% if page.offset > 0 %}<button class="button" name="offset" value="{{ [page.offset - page.limit, 0]|max }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Previous</button>{% endif %}
+      {% if page.offset + page.limit < page.total %}<button class="button" name="offset" value="{{ page.offset + page.limit }}" hx-get="/activity" hx-include="#activity-filters" hx-target="#activity-results">Next</button>{% endif %}
+    </div>
+  </nav>
+{% endif %}

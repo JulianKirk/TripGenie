@@ -16,10 +16,13 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TransportTravellerTotal,
     TripAccommodationRecord,
+    TripActivityRecord,
     TripCreate,
     TripRecord,
     TripStatus,
+    TripTransportRecord,
     TripUpdate,
 )
 
@@ -265,6 +268,135 @@ class DatabaseApiClient:
             response_type=DataEnvelope[list[TripRecord]],
             malformed_message=(
                 "Database API returned a malformed accommodation trip list response."
+            ),
+        )
+        return envelope.data
+
+    def list_trip_activities(self, trip_id: str) -> list[TripActivityRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/trips/{trip_id}/activities",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripActivityRecord]],
+            malformed_message=(
+                "Database API returned a malformed trip activity list response."
+            ),
+        )
+        return envelope.data
+
+    def add_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+        date: str,
+        start_time: str | None = None,
+    ) -> TripActivityRecord:
+        envelope = self._request_model(
+            "PUT",
+            f"{self._api_prefix}/trips/{trip_id}/activities/{activity_id}",
+            json={"date": date, "start_time": start_time},
+            expected_statuses={200},
+            response_type=DataEnvelope[TripActivityRecord],
+            malformed_message=(
+                "Database API returned a malformed trip activity response."
+            ),
+        )
+        return envelope.data
+
+    def remove_trip_activity(self, trip_id: str, activity_id: str) -> DeleteResponse:
+        envelope = self._request_model(
+            "DELETE",
+            f"{self._api_prefix}/trips/{trip_id}/activities/{activity_id}",
+            expected_statuses={200},
+            response_type=DataEnvelope[DeleteResponse],
+            malformed_message=(
+                "Database API returned a malformed trip activity delete response."
+            ),
+        )
+        return envelope.data
+
+    def list_trip_transport(self, trip_id: str) -> list[TripTransportRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/trips/{trip_id}/transport",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripTransportRecord]],
+            malformed_message=(
+                "Database API returned a malformed trip transport list response."
+            ),
+        )
+        return envelope.data
+
+    def add_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+        traveller_count: int,
+        plan_status: str,
+        added_on: str,
+        notes: str | None = None,
+    ) -> TripTransportRecord:
+        envelope = self._request_model(
+            "PUT",
+            f"{self._api_prefix}/trips/{trip_id}/transport/{transport_id}",
+            json={
+                "traveller_count": traveller_count,
+                "plan_status": plan_status,
+                "added_on": added_on,
+                "notes": notes,
+            },
+            expected_statuses={200},
+            response_type=DataEnvelope[TripTransportRecord],
+            malformed_message=(
+                "Database API returned a malformed trip transport response."
+            ),
+        )
+        return envelope.data
+
+    def remove_trip_transport(self, trip_id: str, transport_id: str) -> DeleteResponse:
+        envelope = self._request_model(
+            "DELETE",
+            f"{self._api_prefix}/trips/{trip_id}/transport/{transport_id}",
+            expected_statuses={200},
+            response_type=DataEnvelope[DeleteResponse],
+            malformed_message=(
+                "Database API returned a malformed trip transport delete response."
+            ),
+        )
+        return envelope.data
+
+    def list_trips_for_transport(self, transport_id: str) -> list[TripRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/transport/{transport_id}/trips",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripRecord]],
+            malformed_message=(
+                "Database API returned a malformed transport trip list response."
+            ),
+        )
+        return envelope.data
+
+    def transport_traveller_totals(self) -> list[TransportTravellerTotal]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/transport-traveller-totals",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TransportTravellerTotal]],
+            malformed_message=(
+                "Database API returned a malformed transport totals response."
+            ),
+        )
+        return envelope.data
+
+    def list_trips_for_activity(self, activity_id: str) -> list[TripRecord]:
+        envelope = self._request_model(
+            "GET",
+            f"{self._api_prefix}/activities/{activity_id}/trips",
+            expected_statuses={200},
+            response_type=DataEnvelope[list[TripRecord]],
+            malformed_message=(
+                "Database API returned a malformed activity trip list response."
             ),
         )
         return envelope.data

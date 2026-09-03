@@ -1,0 +1,29 @@
+<dialog class="activity-dialog" aria-labelledby="activity-dialog-title">
+  <div class="dialog-content">
+    <div class="panel-heading"><div><p class="eyebrow">Activity details</p><h2 id="activity-dialog-title">{{ activity.name }}</h2></div><button class="button icon-button" type="button" aria-label="Edit {{ activity.name }}" title="Edit activity" hx-get="/manage/activity/{{ activity.id }}/edit" hx-target="#activity-dialog">✎</button></div>
+    <p>{{ activity.description }}</p>
+    <dl class="facts facts--detail">
+      <div><dt>Price</dt><dd>{{ activity.price|money }} · {{ 'per person' if activity.pricing_basis == 'PER_PERSON' else 'flat admission' }}</dd></div>
+      <div><dt>Duration</dt><dd>{{ activity.duration_minutes|duration }}</dd></div>
+      <div><dt>Address</dt><dd>{% if activity.location_details.street_number %}{{ activity.location_details.street_number }} {% endif %}{% if activity.location_details.street %}{{ activity.location_details.street|title }}, {% endif %}{{ activity.location_details|location }}</dd></div>
+      <div><dt>Booking</dt><dd>{{ 'Required externally' if activity.booking_required else 'Not required' }}</dd></div>
+      <div><dt>Participants</dt><dd>{{ activity.minimum_participants }}{% if activity.maximum_participants %}–{{ activity.maximum_participants }}{% else %}+{% endif %} participants</dd></div>
+      {% if activity.minimum_age is not none or activity.maximum_age is not none %}<div><dt>Ages</dt><dd>Ages {{ activity.minimum_age|default(0, true) }}{% if activity.maximum_age is not none %}–{{ activity.maximum_age }}{% else %}+{% endif %}</dd></div>{% endif %}
+    </dl>
+    <div class="pills">{% for code in activity.categories %}<span class="pill">{{ labels.get(code, code|replace('_', ' ')|title) }}</span>{% endfor %}</div>
+    {% if activity.booking_notes %}<h3>Booking notes</h3><p>{{ activity.booking_notes }}</p>{% endif %}
+    <h3>Accessibility</h3>
+    <dl class="facts"><div><dt>Wheelchair accessible</dt><dd>{{ activity.wheelchair_accessible|accessibility }}</dd></div><div><dt>Step-free access</dt><dd>{{ activity.step_free_access|accessibility }}</dd></div><div><dt>Accessible toilet</dt><dd>{{ activity.accessible_toilet|accessibility }}</dd></div></dl>
+    {% if activity.accessibility_notes %}<p>{{ activity.accessibility_notes }}</p>{% endif %}
+    <h3>Availability</h3>
+    {% for day, rows in schedules.weekly.items() %}<h4>{{ day|title }}</h4><ul>{% for row in rows %}<li>{{ row.start_time.strftime('%H:%M') }}–{{ row.end_time.strftime('%H:%M') }}</li>{% endfor %}</ul>{% endfor %}
+    {% if schedules.one_off %}<h4>One-off dates</h4><ul>{% for row in schedules.one_off %}<li>{{ row.date.isoformat() }} · {{ row.start_time.strftime('%H:%M') }}–{{ row.end_time.strftime('%H:%M') }}</li>{% endfor %}</ul>{% endif %}
+    <section class="itinerary-section">
+      <h3>Trip itinerary</h3>
+      <button class="button button--primary" type="button" hx-get="/activity/{{ activity.id }}/itineraries" hx-target="#itinerary-picker">{{ 'Add to trip' if activity.is_active else 'Manage trip' }}</button>
+      {% if not activity.is_active %}<p class="banner banner--warning">This activity is inactive and cannot be newly added to an itinerary. Existing selections remain available to update or remove.</p>{% endif %}
+      <div id="itinerary-picker"></div>
+    </section>
+    <div class="actions dialog-actions"><button class="button" type="button" data-close-dialog>Close</button></div>
+  </div>
+</dialog>

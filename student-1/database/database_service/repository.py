@@ -20,9 +20,11 @@ from .models import (
     ItineraryItemRecord,
     ItineraryItemUpdate,
     TripAccommodationRecord,
+    TripActivityRecord,
     TripCreate,
     TripRecord,
     TripStatus,
+    TripTransportRecord,
     TripUpdate,
 )
 from .seed_data import SEED_ITINERARY_ITEMS, SEED_TRIPS
@@ -57,6 +59,21 @@ TRIP_ACCOMMODATION_FIELDS = (
     "check_in_time",
     "check_out",
     "check_out_time",
+)
+
+TRIP_ACTIVITY_FIELDS = (
+    "trip_id",
+    "activity_id",
+    "date",
+    "start_time",
+)
+TRIP_TRANSPORT_FIELDS = (
+    "trip_id",
+    "transport_id",
+    "traveller_count",
+    "plan_status",
+    "added_on",
+    "notes",
 )
 
 SEED_MARKER_KEY = "student1_demo_seed_v1"
@@ -115,6 +132,15 @@ CREATE TABLE IF NOT EXISTS trip_accommodations (
 )
 """,
     """
+CREATE TABLE IF NOT EXISTS trip_activities (
+    trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    activity_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    start_time TEXT,
+    PRIMARY KEY (trip_id, activity_id)
+)
+""",
+    """
 CREATE TABLE IF NOT EXISTS schema_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -139,6 +165,30 @@ CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_category_date
     """
 CREATE INDEX IF NOT EXISTS idx_trip_accommodations_accommodation
     ON trip_accommodations (accommodation_id)
+""",
+    """
+CREATE INDEX IF NOT EXISTS idx_trip_activities_activity
+    ON trip_activities (activity_id)
+""",
+    """
+CREATE TABLE IF NOT EXISTS trip_transport (
+    trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    transport_id TEXT NOT NULL,
+    traveller_count INTEGER NOT NULL CHECK (traveller_count > 0),
+    plan_status TEXT NOT NULL CHECK (
+        plan_status IN ('pending', 'confirmed', 'cancelled', 'completed')
+    ),
+    added_on TEXT NOT NULL,
+    notes TEXT,
+    PRIMARY KEY (trip_id, transport_id)
+)
+""",
+    """
+-- The reverse lookup -- which trips hold this transport option? -- is what
+-- Student 3's picker asks on every open, and what its capacity check asks
+-- before accepting a selection.
+CREATE INDEX IF NOT EXISTS idx_trip_transport_transport
+    ON trip_transport (transport_id)
 """,
 )
 
@@ -344,6 +394,7 @@ class DatabaseService:
                 merged = existing | updates
                 self._validate_trip_record(merged)
                 self._ensure_trip_window_covers_items(connection, merged)
+                self._ensure_trip_window_covers_activities(connection, merged)
                 self._normalise_empty_payload(merged)
                 connection.execute(UPDATE_TRIP_SQL, merged)
 
@@ -552,6 +603,205 @@ class DatabaseService:
 
         return [self._serialise_trip(row) for row in rows]
 
+    def list_trip_activities(self, trip_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            self._get_trip_row(connection, trip_id)
+            rows = connection.execute(
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                "FROM trip_activities WHERE trip_id = ? "
+                "ORDER BY date ASC, activity_id ASC",
+                (trip_id,),
+            ).fetchall()
+
+        return [self._serialise_trip_activity(row) for row in rows]
+
+    def add_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+        date: str,
+        start_time: str | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                trip = self._get_trip_row(connection, trip_id)
+                if date < trip["start_date"] or date > trip["end_date"]:
+                    raise validation_error(
+                        "One or more fields failed validation.",
+                        [
+                            {
+                                "field": "date",
+                                "issue": (
+                                    f"must fall between {trip['start_date']} "
+                                    f"and {trip['end_date']}"
+                                ),
+                            }
+                        ],
+                    )
+                connection.execute(
+                    "INSERT INTO trip_activities "
+                    "(trip_id, activity_id, date, start_time) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (trip_id, activity_id) DO UPDATE SET "
+                    "date = excluded.date, start_time = excluded.start_time",
+                    (trip_id, activity_id, date, start_time),
+                )
+
+            row = connection.execute(
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                "FROM trip_activities WHERE trip_id = ? AND activity_id = ?",
+                (trip_id, activity_id),
+            ).fetchone()
+
+        return self._serialise_trip_activity(row)
+
+    def remove_trip_activity(
+        self,
+        trip_id: str,
+        activity_id: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                self._get_trip_row(connection, trip_id)
+                cursor = connection.execute(
+                    "DELETE FROM trip_activities WHERE trip_id = ? AND activity_id = ?",
+                    (trip_id, activity_id),
+                )
+                if cursor.rowcount == 0:
+                    raise not_found("Trip activity", activity_id)
+
+        return {"id": activity_id, "deleted": True}
+
+    def list_trips_for_activity(
+        self,
+        activity_id: str,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                "FROM trips JOIN trip_activities "
+                "ON trip_activities.trip_id = trips.id "
+                "WHERE trip_activities.activity_id = ? "
+                "ORDER BY trips.start_date ASC, trips.name COLLATE NOCASE ASC, "
+                "trips.id ASC",
+                (activity_id,),
+            ).fetchall()
+
+        return [self._serialise_trip(row) for row in rows]
+
+    def list_trip_transport(self, trip_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            self._get_trip_row(connection, trip_id)
+            rows = connection.execute(
+                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "
+                "FROM trip_transport WHERE trip_id = ? "
+                "ORDER BY added_on ASC, transport_id ASC",
+                (trip_id,),
+            ).fetchall()
+
+        return [self._serialise_trip_transport(row) for row in rows]
+
+    def add_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+        traveller_count: int,
+        plan_status: str,
+        added_on: str,
+        notes: str | None = None,
+    ) -> dict[str, object]:
+        """Pin one transport option to a trip, replacing any existing pin.
+
+        No date window check, unlike activities: the travel date belongs to the
+        transport option, which this service does not own and must not second-
+        guess. Whether an option suits the trip's dates is Student 3's call.
+        """
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                self._get_trip_row(connection, trip_id)
+                connection.execute(
+                    "INSERT INTO trip_transport "
+                    "(trip_id, transport_id, traveller_count, plan_status, "
+                    "added_on, notes) VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT (trip_id, transport_id) DO UPDATE SET "
+                    "traveller_count = excluded.traveller_count, "
+                    "plan_status = excluded.plan_status, "
+                    "added_on = excluded.added_on, "
+                    "notes = excluded.notes",
+                    (
+                        trip_id,
+                        transport_id,
+                        traveller_count,
+                        plan_status,
+                        added_on,
+                        notes,
+                    ),
+                )
+
+            row = connection.execute(
+                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "
+                "FROM trip_transport WHERE trip_id = ? AND transport_id = ?",
+                (trip_id, transport_id),
+            ).fetchone()
+
+        return self._serialise_trip_transport(row)
+
+    def remove_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            with self._write_transaction(connection):
+                self._get_trip_row(connection, trip_id)
+                cursor = connection.execute(
+                    "DELETE FROM trip_transport "
+                    "WHERE trip_id = ? AND transport_id = ?",
+                    (trip_id, transport_id),
+                )
+                if cursor.rowcount == 0:
+                    raise not_found("Trip transport", transport_id)
+
+        return {"id": transport_id, "deleted": True}
+
+    def list_trips_for_transport(
+        self,
+        transport_id: str,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                "FROM trips JOIN trip_transport "
+                "ON trip_transport.trip_id = trips.id "
+                "WHERE trip_transport.transport_id = ? "
+                "ORDER BY trips.start_date ASC, trips.name COLLATE NOCASE ASC, "
+                "trips.id ASC",
+                (transport_id,),
+            ).fetchall()
+
+        return [self._serialise_trip(row) for row in rows]
+
+    def transport_traveller_totals(self) -> list[dict[str, object]]:
+        """Travellers pinned to each transport option, for Student 3's seats.
+
+        Student 3 derives `seats_remaining` from this. It is one query here
+        rather than one request per option there, because that service asks for
+        every option at once whenever it renders a list.
+
+        Cancelled selections do not consume a seat.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT transport_id, SUM(traveller_count) AS travellers "
+                "FROM trip_transport "
+                "WHERE plan_status IN ('pending', 'confirmed', 'completed') "
+                "GROUP BY transport_id ORDER BY transport_id ASC",
+            ).fetchall()
+
+        return [
+            {"transport_id": row["transport_id"], "travellers": row["travellers"]}
+            for row in rows
+        ]
+
     def _get_trip_row(
         self,
         connection: sqlite3.Connection,
@@ -721,6 +971,38 @@ class DatabaseService:
             ],
         )
 
+    def _ensure_trip_window_covers_activities(
+        self,
+        connection: sqlite3.Connection,
+        record: dict[str, object],
+    ) -> None:
+        conflicting_rows = connection.execute(
+            """
+            SELECT activity_id, date
+            FROM trip_activities
+            WHERE trip_id = ?
+              AND (date < ? OR date > ?)
+            ORDER BY date ASC, activity_id ASC
+            LIMIT 3
+            """,
+            (record["id"], record["start_date"], record["end_date"]),
+        ).fetchall()
+        if not conflicting_rows:
+            return
+
+        sample_dates = ", ".join(row["date"] for row in conflicting_rows)
+        raise validation_error(
+            "One or more fields failed validation.",
+            [
+                {
+                    "field": "start_date",
+                    "issue": (
+                        f"cannot exclude existing activity dates ({sample_dates})"
+                    ),
+                },
+            ],
+        )
+
     def _validate_item_record(
         self,
         record: dict[str, object],
@@ -796,3 +1078,11 @@ class DatabaseService:
     @staticmethod
     def _serialise_trip_accommodation(row: sqlite3.Row) -> dict[str, object]:
         return TripAccommodationRecord.model_validate(dict(row)).model_dump(mode="json")
+
+    @staticmethod
+    def _serialise_trip_activity(row: sqlite3.Row) -> dict[str, object]:
+        return TripActivityRecord.model_validate(dict(row)).model_dump(mode="json")
+
+    @staticmethod
+    def _serialise_trip_transport(row: sqlite3.Row) -> dict[str, object]:
+        return TripTransportRecord.model_validate(dict(row)).model_dump(mode="json")

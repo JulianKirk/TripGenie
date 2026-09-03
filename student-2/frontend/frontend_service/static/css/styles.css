@@ -29,6 +29,9 @@ body {
 .masthead__eyebrow { margin: 0; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .masthead__title { margin: 0.2rem 0; font-size: 1.6rem; }
 .masthead__subtitle { margin: 0; color: var(--muted); }
+.masthead__home, .masthead > .button { margin-top: 1rem; vertical-align: middle; }
+.masthead__home { display: inline-block; padding: 0.4rem 0.8rem; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; text-decoration: none; }
+.masthead__home:hover, .masthead__home:focus-visible { color: #fff; background: var(--primary); }
 
 .layout { padding: 1.5rem clamp(1rem, 5vw, 3rem); }
 
@@ -106,6 +109,8 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 }
 .button:disabled { color: var(--muted); cursor: not-allowed; }
 .button--primary { background: var(--primary); border-color: var(--primary); color: var(--surface); }
+.button--danger { border-color: var(--sold_out); color: var(--sold_out); }
+.button--danger:hover, .button--danger:focus-visible { background: var(--sold_out); color: var(--surface); }
 .link {
   font: inherit;
   border: 0;

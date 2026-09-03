@@ -49,6 +49,17 @@ class DatabaseClient:
     async def query(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self.request("QUERY", PATH, json=body)
 
+    async def create(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self.request("POST", PATH, json=body)
+
+    async def update(
+        self, accommodation_id: UUID, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await self.request("PUT", f"{PATH}/{accommodation_id}", json=body)
+
+    async def delete(self, accommodation_id: UUID) -> None:
+        await self.request("DELETE", f"{PATH}/{accommodation_id}")
+
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await request(
             self._client, method, path, unavailable=UNAVAILABLE, **kwargs
@@ -83,6 +94,11 @@ async def request(
 
     if response.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, bad_response)
+
+    # A DELETE answers 204 with no body. Decoding it would be a ValueError and
+    # so a 502 -- a successful delete reported as a broken upstream.
+    if response.status_code == status.HTTP_204_NO_CONTENT:
+        return None
 
     try:
         body = response.json()

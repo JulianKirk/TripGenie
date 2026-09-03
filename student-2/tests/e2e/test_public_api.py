@@ -2,8 +2,9 @@
 TestClient against the real database service over ASGI. Covers the contract in
 student-2/docs/backend-service-api.md.
 
-Rows are seeded through the database service's own POST -- this service has no
-write path, by design.
+Most rows are seeded through the database service's own POST, so a read test
+does not depend on the write path being right. TestWrite below is where the
+public create/update/delete surface is exercised end to end.
 """
 
 from __future__ import annotations
@@ -33,6 +34,20 @@ def seeded(database):
 
 def query(client, **filters):
     return client.request("QUERY", "/accommodation", json=filters)
+
+
+# The same accommodation as HOTEL, but through the public contract: the place
+# is named rather than identified, which is the whole difference between the
+# two services' create bodies.
+PUBLIC_HOTEL = {
+    **HOTEL,
+    "location_details": {
+        "country": "australia",
+        "city": "sydney",
+        "street": "example street avenue",
+        "street_number": 123,
+    },
+}
 
 
 class TestHealth:
@@ -283,3 +298,73 @@ class TestFiltersReachTheDatabase:
         body = query(client, **filters).json()
         assert [a["name"] for a in body["accommodations"]] == expected
         assert body["total"] == len(expected)
+
+
+class TestWrite:
+    """Create, update and delete, through the public API and down to SQLite."""
+
+    def test_create_stores_the_row_and_returns_its_id(self, client):
+        created = client.post("/accommodation", json=PUBLIC_HOTEL)
+        assert created.status_code == 201
+        # Only what the caller needs to find the row again -- the rest is what
+        # they just sent.
+        assert created.json().keys() == {"id", "name"}
+
+        stored = client.get(f"/accommodation/{created.json()['id']}").json()
+        assert stored["location_details"]["city"] == "sydney"
+        assert stored["room_details"]["bed_types"] == ["king", "queen"]
+
+    def test_create_names_the_place_and_the_database_stores_ids(self, client, database):
+        """The point of the translation: names on the wire, ids in the table."""
+        row_id = client.post("/accommodation", json=PUBLIC_HOTEL).json()["id"]
+        place = database.get(f"/internal/accommodation/{row_id}").json()[
+            "location_details"
+        ]
+        assert place["city_id"] == str(place_ids("australia", "sydney")["city_id"])
+
+    def test_create_rejects_a_place_nobody_has(self, client):
+        body = {
+            **PUBLIC_HOTEL,
+            "location_details": {"country": "narnia", "city": "cair"},
+        }
+        response = client.post("/accommodation", json=body)
+        # Unlike a search, which answers empty -- you cannot store a row there.
+        assert response.status_code == 400
+
+    def test_create_rejects_a_body_missing_a_required_field(self, client):
+        body = {key: value for key, value in PUBLIC_HOTEL.items() if key != "name"}
+        # 400, not FastAPI's 422 -- see backend_service/errors.py.
+        assert client.post("/accommodation", json=body).status_code == 400
+
+    def test_update_merges_and_leaves_omitted_fields_alone(self, client, hotel_id):
+        updated = client.put(
+            f"/accommodation/{hotel_id}", json={"price_per_night": 99.5}
+        )
+        assert updated.status_code == 200
+        assert updated.json()["price_per_night"] == 99.5
+        # Untouched, and named on the way back out.
+        assert updated.json()["name"] == "example accommodation"
+        assert updated.json()["location_details"]["city"] == "sydney"
+
+    def test_update_can_move_an_accommodation_to_another_city(self, client, hotel_id):
+        body = {"location_details": {"country": "australia", "city": "katoomba"}}
+        updated = client.put(f"/accommodation/{hotel_id}", json=body)
+        assert updated.json()["location_details"]["city"] == "katoomba"
+        # The rest of the address is a merge, same as every other field.
+        assert updated.json()["location_details"]["street_number"] == 123
+
+    def test_update_rejects_a_city_without_a_country(self, client, hotel_id):
+        body = {"location_details": {"city": "sydney"}}
+        assert client.put(f"/accommodation/{hotel_id}", json=body).status_code == 400
+
+    def test_update_is_404_for_an_accommodation_that_is_not_there(self, client):
+        response = client.put(f"/accommodation/{uuid4()}", json={"rating": 3.0})
+        assert response.status_code == 404
+
+    def test_delete_removes_it(self, client, hotel_id):
+        assert client.delete(f"/accommodation/{hotel_id}").status_code == 204
+        assert client.get(f"/accommodation/{hotel_id}").status_code == 404
+
+    def test_delete_is_404_the_second_time(self, client, hotel_id):
+        client.delete(f"/accommodation/{hotel_id}")
+        assert client.delete(f"/accommodation/{hotel_id}").status_code == 404

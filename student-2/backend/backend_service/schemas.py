@@ -72,6 +72,57 @@ class Accommodation(BaseModel):
     room_details: Room | None = None
 
 
+class LocationCreateRequest(Location):
+    """The same message with the two names a new accommodation cannot go
+    without. The database service stores both as NOT NULL ids, so requiring
+    them here turns what would be its 400 into one raised before the round
+    trip -- and /docs then documents the create contract."""
+
+    country: str = Field(min_length=1)
+    city: str = Field(min_length=1)
+
+
+class AccommodationCreateRequest(Accommodation):
+    """The body of POST /accommodation.
+
+    Mirrors the database service's create request, with places named rather
+    than identified -- the route translates the two names into ids on the way
+    through. `id` is not accepted: the database service mints it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: None = None
+    name: str = Field(min_length=1)
+    type: AccommodationType
+    description: str = Field(min_length=1)
+    price_per_night: float = Field(ge=0)
+    availability_status: AvailabilityStatus
+    location_details: LocationCreateRequest
+
+
+class AccommodationUpdateRequest(Accommodation):
+    """The body of PUT /accommodation/{id} -- a merge, so every field is
+    optional and an omitted one is left alone. There is no way to unset a
+    field, the same as the database service's PUT.
+
+    `id` comes from the path; accepting a second one in the body would only
+    invite the two to disagree.
+    """
+
+    id: None = None
+
+    @model_validator(mode="after")
+    def _city_needs_country(self) -> AccommodationUpdateRequest:
+        # Same rule as a search: "Sydney" alone names more than one place, and
+        # the location client cannot resolve a city without its country.
+        location = self.location_details
+        if location is not None and location.city and not location.country:
+            message = "city requires country"
+            raise ValueError(message)
+        return self
+
+
 class AccommodationQueryRequest(BaseModel):
     """A match template plus the bounds that a template cannot express.
 
