@@ -1,0 +1,46 @@
+name: AI-Mode CI
+
+on:
+  push:
+    paths:
+      - 'ai-services/ai-mode/**'
+      - '.github/workflows/ai-mode-ci.yml'
+      - 'shared/configuration/**'
+      - 'ruff.toml'
+  pull_request:
+    paths:
+      - 'ai-services/ai-mode/**'
+      - '.github/workflows/ai-mode-ci.yml'
+      - 'shared/configuration/**'
+      - 'ruff.toml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Build and Validate Shared AI-Mode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install shared AI-Mode dependencies
+        working-directory: ai-services/ai-mode
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate installed shared AI-Mode package
+        working-directory: ai-services/ai-mode
+        run: python -c "import ai_mode_service"
+      - name: Run shared AI-Mode syntax checks
+        working-directory: ai-services/ai-mode
+        run: python -m compileall ai_mode_service tests examples
+      - name: Run shared AI-Mode Ruff checks
+        working-directory: ai-services/ai-mode
+        run: python -m ruff check ai_mode_service tests examples
+      - name: Run shared AI-Mode pytest suite
+        working-directory: ai-services/ai-mode
+        run: python -m pytest tests
+      - name: Build shared AI-Mode image
+        run: docker build -f ai-services/ai-mode/Dockerfile ai-services/ai-mode

@@ -8,3 +8,20 @@ services:
   student-3-backend:
     ports:
       - "8003:8003"
+
+  # The ask box, switched off for the loop. AI-Mode reports "degraded" when the
+  # model it is configured for is not pulled, student 2's /health passes that
+  # through, and the runner's Ollama volume is empty -- so the gate that waits
+  # for "status":"ok" waits forever on a service that is up and correct.
+  #
+  # Off is a state this service documents rather than a fudge: with no
+  # AI_MODE_URL the ask box is gone, /health says "not_configured", and every
+  # endpoint the loop checks behaves exactly as it does in production. Pulling a
+  # 4.9GB model on a runner to satisfy a health string buys nothing.
+  #
+  # ponytail: if the loop ever checks /accommodation/ai-search, this is where it
+  # changes -- point AI_MODE_DEFAULT_MODEL at qwen2.5:0.5b and pull that (400MB)
+  # in the workflow before the wait.
+  student-2-backend:
+    environment:
+      AI_MODE_URL: ""

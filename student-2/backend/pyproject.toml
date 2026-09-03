@@ -17,3 +17,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["backend_service*"]
+
+[tool.setuptools.package-data]
+# pip install is what copies the prompt asset into the image -- without the
+# glob the container starts and then 502s on the first ask-box question.
+backend_service = ["prompts/*.md"]

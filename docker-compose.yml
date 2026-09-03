@@ -121,10 +121,21 @@ services:
       # stores their ids and publishes their names, so every accommodation
       # response passes through here.
       LOCATION_URL: http://shared-backend:9100
+      # The ask box on the accommodation page. Unset it and the service still
+      # runs -- /health says "not_configured" and only /accommodation/ai-search
+      # is gone.
+      AI_MODE_URL: http://ai-mode:8006
+      # Longer than AI-Mode's own wait on Ollama below, so a slow generation is
+      # reported by the service that is actually waiting on it rather than
+      # guessed at from here. Under it, a 44-second answer -- measured, on a
+      # cold model -- reached the page as "ai mode service unavailable" while
+      # AI-Mode was still patiently waiting.
+      AI_MODE_TIMEOUT: "100"
     depends_on:
       - student-2-database
       - student-1-backend
       - shared-backend
+      - ai-mode
 
   # The accommodation webpage. Talks to the backend service and nothing else.
   student-2-frontend:
@@ -133,6 +144,12 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "9003:9003"
+    environment:
+      # The page's wait on the ask box, and the last one in the chain: the
+      # backend's own worst case is AI_MODE_TIMEOUT above times AI_MAX_ATTEMPTS,
+      # so this sits above that. Every other call the page makes keeps the
+      # ordinary 5 seconds.
+      AI_TIMEOUT: "210"
     depends_on:
       - student-2-backend
 
@@ -345,19 +362,39 @@ services:
       retries: 5
       start_period: 10s
 
-  # Shared AI gateway. Student backends call this service; only it calls the
-  # host Ollama runtime. Student 5 waits for the process to start, not for AI
-  # readiness, so budget and expense CRUD remains available without a model.
+  # Shared AI gateway. Every student's backend reaches it over HTTP, so the
+  # model client, the approved-model allowlist and the prompt/response bounds
+  # live in one place -- and it is the only service that speaks to Ollama.
+  # Internal only: its callers are the backends on this network, not a browser.
+  # Student 5 waits for the process to start, not for AI readiness, so budget
+  # and expense CRUD remains available without a model.
   ai-mode:
     build:
       context: ./ai-services/ai-mode
       dockerfile: Dockerfile
-    environment:
-      AI_MODE_OLLAMA_BASE_URL: http://host.docker.internal:11434
     expose:
       - "8006"
+    environment:
+      # Where Ollama runs is a deployment fact, not a code one: the container
+      # below by default, `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434`
+      # for a host runtime (which is what main assumes).
+      AI_MODE_OLLAMA_BASE_URL: "${AI_MODE_OLLAMA_BASE_URL:-http://ollama:11434}"
+      # The image's own default is qwen2.5:0.5b, which is too small for the
+      # accommodation ask box: it reads "under 100 a night" as a number of beds,
+      # or as a minimum price, and answers with filters that match nothing. The
+      # 8b model is already on the service's approved list and is what the
+      # feature is built against -- `docker compose exec ollama ollama pull
+      # llama3.1:8b` before using it. Drop this line to go back to the small
+      # model; the service runs either way.
+      AI_MODE_DEFAULT_MODEL: llama3.1:8b
+      # A local model on a laptop is slower than the 15s the image assumes:
+      # measured on this stack, an 8b answering a cold prompt takes ~32s of
+      # inference on top of ~11s of loading itself off disk.
+      AI_MODE_TIMEOUT_SECONDS: "90"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
     healthcheck:
       test:
         [
@@ -372,12 +409,22 @@ services:
       start_period: 10s
 
   # Local AI Model Runtime (Ollama)
+  # The models are not baked into the image: `docker compose exec ollama ollama
+  # pull qwen2.5:0.5b` once, and the volume keeps them across restarts.
   ollama:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
+    environment:
+      # Ollama drops a model from memory after 5 idle minutes by default, and
+      # loading this one back off disk is ~11 seconds added to the next answer.
+      # There is nothing else on this machine competing for the memory.
+      OLLAMA_KEEP_ALIVE: "60m"
+    volumes:
+      - ollama:/root/.ollama
 
 volumes:
+  ollama:
   shared-db:
   student-1-db:
   student-2-db:

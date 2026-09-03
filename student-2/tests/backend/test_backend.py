@@ -230,6 +230,9 @@ class TestHealthWithoutADatabase:
             "service": "student-2-backend",
             "database": "unreachable",
             "location": "unreachable",
+            # No AI_MODE_URL in these settings: the ask box is switched off,
+            # which is not one of the things that are broken here.
+            "ai_mode": "not_configured",
         }
 
     def test_a_health_body_that_says_nothing_is_not_read_as_ok(self, mock_client):

@@ -1,0 +1,23 @@
+{#
+  The answer to the question, under the ask box that asked it: the model's own
+  sentence, then how the question was read as filters. Worth showing plainly --
+  the filters below are what actually ran, and if they are wrong this is where
+  you can see that they are.
+
+  Always rendered, empty when there is nothing to say, so the ordinary search
+  can swap this same element back to blank out of band.
+#}
+<div id="ai-answer" class="ai-answer" aria-live="polite"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if reply %}
+    <p class="ai-reply">{{ reply }}</p>
+    <p class="ai-notice">
+      {% if understood %}
+        Searched for {{ understood|join(" · ") }}.
+      {% else %}
+        Could not tell what to filter on, so this is everything.
+      {% endif %}
+      <a class="link" href="{{ request.url_for('index') }}">Clear</a>
+    </p>
+  {% endif %}
+</div>

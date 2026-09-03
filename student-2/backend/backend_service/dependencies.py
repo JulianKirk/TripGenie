@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from backend_service.ai_client import AiClient
 from backend_service.client import DatabaseClient
 from backend_service.itinerary_client import ItineraryClient
 from backend_service.location_client import LocationClient
@@ -36,3 +37,12 @@ def get_location(request: Request) -> LocationClient:
 
 
 LocationDep = Annotated[LocationClient, Depends(get_location)]
+
+
+def get_ai(request: Request) -> AiClient:
+    """The one AI-Mode client, built once in the app lifespan -- same reason as
+    `get_db`. It exists even when the feature is switched off; it just says so."""
+    return request.app.state.ai
+
+
+AiDep = Annotated[AiClient, Depends(get_ai)]
