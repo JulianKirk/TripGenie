@@ -32,6 +32,7 @@ consumes; it is never an amount charged.
 | `STUDENT3_BACKEND_TRIPS_API_PREFIX` | `/api` | Trips API prefix. |
 | `STUDENT3_BACKEND_TRIPS_API_TIMEOUT_SECONDS` | `5` | Timeout for the trip lookup. |
 | `STUDENT3_BACKEND_VERIFY_TRIP_EXISTS` | `false` | Opt in to checking trips against Student 1. |
+| `STUDENT3_BACKEND_CURRENCY` | `AUD` | ISO 4217 currency for transport prices and estimates. |
 
 ## API surface
 
@@ -74,6 +75,7 @@ returning each plan entry joined to its option, ordered by departure, plus:
 - `entry_count` — every entry for the trip
 - `active_entry_count` — entries that still count (`pending`, `confirmed`, `completed`)
 - `estimated_cost_total` — summed over active entries only, in whole cents
+- `currency` — explicit ISO 4217 currency for the estimate
 
 ### `GET /api/transport-options/compare`
 
