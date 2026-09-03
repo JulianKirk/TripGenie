@@ -1,0 +1,5 @@
+<dialog class="activity-dialog" aria-labelledby="delete-title"><div class="dialog-content confirmation">
+  <p class="eyebrow">Destructive action</p><h2 id="delete-title">Permanently delete {{ activity.name }}?</h2>
+  <p>This removes the catalogue record and its schedules. Deactivation is safer when the entry may be needed later.</p>
+  <div class="actions"><button type="button" class="button" data-close-dialog>Cancel</button><form action="/manage/activity/{{ activity.id }}/delete" method="post" hx-delete="/manage/activity/{{ activity.id }}" hx-target="#activity-dialog"><button class="button button--danger" type="submit">Permanently delete</button></form></div>
+</div></dialog>

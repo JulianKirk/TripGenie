@@ -1,0 +1,18 @@
+{% if error %}{% include "partials/error_state.html" %}
+{% elif not page.activities %}<div class="empty-state"><h3>No catalogue entries</h3><p>Create the first activity.</p></div>
+{% else %}<div class="activity-grid">
+{% for activity in page.activities %}
+<article class="activity-card" id="activity-{{ activity.id }}">
+  <div class="activity-card__heading"><div><h3>{{ activity.name }}</h3><p>{{ activity.location_details|location }}</p></div><span class="pill {% if not activity.is_active %}pill--muted{% endif %}">{{ 'Active' if activity.is_active else 'Inactive' }}</span></div>
+  <p>{{ activity.description }}</p>
+  <div class="pills">{% for code in activity.categories %}<span class="pill">{{ labels.get(code, code|title) }}</span>{% endfor %}</div>
+  <div class="actions management-actions"><button class="button" hx-get="/manage/activity/{{ activity.id }}/edit" hx-target="#activity-dialog">Edit</button><button class="button button--danger" hx-get="/manage/activity/{{ activity.id }}/delete" hx-target="#activity-dialog">Delete</button></div>
+</article>
+{% endfor %}</div>
+<nav class="pager" aria-label="Management pages">
+  <p>Showing {{ page.offset + 1 }}–{{ [page.offset + page.limit, page.total]|min }} of {{ page.total }}</p>
+  <div class="actions">
+    {% if page.offset > 0 %}<a class="button" href="/manage?offset={{ [page.offset - page.limit, 0]|max }}&amp;limit={{ page.limit }}">Previous</a>{% endif %}
+    {% if page.offset + page.limit < page.total %}<a class="button" href="/manage?offset={{ page.offset + page.limit }}&amp;limit={{ page.limit }}">Next</a>{% endif %}
+  </div>
+</nav>{% endif %}

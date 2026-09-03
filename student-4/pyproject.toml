@@ -5,7 +5,10 @@ description = "Student 4 activities and attractions services for TripGenie."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "jinja2>=3.1,<4.0",
     "pydantic>=2.8,<3.0",
+    "python-multipart>=0.0.9,<1.0",
     "sqlalchemy>=2.0,<3.0",
     "uvicorn[standard]>=0.30,<1.0",
 ]
@@ -23,8 +26,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["database"]
-include = ["student4_database_service*"]
+where = ["database", "frontend"]
+include = [
+    "student4_database_service*",
+    "student4_frontend_service*",
+]
+
+[tool.setuptools.package-data]
+student4_frontend_service = [
+    "templates/*.html",
+    "templates/macros/*.html",
+    "templates/partials/*.html",
+    "static/css/*.css",
+    "static/js/*.js",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,16 +59,22 @@ extend-immutable-calls = ["fastapi.Body", "fastapi.Depends"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-mypy_path = "$MYPY_CONFIG_FILE_DIR/backend:$MYPY_CONFIG_FILE_DIR/database"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/backend:$MYPY_CONFIG_FILE_DIR/database:$MYPY_CONFIG_FILE_DIR/frontend"
 files = [
     "backend/student4_backend_service",
     "database/student4_database_service",
+    "frontend/student4_frontend_service",
     "tests/backend",
     "tests/database",
     "tests/e2e",
+    "tests/frontend",
 ]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "tests.database.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tests.frontend.*"
 disallow_untyped_defs = true

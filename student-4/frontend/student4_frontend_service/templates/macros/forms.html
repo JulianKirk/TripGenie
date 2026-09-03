@@ -1,0 +1,14 @@
+{% macro field_error(errors, name) -%}
+  {% if errors.get(name) %}<ul class="field-errors">{% for error in errors[name] %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+{%- endmacro %}
+
+{% macro schedule_row(schedule, index) -%}
+<div class="schedule-row">
+  <label class="field">Kind<select name="schedules.{{ index }}.recurring_weekly"><option value="true" {% if schedule.get('recurring_weekly') in [true, 'true'] %}selected{% endif %}>Weekly</option><option value="false" {% if schedule.get('recurring_weekly') in [false, 'false'] %}selected{% endif %}>One-off</option></select></label>
+  <label class="field">Weekday<select name="schedules.{{ index }}.day_of_week">{% for day in ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'] %}<option value="{{ day }}" {% if schedule.get('day_of_week') == day %}selected{% endif %}>{{ day|title }}</option>{% endfor %}</select></label>
+  <label class="field">Date<input name="schedules.{{ index }}.date" type="date" value="{{ schedule.get('date', '') }}"></label>
+  <label class="field">Start<input name="schedules.{{ index }}.start_time" type="time" required value="{{ schedule.get('start_time', '') }}"></label>
+  <label class="field">End<input name="schedules.{{ index }}.end_time" type="time" required value="{{ schedule.get('end_time', '') }}"></label>
+  <button class="button" type="button" data-remove-schedule>Remove schedule</button>
+</div>
+{%- endmacro %}
