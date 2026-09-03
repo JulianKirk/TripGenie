@@ -278,6 +278,7 @@ class BackendService:
 
         return TripTransportSummary(
             trip_id=trip_id,
+            currency=self._settings.currency,
             entry_count=len(entries),
             active_entry_count=count_active_plan_entries(entries),
             estimated_cost_total=active_plan_cost_total(entries),

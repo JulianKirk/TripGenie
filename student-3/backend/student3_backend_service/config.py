@@ -32,6 +32,13 @@ def _parse_bool(value: str | None, *, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_currency(value: str | None) -> str:
+    currency = (value or "AUD").strip().upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise ValueError("STUDENT3_BACKEND_CURRENCY must be a 3-letter ISO code.")
+    return currency
+
+
 def _normalise_prefix(value: str | None, *, env_name: str, default: str) -> str:
     prefix = (value or default).strip()
     if not prefix.startswith("/"):
@@ -67,6 +74,7 @@ class Settings:
     trips_api_prefix: str = "/api"
     trips_api_timeout_seconds: float = 5.0
     verify_trip_exists: bool = False
+    currency: str = "AUD"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -115,4 +123,5 @@ class Settings:
                 os.getenv("STUDENT3_BACKEND_VERIFY_TRIP_EXISTS"),
                 default=False,
             ),
+            currency=_parse_currency(os.getenv("STUDENT3_BACKEND_CURRENCY")),
         )

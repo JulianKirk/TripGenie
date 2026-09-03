@@ -35,6 +35,7 @@ IsoDateTime = Annotated[
     str,
     StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"),
 ]
+CurrencyCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 LongText = Annotated[str, StringConstraints(max_length=2000)]
 Price = Annotated[float, Field(ge=0, le=1_000_000)]
@@ -350,6 +351,7 @@ class PlannedTransport(StrictModel):
 
 class TripTransportSummary(StrictModel):
     trip_id: TripIdentifier
+    currency: CurrencyCode
     entry_count: int = Field(ge=0)
     active_entry_count: int = Field(ge=0)
     estimated_cost_total: Price
