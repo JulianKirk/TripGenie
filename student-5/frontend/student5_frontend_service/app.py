@@ -95,6 +95,19 @@ def create_app(
     def list_budgets() -> list[dict[str, Any]]:
         return backend.request("GET", "/budgets")
 
+    def trip_context(
+        budgets: list[dict[str, Any]], *records: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            trips = backend.request("GET", "/trips")
+            trip_error = None
+        except BackendError as error:
+            trips, trip_error = [], error
+        trips_by_id = {trip["id"]: trip for trip in trips}
+        for budget in [*budgets, *records]:
+            budget["trip"] = trips_by_id.get(budget["trip_id"])
+        return {"trips": trips, "trip_error": trip_error}
+
     def error_page(request: Request, error: BackendError) -> Response:
         return render(
             request,
@@ -131,6 +144,7 @@ def create_app(
             "partials/budget_list.html",
             page_title="Budgets",
             budgets=budgets,
+            **trip_context(budgets),
         )
 
     @app.get("/budgets/new")
@@ -144,6 +158,7 @@ def create_app(
             "partials/budget_form.html",
             page_title="Create budget",
             budgets=budgets,
+            **trip_context(budgets),
             form={
                 "currency": "AUD",
                 **{name: "0.00" for name in BUDGET_FIELDS[3:]},
@@ -219,6 +234,7 @@ def create_app(
                 "date_from": date_from,
                 "date_to": date_to,
             },
+            **trip_context(budgets, budget),
         )
 
     @app.get("/budgets/{budget_id}/edit")
@@ -233,6 +249,7 @@ def create_app(
             "partials/budget_form.html",
             page_title="Edit budget",
             budgets=budgets,
+            **trip_context(budgets),
             form=budget,
             errors={},
             action=f"/budgets/{budget_id}/edit",

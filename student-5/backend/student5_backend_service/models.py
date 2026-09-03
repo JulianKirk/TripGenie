@@ -134,8 +134,11 @@ class TripRecord(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: TripIdentifier
+    name: RequiredText | None = None
+    destination: RequiredText | None = None
     start_date: Date
     end_date: Date
+    status: RequiredText | None = None
 
 
 class ProviderStatus(str, Enum):
