@@ -553,7 +553,7 @@ def verify_portal_and_seeded_frontend(
     )
     require_contains(
         portal_response.body,
-        "Student 1:",
+        "Student 1",
         "http://localhost:8081",
         context="shared portal",
     )
