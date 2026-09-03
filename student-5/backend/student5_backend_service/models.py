@@ -201,28 +201,33 @@ class BudgetAnalysisRequest(StrictModel):
 class BudgetAnalysis(StrictModel):
     overview: Annotated[
         str,
-        StringConstraints(min_length=1, max_length=400),
+        StringConstraints(min_length=1),
         Field(
             description=(
-                "A concise direct answer quoting at least one exact supplied currency "
-                "amount and accurately stating relevant uncertainty."
+                "A direct two-to-four sentence answer quoting exact supplied currency "
+                "amounts and accurately stating relevant uncertainty."
             )
         ),
     ]
     risks: list[
         Annotated[
             str,
-            StringConstraints(min_length=1, max_length=180),
+            StringConstraints(min_length=1),
             Field(description="One distinct risk supported by the supplied context."),
         ]
-    ] = Field(max_length=3)
+    ] = Field(max_length=5)
     recommendations: list[
         Annotated[
             str,
-            StringConstraints(min_length=1, max_length=180),
-            Field(description="One concise, practical, non-contradictory next step."),
+            StringConstraints(min_length=1),
+            Field(
+                description=(
+                    "One practical, non-contradictory next step tied to a supplied "
+                    "amount, category, expense, or provider."
+                )
+            ),
         ]
-    ] = Field(min_length=1, max_length=3)
+    ] = Field(min_length=1, max_length=5)
     disclaimer: Annotated[str, StringConstraints(min_length=1, max_length=200)]
 
 

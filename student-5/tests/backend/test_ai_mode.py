@@ -55,6 +55,8 @@ def test_ai_mode_client_sends_schema_and_parses_structured_analysis() -> None:
         "recommendations",
         "disclaimer",
     ]
+    assert "maxLength" not in captured["schema"]["properties"]["overview"]
+    assert captured["schema"]["properties"]["recommendations"]["maxItems"] == 5
     assert result.analysis.recommendations == ["Keep a contingency reserve."]
     assert result.model == "qwen2.5:0.5b"
 
@@ -108,8 +110,10 @@ def test_budget_analysis_route_sends_only_selected_budget_context(
     assert "Total budget: AUD 1000.00" in prompt
     assert "Remaining budget: AUD 699.70 (complete: false)" in prompt
     assert "Recorded expenses: 1" in prompt
+    assert "Provider accommodation: unavailable" in prompt
     assert '"trip_id":"trip_chunk3"' in prompt
     assert '"description":"Dinner"' in prompt
+    assert "category allocations: spending targets, not expenses" in prompt
     assert captured["metadata"] == {
         "feature": "student-5-budget-analysis",
         "trip_id": "trip_chunk3",
