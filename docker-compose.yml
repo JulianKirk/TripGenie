@@ -331,7 +331,8 @@ services:
 
   # Student 4: Activities & Attractions Management
   # Grouping target for the complete Student 4 slice:
-  # `docker compose up --build student-4`.
+  # `docker compose up --build --remove-orphans student-4`. The orphan cleanup
+  # retires the old source-serving `student-4-service` container on upgrade.
   student-4:
     image: alpine:3
     command: ["true"]

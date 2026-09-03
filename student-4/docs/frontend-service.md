@@ -42,7 +42,9 @@ docker compose up student-4-frontend
 ```
 
 Then open `http://localhost:8084`. Start the complete Student 4 slice with
-`docker compose up --build student-4`.
+`docker compose up --build --remove-orphans student-4`. The orphan cleanup
+removes the retired `student-4-service` directory-server container if it exists,
+freeing the assignment port for the real frontend.
 
 ## HTML routes
 

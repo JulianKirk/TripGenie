@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, cast
@@ -13,6 +14,7 @@ def compose_services() -> dict[str, dict[str, Any]]:
         cwd=repository,
         check=True,
         capture_output=True,
+        env={**os.environ, "STUDENT4_FRONTEND_HOST_PORT": "8084"},
         text=True,
     )
     config = cast("dict[str, Any]", json.loads(result.stdout))
@@ -51,6 +53,8 @@ def test_student_4_publishes_only_its_frontend() -> None:
 
     assert services["student-4-backend"]["expose"] == ["8008"]
     assert "ports" not in services["student-4-backend"]
+    assert "ports" not in services["student-4-database"]
+    assert "ports" not in services["student-4"]
     frontend_port = services["student-4-frontend"]["ports"][0]
     assert frontend_port["target"] == 8084
     assert frontend_port["published"] == "8084"

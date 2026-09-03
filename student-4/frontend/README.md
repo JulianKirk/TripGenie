@@ -43,7 +43,9 @@ Browse and manage entries at `http://127.0.0.1:8084/`.
 
 Compose publishes the frontend on the assignment port at
 `http://localhost:8084`. Start the complete owned slice with
-`docker compose up --build student-4`.
+`docker compose up --build --remove-orphans student-4`. The orphan cleanup is
+required once when upgrading from the retired `student-4-service` placeholder,
+which previously occupied port 8084.
 
 ## HTML routes
 

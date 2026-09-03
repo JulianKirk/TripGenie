@@ -7,12 +7,14 @@ on:
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'shared/frontend/index.html'
   pull_request:
     paths:
       - 'student-4/**'
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'shared/frontend/index.html'
   workflow_dispatch:
 
 jobs:
