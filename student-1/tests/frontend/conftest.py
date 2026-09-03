@@ -587,6 +587,28 @@ class FakeBackendApi:
         row.update(fields)
         self.activities.setdefault(trip_id, []).append(row)
 
+    def pin_transport(self, trip_id: str, **fields: object) -> None:
+        row = {
+            "trip_id": trip_id,
+            "transport_id": "transport_1",
+            "traveller_count": 2,
+            "plan_status": "pending",
+            "added_on": "2027-04-01",
+            "notes": None,
+            "origin": None,
+            "destination": None,
+            "provider": None,
+            "type": None,
+            "departure_time": None,
+            "arrival_time": None,
+            "duration_minutes": None,
+            "price": None,
+            "pricing_basis": None,
+            "estimated_cost": None,
+        }
+        row.update(fields)
+        self.transport.setdefault(trip_id, []).append(row)
+
     def _trip_detail(self, trip_id: str) -> dict[str, object]:
         trip = deepcopy(self.trips[trip_id])
         days: list[dict[str, object]] = []
