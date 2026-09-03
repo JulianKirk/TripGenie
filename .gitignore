@@ -31,3 +31,13 @@ desktop.ini
 .env
 .env.local
 *.log
+
+# Graphify portable outputs are tracked (graph.json, graph.html, and
+# GRAPH_REPORT.md). Runtime state is local because it contains caches and
+# machine-specific absolute paths.
+graphify-out/cache/
+graphify-out/memory/
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/.*
+graphify-out/[0-9][0-9][0-9][0-9]-*/

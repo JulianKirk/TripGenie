@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Shared Frontend Portal
   shared-ui:
@@ -9,29 +7,246 @@ services:
     ports:
       - "8080:80"
 
+  # Shared Reference Service
+  # Country and city -- the reference data every micro-service needs. Same
+  # shape as a student's service: a public backend and an internal-only
+  # database service behind it. There is no frontend; the shared portal above
+  # is a different thing entirely.
+  #
+  # ponytail: no grouping container like student-2's. `docker compose up
+  # --build shared-backend` starts both, because the backend depends on the
+  # database. Add one if a third shared service ever appears.
+  shared-backend:
+    build:
+      context: ./shared
+      dockerfile: backend/Dockerfile
+    ports:
+      - "9100:9100"
+    depends_on:
+      - shared-database
+
+  # Internal only -- the shared backend is the sole caller and reaches it as
+  # http://shared-database:9101 on the compose network.
+  shared-database:
+    build:
+      context: ./shared
+      dockerfile: database/Dockerfile
+    expose:
+      - "9101"
+    volumes:
+      - shared-db:/data
+
   # Student 1: Trip & Itinerary Management
-  student-1-service:
+  # Same shape as student-2 below: a grouping container, a public backend, a
+  # webpage, and an internal-only database service.
+  student-1:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - student-1-frontend
+
+  # The public face of the trip service. Student 2's backend calls it to pin
+  # accommodations to trips, and this one calls student 2 back for the names
+  # and nightly rates the trip page shows -- the two services reference each
+  # other's data.
+  #
+  # ponytail: deliberately NO depends_on for student-2-backend. That service
+  # already depends on this one, so declaring the reverse is a cycle compose
+  # refuses to start. The dependency is a runtime lookup, not a boot order:
+  # AccommodationClient returns None when student 2 is not up yet and the trip
+  # page renders the stay without a name.
+  student-1-backend:
     build:
       context: ./student-1
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
+      STUDENT1_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+    ports:
+      - "8001:8001"
+    depends_on:
+      - student-1-database
+      - ai-mode
+
+  # The trip and itinerary webpage.
+  student-1-frontend:
+    build:
+      context: ./student-1
+      dockerfile: frontend/Dockerfile
+    environment:
+      # A browser address, not a compose one: the trip page links out to
+      # student 2's webpage, and that link is followed on the user's machine.
+      STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
     ports:
       - "8081:8081"
+    depends_on:
+      - student-1-backend
+
+  # Internal only -- the backend service is the sole caller and reaches it as
+  # http://student-1-database:8002 on the compose network.
+  student-1-database:
+    build:
+      context: ./student-1
+      dockerfile: database/Dockerfile
+    expose:
+      - "8002"
+    volumes:
+      - student-1-db:/data
 
   # Student 2: Accommodation Management
-  student-2-service:
+  # Not a service -- the name you type to bring the whole accommodation
+  # micro-service up: `docker compose up --build student-2`. It exits at once;
+  # the three services it depends on are the point.
+  # ponytail: compose has no way to name a group of services. A container that
+  # runs `true` is the cheapest one. Switch to profiles if this ever needs to
+  # be excluded from a bare `docker compose up`.
+  student-2:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      - student-2-frontend
+
+  # The public face of the accommodation service, and the only caller of the
+  # database service behind it.
+  student-2-backend:
     build:
       context: ./student-2
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     ports:
-      - "8082:8082"
+      - "9000:9000"
+    environment:
+      # The one cross-student dependency: adding an accommodation to an
+      # itinerary is a call to student 1's public API from here, never from
+      # the frontend.
+      ITINERARY_URL: http://student-1-backend:8001
+      # Country and city live in the shared reference service. This service
+      # stores their ids and publishes their names, so every accommodation
+      # response passes through here.
+      LOCATION_URL: http://shared-backend:9100
+    depends_on:
+      - student-2-database
+      - student-1-backend
+      - shared-backend
+
+  # The accommodation webpage. Talks to the backend service and nothing else.
+  student-2-frontend:
+    build:
+      context: ./student-2
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "9003:9003"
+    depends_on:
+      - student-2-backend
+
+  # Internal only -- no published port. The backend service is the sole caller
+  # and reaches it as http://student-2-database:9001 on the compose network.
+  student-2-database:
+    build:
+      context: ./student-2
+      dockerfile: database/Dockerfile
+    expose:
+      - "9001"
+    volumes:
+      - student-2-db:/data
 
   # Student 3: Transport Management
-  student-3-service:
+  # Not a service -- the name you type to bring the whole transport slice up:
+  # `docker compose up --build student-3`. It exits immediately; the three
+  # services it depends on are the point.
+  student-3:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      student-3-frontend:
+        condition: service_healthy
+
+  # The transport webpage. Talks to the Student 3 backend and nothing else.
+  student-3-frontend:
     build:
       context: ./student-3
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
+    environment:
+      STUDENT3_FRONTEND_BACKEND_BASE_URL: "${STUDENT3_FRONTEND_BACKEND_BASE_URL:-http://student-3-backend:8003}"
+      STUDENT3_FRONTEND_BACKEND_API_PREFIX: "${STUDENT3_FRONTEND_BACKEND_API_PREFIX:-/api}"
+      STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS:-5}"
+      STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
     ports:
-      - "8083:8083"
+      - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
+    depends_on:
+      student-3-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8093/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # The public /api surface. The only caller of the database service behind it,
+  # and the only thing that reads Student 1's trips API for the trip picker.
+  student-3-backend:
+    build:
+      context: ./student-3
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT3_BACKEND_API_PREFIX: "${STUDENT3_BACKEND_API_PREFIX:-/api}"
+      STUDENT3_BACKEND_DB_API_BASE_URL: "${STUDENT3_BACKEND_DB_API_BASE_URL:-http://student-3-database:8004}"
+      STUDENT3_BACKEND_DB_API_PREFIX: "${STUDENT3_BACKEND_DB_API_PREFIX:-/internal}"
+      STUDENT3_BACKEND_DB_API_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_DB_API_TIMEOUT_SECONDS:-5}"
+      STUDENT3_BACKEND_TRIPS_API_BASE_URL: "${STUDENT3_BACKEND_TRIPS_API_BASE_URL:-http://student-1-backend:8001}"
+      STUDENT3_BACKEND_TRIPS_API_PREFIX: "${STUDENT3_BACKEND_TRIPS_API_PREFIX:-/api}"
+      STUDENT3_BACKEND_TRIPS_API_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_TRIPS_API_TIMEOUT_SECONDS:-5}"
+      STUDENT3_BACKEND_VERIFY_TRIP_EXISTS: "${STUDENT3_BACKEND_VERIFY_TRIP_EXISTS:-false}"
+      STUDENT3_BACKEND_SERVICE_NAME: "${STUDENT3_BACKEND_SERVICE_NAME:-student-3-backend}"
+    expose:
+      - "8003"
+    depends_on:
+      student-3-database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Internal only -- no published port. Owns the Student 3 SQLite file; the
+  # backend reaches it as http://student-3-database:8004 on the compose network.
+  student-3-database:
+    build:
+      context: ./student-3
+      dockerfile: database/Dockerfile
+    environment:
+      STUDENT3_SQLITE_PATH: "${STUDENT3_SQLITE_PATH:-/data/student-3/tripgenie.db}"
+      STUDENT3_SEED_DATA: "${STUDENT3_SEED_DATA:-true}"
+    expose:
+      - "8004"
+    volumes:
+      - student-3-sqlite:/data/student-3
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/internal/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Student 4: Activities & Attractions Management
   student-4-service:
@@ -42,15 +257,125 @@ services:
       - "8084:8084"
 
   # Student 5: Budget & Expense Management
-  student-5-service:
+  # Grouping target for the complete Student 5 slice:
+  # `docker compose up --build student-5`.
+  student-5:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      student-5-frontend:
+        condition: service_healthy
+
+  student-5-frontend:
     build:
       context: ./student-5
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
+    environment:
+      STUDENT5_FRONTEND_BACKEND_BASE_URL: http://student-5-backend:8005
     ports:
       - "8085:8085"
+    depends_on:
+      student-5-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Local AI Model Runtime (Ollama)
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+  student-5-backend:
+    build:
+      context: ./student-5
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT5_BACKEND_API_PREFIX: /api/v1
+      STUDENT5_BACKEND_DB_API_BASE_URL: http://student-5-database:8007
+      STUDENT5_BACKEND_TRIPS_API_BASE_URL: http://student-1-backend:8001
+      STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
+      STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+    expose:
+      - "8005"
+    depends_on:
+      student-5-database:
+        condition: service_healthy
+      student-1-backend:
+        condition: service_started
+      student-3-backend:
+        condition: service_started
+      ai-mode:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  student-5-database:
+    build:
+      context: ./student-5
+      dockerfile: database/Dockerfile
+    environment:
+      STUDENT5_SQLITE_PATH: /data/student-5/tripgenie.db
+    expose:
+      - "8007"
+    volumes:
+      - student-5-sqlite:/data/student-5
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Shared AI gateway. Student backends call this service; only it calls the
+  # host Ollama runtime. Student backends wait for the process to start, not
+  # for AI readiness, so ordinary CRUD remains available without a model.
+  ai-mode:
+    build:
+      context: ./ai-services/ai-mode
+      dockerfile: Dockerfile
+    environment:
+      AI_MODE_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    expose:
+      - "8006"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  shared-db:
+  student-1-db:
+  student-2-db:
+  student-3-sqlite:
+  student-5-sqlite:

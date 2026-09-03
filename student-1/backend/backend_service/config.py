@@ -138,6 +138,9 @@ class Settings:
     api_prefix: str = "/api"
     database_api_timeout_seconds: float = 5.0
     service_name: str = "student-1-backend"
+    # Student 2 owns accommodation names and nightly rates.
+    accommodation_api_base_url: str = "http://student-2-backend:9000"
+    accommodation_api_timeout_seconds: float = 5.0
     ai_mode_base_url: str | None = None
     ai_mode_timeout_seconds: float = 15.0
     ai_prompt_asset: str = "runtime_ai_suggestions_v1.md"
@@ -162,6 +165,19 @@ class Settings:
                 ),
                 env_name="STUDENT1_BACKEND_DB_API_BASE_URL",
                 default="http://student-1-database:8002",
+            ),
+            accommodation_api_base_url=_normalise_base_url(
+                os.getenv(
+                    "STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL",
+                    "http://student-2-backend:9000",
+                ),
+                env_name="STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL",
+                default="http://student-2-backend:9000",
+            ),
+            accommodation_api_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_ACCOMMODATION_API_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_ACCOMMODATION_API_TIMEOUT_SECONDS",
+                default=5.0,
             ),
             database_api_prefix=_normalise_prefix(
                 os.getenv("STUDENT1_BACKEND_DB_API_PREFIX"),

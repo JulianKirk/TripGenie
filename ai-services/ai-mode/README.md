@@ -29,7 +29,7 @@ Release 0 assumes Ollama is installed and managed on the **host machine**, not i
 1. Install Ollama on the host OS using the official installer/package for that platform.
 2. Start Ollama so the shared AI-Mode service can reach its HTTP API.
    - Native `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
-   - Containerized `ai-mode` runs must receive `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434` from Compose. PR #29 / issue #13 owns that wiring.
+   - Containerized `ai-mode` runs receive `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434` from Compose.
 3. Pull the approved Release 0 model on the host:
 
    ```bash
@@ -276,7 +276,7 @@ Correlation IDs and other logged fields are sanitized defensively to stay single
 
 The Docker image is built from [`Dockerfile`](./Dockerfile) and exposes port `8006`.
 
-PR #29 / issue #13 owns final Compose wiring. The expected runtime contract is:
+The Compose runtime contract is:
 
 - service name: `ai-mode`
 - backend-to-service URL:
@@ -286,4 +286,4 @@ PR #29 / issue #13 owns final Compose wiring. The expected runtime contract is:
   - native `ai-mode`: `http://127.0.0.1:11434`
   - containerized `ai-mode`: `http://host.docker.internal:11434`
 
-This README documents the contract only; it does not require Compose changes or any Ollama installation/bootstrap steps in this PR or CI.
+Ollama remains a host prerequisite; Compose and CI do not install, start, or download Ollama or its models.

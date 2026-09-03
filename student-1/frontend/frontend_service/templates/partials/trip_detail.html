@@ -178,5 +178,72 @@
     {% endif %}
   </section>
 
+  <section class="panel panel--nested" aria-labelledby="accommodation-heading">
+    <div class="panel__header">
+      <div>
+        <h3 id="accommodation-heading">Accommodations</h3>
+        <p class="muted-copy">Where you are staying on this trip.</p>
+      </div>
+    </div>
+
+    {% if trip.accommodations %}
+      <ul class="stay-list">
+        {% for stay in trip.accommodations %}
+          <li class="stay-row">
+            {# The whole row is the link, so clicking anywhere on it opens the
+               accommodation. The bin sits outside the anchor rather than
+               inside it -- a button nested in a link is not a button any
+               more, and one stray click would remove the stay instead of
+               opening it. #}
+            {# hx-boost="false" because this leaves for another origin. The
+               shell boosts every anchor inside it, which would turn this into
+               a cross-origin XHR that CORS blocks -- the click would simply do
+               nothing. Opting out hands it back to the browser. #}
+            <a class="stay-row__link" hx-boost="false"
+               href="{{ accommodation_ui_url }}/?accommodation={{ stay.accommodation_id }}">
+              <span class="stay-row__name">
+                {# Student 2 owns the name. When it cannot be reached the id is
+                   what we have, and it beats an empty row. #}
+                {{ stay.name or stay.accommodation_id }}
+              </span>
+              <span class="stay-row__dates">
+                {{ stay.date }}{% if stay.check_in_time %} {{ stay.check_in_time }}{% endif %}
+                &rarr;
+                {% if stay.check_out %}
+                  {{ stay.check_out }}{% if stay.check_out_time %} {{ stay.check_out_time }}{% endif %}
+                {% else %}
+                  <span class="muted-copy">no check-out recorded</span>
+                {% endif %}
+              </span>
+              <span class="stay-row__price">
+                {% if stay.total_price is not none %}
+                  ${{ "%.2f"|format(stay.total_price) }}
+                {% elif stay.price_per_night is not none %}
+                  <span class="muted-copy">${{ "%.2f"|format(stay.price_per_night) }}/night</span>
+                {% else %}
+                  <span class="muted-copy">&mdash;</span>
+                {% endif %}
+              </span>
+            </a>
+            <a class="stay-row__remove"
+               href="{{ request.url_for('remove_accommodation_confirmation', trip_id=trip.id, accommodation_id=stay.accommodation_id) }}"
+               aria-label="Remove {{ stay.name or stay.accommodation_id }} from this trip">
+              {# Inline SVG rather than an icon font or an emoji: it inherits
+                 currentColor, scales with the text, and adds no request. #}
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M6.5 1a.5.5 0 0 0-.5.5V2H3a.5.5 0 0 0 0 1h.5l.6 10.1A1.5 1.5 0 0 0 5.6 15h4.8a1.5 1.5 0 0 0 1.5-1.4L12.5 3h.5a.5.5 0 0 0 0-1H10v-.5a.5.5 0 0 0-.5-.5h-3ZM7 2h2v-.5H7V2Zm-1.9 1h5.8l-.6 10a.5.5 0 0 1-.5.5H5.6a.5.5 0 0 1-.5-.5L4.5 3h.6Zm1.4 2a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0v-6a.5.5 0 0 1 .5-.5Zm2.5.5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0v-6Z"/>
+              </svg>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-copy">
+        No accommodation booked for this trip yet. Add one from the
+        <a href="{{ accommodation_ui_url }}/" hx-boost="false">accommodation page</a>.
+      </p>
+    {% endif %}
+  </section>
+
   {% include "partials/ai_mode_panel.html" %}
 </article>

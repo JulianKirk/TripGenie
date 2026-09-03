@@ -16,7 +16,7 @@ from student3_database_service.models import (
 )
 from student3_database_service.repository import (
     DatabaseService,
-    default_total_cost,
+    default_estimated_cost,
     duration_minutes,
 )
 from student3_database_service.seed_data import (
@@ -76,7 +76,7 @@ def test_seed_bookings_never_exceed_option_capacity() -> None:
         ):
             transport_id = str(booking["transport_id"])
             booked[transport_id] = booked.get(transport_id, 0) + int(
-                booking["passenger_count"],
+                booking["traveller_count"],
             )
 
     for transport_id, seats in booked.items():
@@ -141,9 +141,9 @@ def test_seed_totals_match_the_per_passenger_default(
         if booking["id"] in overridden:
             continue
 
-        assert booking["total_cost"] == default_total_cost(
+        assert booking["estimated_cost"] == default_estimated_cost(
             prices[booking["transport_id"]],
-            int(booking["passenger_count"]),
+            int(booking["traveller_count"]),
         )
 
 
@@ -159,8 +159,8 @@ def test_foreign_key_enforcement_is_enabled(
         connection.execute(
             """
             INSERT INTO transport_bookings (
-                id, trip_id, transport_id, passenger_count,
-                booking_date, total_cost, booking_status, notes
+                id, trip_id, transport_id, traveller_count,
+                booking_date, estimated_cost, booking_status, notes
             ) VALUES (
                 'booking_orphan_row', 'trip_2026_orphan', 'transport_missing_row',
                 1, '2026-01-01', 10.0, 'pending', NULL
@@ -187,14 +187,14 @@ def test_cancelled_bookings_do_not_consume_capacity(
             {
                 "trip_id": "trip_2027_queenstown_ski_escape",
                 "transport_id": SHUTTLE_ID,
-                "passenger_count": remaining + 3,
+                "traveller_count": remaining + 3,
                 "booking_date": "2027-05-03",
                 "booking_status": "confirmed",
             },
         ),
     )
 
-    assert created["passenger_count"] == int(shuttle["capacity"])
+    assert created["traveller_count"] == int(shuttle["capacity"])
 
 
 def test_reactivating_a_booking_on_a_cancelled_option_is_rejected(
@@ -326,7 +326,7 @@ def test_moving_a_booking_to_another_option_revalidates_capacity(
         )
 
     assert excinfo.value.status_code == 409
-    assert excinfo.value.details[0]["field"] == "passenger_count"
+    assert excinfo.value.details[0]["field"] == "traveller_count"
 
 
 def test_option_update_requires_at_least_one_field(
@@ -341,7 +341,7 @@ def test_option_update_requires_at_least_one_field(
     assert excinfo.value.details[0]["field"] == "body"
 
 
-def test_overridden_total_cost_survives_unrelated_updates(
+def test_overridden_estimated_cost_survives_unrelated_updates(
     service: DatabaseService,
 ) -> None:
     service.initialize()
@@ -351,33 +351,33 @@ def test_overridden_total_cost_survives_unrelated_updates(
         TransportBookingUpdate(notes="Toll pass added."),
     )
 
-    assert updated["total_cost"] == 612.00
+    assert updated["estimated_cost"] == 612.00
 
 
-def test_changing_passenger_count_rederives_an_overridden_total(
+def test_changing_traveller_count_rederives_an_overridden_total(
     service: DatabaseService,
 ) -> None:
     service.initialize()
 
     updated = service.update_transport_booking(
         "booking_2026_gold_coast_car_hire",
-        TransportBookingUpdate(passenger_count=2),
+        TransportBookingUpdate(traveller_count=2),
     )
 
-    assert updated["total_cost"] == default_total_cost(612.00, 2)
+    assert updated["estimated_cost"] == default_estimated_cost(612.00, 2)
 
 
-def test_an_explicit_total_cost_wins_over_the_rederived_default(
+def test_an_explicit_estimated_cost_wins_over_the_rederived_default(
     service: DatabaseService,
 ) -> None:
     service.initialize()
 
     updated = service.update_transport_booking(
         "booking_2026_gold_coast_car_hire",
-        TransportBookingUpdate(passenger_count=2, total_cost=612.00),
+        TransportBookingUpdate(traveller_count=2, estimated_cost=612.00),
     )
 
-    assert updated["total_cost"] == 612.00
+    assert updated["estimated_cost"] == 612.00
 
 
 def test_cross_timezone_duration_uses_utc_not_wall_clock(
@@ -471,8 +471,8 @@ def test_seats_remaining_is_not_a_stored_column(
     assert {"departure_utc_offset", "arrival_utc_offset"} <= columns
 
 
-def test_default_total_cost_is_exact_in_cents() -> None:
+def test_default_estimated_cost_is_exact_in_cents() -> None:
     # 0.1 * 3 is 0.30000000000000004 in binary floating point.
-    assert default_total_cost(0.10, 3) == 0.30
-    assert default_total_cost(19.99, 7) == 139.93
-    assert default_total_cost(48.75, 2) == 97.50
+    assert default_estimated_cost(0.10, 3) == 0.30
+    assert default_estimated_cost(19.99, 7) == 139.93
+    assert default_estimated_cost(48.75, 2) == 97.50

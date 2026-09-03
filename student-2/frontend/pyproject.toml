@@ -1,0 +1,29 @@
+[project]
+name = "tripgenie-student2-frontend"
+version = "0.1.0"
+description = "Student 2 accommodation HTMX frontend microservice for TripGenie."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "jinja2>=3.1,<4.0",
+    "python-multipart>=0.0.9,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["frontend_service*"]
+
+[tool.setuptools.package-data]
+# pip install is what copies these into the image -- without the globs the
+# container starts and then 500s on the first template lookup.
+frontend_service = [
+    "templates/*.html",
+    "templates/partials/*.html",
+    "static/css/*.css",
+]

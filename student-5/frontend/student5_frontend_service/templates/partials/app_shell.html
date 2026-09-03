@@ -1,0 +1,20 @@
+<main id="app-shell" class="app-shell" hx-boost="true" hx-target="#app-shell" hx-swap="outerHTML" hx-indicator="#global-loading-indicator" tabindex="-1" data-autofocus>
+  <div class="app-layout">
+    <aside class="sidebar panel" aria-labelledby="budget-nav-heading">
+      <div class="panel-heading">
+        <div><p class="eyebrow">Workspace</p><h2 id="budget-nav-heading">Budgets</h2></div>
+        <a class="icon-button" href="/budgets/new" title="Create budget" aria-label="Create budget">+</a>
+      </div>
+      <nav aria-label="Budget list">
+        {% if budgets %}
+          <ul class="budget-nav">
+          {% for item in budgets %}
+            <li><a href="/budgets/{{ item.budget_id }}"><strong>{{ item.trip_id }}</strong><span>{{ item.currency }} {{ item.total_budget }}</span></a></li>
+          {% endfor %}
+          </ul>
+        {% else %}<p class="muted">No budgets yet.</p>{% endif %}
+      </nav>
+    </aside>
+    <section class="content-panel">{% include content_template %}</section>
+  </div>
+</main>

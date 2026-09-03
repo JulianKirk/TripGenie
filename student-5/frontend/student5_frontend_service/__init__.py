@@ -1,0 +1,1 @@
+"""Student 5 HTMX frontend service."""

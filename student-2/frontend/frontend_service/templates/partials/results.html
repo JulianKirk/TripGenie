@@ -1,0 +1,86 @@
+{#
+  The list and its pager. This is the whole of #results, so a search, a filter
+  change and a page link all swap the same fragment.
+
+  A result row is the trimmed message the backend returns for a list -- the
+  description, amenities and room details only arrive when the modal asks for
+  the accommodation in full.
+#}
+{% set last = offset + accommodations|length %}
+<div class="results__bar">
+  <p class="results__count">
+    {% if total %}
+      Showing {{ offset + 1 }}–{{ last }} of {{ total }}
+    {% else %}
+      No accommodations match these filters.
+    {% endif %}
+  </p>
+  {# The page size lives here rather than in the filter form, so it sits above
+     the table. It carries no offset, so changing it lands on page one. #}
+  <label class="results__limit">Per page
+    <select name="limit"
+            hx-get="{{ request.url_for('results') }}"
+            hx-include="#filters" hx-target="#results" hx-swap="innerHTML">
+      {% for size in page_sizes %}
+        <option value="{{ size }}" {% if size == limit %}selected{% endif %}>{{ size }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</div>
+
+{% if accommodations %}
+<table class="results__table">
+  <caption class="visually-hidden">Accommodations matching the current filters</caption>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Type</th>
+      <th scope="col">Where</th>
+      <th scope="col">Per night</th>
+      <th scope="col">Rating</th>
+      <th scope="col">Availability</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in accommodations %}
+      {% set where = a.location_details or {} %}
+      <tr class="results__row"
+          hx-get="{{ request.url_for('detail', accommodation_id=a.id) }}"
+          hx-target="#modal"
+          hx-swap="innerHTML">
+        <th scope="row">
+          {# A clickable <tr> is not reachable by keyboard, so the name is the
+             button and the row click is the shortcut for a mouse. #}
+          <button type="button" class="link">{{ a.name }}</button>
+        </th>
+        <td>{{ (a.type or "")|replace("_", " ")|title }}</td>
+        <td>{{ where.city|default("", true)|title }}{% if where.city and where.country %}, {% endif %}{{ where.country|default("", true)|title }}</td>
+        <td>{% if a.price_per_night is not none %}${{ "%.2f"|format(a.price_per_night) }}{% else %}—{% endif %}</td>
+        <td>{% if a.rating is not none %}{{ a.rating }} / 5{% else %}Unrated{% endif %}</td>
+        <td>
+          <span class="pill pill--{{ a.availability_status|default('unknown', true) }}">
+            {{ (a.availability_status or "unknown")|replace("_", " ")|title }}
+          </span>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if total > limit %}
+<nav class="pager" aria-label="Result pages">
+  {# hx-include pulls the current filters off the form, so a page link only has
+     to carry the offset. The form has no offset of its own, which is why any
+     filter change lands back on page one. #}
+  <button type="button" class="button"
+          hx-get="{{ request.url_for('results') }}?offset={{ [offset - limit, 0]|max }}&limit={{ limit }}"
+          hx-include="#filters" hx-target="#results" hx-swap="innerHTML"
+          {% if offset == 0 %}disabled{% endif %}>Previous</button>
+  <span>Page {{ (offset // limit) + 1 }} of {{ ((total - 1) // limit) + 1 }}</span>
+  <button type="button" class="button"
+          hx-get="{{ request.url_for('results') }}?offset={{ offset + limit }}&limit={{ limit }}"
+          hx-include="#filters" hx-target="#results" hx-swap="innerHTML"
+          {% if last >= total %}disabled{% endif %}>Next</button>
+</nav>
+{% endif %}

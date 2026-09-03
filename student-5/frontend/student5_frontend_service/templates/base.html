@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title }} · TripGenie Student 5</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{{ request.url_for('static', path='js/app.js') }}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <p class="eyebrow">TripGenie Student 5</p>
+      <h1><a href="/">Budget &amp; Expense Management</a></h1>
+      <p>Plan a trip budget, record spending, and keep the remaining balance visible.</p>
+    </div>
+  </header>
+  <div id="global-loading-indicator" class="loading htmx-indicator" role="status">Updating budget...</div>
+  {% block body %}{% endblock %}
+</body>
+</html>

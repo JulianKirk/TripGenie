@@ -1,0 +1,169 @@
+{#
+  The whole page. Every filter, the search box and the page-size select live in
+  one form: a single hx-trigger on it covers search-as-you-type and every other
+  control, so there is no per-input wiring. The only script on the page is the
+  city/country pairing at the bottom.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accommodation · TripGenie Student 2</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <p class="masthead__eyebrow">TripGenie Student 2</p>
+    <h1 class="masthead__title">Accommodation</h1>
+    <p class="masthead__subtitle">Search, filter and open any listing for the full detail.</p>
+  </header>
+
+  <main class="layout">
+    <form id="filters" class="filters"
+          hx-get="{{ request.url_for('results') }}"
+          hx-trigger="input changed delay:300ms, change"
+          hx-target="#results"
+          hx-swap="innerHTML"
+          hx-indicator="#loading">
+      {# No offset field: changing any filter drops you back to page one,
+         because only the pager links carry an offset. #}
+      <div class="filters__search">
+        <label for="f-name">Search by name</label>
+        <input id="f-name" name="name" type="search" autocomplete="off"
+               placeholder="Start typing…" value="{{ params.get('name', '') }}">
+      </div>
+
+      <details class="filters__more" {% if params and params|length > 1 %}open{% endif %}>
+        <summary>Filters</summary>
+        <div class="filters__grid">
+          <label>Type
+            <select name="type">
+              <option value="">Any</option>
+              {% for value in ["hotel", "hostel", "apartment", "resort", "guesthouse", "camping"] %}
+                <option value="{{ value }}" {% if params.get('type') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>Availability
+            <select name="availability_status">
+              <option value="">Any</option>
+              {% for value in ["available", "unavailable", "sold_out"] %}
+                <option value="{{ value }}" {% if params.get('availability_status') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>Description contains
+            <input name="description" type="search" autocomplete="off" value="{{ params.get('description', '') }}">
+          </label>
+
+          <label>Country
+            <input id="f-country" name="country" type="search" autocomplete="off" value="{{ params.get('country', '') }}">
+          </label>
+
+          <label>City
+            {# The backend rejects a city without a country, so the input stays
+               disabled until there is one -- the 400 is unreachable from here. #}
+            <input name="city" type="search" autocomplete="off"
+                   value="{{ params.get('city', '') }}"
+                   {% if not params.get('country') %}disabled{% endif %}
+                   data-needs="country">
+          </label>
+
+          <label>Street
+            <input name="street" type="search" autocomplete="off" value="{{ params.get('street', '') }}">
+          </label>
+
+          <label>Street number
+            <input name="street_number" type="number" min="0" value="{{ params.get('street_number', '') }}">
+          </label>
+
+          <label>Price from
+            <input name="price_min" type="number" min="0" step="1" value="{{ params.get('price_min', '') }}">
+          </label>
+
+          <label>Price to
+            <input name="price_max" type="number" min="0" step="1" value="{{ params.get('price_max', '') }}">
+          </label>
+
+          <label>Rating from
+            <input name="rating_min" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_min', '') }}">
+          </label>
+
+          <label>Rating to
+            <input name="rating_max" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_max', '') }}">
+          </label>
+
+          <label>Rooms (at least)
+            <input name="room_count_min" type="number" min="0" value="{{ params.get('room_count_min', '') }}">
+          </label>
+
+          <label>Rooms (exactly)
+            <input name="room_count" type="number" min="0" value="{{ params.get('room_count', '') }}">
+          </label>
+
+          <label>Beds (at least)
+            <input name="bed_count_min" type="number" min="0" value="{{ params.get('bed_count_min', '') }}">
+          </label>
+
+          <label>Beds (exactly)
+            <input name="bed_count" type="number" min="0" value="{{ params.get('bed_count', '') }}">
+          </label>
+
+          <label>Room description contains
+            <input name="room_description" type="search" autocomplete="off" value="{{ params.get('room_description', '') }}">
+          </label>
+        </div>
+
+        <fieldset class="filters__amenities">
+          <legend>Amenities (all of them must be present)</legend>
+          {% for amenity in ["wifi", "pool", "gym", "spa", "breakfast", "parking", "kitchen", "laundry", "air_conditioning"] %}
+            <label class="checkbox">
+              <input type="checkbox" name="amenities" value="{{ amenity }}"
+                     {% if amenity in params.getlist('amenities') %}checked{% endif %}>
+              {{ amenity|replace("_", " ")|title }}
+            </label>
+          {% endfor %}
+        </fieldset>
+
+        <a class="button" href="{{ request.url_for('index') }}">Clear all filters</a>
+      </details>
+      <span id="loading" class="htmx-indicator" role="status">Searching…</span>
+    </form>
+
+    <section id="results" class="results" aria-live="polite">
+      {% if error %}
+        {% include "partials/error.html" %}
+      {% else %}
+        {% include "partials/results.html" %}
+      {% endif %}
+    </section>
+  </main>
+
+  {# The modal is swapped in here and removes itself on close. A deep link
+     (?accommodation=<id>) renders it server-side so it is open on arrival. #}
+  <div id="modal">
+    {% if opened %}{% with accommodation = opened %}{% include "partials/modal.html" %}{% endwith %}{% endif %}
+  </div>
+  {% if opened_missing %}
+    <p class="error" role="alert">
+      That accommodation could not be found. It may have been removed.
+    </p>
+  {% endif %}
+  {# And the Add-to-Trip form, which opens as a second dialog over that one. #}
+  <div id="stay-modal"></div>
+
+  <script>
+    // The city filter is only legal alongside a country (see app.py).
+    document.addEventListener("input", (event) => {
+      if (event.target.id !== "f-country") return;
+      const city = document.querySelector('[data-needs="country"]');
+      city.disabled = !event.target.value.trim();
+      if (city.disabled) city.value = "";
+    });
+  </script>
+</body>
+</html>

@@ -2,9 +2,15 @@
 name = "tripgenie-student2-accommodation"
 version = "0.1.0"
 description = "Student 2 accommodation microservice for TripGenie."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "jinja2>=3.1,<4.0",
+    "pydantic>=2.8,<3.0",
+    "python-multipart>=0.0.9,<1.0",
     "sqlalchemy>=2.0,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -17,8 +23,16 @@ dev = [
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-# ponytail: declares dependencies only. `database` is imported via the
-# pythonpath in the repo-root pytest.ini, so there is nothing to package --
-# this stops setuptools auto-discovering backend/frontend/tests as modules.
-py-modules = []
+[tool.setuptools.packages.find]
+# The aggregate dev/test install. Each service's own pyproject.toml is the slim
+# one its image builds from; this one exists so `pytest student-2/tests` can
+# import both packages without a PYTHONPATH.
+where = ["database", "backend", "frontend"]
+include = ["database_service*", "backend_service*", "frontend_service*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    'ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead\.',
+]

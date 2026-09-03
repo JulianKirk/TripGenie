@@ -10,6 +10,7 @@ on:
       - 'shared/configuration/**'
       - '.github/workflows/student-1-ci.yml'
       - '.github/workflows/ai-mode-ci.yml'
+      - 'docker-compose.yml'
       - 'ruff.toml'
   pull_request:
     paths:
@@ -20,6 +21,7 @@ on:
       - 'shared/configuration/**'
       - '.github/workflows/student-1-ci.yml'
       - '.github/workflows/ai-mode-ci.yml'
+      - 'docker-compose.yml'
       - 'ruff.toml'
   workflow_dispatch:
 

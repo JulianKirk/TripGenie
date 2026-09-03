@@ -14,7 +14,7 @@ This update uses three labels consistently:
 
 Because the assignment handout is not committed in this repository snapshot, the traceability table below points the **Assignment / Group 07 requirement** column at the repository artefacts that currently carry that scope: README, Docker Compose, CI, and the paired Student 1 design docs.
 
-Issue #12 now implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan still stays evidence-oriented: it does **not** fabricate live Compose showcase proof, and final Compose wiring remains deferred to PR #29 / issue #13.
+Issue #12 implements the Student 1 runtime AI-mode and the shared AI-Mode service boundary. This plan stays evidence-oriented and does **not** fabricate live Compose showcase proof.
 
 ## 2. Course source pack used
 
@@ -117,7 +117,7 @@ Issue #12 implements the bounded runtime path separately from the assessed workf
 ## 8. Limitations and open points
 
 - [asd-labs README][ASD-README] advertises Labs 05/06, but the visible repository snapshot used for this update exposes only Labs 01-04 plus the AI guide and README [ASD-TREE]. No later-lab requirement is asserted here.
-- Current Group 07 repository evidence still leaves final shared-service wiring to [docker-compose.yml][TG-COMPOSE]; service names, ports, and runtime Compose host-bridge connections remain pending PR #29 / issue #13.
+- Current Group 07 repository evidence records shared-service names, ports, and the Compose host bridge in [docker-compose.yml][TG-COMPOSE].
 - `deepseek-r1:8b` appears in the AI guide only as a reasoning model for later labs [CFG], so it is intentionally kept out of Student 1 Release 0 scope.
 
 [TG-ARCH]: ../../architecture/student-1-release-0-architecture.md

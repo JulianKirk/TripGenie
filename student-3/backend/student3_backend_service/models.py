@@ -1,0 +1,356 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from enum import Enum
+from typing import Annotated, Generic, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+TransportIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=11,
+        max_length=64,
+        pattern=r"^transport_[A-Za-z0-9][A-Za-z0-9_-]{2,53}$",
+    ),
+]
+BookingIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=9,
+        max_length=64,
+        pattern=r"^booking_[A-Za-z0-9][A-Za-z0-9_-]{2,55}$",
+    ),
+]
+TripIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=6,
+        max_length=64,
+        pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$",
+    ),
+]
+IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+IsoDateTime = Annotated[
+    str,
+    StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"),
+]
+ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
+LongText = Annotated[str, StringConstraints(max_length=2000)]
+Price = Annotated[float, Field(ge=0, le=1_000_000)]
+UtcOffsetMinutes = Annotated[int, Field(ge=-720, le=840)]
+
+T = TypeVar("T")
+
+MAX_TRANSPORT_DURATION_MINUTES = 60 * 24 * 90
+MAX_COMPARE_SELECTION = 4
+
+_ISO_DATETIME_MESSAGE = "must be a valid ISO timestamp in YYYY-MM-DDTHH:MM format"
+_ISO_DATE_MESSAGE = "must be a valid ISO date in YYYY-MM-DD format"
+_MONEY_MESSAGE = "must have at most 2 decimal places"
+
+
+def _validate_iso_date(value: str) -> str:
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(_ISO_DATE_MESSAGE) from exc
+
+    return value
+
+
+def _validate_iso_datetime(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(_ISO_DATETIME_MESSAGE) from exc
+
+    if parsed.second or parsed.microsecond or parsed.tzinfo is not None:
+        raise ValueError(_ISO_DATETIME_MESSAGE)
+
+    return value
+
+
+def _validate_money(value: float) -> float:
+    rounded = round(value, 2)
+    if abs(value - rounded) > 1e-9:
+        raise ValueError(_MONEY_MESSAGE)
+
+    return rounded
+
+
+def _normalise_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    return stripped or None
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class TransportType(str, Enum):
+    FLIGHT = "flight"
+    TRAIN = "train"
+    BUS = "bus"
+    FERRY = "ferry"
+    CAR_RENTAL = "car_rental"
+    TRANSFER = "transfer"
+
+
+class AvailabilityStatus(str, Enum):
+    AVAILABLE = "available"
+    LIMITED = "limited"
+    SOLD_OUT = "sold_out"
+    CANCELLED = "cancelled"
+
+
+class BookingStatus(str, Enum):
+    """Plan states. TripGenie does not place reservations with carriers."""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+ACTIVE_PLAN_STATUSES = frozenset(
+    {BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.COMPLETED},
+)
+
+
+class ErrorDetail(StrictModel):
+    field: str
+    issue: str
+
+
+class ErrorBody(StrictModel):
+    code: str
+    message: str
+    details: list[ErrorDetail] = Field(default_factory=list)
+
+
+class ErrorEnvelope(StrictModel):
+    error: ErrorBody
+
+
+class DataEnvelope(StrictModel, Generic[T]):
+    data: T
+
+
+class DeleteResponse(StrictModel):
+    id: str
+    deleted: bool = True
+
+
+class DatabaseHealthPayload(StrictModel):
+    status: str
+    service: str
+    sqlite_path: str
+
+
+class DependencyStatus(StrictModel):
+    status: str
+    service: str
+    detail: str
+    code: str | None = None
+
+
+class HealthDependencies(StrictModel):
+    database: DependencyStatus
+
+
+class HealthResponse(StrictModel):
+    status: str
+    service: str
+    dependencies: HealthDependencies
+
+
+class TransportOptionFields(StrictModel):
+    type: TransportType
+    provider: ShortText
+    origin: ShortText
+    destination: ShortText
+    departure_time: IsoDateTime
+    arrival_time: IsoDateTime
+    departure_utc_offset: UtcOffsetMinutes | None = None
+    arrival_utc_offset: UtcOffsetMinutes | None = None
+    price: Price
+    capacity: int = Field(ge=1, le=10_000)
+    availability_status: AvailabilityStatus
+    notes: LongText | None = None
+
+    @field_validator("departure_time", "arrival_time")
+    @classmethod
+    def validate_timestamps(cls, value: str) -> str:
+        return _validate_iso_datetime(value)
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, value: float) -> float:
+        return _validate_money(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportOptionCreate(TransportOptionFields):
+    id: TransportIdentifier | None = None
+
+
+class TransportOptionUpdate(StrictModel):
+    type: TransportType | None = None
+    provider: ShortText | None = None
+    origin: ShortText | None = None
+    destination: ShortText | None = None
+    departure_time: IsoDateTime | None = None
+    arrival_time: IsoDateTime | None = None
+    departure_utc_offset: UtcOffsetMinutes | None = None
+    arrival_utc_offset: UtcOffsetMinutes | None = None
+    price: Price | None = None
+    capacity: int | None = Field(default=None, ge=1, le=10_000)
+    availability_status: AvailabilityStatus | None = None
+    notes: LongText | None = None
+
+    @field_validator("departure_time", "arrival_time")
+    @classmethod
+    def validate_timestamps(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_datetime(value)
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+
+        return _validate_money(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportOptionRecord(TransportOptionFields):
+    id: TransportIdentifier
+    duration_minutes: int = Field(ge=1, le=MAX_TRANSPORT_DURATION_MINUTES)
+    seats_remaining: int = Field(ge=0)
+
+
+class TransportPlanEntryFields(StrictModel):
+    trip_id: TripIdentifier
+    transport_id: TransportIdentifier
+    traveller_count: int = Field(ge=1, le=1000)
+    booking_date: IsoDate
+    booking_status: BookingStatus
+    notes: LongText | None = None
+
+    @field_validator("booking_date")
+    @classmethod
+    def validate_booking_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportPlanEntryCreate(TransportPlanEntryFields):
+    id: BookingIdentifier | None = None
+    estimated_cost: Price | None = None
+
+    @field_validator("estimated_cost")
+    @classmethod
+    def validate_estimated_cost(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+
+        return _validate_money(value)
+
+
+class TransportPlanEntryUpdate(StrictModel):
+    trip_id: TripIdentifier | None = None
+    transport_id: TransportIdentifier | None = None
+    traveller_count: int | None = Field(default=None, ge=1, le=1000)
+    booking_date: IsoDate | None = None
+    booking_status: BookingStatus | None = None
+    estimated_cost: Price | None = None
+    notes: LongText | None = None
+
+    @field_validator("estimated_cost")
+    @classmethod
+    def validate_estimated_cost(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+
+        return _validate_money(value)
+
+    @field_validator("booking_date")
+    @classmethod
+    def validate_booking_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        return _validate_iso_date(value)
+
+    @field_validator("notes")
+    @classmethod
+    def normalise_notes(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class TransportPlanEntryRecord(TransportPlanEntryFields):
+    id: BookingIdentifier
+    estimated_cost: Price
+
+
+class TripSummary(BaseModel):
+    """A trip as Student 1 reports it. Extra fields are tolerated on purpose.
+
+    Student 1 owns trips; this exists only so pickers can show a readable label
+    instead of asking a traveller to type a raw identifier.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: TripIdentifier
+    name: ShortText
+    destination: ShortText
+    start_date: IsoDate
+    end_date: IsoDate
+    status: str | None = None
+
+
+class TripDirectory(StrictModel):
+    """Trips available for selection, and whether the lookup succeeded.
+
+    ``available`` is false when Student 1's service could not be reached, which
+    lets a caller fall back to free text instead of showing an empty picker that
+    looks like "you have no trips".
+    """
+
+    available: bool
+    trips: list[TripSummary]
+
+
+class PlannedTransport(StrictModel):
+    """A plan entry joined to the transport option it refers to."""
+
+    entry: TransportPlanEntryRecord
+    option: TransportOptionRecord
+
+
+class TripTransportSummary(StrictModel):
+    trip_id: TripIdentifier
+    entry_count: int = Field(ge=0)
+    active_entry_count: int = Field(ge=0)
+    estimated_cost_total: Price
+    planned: list[PlannedTransport]

@@ -6,11 +6,15 @@ on:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
       - 'shared/configuration/**'
+      - 'shared/frontend/index.html'
+      - 'docker-compose.yml'
   pull_request:
     paths:
       - 'student-3/**'
       - '.github/workflows/student-3-ci.yml'
       - 'shared/configuration/**'
+      - 'shared/frontend/index.html'
+      - 'docker-compose.yml'
   workflow_dispatch:
 
 jobs:
@@ -71,3 +75,67 @@ jobs:
         run: python -m pytest tests/backend
       - name: Build Student 3 backend image
         run: docker build -f student-3/backend/Dockerfile student-3
+
+  frontend:
+    name: Build and Validate Student 3 Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 3 frontend dependencies
+        working-directory: student-3
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate installed Student 3 packages
+        working-directory: student-3
+        run: python -c "import student3_frontend_service, student3_backend_service, student3_database_service"
+      - name: Run Student 3 frontend syntax checks
+        working-directory: student-3
+        run: python -m compileall frontend/student3_frontend_service tests/frontend
+      - name: Run Student 3 frontend Ruff checks
+        working-directory: student-3
+        run: python -m ruff check frontend/student3_frontend_service tests/frontend
+      - name: Run Student 3 frontend pytest suite
+        working-directory: student-3
+        run: python -m pytest tests/frontend
+      - name: Build Student 3 frontend image
+        run: docker build -f student-3/frontend/Dockerfile student-3
+
+  compose:
+    name: Validate Student 3 Compose Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the shared Compose configuration
+        run: docker compose config --quiet
+      # Targets the frontend rather than the `student-3` grouping service:
+      # that group is a container that exits immediately, and --wait treats an
+      # exited container as a failure. depends_on still brings the backend and
+      # database up and waits for their health first.
+      - name: Bring the Student 3 slice up and wait for health
+        run: docker compose up -d --build --wait student-3-frontend
+      - name: Check the frontend answers on its published port
+        run: |
+          port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/ready"
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/" > /dev/null
+          echo "Student 3 frontend answered on published port ${port}."
+      - name: Check the shared home page links that same port
+        run: |
+          port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
+          linked=$(grep -oE 'localhost:[0-9]+"[^>]*>[[:space:]]*Student 3'             shared/frontend/index.html | grep -oE '[0-9]+' | head -1)
+          if [ "$port" != "$linked" ]; then
+            echo "::error::Compose publishes ${port} but the shared home page links ${linked}."
+            exit 1
+          fi
+          echo "Home page link and published port agree on ${port}."
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, Response,
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .accommodation_client import AccommodationClient
 from .ai_mode_client import AiModeClient
 from .ai_suggestions import (
     AiSuggestionRequest,
@@ -20,6 +21,7 @@ from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_request, validation_error
 from .models import (
+    AccommodationIdentifier,
     DataEnvelope,
     ErrorBody,
     ErrorDetail,
@@ -30,6 +32,8 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TripAccommodationCreate,
+    TripAccommodationRecord,
     TripCreate,
     TripDaySelection,
     TripDetail,
@@ -231,6 +235,7 @@ def create_app(
     transport: httpx.BaseTransport | None = None,
     database_transport: httpx.BaseTransport | None = None,
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
+    accommodation_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     resolved_database_transport = database_transport or transport
@@ -241,17 +246,23 @@ def create_app(
             app_settings,
             transport=resolved_database_transport,
         )
+        accommodations = AccommodationClient(
+            app_settings,
+            transport=accommodation_transport,
+        )
         ai_mode_client = AiModeClient(app_settings, transport=ai_mode_transport)
         app.state.backend_service = BackendService(
             client,
             AiSuggestionService(ai_mode_client, app_settings),
             app_settings,
+            accommodations,
         )
         try:
             yield
         finally:
             client.close()
             await ai_mode_client.close()
+            accommodations.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -479,6 +490,68 @@ def create_app(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.delete_itinerary_item(item_id))
+
+    @router.get(
+        "/trips/{trip_id}/accommodations",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripAccommodationRecord]],
+    )
+    def list_trip_accommodations(
+        trip_id: TripIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trip_accommodations(trip_id))
+
+    @router.put(
+        "/trips/{trip_id}/accommodations/{accommodation_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TripAccommodationRecord],
+    )
+    def add_trip_accommodation(
+        trip_id: TripIdentifier,
+        accommodation_id: AccommodationIdentifier,
+        payload: TripAccommodationCreate | None = None,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        """PUT, not POST: it replaces the pin rather than creating a second
+        one, so re-sending the same stay is a no-op and sending a different
+        stay moves it. The body is optional -- without one this pins to the
+        trip's first day, which is all this endpoint could do before stay
+        dates existed.
+        """
+        return envelope(
+            service.add_trip_accommodation(
+                trip_id,
+                accommodation_id,
+                payload.date if payload else None,
+                payload.check_out if payload else None,
+                payload.check_in_time if payload else None,
+                payload.check_out_time if payload else None,
+            ),
+        )
+
+    @router.delete(
+        "/trips/{trip_id}/accommodations/{accommodation_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[dict[str, object]],
+    )
+    def remove_trip_accommodation(
+        trip_id: TripIdentifier,
+        accommodation_id: AccommodationIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.remove_trip_accommodation(trip_id, accommodation_id))
+
+    @router.get(
+        "/accommodations/{accommodation_id}/trips",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripRecord]],
+    )
+    def list_trips_for_accommodation(
+        accommodation_id: AccommodationIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trips_for_accommodation(accommodation_id))
 
     app.include_router(router)
     return app

@@ -238,7 +238,7 @@ class TransportOptionRecord(TransportOptionStored):
 class TransportBookingFields(StrictModel):
     trip_id: TripIdentifier
     transport_id: TransportIdentifier
-    passenger_count: int = Field(ge=1, le=1000)
+    traveller_count: int = Field(ge=1, le=1000)
     booking_date: IsoDate
     booking_status: BookingStatus
     notes: LongText | None = None
@@ -256,11 +256,11 @@ class TransportBookingFields(StrictModel):
 
 class TransportBookingCreate(TransportBookingFields):
     id: BookingIdentifier | None = None
-    total_cost: Price | None = None
+    estimated_cost: Price | None = None
 
-    @field_validator("total_cost")
+    @field_validator("estimated_cost")
     @classmethod
-    def validate_total_cost(cls, value: float | None) -> float | None:
+    def validate_estimated_cost(cls, value: float | None) -> float | None:
         if value is None:
             return None
 
@@ -270,15 +270,15 @@ class TransportBookingCreate(TransportBookingFields):
 class TransportBookingUpdate(StrictModel):
     trip_id: TripIdentifier | None = None
     transport_id: TransportIdentifier | None = None
-    passenger_count: int | None = Field(default=None, ge=1, le=1000)
+    traveller_count: int | None = Field(default=None, ge=1, le=1000)
     booking_date: IsoDate | None = None
     booking_status: BookingStatus | None = None
-    total_cost: Price | None = None
+    estimated_cost: Price | None = None
     notes: LongText | None = None
 
-    @field_validator("total_cost")
+    @field_validator("estimated_cost")
     @classmethod
-    def validate_total_cost(cls, value: float | None) -> float | None:
+    def validate_estimated_cost(cls, value: float | None) -> float | None:
         if value is None:
             return None
 
@@ -300,4 +300,4 @@ class TransportBookingUpdate(StrictModel):
 
 class TransportBookingRecord(TransportBookingFields):
     id: BookingIdentifier
-    total_cost: Price
+    estimated_cost: Price

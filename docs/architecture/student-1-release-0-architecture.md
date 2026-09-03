@@ -11,7 +11,7 @@ This document describes the **Student 1 Release 0 runtime target**.
 - The assessed course workflow remains the evidence-driven development/review loop documented in the paired plan, not the end-user AI suggestion runtime.
 - Student 1 still owns a three-service application slice: frontend, backend, and database API.
 - Issue #12 adds a **shared Release 0 AI-Mode service** between Student 1 backends and Ollama, so Student 1 no longer talks to Ollama directly.
-- Final Compose wiring stays out of scope here and is deferred to PR #29 / issue #13.
+- Shared Compose wiring connects Student 1 to `ai-mode`, which reaches host-managed Ollama through `host.docker.internal`.
 
 ## 2. Traceability summary
 
@@ -92,7 +92,7 @@ flowchart LR
 
 ## 9. Compose and deployment boundary
 
-PR #29 / issue #13 owns final Compose wiring. This issue only establishes the service expectations:
+The merged Compose integration follows these service expectations:
 
 - shared service name: `ai-mode`
 - expected internal port: `8006`

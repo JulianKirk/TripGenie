@@ -1,0 +1,260 @@
+/* One stylesheet, custom properties at the top -- same approach as student 1's
+   frontend. No framework: this is one page with a table and a dialog on it. */
+:root {
+  --page-bg: #f5f6f8;
+  --surface: #ffffff;
+  --border: #d8dce3;
+  --text: #1c2430;
+  --muted: #5d6875;
+  --primary: #1f5fa8;
+  --available: #1c7c4a;
+  --unavailable: #8a6d1f;
+  --sold_out: #a33b3b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.masthead {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem clamp(1rem, 5vw, 3rem);
+}
+.masthead__eyebrow { margin: 0; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.masthead__title { margin: 0.2rem 0; font-size: 1.6rem; }
+.masthead__subtitle { margin: 0; color: var(--muted); }
+
+.layout { padding: 1.5rem clamp(1rem, 5vw, 3rem); }
+
+.filters {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.filters__search label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+.filters__search input { width: 100%; max-width: 32rem; }
+.filters__more { margin-top: 1rem; }
+.filters__more summary { cursor: pointer; font-weight: 600; }
+.filters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.filters__grid label { display: flex; flex-direction: column; gap: 0.25rem; color: var(--muted); font-size: 0.9rem; }
+.filters__amenities {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.filters__amenities legend { color: var(--muted); font-size: 0.9rem; }
+.checkbox { display: flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; }
+
+input, select {
+  font: inherit;
+  color: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+input:disabled { background: var(--page-bg); color: var(--muted); }
+
+.button {
+  font: inherit;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-block;
+}
+.button:disabled { color: var(--muted); cursor: not-allowed; }
+.link {
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.results__bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.results__count { color: var(--muted); }
+.results__limit { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.9rem; }
+.results__table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.results__table th, .results__table td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
+.results__table thead th { background: var(--page-bg); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.results__row { cursor: pointer; }
+.results__row:hover { background: #eef4fb; }
+
+.pill { font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--page-bg); }
+.pill--available { color: var(--available); }
+.pill--unavailable { color: var(--unavailable); }
+.pill--sold_out { color: var(--sold_out); }
+
+.pager { display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; }
+
+.modal {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  /* Sized by its contents, not to a fixed width: the dialog is as wide as the
+     details card plus the trip card, and no wider. `fit-content` on the max
+     keeps it from stretching to the viewport the way a plain width would. */
+  width: fit-content;
+  max-width: 95vw;
+  max-height: 85vh;
+  padding: 1.5rem 1.75rem;
+  overflow: auto;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 0.3);
+}
+.modal::backdrop { background: rgb(0 0 0 / 0.55); }
+.modal__close {
+  font: inherit;
+  font-size: 1.6rem;
+  line-height: 1;
+  border: 0;
+  background: none;
+  padding: 0 0.25rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.modal__close:hover { color: var(--text); }
+.modal__header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.modal__header h2 { margin: 0; }
+.modal__lede { color: var(--muted); }
+.modal__facts { display: grid; grid-template-columns: 10rem 1fr; gap: 0.4rem 1rem; margin: 0; }
+.modal__facts dt { color: var(--muted); }
+.modal__facts dd { margin: 0; }
+
+.modal__card { min-width: 0; }
+/* The Add to Trip button, under the facts. */
+.modal__actions { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+/* The form modal is a column of fields, so it wants to be narrower than the
+   details it opens over. */
+.modal--form { width: min(30rem, 92vw); }
+.stay__form { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+/* Date beside its time. Collapses in the narrow block at the bottom. */
+.stay__pair { display: grid; grid-template-columns: 1fr 8rem; gap: 0.6rem; }
+.stay__actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.2rem; }
+.stay__cancel {
+  font: inherit;
+  font-size: 0.85rem;
+  border: 0;
+  background: none;
+  padding: 0.45rem 0.25rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.stay__cancel:hover { color: var(--text); }
+.stay__field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+.stay__field select, .stay__field input {
+  width: 100%; font: inherit; padding: 0.35rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.stay__optional { font-size: 0.75rem; }
+.stay__submit {
+  font: inherit;
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--primary);
+  color: var(--surface);
+  cursor: pointer;
+}
+.stay__submit:hover { filter: brightness(1.08); }
+/* The form's own error sits above the fields, so the dates the user typed are
+   still on screen to correct. */
+.stay__form .error { font-size: 0.85rem; padding: 0.5rem; }
+
+/* The running total. Its own block so it reads as an answer rather than as
+   another field. */
+.stay__total {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+.stay__note { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.stay__sum { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; flex-wrap: wrap; }
+.stay__figure { font-size: 1.5rem; font-weight: 600; }
+.stay__working { font-size: 0.85rem; color: var(--muted); }
+
+/* Fixed inside the modal <dialog>, so it paints in the top layer above the
+   backdrop while still positioning against the viewport. */
+.toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  margin: 0;
+  max-width: min(22rem, calc(100vw - 2.5rem));
+  padding: 0.7rem 1rem;
+  background: var(--text);
+  color: var(--surface);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  animation: toast-life 4s ease forwards;
+}
+
+/* Fades itself out and stops taking clicks. Pure CSS so there is no timer to
+   clear when the modal closes mid-flight. */
+@keyframes toast-life {
+  0% { opacity: 0; transform: translateY(0.5rem); }
+  6% { opacity: 1; transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(0.5rem); visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still leaves on its own -- it just stops sliding to do it. */
+  .toast { animation-name: toast-life-still; }
+  @keyframes toast-life-still {
+    0%, 80% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+  }
+}
+
+.error {
+  background: #fdecec;
+  border: 1px solid var(--sold_out);
+  color: var(--sold_out);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+/* htmx toggles this class on for the duration of a request. */
+.htmx-indicator { visibility: hidden; color: var(--muted); font-size: 0.9rem; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { visibility: visible; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .modal__facts { grid-template-columns: 1fr; }
+  .stay__pair { grid-template-columns: 1fr; }
+  .results__table { display: block; overflow-x: auto; }
+}

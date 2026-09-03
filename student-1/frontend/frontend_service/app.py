@@ -861,6 +861,15 @@ def render_trip_detail_screen(
         ai_error=ai_error,
         ai_errors_by_field=error_details_by_field(ai_error),
         ai_result=ai_result,
+        # Browser-facing, so a row can link out to student 2's own page.
+        accommodation_ui_url=request.app.state.settings.accommodation_ui_url,
+    )
+
+
+def accommodation_remove_description(name: str, trip_name: str) -> str:
+    return (
+        f"Remove {name} from {trip_name}? The accommodation itself is not "
+        "deleted -- only its place on this trip."
     )
 
 
@@ -946,6 +955,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         client = BackendApiClient(app_settings, transport=transport)
         app.state.backend_client = client
+        app.state.settings = app_settings
         try:
             yield
         finally:
@@ -1878,6 +1888,101 @@ def create_app(
             trip_list_error=trip_list_error,
             selected_date=updated_item.date,
             push_url=destination_url,
+        )
+
+    @app.get(
+        "/trips/{trip_id}/accommodations/{accommodation_id}/remove",
+        name="remove_accommodation_confirmation",
+    )
+    async def remove_accommodation_confirmation(
+        trip_id: str,
+        accommodation_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        trips, trip_list_error = await safe_list_trips(client)
+        try:
+            trip = await client.get_trip(trip_id)
+        except ApiError as exc:
+            return render_error_screen(
+                request,
+                error=exc,
+                error_title="Unable to open accommodation removal",
+                page_title="Accommodation removal unavailable",
+                trips=trips,
+                trip_list_error=trip_list_error,
+                retry_url=path_for(
+                    request,
+                    "remove_accommodation_confirmation",
+                    trip_id=trip_id,
+                    accommodation_id=accommodation_id,
+                ),
+                fallback_url=path_for(request, "view_trip", trip_id=trip_id),
+            )
+
+        stay = next(
+            (
+                record
+                for record in trip.accommodations
+                if record.accommodation_id == accommodation_id
+            ),
+            None,
+        )
+        # The name is student 2's and may be missing; the id is always here.
+        label = (stay.name if stay and stay.name else None) or accommodation_id
+        return render_confirmation_screen(
+            request,
+            trips=trips,
+            selected_trip_id=trip_id,
+            trip_list_error=trip_list_error,
+            title="Remove accommodation",
+            description=accommodation_remove_description(label, trip.name),
+            confirm_action=path_for(
+                request,
+                "remove_accommodation",
+                trip_id=trip_id,
+                accommodation_id=accommodation_id,
+            ),
+            confirm_label="Remove from trip",
+            cancel_url=path_for(request, "view_trip", trip_id=trip_id),
+            # Both ids are already in the POST path, so the form carries none.
+            hidden_fields={},
+        )
+
+    @app.post(
+        "/trips/{trip_id}/accommodations/{accommodation_id}/remove",
+        name="remove_accommodation",
+    )
+    async def remove_accommodation(
+        trip_id: str,
+        accommodation_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        try:
+            await client.remove_trip_accommodation(trip_id, accommodation_id)
+        except ApiError as exc:
+            trips, trip_list_error = await safe_list_trips(client)
+            return render_error_screen(
+                request,
+                error=exc,
+                error_title="Unable to remove accommodation",
+                page_title="Accommodation removal failed",
+                trips=trips,
+                trip_list_error=trip_list_error,
+                retry_url=path_for(
+                    request,
+                    "remove_accommodation_confirmation",
+                    trip_id=trip_id,
+                    accommodation_id=accommodation_id,
+                ),
+                fallback_url=path_for(request, "view_trip", trip_id=trip_id),
+            )
+
+        # Back to the trip, which is the thing that changed.
+        return RedirectResponse(
+            path_for(request, "view_trip", trip_id=trip_id),
+            status_code=303,
         )
 
     @app.get("/items/{item_id}/delete", name="delete_item_confirmation")

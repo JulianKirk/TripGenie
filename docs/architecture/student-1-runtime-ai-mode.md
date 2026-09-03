@@ -180,7 +180,7 @@ Instead, logs record safe metadata such as:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Leave unset for native runs; PR #29 / issue #13 will inject the Compose-only value `http://ai-mode:8006`. |
+| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects `http://ai-mode:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Student 1 calls to the shared AI-Mode service. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Student-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset. |
@@ -199,7 +199,7 @@ Provider/runtime configuration now lives in [`ai-services/ai-mode/README.md`](..
 - `AI_MODE_MAX_SCHEMA_CHARS`
 - `AI_MODE_MAX_RESPONSE_BYTES`
 
-Release 0 expects Ollama to run on the host machine. Native shared-service runs default to `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`; containerized shared-service runs must receive `http://host.docker.internal:11434` from PR #29 / issue #13.
+Release 0 expects Ollama to run on the host machine. Native shared-service runs default to `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`; `docker-compose.yml` supplies `http://host.docker.internal:11434` to the containerized shared service.
 
 ## 11. Frontend runtime notes
 

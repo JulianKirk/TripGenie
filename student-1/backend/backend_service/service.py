@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from .accommodation_client import AccommodationClient
 from .ai_suggestions import AiSuggestionRequest, AiSuggestionService
 from .client import DatabaseApiClient
 from .config import Settings
@@ -14,6 +15,8 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TripAccommodationDetail,
+    TripAccommodationRecord,
     TripCreate,
     TripDay,
     TripDaySelection,
@@ -22,7 +25,11 @@ from .models import (
     TripStatus,
     TripUpdate,
 )
-from .trip_rules import ensure_trip_detail_supported, validate_trip_window
+from .trip_rules import (
+    ensure_trip_detail_supported,
+    validate_stay_window,
+    validate_trip_window,
+)
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
 
@@ -33,10 +40,12 @@ class BackendService:
         client: DatabaseApiClient,
         ai_suggestions: AiSuggestionService,
         settings: Settings,
+        accommodations: AccommodationClient | None = None,
     ) -> None:
         self._client = client
         self._ai_suggestions = ai_suggestions
         self._settings = settings
+        self._accommodations = accommodations
 
     def list_trips(
         self,
@@ -54,13 +63,49 @@ class BackendService:
             message=VALIDATION_ERROR_MESSAGE,
         )
         created_trip = self._client.create_trip(payload)
-        return self._build_trip_detail(created_trip, [])
+        return self._build_trip_detail(created_trip, [], [])
+
+    def _enrich(
+        self,
+        accommodations: list[TripAccommodationRecord],
+    ) -> list[TripAccommodationDetail]:
+        """The pinned accommodations, with the name and price student 2 owns.
+
+        A trip stores an id and the stay; everything the page needs to *label*
+        that stay lives in the other service. When it cannot be reached the
+        fields stay None and the page shows the stay without them -- losing a
+        name is not a reason to lose the trip.
+        """
+        if not accommodations:
+            return []
+
+        found = (
+            self._accommodations.details(
+                [record.accommodation_id for record in accommodations]
+            )
+            if self._accommodations is not None
+            else {}
+        )
+        detailed: list[TripAccommodationDetail] = []
+        for record in accommodations:
+            extra = found.get(record.accommodation_id, {})
+            rate = extra.get("price_per_night")
+            detailed.append(
+                TripAccommodationDetail(
+                    **record.model_dump(mode="json"),
+                    name=extra.get("name"),
+                    price_per_night=rate,
+                    total_price=_stay_total(rate, record.date, record.check_out),
+                )
+            )
+        return detailed
 
     def get_trip(self, trip_id: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
         ensure_trip_detail_supported(trip)
         items = self._client.list_itinerary_items(trip_id)
-        return self._build_trip_detail(trip, items)
+        accommodations = self._client.list_trip_accommodations(trip_id)
+        return self._build_trip_detail(trip, items, self._enrich(accommodations))
 
     def get_trip_day(self, trip_id: str, trip_day: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
@@ -117,11 +162,74 @@ class BackendService:
         updated_trip = self._client.update_trip(trip_id, payload)
         ensure_trip_detail_supported(updated_trip)
         refreshed_items = self._client.list_itinerary_items(trip_id)
-        return self._build_trip_detail(updated_trip, refreshed_items)
+        accommodations = self._client.list_trip_accommodations(trip_id)
+        return self._build_trip_detail(
+            updated_trip, refreshed_items, self._enrich(accommodations)
+        )
 
     def delete_trip(self, trip_id: str) -> dict[str, object]:
         deleted = self._client.delete_trip(trip_id)
         return deleted.model_dump(mode="json")
+
+    def list_trip_accommodations(self, trip_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trip_accommodations(trip_id)
+        return [record.model_dump(mode="json") for record in records]
+
+    def add_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+        check_in: str | None = None,
+        check_out: str | None = None,
+        check_in_time: str | None = None,
+        check_out_time: str | None = None,
+    ) -> dict[str, object]:
+        """Pins an accommodation to a trip for a stay window.
+
+        Both dates are optional. A caller that supplies neither gets what this
+        did before there was anything to supply: pinned to the trip's first
+        day with no departure recorded. That keeps the bodyless PUT working
+        for anyone still sending one.
+
+        The trip is fetched either way -- to default the check-in, and to have
+        a window to validate against -- so the check costs no extra request.
+        """
+        trip = self._client.get_trip(trip_id)
+        check_in = check_in or trip.start_date
+        validate_stay_window(
+            trip,
+            check_in,
+            check_out,
+            check_in_time,
+            check_out_time,
+            message="Stay dates must fall inside the trip.",
+        )
+        record = self._client.add_trip_accommodation(
+            trip_id,
+            accommodation_id,
+            check_in,
+            check_out,
+            check_in_time,
+            check_out_time,
+        )
+        return record.model_dump(mode="json")
+
+    def remove_trip_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> dict[str, object]:
+        removed = self._client.remove_trip_accommodation(trip_id, accommodation_id)
+        return removed.model_dump(mode="json")
+
+    def list_trips_for_accommodation(
+        self,
+        accommodation_id: str,
+    ) -> list[dict[str, object]]:
+        """The reverse lookup. One query answers which boxes the accommodation
+        service's picker should show ticked, instead of one call per trip."""
+        trips = self._client.list_trips_for_accommodation(accommodation_id)
+        return [trip.model_dump(mode="json") for trip in trips]
 
     def list_itinerary_items(
         self,
@@ -249,8 +357,7 @@ class BackendService:
                 {
                     "field": "start_date",
                     "issue": (
-                        "cannot exclude existing itinerary item dates "
-                        f"({sample_dates})"
+                        f"cannot exclude existing itinerary item dates ({sample_dates})"
                     ),
                 },
             ],
@@ -292,6 +399,7 @@ class BackendService:
     def _build_trip_detail(
         trip: TripRecord,
         items: list[ItineraryItemRecord],
+        accommodations: list[TripAccommodationDetail],
     ) -> dict[str, object]:
         ensure_trip_detail_supported(trip)
         items_by_date: dict[str, list[ItineraryItemRecord]] = {}
@@ -309,6 +417,7 @@ class BackendService:
         return TripDetail(
             **trip.model_dump(mode="json"),
             days=days,
+            accommodations=accommodations,
         ).model_dump(mode="json")
 
     def _probe_database(self) -> DependencyStatus:
@@ -348,3 +457,23 @@ class BackendService:
             detail=exc.message,
             code=exc.code,
         )
+
+
+def _stay_total(
+    rate: float | None,
+    check_in: str,
+    check_out: str | None,
+) -> float | None:
+    """What the stay costs: the nightly rate times the nights between the two
+    dates.
+
+    None when there is nothing to multiply -- no rate, or no departure date yet.
+    A same-day stay is nought nights and so costs nothing, which is a real
+    answer rather than a missing one.
+    """
+    if rate is None or not check_out:
+        return None
+    nights = (date.fromisoformat(check_out) - date.fromisoformat(check_in)).days
+    if nights < 0:
+        return None
+    return round(rate * nights, 2)
