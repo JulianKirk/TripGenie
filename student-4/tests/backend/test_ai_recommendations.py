@@ -208,7 +208,7 @@ def test_plan_retries_once_after_an_unusable_ai_answer() -> None:
     def ai(request: httpx.Request) -> httpx.Response:
         body = cast("dict[str, Any]", json.loads(request.content))
         requests.append(body)
-        response = (
+        response: dict[str, object] = (
             {"not": "a search plan"}
             if len(requests) == 1
             else {
