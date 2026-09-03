@@ -39,7 +39,26 @@ SUMMARY = {
     "committed_costs_complete": False,
     "remaining_budget": "1625.00",
     "remaining_budget_complete": False,
-    "providers": {"transport": {"status": "unavailable"}},
+    "providers": {
+        "transport": {
+            "status": "available",
+            "subtotal": "300.00",
+            "currency": "AUD",
+            "items": [
+                {
+                    "description": "Harbour Ferry: Sydney to Manly",
+                    "status": "pending",
+                    "amount": "300.00",
+                    "currency": "AUD",
+                }
+            ],
+        },
+        "accommodation": {
+            "status": "unavailable",
+            "detail": "provider contract is not available",
+            "items": [],
+        },
+    },
 }
 TRIP = {
     "id": "trip-7",
@@ -158,7 +177,15 @@ def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
     assert page.text.lstrip().startswith('<main id="app-shell"')
     assert "<html" not in page.text
     assert "Committed *" in page.text
-    assert "Some provider costs are unavailable" in page.text
+    assert "Provider costs not included" in page.text
+    assert (
+        "<strong>Accommodation</strong>: provider contract is not available"
+        in page.text
+    )
+    assert "How remaining is calculated" in page.text
+    assert "Harbour Ferry: Sydney to Manly" in page.text
+    assert "AUD 2000.00 &minus; AUD 300.00 committed" in page.text
+    assert "&minus; AUD 75.00 actual = <strong>AUD 1625.00</strong>" in page.text
     assert "Planned allocations" in page.text
     assert "Sydney Long Weekend" in page.text
     assert "AUD 800.00" in page.text

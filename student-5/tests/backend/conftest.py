@@ -135,7 +135,26 @@ def trips_handler(request: httpx.Request) -> httpx.Response:
 def provider_handler(_: httpx.Request) -> httpx.Response:
     return httpx.Response(
         200,
-        json={"data": {"estimated_cost_total": "200.20", "currency": "AUD"}},
+        json={
+            "data": {
+                "estimated_cost_total": "200.20",
+                "currency": "AUD",
+                "planned": [
+                    {
+                        "entry": {
+                            "id": "booking_ferry",
+                            "booking_status": "pending",
+                            "estimated_cost": "200.20",
+                        },
+                        "option": {
+                            "provider": "Harbour Ferry",
+                            "origin": "Sydney",
+                            "destination": "Manly",
+                        },
+                    }
+                ],
+            }
+        },
     )
 
 

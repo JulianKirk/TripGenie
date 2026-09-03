@@ -67,6 +67,10 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: .65rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { color: var(--muted); background: var(--canvas); font: .72rem var(--tg-font-ui); text-transform: uppercase; }
 .cell-note { display: block; color: var(--muted); font-size: .8rem; }
+.cost-breakdown td:last-child { white-space: nowrap; font-weight: 700; }
+.cost-breakdown__remaining td { border-top: 2px solid var(--ink); }
+.cost-items { margin: .35rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .8rem; font-weight: 400; }
+.calculation { margin: .75rem 0 0; color: var(--muted); }
 .muted { color: var(--muted); }
 .confirmation { max-width: 620px; border-top: 4px solid var(--danger); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
