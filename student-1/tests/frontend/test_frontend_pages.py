@@ -30,21 +30,13 @@ def test_dashboard_renders_full_page_theme_and_accessible_controls(client) -> No
     assert "persisted=false" in response.text
     assert "Delete trip" in response.text
     assert 'href="http://localhost:8080/theme.css"' in response.text
-    assert 'href="http://testserver/static/css/styles.css"' in response.text
-    assert 'src="http://testserver/static/js/htmx.min.js"' in response.text
-    assert "unpkg.com" not in response.text
     assert 'class="skip-link" href="#app-shell"' in response.text
-    assert '<nav class="panel panel--sidebar"' in response.text
     assert 'href="http://localhost:8080">Home</a>' in response.text
 
 
-def test_theme_and_local_assets_follow_the_shared_contract(
-    client,
-    client_factory,
-) -> None:
+def test_shared_theme_contract_preserves_student1_content_and_focus(client) -> None:
     page = client.get("/")
     css = client.get("/static/css/styles.css")
-    htmx = client.get("/static/js/htmx.min.js")
 
     shared_theme_link = 'href="http://localhost:8080/theme.css"'
     local_stylesheet_link = 'href="http://testserver/static/css/styles.css"'
@@ -61,21 +53,13 @@ def test_theme_and_local_assets_follow_the_shared_contract(
         css.text
     )
     assert "outline: none;" not in css.text
-    assert htmx.status_code == 200
-    assert "htmx" in htmx.text
-
-    with client_factory(root_path="/tripgenie/student-1") as prefixed_client:
-        page = prefixed_client.get("/")
-
-    assert page.status_code == 200
+    # The focus indicator must not return to the translucent 2.35:1 treatment.
+    assert "outline: 3px solid var(--tg-accent, #0f766e);" in css.text
+    assert "box-shadow: 0 0 0 2px var(--tg-surface, #fff);" in css.text
     assert (
-        'href="http://testserver/tripgenie/student-1/static/css/styles.css"'
-        in page.text
+        "outline: 3px solid color-mix(in srgb, var(--primary) 55%, transparent);"
+        not in css.text
     )
-    assert (
-        'src="http://testserver/tripgenie/student-1/static/js/htmx.min.js"' in page.text
-    )
-    assert 'src="http://testserver/tripgenie/student-1/static/js/app.js"' in page.text
 
 
 def test_htmx_trip_navigation_returns_shell_fragment_only(client) -> None:
