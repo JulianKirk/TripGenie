@@ -103,9 +103,9 @@ def test_seed_migrates_the_legacy_uuid4_catalogue_without_duplicates(
 
         legacy_rows: list[Activity] = []
         for payload in seed_data.SAMPLE_ACTIVITY_DATA:
-            legacy = Activity.from_message(ActivityWrite.model_validate(payload))
-            session.add(legacy)
-            legacy_rows.append(legacy)
+            legacy_row = Activity.from_message(ActivityWrite.model_validate(payload))
+            session.add(legacy_row)
+            legacy_rows.append(legacy_row)
         session.commit()
         legacy_ids = [row.id for row in legacy_rows]
 
@@ -120,7 +120,7 @@ def test_seed_migrates_the_legacy_uuid4_catalogue_without_duplicates(
 
         repository = ActivityRepository(session)
         canonical = repository.get(seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID)
-        legacy = repository.get(legacy_ids[0])
+        legacy_record = repository.get(legacy_ids[0])
         rows, total = repository.search(ActivityQueryRequest(limit=100))
         aliases = session.scalar(select(func.count()).select_from(ActivityIdAlias))
 
@@ -133,9 +133,9 @@ def test_seed_migrates_the_legacy_uuid4_catalogue_without_duplicates(
         assert canonical is not None
         assert canonical.id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
         assert canonical.name == "Sydney Harbour guided walk"
-        assert legacy is not None
-        assert legacy.id == legacy_ids[0]
-        assert legacy.name == canonical.name
+        assert legacy_record is not None
+        assert legacy_record.id == legacy_ids[0]
+        assert legacy_record.name == canonical.name
         assert legacy_ids[0] not in {row.id for row in rows}
         assert seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID in {row.id for row in rows}
         assert session.execute(text("PRAGMA foreign_key_check")).all() == []
