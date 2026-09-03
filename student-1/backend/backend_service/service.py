@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -8,6 +9,7 @@ from .activity_client import ActivityClient, ActivityDetails
 from .ai_suggestions import (
     AiSuggestionRequest,
     AiSuggestionService,
+    build_cross_service_time_blocks,
     prepare_cross_service_prompt_context,
     select_cross_service_records,
 )
@@ -299,6 +301,27 @@ class BackendService:
         *,
         correlation_id: str | None = None,
     ) -> dict[str, object]:
+        trip, items, cross_service_context, time_blocks = await asyncio.to_thread(
+            self._load_ai_suggestion_snapshot,
+            trip_id,
+            payload,
+        )
+        response = await self._ai_suggestions.generate(
+            trip_id=trip_id,
+            trip=trip,
+            existing_items=items,
+            cross_service_context=cross_service_context,
+            authoritative_time_blocks=time_blocks,
+            request=payload,
+            correlation_id=correlation_id,
+        )
+        return response.model_dump(mode="json")
+
+    def _load_ai_suggestion_snapshot(
+        self,
+        trip_id: str,
+        payload: AiSuggestionRequest,
+    ) -> tuple[TripRecord, list[ItineraryItemRecord], Any, list[Any]]:
         trip = self._client.get_trip(trip_id)
         ensure_trip_detail_supported(trip)
         self._ensure_date_within_trip(payload.requested_date, trip)
@@ -316,31 +339,31 @@ class BackendService:
         accommodation_sources = self._accommodation_sources(selection.accommodations)
         activity_sources = self._activity_sources(selection.activities)
         transport_sources = self._transport_sources(selection.transport)
+        enriched_accommodations = self._enrich_accommodations(
+            selection.accommodations,
+            sources=accommodation_sources,
+        )
+        enriched_activities = self._enrich_activities(
+            selection.activities,
+            sources=activity_sources,
+        )
+        enriched_transport = self._enrich_transport(
+            selection.transport,
+            sources=transport_sources,
+        )
         cross_service_context = prepare_cross_service_prompt_context(
             selection=selection,
-            enriched_accommodations=self._enrich_accommodations(
-                selection.accommodations,
-                sources=accommodation_sources,
-            ),
+            enriched_accommodations=enriched_accommodations,
             accommodation_sources=accommodation_sources,
-            enriched_activities=self._enrich_activities(
-                selection.activities,
-                sources=activity_sources,
-            ),
-            enriched_transport=self._enrich_transport(
-                selection.transport,
-                sources=transport_sources,
-            ),
+            enriched_activities=enriched_activities,
+            enriched_transport=enriched_transport,
         )
-        response = await self._ai_suggestions.generate(
-            trip_id=trip_id,
-            trip=trip,
-            existing_items=items,
-            cross_service_context=cross_service_context,
-            request=payload,
-            correlation_id=correlation_id,
+        time_blocks = build_cross_service_time_blocks(
+            selection=selection,
+            enriched_activities=enriched_activities,
+            transport_sources=transport_sources,
         )
-        return response.model_dump(mode="json")
+        return trip, items, cross_service_context, time_blocks
 
     def update_trip(self, trip_id: str, payload: TripUpdate) -> dict[str, object]:
         updates = payload.model_dump(exclude_unset=True, mode="json")

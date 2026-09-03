@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from copy import deepcopy
+from threading import Event
 
 import httpx
 import pytest
@@ -828,8 +829,15 @@ class FakeAccommodationApi:
         self.records = records or {}
         self.calls: list[str] = []
         self.unavailable = False
+        self.block_requests = False
+        self.request_started = Event()
+        self.release_requests = Event()
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        if self.block_requests:
+            self.request_started.set()
+            if not self.release_requests.wait(timeout=10):
+                raise httpx.ReadTimeout("blocked request timed out", request=request)
         if self.unavailable:
             raise httpx.ConnectError("unavailable", request=request)
         accommodation_id = request.url.path.rsplit("/", 1)[-1]

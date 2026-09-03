@@ -77,7 +77,10 @@ facts even when an external service is unavailable. `source_status` is
 only; it never asserts booking availability or that unknown time is free.
 Missing fields remain absent rather than being fabricated. The same best-effort
 HTTP clients and enrichment helpers used by trip detail perform the enrichment;
-Student 1 never reads another service's database.
+Student 1 never reads another service's database. The synchronous database
+snapshot and downstream enrichment phase runs on a worker thread so slow
+Student 2/3/4 responses do not block the backend event loop or unrelated
+readiness and CRUD requests.
 
 Existing itinerary context stays bounded:
 
@@ -144,6 +147,35 @@ Student 1 then validates the generated JSON against its own itinerary rules:
 - timed suggestions must keep `start_time < end_time`
 - obvious duplicate suggestions are rejected
 - overlapping timed suggestions are rejected when rules provide enough information
+- selected activity intervals are enforced only when the local date/start and
+  enriched authoritative duration are all available
+- selected transport intervals are enforced only when authoritative departure
+  and arrival timestamps, duration, and a consistent offset pair (or no
+  offsets) are available; cancelled transport is ignored
+- cross-service interval validation uses the capped enriched snapshot before
+  prompt budgeting, so a lower-priority record omitted from the rendered prompt
+  still prevents a conflicting draft
+- incomplete or unavailable timing never creates an inferred end time or a
+  fabricated availability constraint
+
+Transport timestamps are Student 3 local wall-clock values. Student 1 validates
+the authoritative duration by converting both endpoints to UTC when both UTC
+offsets are present; without offsets, the local timestamp difference must equal
+the duration. A lone offset or inconsistent duration degrades that transport
+enrichment rather than creating a guessed interval. Itinerary suggestions have
+no timezone, so conflict checks use explicit local-calendar boundaries:
+
+- on the departure local date, time from departure through the end of that day
+  is blocked when arrival is on another local date
+- on the arrival local date, time from the start of that day through arrival is
+  blocked when departure is on another local date
+- increasing intermediate local dates are fully blocked
+- same-date eastbound/same-zone journeys block departure through arrival
+- same-date westbound journeys whose arrival clock is earlier block the
+  arrival-day start through arrival and departure through the day end, leaving
+  the wall-clock gap between those boundaries schedulable
+- when the arrival local date precedes the departure local date, only those two
+  endpoint-day boundary windows are asserted
 
 If validation succeeds, suggestions are sorted and returned as reviewable drafts.
 
