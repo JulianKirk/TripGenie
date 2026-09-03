@@ -316,6 +316,7 @@ services:
       dockerfile: frontend/Dockerfile
     environment:
       STUDENT5_FRONTEND_BACKEND_BASE_URL: http://student-5-backend:8005
+      STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "210"
     ports:
       - "8085:8085"
     depends_on:
@@ -344,6 +345,7 @@ services:
       STUDENT5_BACKEND_TRIPS_API_BASE_URL: http://student-1-backend:8001
       STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
       STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+      STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS: "100"
     expose:
       - "8005"
     depends_on:
@@ -439,7 +441,7 @@ services:
 
   # Local AI Model Runtime (Ollama)
   # The models are not baked into the image: `docker compose exec ollama ollama
-  # pull qwen2.5:0.5b` once, and the volume keeps them across restarts.
+  # pull llama3.1:8b` once, and the volume keeps them across restarts.
   ollama:
     image: ollama/ollama:latest
     ports:
