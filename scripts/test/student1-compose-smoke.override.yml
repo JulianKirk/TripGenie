@@ -1,0 +1,5 @@
+services:
+  ai-mode:
+    environment:
+      AI_MODE_OLLAMA_BASE_URL: "${SMOKE_AI_MODE_OLLAMA_BASE_URL}"
+      AI_MODE_TIMEOUT_SECONDS: "${SMOKE_AI_MODE_TIMEOUT_SECONDS:-5}"

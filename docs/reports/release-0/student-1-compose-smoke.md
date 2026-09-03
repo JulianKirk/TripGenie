@@ -3,6 +3,10 @@
 This guide documents the Release 0 Student 1/shared AI Compose smoke flow added
 for issue #14.
 
+The dedicated workflow is
+`.github/workflows/student-1-compose-smoke-ci.yml`; it does not depend on a
+repository-wide integration workflow.
+
 ## 1. What the routine smoke proves
 
 Routine CI now runs two deterministic phases against a unique Compose project:
@@ -32,7 +36,7 @@ For **manual live host Ollama evidence**, also ensure:
 
 ```bash
 ollama serve
-ollama pull qwen2.5:0.5b
+ollama pull llama3.1:8b
 curl http://localhost:11434/api/tags
 ```
 
@@ -51,8 +55,9 @@ python scripts/test/run_student1_compose_smoke.py --project-name tripgenie14-loc
 ```
 
 The smoke script generates per-phase env overrides, uses a unique Compose
-project for isolation, and always tears down only that project plus its named
-volume in `finally`, even after failures.
+project for isolation, layers a test-only Compose override over the production
+topology, and always tears down only that project plus its named volumes in
+`finally`, even after failures.
 
 ## 4. Manual live host Ollama evidence
 

@@ -229,7 +229,7 @@ Compose and CI never install Ollama or download models.
 
 ## Compose validation
 
-- If `ai-mode` stays unhealthy, confirm host Ollama is running, `ollama pull qwen2.5:0.5b` completed, and `curl http://localhost:11434/api/tags` succeeds on the host.
+- If `ai-mode` stays unhealthy, confirm host Ollama is running, `ollama pull llama3.1:8b` completed, and `curl http://localhost:11434/api/tags` succeeds on the host.
 - Student 1 frontend/backend/database readiness is intentionally chained to database readiness only; AI degradation must not block CRUD startup.
 - Override `AI_MODE_OLLAMA_BASE_URL` only when the host Ollama endpoint differs from `http://host.docker.internal:11434` as seen from the container.
 - If host Ollama only binds to loopback, restart it so Docker can reach it and review host firewall rules for port `11434`.

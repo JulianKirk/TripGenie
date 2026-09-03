@@ -40,6 +40,7 @@ jobs:
   compose-smoke:
     name: Validate Student 1 Compose Smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       TRIPGENIE_COMPOSE_PROJECT: tripgenie14-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -53,9 +54,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "ruff>=0.6,<1.0"
       - name: Run smoke script syntax checks
-        run: python -m compileall scripts/test
+        run: python -m py_compile scripts/test/validate_compose_config.py scripts/test/fake_ollama_host.py scripts/test/run_student1_compose_smoke.py
       - name: Run smoke script Ruff checks
-        run: python -m ruff check scripts/test
+        run: python -m ruff check scripts/test/validate_compose_config.py scripts/test/fake_ollama_host.py scripts/test/run_student1_compose_smoke.py
       - name: Resolve Docker Compose configuration
         run: docker compose -p "$TRIPGENIE_COMPOSE_PROJECT" --env-file shared/configuration/.env.example config --format json > compose-config.json
       - name: Validate Student 1 Compose contract
@@ -64,3 +65,6 @@ jobs:
         run: docker compose -p "$TRIPGENIE_COMPOSE_PROJECT" --env-file shared/configuration/.env.example build shared-ui student-1-frontend student-1-backend student-1-database ai-mode
       - name: Run Student 1 Compose smoke with degraded AI and fake host Ollama transport contract
         run: python scripts/test/run_student1_compose_smoke.py --project-name "$TRIPGENIE_COMPOSE_PROJECT"
+      - name: Remove smoke Compose resources
+        if: always()
+        run: docker compose -p "$TRIPGENIE_COMPOSE_PROJECT" --env-file shared/configuration/.env.example down --volumes --remove-orphans

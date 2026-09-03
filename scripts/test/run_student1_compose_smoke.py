@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
+SMOKE_COMPOSE_OVERRIDE = (
+    REPO_ROOT / "scripts" / "test" / "student1-compose-smoke.override.yml"
+)
 BASE_ENV_FILE = REPO_ROOT / "shared" / "configuration" / ".env.example"
 GENERATED_ENV_DIR = REPO_ROOT / "scripts" / "test"
 
@@ -44,7 +47,7 @@ UNPUBLISHED_INTERNAL_PORTS = (
 HTTP_TIMEOUT_SECONDS = 5.0
 POLL_INTERVAL_SECONDS = 1.0
 WAIT_TIMEOUT_SECONDS = 120.0
-DEGRADED_OLLAMA_BASE_URL = "http://host.docker.internal:65531"
+DEGRADED_OLLAMA_BASE_URL = "http://ollama-unavailable.invalid:11434"
 HOST_OLLAMA_BASE_URL = "http://host.docker.internal:11434"
 FAKE_OLLAMA_HOST_URL = "http://127.0.0.1:11434/api/tags"
 
@@ -96,8 +99,8 @@ PHASES = {
         name="degraded-unavailable",
         description="force unavailable host Ollama while CRUD still works",
         env_overrides={
-            "AI_MODE_OLLAMA_BASE_URL": DEGRADED_OLLAMA_BASE_URL,
-            "AI_MODE_TIMEOUT_SECONDS": "2",
+            "SMOKE_AI_MODE_OLLAMA_BASE_URL": DEGRADED_OLLAMA_BASE_URL,
+            "SMOKE_AI_MODE_TIMEOUT_SECONDS": "2",
         },
         expected_ai_health_status="degraded",
         expected_ai_ready_status=503,
@@ -107,8 +110,8 @@ PHASES = {
         name="fake-ollama-transport",
         description="use a fake host Ollama process for transport-contract CI",
         env_overrides={
-            "AI_MODE_OLLAMA_BASE_URL": HOST_OLLAMA_BASE_URL,
-            "AI_MODE_TIMEOUT_SECONDS": "5",
+            "SMOKE_AI_MODE_OLLAMA_BASE_URL": HOST_OLLAMA_BASE_URL,
+            "SMOKE_AI_MODE_TIMEOUT_SECONDS": "5",
         },
         start_fake_ollama=True,
         expected_ai_health_status="ok",
@@ -119,8 +122,8 @@ PHASES = {
         name="live-host-ollama",
         description="use an already-running real host Ollama for manual evidence",
         env_overrides={
-            "AI_MODE_OLLAMA_BASE_URL": HOST_OLLAMA_BASE_URL,
-            "AI_MODE_TIMEOUT_SECONDS": "5",
+            "SMOKE_AI_MODE_OLLAMA_BASE_URL": HOST_OLLAMA_BASE_URL,
+            "SMOKE_AI_MODE_TIMEOUT_SECONDS": "5",
         },
         expected_ai_health_status="ok",
         expected_ai_ready_status=200,
@@ -224,6 +227,8 @@ def compose_command(project_name: str, env_file: Path, *args: str) -> list[str]:
         project_name,
         "-f",
         str(COMPOSE_FILE),
+        "-f",
+        str(SMOKE_COMPOSE_OVERRIDE),
         "--env-file",
         str(env_file),
         *args,
@@ -1132,6 +1137,10 @@ def main() -> int:
 
     ensure(base_env_file.exists(), f"base env file does not exist: {base_env_file}")
     ensure(COMPOSE_FILE.exists(), f"Compose file does not exist: {COMPOSE_FILE}")
+    ensure(
+        SMOKE_COMPOSE_OVERRIDE.exists(),
+        f"Compose smoke override does not exist: {SMOKE_COMPOSE_OVERRIDE}",
+    )
 
     results = [
         run_phase(project_name, base_env_file, phase) for phase in selected_phases

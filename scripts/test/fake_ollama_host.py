@@ -5,7 +5,8 @@ import json
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DEFAULT_MODEL = "qwen2.5:0.5b"
+DEFAULT_MODEL = "llama3.1:8b"
+AVAILABLE_MODELS = ("qwen2.5:0.5b", DEFAULT_MODEL)
 REQUESTED_DATE_PATTERN = re.compile(r'"requested_date"\s*:\s*"(\d{4}-\d{2}-\d{2})"')
 
 
@@ -43,13 +44,14 @@ class FakeOllamaHandler(BaseHTTPRequestHandler):
             {
                 "models": [
                     {
-                        "name": DEFAULT_MODEL,
-                        "model": DEFAULT_MODEL,
+                        "name": model,
+                        "model": model,
                         "modified_at": "2026-09-01T00:00:00Z",
                         "size": 934348800,
-                        "digest": "sha256:tripgenie-fake-ollama",
-                        "details": {"family": "qwen2"},
+                        "digest": f"sha256:tripgenie-fake-{model}",
+                        "details": {"family": model.split(":", 1)[0]},
                     }
+                    for model in AVAILABLE_MODELS
                 ]
             },
         )

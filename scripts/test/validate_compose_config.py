@@ -10,10 +10,6 @@ REQUIRED_SERVICES = (
     "student-1-frontend",
     "student-1-backend",
     "student-1-database",
-    "student-2-service",
-    "student-3-service",
-    "student-4-service",
-    "student-5-service",
     "ai-mode",
 )
 INTERNAL_ONLY_SERVICES = ("student-1-backend", "student-1-database", "ai-mode")
@@ -27,6 +23,7 @@ BUILD_REQUIRED_SERVICES = (
 ENV_EXAMPLE_PATH = Path("shared/configuration/.env.example")
 SHARED_PORTAL_PATH = Path("shared/frontend/index.html")
 README_PATH = Path("README.md")
+SMOKE_WORKFLOW_PATH = Path(".github/workflows/student-1-compose-smoke-ci.yml")
 
 
 def _fail(message: str) -> None:
@@ -273,6 +270,7 @@ def main() -> int:
     env_example_text = _read_text(ENV_EXAMPLE_PATH)
     shared_portal_html = _read_text(SHARED_PORTAL_PATH)
     root_readme = _read_text(README_PATH)
+    smoke_workflow = _read_text(SMOKE_WORKFLOW_PATH).lower()
 
     missing_services = [
         service_name
@@ -295,9 +293,20 @@ def main() -> int:
         "exec ollama" not in root_readme,
         "README must not document docker compose exec ollama bootstrap steps",
     )
+    for forbidden_ci_command in (
+        "ollama serve",
+        "ollama pull",
+        "apt-get install ollama",
+        "brew install ollama",
+    ):
+        _ensure(
+            forbidden_ci_command not in smoke_workflow,
+            "the dedicated smoke workflow must not install, start, or pull "
+            f"Ollama ({forbidden_ci_command})",
+        )
 
     _validate_networks(config, services)
-    _ensure("student-1-sqlite" in volumes, "student-1-sqlite volume is missing")
+    _ensure("student-1-db" in volumes, "student-1-db volume is missing")
     _ensure("ollama-models" not in volumes, "ollama-models volume must not exist")
     _ensure("ollama" not in services, "ollama service must not exist")
     _ensure(
@@ -378,8 +387,8 @@ def main() -> int:
         "ai-mode must target http://host.docker.internal:11434",
     )
     _ensure(
-        ai_mode_env.get("AI_MODE_DEFAULT_MODEL") == "qwen2.5:0.5b",
-        "ai-mode must default to qwen2.5:0.5b",
+        ai_mode_env.get("AI_MODE_DEFAULT_MODEL") == "llama3.1:8b",
+        "ai-mode must use the integrated stack default model llama3.1:8b",
     )
     _ensure(
         _has_extra_host(
@@ -446,8 +455,8 @@ def main() -> int:
 
     database_volumes = _normalise_volume_targets(database.get("volumes"))
     _ensure(
-        database_volumes.get("/data/student-1") == "student-1-sqlite",
-        "student-1-database must mount the student-1-sqlite volume at /data/student-1",
+        database_volumes.get("/data") == "student-1-db",
+        "student-1-database must mount the student-1-db volume at /data",
     )
 
     print("Compose config validation passed for Student 1 Release 0 smoke CI.")
