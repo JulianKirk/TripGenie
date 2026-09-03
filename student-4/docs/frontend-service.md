@@ -4,9 +4,12 @@
 
 ## Service scope
 
-This service renders Student 4's single activities-and-attractions webpage. It
-talks only to the [Student 4 backend](./backend-service-api.md), never to the
-database or shared reference services.
+This document is the implementation contract for Student 4's future
+activities-and-attractions webpage. The current backend-focused branch does not
+implement that frontend; `student-4-service` remains a placeholder static
+server. When implemented, the frontend talks only to the
+[Student 4 backend](./backend-service-api.md), never to the database or shared
+reference services.
 
 ```text
               browser
@@ -34,13 +37,15 @@ booking or payment workflow.
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend-service base URL. |
 | `BACKEND_TIMEOUT` | `5` | Backend request timeout in seconds. |
 
-Run the completed slice with:
+Run the backend and its dependencies with:
 
 ```bash
-docker compose up student-4
+docker compose up student-4-backend
 ```
 
-Then open `http://localhost:8084`.
+Open `http://localhost:8008/docs` to inspect and exercise the backend contract.
+Port `8084` does not provide the UI described below until the frontend is
+implemented on its own branch.
 
 ## HTML routes
 
@@ -58,12 +63,14 @@ reached, matching the other frontend services.
 
 ## Page structure
 
-The page has four regions:
+The page has five regions:
 
 1. A heading explaining that attractions and activities share one catalogue.
 2. One search-and-filter form.
 3. An `aria-live` results region containing cards, count and pager.
-4. A dialog target populated when a user opens an activity.
+4. A dialog target populated when a user opens or edits an activity.
+5. An administration region for creating, replacing, deactivating and deleting
+   catalogue entries.
 
 The initial `GET /` concurrently requests the backend's first activity page and
 `GET /activity/categories`. Category rows are rendered in the backend-provided
@@ -200,6 +207,35 @@ Recurring schedules are grouped by weekday for readability. One-off schedules
 show their ISO date. Times remain in local `HH:MM` form. The page does not invent
 bookable time slots from a flexible interval.
 
+Every card and detail dialog also offers an **Add to itinerary** button. It
+loads `GET /activity/{id}/itineraries` from the Student 4 backend, shows each
+trip with a checkbox plus date and optional start-time controls, and sends
+`PUT` or `DELETE` to that same Student 4 backend. Dates are bounded by each
+row's returned `start_date` and `end_date`. The frontend never calls Student 1
+directly.
+
+## Catalogue CRUD
+
+The page includes a clearly separated management mode. It uses the public
+Student 4 backend only:
+
+| User action | Backend request |
+|---|---|
+| Create activity | `POST /activity` |
+| Load edit form | `GET /activity/{id}` |
+| Save complete edit | `PUT /activity/{id}` |
+| Deactivate/reactivate | `PUT /activity/{id}` with the full record and changed `is_active` |
+| Permanently delete | `DELETE /activity/{id}` after confirmation |
+| Show inactive rows | `QUERY /activity` with `include_inactive: true` |
+
+The create/edit form covers every writable field, nested location data,
+category checkboxes, and a repeatable schedule editor. It sends country/city
+names and strips generated activity, location and schedule ids before writes.
+Replacing is a full `PUT`, so the form must send all current writable values;
+leaving out an optional value intentionally clears it. Destructive delete has
+a confirmation step and deactivation is presented as the safer reversible
+choice.
+
 ## Pagination
 
 The results header shows `total` matches. Previous and next controls calculate
@@ -249,4 +285,5 @@ The frontend:
 - does not implement activity filtering or schedule calculations;
 - does not maintain a separate category list;
 - does not create bookings, take payments or track availability inventory; and
-- does not provide catalogue administration in this release.
+- performs catalogue CRUD only through the Student 4 backend; and
+- performs itinerary selection only through the Student 4 backend.

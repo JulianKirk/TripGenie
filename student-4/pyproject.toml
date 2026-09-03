@@ -44,7 +44,14 @@ extend-immutable-calls = ["fastapi.Body", "fastapi.Depends"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["database/student4_database_service", "tests/database"]
+mypy_path = "$MYPY_CONFIG_FILE_DIR/backend:$MYPY_CONFIG_FILE_DIR/database"
+files = [
+    "backend/student4_backend_service",
+    "database/student4_database_service",
+    "tests/backend",
+    "tests/database",
+    "tests/e2e",
+]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
