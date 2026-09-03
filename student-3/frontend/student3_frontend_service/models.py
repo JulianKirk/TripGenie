@@ -186,6 +186,24 @@ class TripDirectory(LenientModel):
     trips: list[TripSummary] = Field(default_factory=list)
 
 
+class RecommendedTransport(LenientModel):
+    reason: str
+    option: TransportOptionRecord
+
+
+class TransportRecommendation(LenientModel):
+    """Draft AI advice. Advisory only: the traveller decides what to save."""
+
+    overview: str
+    recommended: list[RecommendedTransport] = Field(default_factory=list)
+    considerations: list[str] = Field(default_factory=list)
+    disclaimer: str
+    advisory_only: bool = True
+    run_id: str
+    model: str
+    provider: str
+
+
 class PlannedTransport(LenientModel):
     entry: TransportPlanEntryRecord
     option: TransportOptionRecord

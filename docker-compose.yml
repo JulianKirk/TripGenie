@@ -184,6 +184,9 @@ services:
       STUDENT3_FRONTEND_BACKEND_BASE_URL: "${STUDENT3_FRONTEND_BACKEND_BASE_URL:-http://student-3-backend:8003}"
       STUDENT3_FRONTEND_BACKEND_API_PREFIX: "${STUDENT3_FRONTEND_BACKEND_API_PREFIX:-/api}"
       STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS:-5}"
+      # The AI suggestion route only; every other backend call keeps the
+      # short timeout above.
+      STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS:-150}"
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
@@ -220,11 +223,22 @@ services:
       STUDENT3_BACKEND_VERIFY_TRIP_EXISTS: "${STUDENT3_BACKEND_VERIFY_TRIP_EXISTS:-false}"
       STUDENT3_BACKEND_SERVICE_NAME: "${STUDENT3_BACKEND_SERVICE_NAME:-student-3-backend}"
       STUDENT3_BACKEND_CURRENCY: "${STUDENT3_BACKEND_CURRENCY:-AUD}"
+      STUDENT3_BACKEND_AI_MODE_BASE_URL: "${STUDENT3_BACKEND_AI_MODE_BASE_URL:-http://ai-mode:8006}"
+      # Deliberately longer than AI-Mode's own budget so a slow generation
+      # comes back as its error rather than as a timeout here.
+      STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS:-120}"
+      STUDENT3_BACKEND_AI_PROMPT_ASSET: "${STUDENT3_BACKEND_AI_PROMPT_ASSET:-transport_recommendations_v1.md}"
+      STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS: "${STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
+      STUDENT3_BACKEND_AI_MAX_CANDIDATES: "${STUDENT3_BACKEND_AI_MAX_CANDIDATES:-12}"
     expose:
       - "8003"
     depends_on:
       student-3-database:
         condition: service_healthy
+      # Started, not healthy: AI suggestions are advisory, so transport
+      # browsing and planning must keep working when AI-Mode does not.
+      ai-mode:
+        condition: service_started
     healthcheck:
       test:
         [

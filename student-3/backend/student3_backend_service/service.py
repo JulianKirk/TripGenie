@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
+from .ai_mode_client import AiModeClient
+from .ai_suggestions import build_prompt, resolve_draft, select_candidates
 from .client import DatabaseApiClient
 from .config import Settings
-from .errors import ApiError
+from .errors import ApiError, validation_error
 from .models import (
     AvailabilityStatus,
     BookingStatus,
@@ -17,6 +21,8 @@ from .models import (
     TransportPlanEntryCreate,
     TransportPlanEntryRecord,
     TransportPlanEntryUpdate,
+    TransportRecommendationRequest,
+    TransportRecommendationResponse,
     TransportType,
     TripDirectory,
     TripTransportSummary,
@@ -49,10 +55,12 @@ class BackendService:
         settings: Settings,
         client: DatabaseApiClient,
         trips_client: TripsApiClient | None = None,
+        ai_client: AiModeClient | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._trips_client = trips_client
+        self._ai_client = ai_client
 
     # ------------------------------------------------------------------ health
 
@@ -237,6 +245,71 @@ class BackendService:
             return TripDirectory(available=False, trips=[])
 
         return TripDirectory(available=True, trips=trips)
+
+    # ------------------------------------------------------- AI suggestions
+
+    def recommend_transport(
+        self,
+        payload: TransportRecommendationRequest,
+    ) -> TransportRecommendationResponse:
+        """Draft advice for a traveller. Advisory only, never saved here.
+
+        The whole flow is Plan (assemble a bounded candidate list) -> Act (one
+        AI-Mode call) -> Observe (validate the reply against the schema and the
+        candidates) -> Adapt (the traveller reviews and saves through the normal
+        plan-entry route). Nothing on this path writes to the database.
+        """
+        if self._ai_client is None:
+            raise ApiError(
+                status_code=503,
+                code="DEPENDENCY_UNAVAILABLE",
+                message="AI recommendations are not configured for this service.",
+                details=[{"field": "ai_mode", "issue": "client is not configured"}],
+            )
+
+        options = self._client.list_transport_options(
+            origin=payload.origin,
+            destination=payload.destination,
+        )
+        candidates = select_candidates(options, self._settings.ai_max_candidates)
+        if not candidates:
+            raise validation_error(
+                "There are no bookable transport options to recommend from.",
+                [
+                    {
+                        "field": "origin",
+                        "issue": (
+                            "no available option matches this route; widen it or "
+                            "add transport options first"
+                        ),
+                    },
+                ],
+            )
+
+        trip_plan = None
+        if payload.trip_id is not None:
+            self._ensure_trip_is_known(payload.trip_id)
+            trip_plan = self.trip_transport(payload.trip_id)
+
+        prompt = build_prompt(self._settings, payload, candidates, trip_plan)
+        correlation_id = f"student3-transport-{uuid4().hex[:16]}"
+        generated = self._ai_client.generate_draft(
+            prompt=prompt,
+            correlation_id=correlation_id,
+            metadata={
+                "service": self._settings.service_name,
+                "feature": "transport-recommendations",
+                "candidates": str(len(candidates)),
+            },
+        )
+
+        return resolve_draft(
+            generated.draft,
+            candidates,
+            run_id=generated.run_id,
+            model=generated.model,
+            provider=generated.provider,
+        )
 
     def _ensure_trip_is_known(self, trip_id: str) -> None:
         """Reject a plan entry for a trip Student 1 says does not exist.

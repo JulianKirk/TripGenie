@@ -527,6 +527,87 @@ def create_app(
             compare_limit=MAX_COMPARE_SELECTION,
         )
 
+    # -------------------------------------------------------- AI suggestions
+
+    def ai_context(
+        options: list[TransportOptionRecord],
+        directory: TripDirectory,
+    ) -> dict[str, object]:
+        return {
+            "trip_options": trip_choices(directory),
+            "trips_available": directory.available,
+            "trips_unavailable_hint": TRIPS_UNAVAILABLE_HINT,
+        }
+
+    def empty_ai_form() -> dict[str, str]:
+        return {"trip_id": "", "origin": "", "destination": "", "question": ""}
+
+    @app.get("/suggestions", name="ai_form", response_model=None)
+    async def ai_form(
+        request: Request,
+        client: ClientDep,
+        trip_id: Annotated[str | None, Query()] = None,
+        origin: Annotated[str | None, Query()] = None,
+        destination: Annotated[str | None, Query()] = None,
+    ) -> Response:
+        options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
+        form = empty_ai_form() | {
+            "trip_id": (trip_id or "").strip(),
+            "origin": (origin or "").strip(),
+            "destination": (destination or "").strip(),
+        }
+        return render(
+            request,
+            "partials/ai_recommendations.html",
+            page_title="Transport suggestions",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=None,
+            filters={},
+            form=form,
+            form_action=path_for(request, "ai_suggest"),
+            errors_by_field={},
+            error=None,
+            recommendation=None,
+            **ai_context(options, directory),
+        )
+
+    @app.post("/suggestions", name="ai_suggest", response_model=None)
+    async def ai_suggest(request: Request, client: ClientDep) -> Response:
+        form = dict(await request.form())
+        submitted = {key: str(value) for key, value in form.items()}
+        payload: dict[str, object] = {}
+        for name in ("trip_id", "origin", "destination", "question"):
+            value = (submitted.get(name) or "").strip()
+            if value:
+                payload[name] = value
+
+        options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
+        recommendation = None
+        error: ApiError | None = None
+        try:
+            recommendation = await client.recommend_transport(payload)
+        except ApiError as exc:
+            error = exc
+
+        return render(
+            request,
+            "partials/ai_recommendations.html",
+            page_title="Transport suggestions",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=None,
+            filters={},
+            form=empty_ai_form() | submitted,
+            form_action=path_for(request, "ai_suggest"),
+            errors_by_field=error_details_by_field(error),
+            error=error,
+            recommendation=recommendation,
+            **ai_context(options, directory),
+        )
+
     # ------------------------------------------------------------ option CRUD
 
     @app.get("/options/new", name="new_option_form", response_model=None)

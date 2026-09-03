@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 DEFAULT_DB_BASE_URL = "http://student-3-database:8004"
 DEFAULT_TRIPS_BASE_URL = "http://student-1-backend:8001"
+DEFAULT_AI_MODE_BASE_URL = "http://ai-mode:8006"
+DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v1.md"
 
 
 def _parse_timeout(value: str | None, *, env_name: str, default: float) -> float:
@@ -23,6 +25,23 @@ def _parse_timeout(value: str | None, *, env_name: str, default: float) -> float
         raise ValueError(message)
 
     return timeout
+
+
+def _parse_positive_int(value: str | None, *, env_name: str, default: int) -> int:
+    if value is None:
+        return default
+
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        message = f"{env_name} must be a whole number."
+        raise ValueError(message) from exc
+
+    if parsed <= 0:
+        message = f"{env_name} must be greater than zero."
+        raise ValueError(message)
+
+    return parsed
 
 
 def _parse_bool(value: str | None, *, default: bool) -> bool:
@@ -75,6 +94,18 @@ class Settings:
     trips_api_timeout_seconds: float = 5.0
     verify_trip_exists: bool = False
     currency: str = "AUD"
+    # AI-Mode is the shared boundary in front of Ollama. This service renders
+    # its own prompt, validates the reply, and keeps saving on the human side.
+    ai_mode_base_url: str = DEFAULT_AI_MODE_BASE_URL
+    # Above AI-Mode's own AI_MODE_TIMEOUT_SECONDS (90 in compose) so that a
+    # slow generation surfaces as AI-Mode's own error rather than as this
+    # service giving up on a call that was still going to succeed.
+    ai_mode_timeout_seconds: float = 120.0
+    ai_prompt_asset: str = DEFAULT_AI_PROMPT_ASSET
+    # AI-Mode enforces its own prompt ceiling; budget below it so an oversized
+    # prompt is refused here with a domain error rather than upstream.
+    ai_prompt_max_chars: int = 12000
+    ai_max_candidates: int = 12
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -124,4 +155,29 @@ class Settings:
                 default=False,
             ),
             currency=_parse_currency(os.getenv("STUDENT3_BACKEND_CURRENCY")),
+            ai_mode_base_url=_normalise_base_url(
+                os.getenv("STUDENT3_BACKEND_AI_MODE_BASE_URL"),
+                env_name="STUDENT3_BACKEND_AI_MODE_BASE_URL",
+                default=DEFAULT_AI_MODE_BASE_URL,
+            ),
+            ai_mode_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS",
+                default=120.0,
+            ),
+            ai_prompt_asset=os.getenv(
+                "STUDENT3_BACKEND_AI_PROMPT_ASSET",
+                DEFAULT_AI_PROMPT_ASSET,
+            ).strip()
+            or DEFAULT_AI_PROMPT_ASSET,
+            ai_prompt_max_chars=_parse_positive_int(
+                os.getenv("STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS"),
+                env_name="STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS",
+                default=12000,
+            ),
+            ai_max_candidates=_parse_positive_int(
+                os.getenv("STUDENT3_BACKEND_AI_MAX_CANDIDATES"),
+                env_name="STUDENT3_BACKEND_AI_MAX_CANDIDATES",
+                default=12,
+            ),
         )
