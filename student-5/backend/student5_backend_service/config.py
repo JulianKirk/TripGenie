@@ -56,6 +56,9 @@ class Settings:
     accommodation_api_base_url: str = "http://student-2-backend:9000"
     accommodation_api_prefix: str = "/accommodation"
     accommodation_api_timeout_seconds: float = 5.0
+    activity_api_base_url: str = "http://student-4-backend:8008"
+    activity_api_prefix: str = "/activity"
+    activity_api_timeout_seconds: float = 5.0
     ai_mode_base_url: str = "http://ai-mode:8006"
     ai_mode_timeout_seconds: float = 20.0
     ai_prompt_max_chars: int = 12000
@@ -104,6 +107,16 @@ class Settings:
             ),
             accommodation_api_timeout_seconds=_timeout(
                 "STUDENT5_BACKEND_ACCOMMODATION_API_TIMEOUT_SECONDS"
+            ),
+            activity_api_base_url=_url(
+                "STUDENT5_BACKEND_ACTIVITY_API_BASE_URL",
+                "http://student-4-backend:8008",
+            ),
+            activity_api_prefix=_prefix(
+                "STUDENT5_BACKEND_ACTIVITY_API_PREFIX", "/activity"
+            ),
+            activity_api_timeout_seconds=_timeout(
+                "STUDENT5_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS"
             ),
             ai_mode_base_url=_url(
                 "STUDENT5_BACKEND_AI_MODE_BASE_URL", "http://ai-mode:8006"

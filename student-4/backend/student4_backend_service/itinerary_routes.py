@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import UUID  # noqa: TC003 (FastAPI reads this at runtime)
+from decimal import Decimal
+from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
-from .dependencies import ItineraryDep  # noqa: TC001 (FastAPI runtime)
+from .dependencies import DbDep, ItineraryDep  # noqa: TC001 (FastAPI runtime)
 from .schemas import (
+    ActivityCostItem,
+    ActivityCostResponse,
     ActivitySchedule,
     ItinerarySelection,
     ItinerarySelectionResponse,
@@ -14,6 +17,38 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/activity", tags=["itinerary"])
+
+
+@router.get(
+    "/trips/{itinerary_id}/committed-costs",
+    response_model=ActivityCostResponse,
+)
+async def committed_costs(
+    itinerary_id: str, itinerary: ItineraryDep, db: DbDep
+) -> ActivityCostResponse:
+    trips, rows = await asyncio.gather(
+        itinerary.list_itineraries(), itinerary.activities_in(itinerary_id)
+    )
+    trip = next((record for record in trips if record.id == itinerary_id), None)
+    if trip is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "itinerary not found")
+
+    activities = await asyncio.gather(*(db.get(UUID(row.activity_id)) for row in rows))
+    items = [
+        ActivityCostItem(
+            item_id=activity.id,
+            description=activity.name,
+            amount=f"{activity.price * trip.traveller_count:.2f}"
+            if activity.pricing_basis == "PER_PERSON"
+            else f"{activity.price:.2f}",
+        )
+        for activity in activities
+    ]
+    total = sum((item.amount for item in items), Decimal("0.00"))
+    return ActivityCostResponse(
+        committed_cost_total=f"{total:.2f}",
+        items=items,
+    )
 
 
 async def selection(

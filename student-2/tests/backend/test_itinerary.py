@@ -203,6 +203,39 @@ def test_trip_committed_costs_use_attached_stay_dates(itinerary_api):
         ],
     }
 
+
+def test_trip_committed_costs_use_one_night_without_checkout(itinerary_api):
+    itinerary_api.stays["trip_sydney"] = {
+        "trip_id": "trip_sydney",
+        "accommodation_id": ACCOMMODATION_ID,
+        "date": "2027-04-01",
+        "check_out": None,
+    }
+
+    def accommodation(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": ACCOMMODATION_ID,
+                "name": "Harbour Hotel",
+                "price_per_night": "155.0",
+            },
+        )
+
+    app = create_app(
+        Settings(itinerary_url=ITINERARY_URL, database_url="http://database.test"),
+        transport=httpx.MockTransport(accommodation),
+        itinerary_transport=httpx.MockTransport(itinerary_api.handle),
+    )
+    with TestClient(app) as client:
+        response = client.get("/accommodation/trips/trip_sydney/committed-costs")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["committed_cost_total"] == "155.00"
+    assert response.json()["items"][0]["amount"] == "155.00"
+
+
+class TestItineraryClientFailures:
     def test_an_unreachable_itinerary_service_is_a_503(self):
         def handler(request):
             raise httpx.ConnectError(NO_ROUTE)

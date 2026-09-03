@@ -3,6 +3,7 @@
 Related architecture: [Student 1 Release 0 architecture, runtime modes, and decision traceability](../../architecture/student-1-release-0-architecture.md)
 Related runtime AI-mode notes: [Student 1 runtime AI-mode contract and implementation notes](../../architecture/student-1-runtime-ai-mode.md)
 Related ADRs: [ADR-0001](../../architecture/decisions/0001-student-1-service-mapping.md), [ADR-0002](../../architecture/decisions/0002-student-1-internal-api-and-observability.md)
+Related Release 0 material: [report contribution](student-1-report-contribution.md), [evidence register](student-1-evidence-register.md), [demo runbook](student-1-demo-runbook.md)
 
 ## 1. Documentation stance
 

@@ -1,30 +1,44 @@
 /* Student 3 transport frontend.
-   Kept close to the Student 1 frontend's visual language so the integrated app
-   reads as one product. When shared/frontend/css/ gains a real team theme this
-   file should be reduced to Student 3 specifics. */
+
+   The palette is the team's, not this service's: every colour below resolves
+   to a --tg-* token from shared/frontend/theme.css, which base.html loads from
+   the shared portal before this file. Changing a colour here would put this
+   feature out of step with the other four, so the right place to change one is
+   the shared theme.
+
+   The four values at the end have no shared token. They are kept local rather
+   than invented as --tg-* names this service has no standing to define; if the
+   team adds equivalents, these should become aliases like the rest. */
 
 :root {
-  --ink: #16202b;
-  --ink-muted: #5a6b7c;
-  --surface: #ffffff;
-  --surface-sunken: #f4f6f9;
-  --line: #d7dee7;
-  --accent: #1d5f8a;
-  --accent-strong: #14486a;
-  --danger: #a52222;
-  --warning-bg: #fff6e0;
+  --ink: var(--tg-ink);
+  --ink-muted: var(--tg-muted);
+  --surface: var(--tg-surface);
+  --surface-sunken: var(--tg-canvas);
+  --line: var(--tg-line);
+  --accent: var(--tg-accent);
+  --accent-strong: var(--tg-accent-strong);
+  --danger: var(--tg-danger);
+  --warning-bg: var(--tg-warning);
+  --error-bg: var(--tg-error);
+  --radius: var(--tg-radius);
+
+  /* Washes derived from the accent rather than picked, so a change to the
+     team's colour carries through instead of leaving these behind. */
+  --accent-wash: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --accent-wash-soft: color-mix(in srgb, var(--accent) 6%, var(--surface));
+
+  /* Not in the shared theme. */
   --warning-line: #e2b53d;
-  --error-bg: #fdeaea;
   --error-line: #d98d8d;
   --ok: #1d7a4c;
-  --radius: 8px;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--tg-font-body);
   color: var(--ink);
   background: var(--surface-sunken);
   line-height: 1.5;
@@ -44,12 +58,12 @@ a { color: var(--accent); }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.75rem;
-  color: #9fb4c7;
+  color: rgba(255, 255, 255, 0.62);
 }
 .site-header__title { margin: 0.25rem 0; font-size: 1.6rem; }
 .site-header__title a { color: #fff; text-decoration: none; }
-.site-header__subtitle { margin: 0; max-width: 70ch; color: #c6d4e0; font-size: 0.9rem; }
-.site-header__home { display: inline-block; margin-top: 1rem; padding: 0.4rem 0.8rem; color: #fff; border: 1px solid #9fb4c7; border-radius: 6px; text-decoration: none; }
+.site-header__subtitle { margin: 0; max-width: 70ch; color: rgba(255, 255, 255, 0.78); font-size: 0.9rem; }
+.site-header__home { display: inline-block; margin-top: 1rem; padding: 0.4rem 0.8rem; color: #fff; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 6px; text-decoration: none; }
 .site-header__home:hover, .site-header__home:focus-visible { color: var(--ink); background: #fff; }
 
 .loading-indicator {
@@ -105,7 +119,7 @@ a { color: var(--accent); }
   font-weight: 600;
   text-decoration: none;
 }
-.sidebar-nav__ai:hover { background: #eef5fa; }
+.sidebar-nav__ai:hover { background: var(--accent-wash); }
 
 .option-list, .trip-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .option-list__link {
@@ -118,7 +132,7 @@ a { color: var(--accent); }
   background: var(--surface);
 }
 .option-list__link:hover { border-color: var(--accent); }
-.option-list__link.is-active { border-color: var(--accent); background: #eef5fa; }
+.option-list__link.is-active { border-color: var(--accent); background: var(--accent-wash); }
 .option-list__title { display: block; font-weight: 600; }
 .option-list__meta { display: block; font-size: 0.8rem; color: var(--ink-muted); }
 
@@ -137,7 +151,7 @@ a { color: var(--accent); }
 .button--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .button--primary:hover { background: var(--accent-strong); }
 .button--danger { color: var(--danger); border-color: var(--danger); }
-.button--danger:hover { background: #fdeaea; }
+.button--danger:hover { background: var(--error-bg); }
 
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .actions-cell { display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; }
@@ -221,7 +235,7 @@ td.actions-cell { display: table-cell; }
   padding: 1rem 1.1rem;
   border: 1px dashed var(--accent);
   border-radius: var(--radius);
-  background: #f6fafd;
+  background: var(--accent-wash-soft);
 }
 .ai-draft__overview { margin-top: 0; font-weight: 600; }
 .ai-draft__list { margin: 0; padding-left: 1.2rem; display: grid; gap: 1rem; }
@@ -245,7 +259,7 @@ td.actions-cell { display: table-cell; }
   border-radius: var(--radius);
   background: var(--surface);
 }
-.itinerary-row.is-selected { border-color: var(--accent); background: #eef5fa; }
+.itinerary-row.is-selected { border-color: var(--accent); background: var(--accent-wash); }
 .itinerary-row__main { min-width: 0; }
 .itinerary-row__name { margin: 0 0 0.15rem; font-weight: 600; }
 .itinerary-row__name a { text-decoration: none; }

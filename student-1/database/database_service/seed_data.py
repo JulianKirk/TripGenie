@@ -1,3 +1,6 @@
+SYDNEY_HARBOUR_GUIDED_WALK_ID = "9982c0e4-5d7a-5508-8a34-43e529576243"
+
+
 SEED_TRIPS = (
     {
         "id": "trip_2026_sydney_long_weekend",
@@ -222,5 +225,15 @@ SEED_ITINERARY_ITEMS = (
         "description": "Attend the opening performance.",
         "category": "activity",
         "notes": "Collect tickets from the box office.",
+    },
+)
+
+
+SEED_TRIP_ACTIVITIES = (
+    {
+        "trip_id": "trip_2026_sydney_long_weekend",
+        "activity_id": SYDNEY_HARBOUR_GUIDED_WALK_ID,
+        "date": "2026-10-03",
+        "start_time": "09:00",
     },
 )

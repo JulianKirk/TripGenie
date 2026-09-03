@@ -42,10 +42,17 @@ async def committed_costs(
     try:
         for stay in await itinerary.stays_in(itinerary_id):
             check_in = date.fromisoformat(stay["date"])
-            check_out = date.fromisoformat(stay["check_out"])
             accommodation = await db.get(UUID(stay["accommodation_id"]))
-            rate = Decimal(str(accommodation["price_per_night"]))
-            amount = rate * (check_out - check_in).days
+            rate = Decimal(str(accommodation["price_per_night"])).quantize(
+                Decimal("0.01")
+            )
+            check_out_value = stay.get("check_out")
+            nights = (
+                (date.fromisoformat(check_out_value) - check_in).days
+                if check_out_value
+                else 1
+            )
+            amount = rate * nights
             items.append(
                 AccommodationCostItem(
                     item_id=accommodation["id"],

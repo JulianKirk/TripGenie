@@ -13,9 +13,12 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects `http://ai-mode:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for backend-to-shared-AI-Mode HTTP calls. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Consumer-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
-| `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
+| `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v2.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
 | `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. Must stay between `1` and `10`. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_ACCOMMODATIONS` | `6` | Maximum selected accommodation records embedded in prompt context. Must stay between `1` and `50`. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_ACTIVITIES` | `12` | Maximum selected activity records embedded in prompt context. Must stay between `1` and `50`. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT` | `8` | Maximum selected transport records embedded in prompt context. Must stay between `1` and `50`. |
 | `STUDENT1_BACKEND_SERVICE_NAME` | `student-1-backend` | Service name reported by health endpoints. |
 | `STUDENT1_BACKEND_ACTIVITY_API_BASE_URL` | `http://student-4-backend:8008` | Student 4 public API used to enrich activity selections. |
 | `STUDENT1_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS` | `5` | Student 4 lookup timeout. |
@@ -158,10 +161,11 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 
 - `POST /api/trips/{tripId}/ai-suggestions` now calls the shared `ai-mode` service asynchronously, validates returned drafts against the same itinerary rules, and never persists them automatically.
 - Student 1 still owns prompt rendering, bounded trip/itinerary context, domain retry/adaptation, draft-only responses, and the human approval boundary.
-- Student 1 pre-budgets prompts against the shared 12,000-character contract, compacts JSON rendering, drops optional context deterministically when needed, and fails with a Student 1 validation error before calling shared AI-Mode if the irreducible context still cannot fit.
+- AI prompt context also includes bounded local accommodation, selected activity, and transport associations enriched through the existing Student 2, 4, and 3 HTTP clients. `source_status` distinguishes `available`, `partial`, and `unavailable` enrichment while retaining opaque IDs and authoritative local dates/times. Unknown enrichment never implies free time or availability.
+- Cross-service records are prioritised and capped before HTTP fan-out. Student 1 pre-budgets prompts against the shared 12,000-character contract, compacts JSON rendering, drops optional excerpts/interests deterministically, then drops lower-priority transport, accommodation, and activity records before lower-priority ordinary itinerary items. Omitted counts and `budget_adjustments` make every reduction explicit; explicit user constraints are never silently removed.
 - The shared AI-Mode service owns the official `ollama==0.6.2` client, provider configuration, approved model allowlist, provider health/readiness, safe output bounds, and normalized provider errors while targeting a host-managed Ollama runtime (`http://127.0.0.1:11434` natively or `http://host.docker.internal:11434` when the shared service runs in Docker).
 - Returned suggestions always include `persisted=false` and `approval_required=true`.
 - Retry/adaptation is limited to correctable parse/schema/constraint failures only and is a TripGenie runtime robustness feature, **not** the assessed course `Plan -> Act -> Observe -> Adapt` workflow.
 - `GET /health` may report a degraded shared AI-Mode dependency, while `GET /ready` remains database-only and never waits on AI-mode.
 - Correlation IDs are validated to safe single-line values before they are echoed or logged.
-- The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v1.md`, validated at startup, and must stay inside `backend_service/prompts/`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.
+- The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v2.md`, validated at startup, and treats all downstream/user strings as untrusted data that cannot override instructions. Rendering replaces template placeholders in one pass so placeholder-like text inside context is never recursively expanded. It must stay inside `backend_service/prompts/`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.

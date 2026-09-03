@@ -661,6 +661,7 @@ directly. This is the same ownership pattern as Student 2 accommodations.
 
 | Method | Path | Purpose |
 |---|---|---|
+| `GET` | `/activity/trips/{trip_id}/committed-costs` | Return itemized activity costs for the trip. |
 | `GET` | `/activity/{id}/itineraries` | List every itinerary and whether this activity is selected. |
 | `PUT` | `/activity/{id}/itineraries/{trip_id}` | Add or reschedule the activity on the trip. |
 | `DELETE` | `/activity/{id}/itineraries/{trip_id}` | Remove it and return refreshed picker state. |
@@ -676,3 +677,34 @@ contains `itinerary_id`, `name`, `selected`, `start_date`, `end_date`, and the
 stored optional `date`/`start_time`. The frontend should bound its date control
 with the returned trip window. Student 1 is authoritative and returns `422` for
 an out-of-window date.
+
+### Trip committed costs
+
+`GET /activity/trips/{trip_id}/committed-costs` is the provider contract used
+by the budget service. Student 1 supplies the selected activities and trip
+traveller count; this service supplies the exact activity prices and owns the
+pricing calculation.
+
+`PER_PERSON` items cost `price * traveller_count`. `FLAT_ADMISSION` items cost
+the listed price once. All amounts are AUD. A trip with no selected activities
+returns an available total of `0.00`.
+
+```json
+{
+  "committed_cost_total": "179.00",
+  "currency": "AUD",
+  "items": [
+    {
+      "item_id": "0f2b1c4e-aaaa-bbbb-cccc-000000000004",
+      "description": "Harbour Kayak",
+      "status": "planned",
+      "amount": "179.00",
+      "currency": "AUD"
+    }
+  ]
+}
+```
+
+An unknown trip or activity remains `404`. Invalid upstream data returns `502`,
+and an unavailable itinerary or database service returns `503`, so downstream
+budgets never treat an unknown activity cost as zero.

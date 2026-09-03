@@ -12,6 +12,7 @@ from student4_database_service.models import (
     Activity,
     ActivityAvailabilitySchedule,
     ActivityCategory,
+    ActivityIdAlias,
     Category,
     LocationDetails,
 )
@@ -86,12 +87,24 @@ class ActivityRepository:
         self.session = session
 
     def _row(self, activity_id: UUID) -> Activity | None:
+        resolved_id = self.session.scalar(
+            select(ActivityIdAlias.activity_id).where(
+                ActivityIdAlias.alias_id == activity_id
+            )
+        )
         statement = (
             select(Activity)
             .options(*_with_aggregate())
-            .where(Activity.id == activity_id)
+            .where(Activity.id == (resolved_id or activity_id))
         )
         return self.session.scalar(statement)
+
+    @staticmethod
+    def _record_for_requested_id(
+        row: Activity,
+        requested_id: UUID,
+    ) -> ActivityRecord:
+        return row.to_record().model_copy(update={"id": requested_id})
 
     def _ensure_categories(self, message: ActivityWrite) -> None:
         wanted = set(message.categories)
@@ -126,7 +139,7 @@ class ActivityRepository:
 
     def get(self, activity_id: UUID) -> ActivityRecord | None:
         row = self._row(activity_id)
-        return None if row is None else row.to_record()
+        return None if row is None else self._record_for_requested_id(row, activity_id)
 
     def replace(
         self, activity_id: UUID, message: ActivityWrite
@@ -152,7 +165,7 @@ class ActivityRepository:
         except Exception:
             self.session.rollback()
             raise
-        return row.to_record()
+        return self._record_for_requested_id(row, activity_id)
 
     def delete(self, activity_id: UUID) -> bool:
         row = self._row(activity_id)

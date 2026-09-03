@@ -221,6 +221,13 @@ class Activity(Base):
         )
 
 
+class ActivityIdAlias(Base):
+    __tablename__ = "activity_id_aliases"
+
+    alias_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    activity_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+
+
 class LocationDetails(Base):
     __tablename__ = "location_details"
     __table_args__ = (

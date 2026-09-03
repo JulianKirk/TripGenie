@@ -137,20 +137,20 @@ def provider_handler(_: httpx.Request) -> httpx.Response:
         200,
         json={
             "data": {
-                "estimated_cost_total": "200.20",
+                "estimated_cost_total": 200.2,
                 "currency": "AUD",
                 "planned": [
                     {
                         "entry": {
-                            "id": "booking_ferry",
-                            "booking_status": "pending",
-                            "estimated_cost": "200.20",
+                            "transport_id": "booking_ferry",
+                            "plan_status": "pending",
                         },
                         "option": {
                             "provider": "Harbour Ferry",
                             "origin": "Sydney",
                             "destination": "Manly",
                         },
+                        "estimated_cost": 200.2,
                     }
                 ],
             }
@@ -178,6 +178,26 @@ def accommodation_handler(request: httpx.Request) -> httpx.Response:
     )
 
 
+def activity_handler(request: httpx.Request) -> httpx.Response:
+    assert request.url.path == "/activity/trips/trip_chunk3/committed-costs"
+    return httpx.Response(
+        200,
+        json={
+            "committed_cost_total": "179.00",
+            "currency": "AUD",
+            "items": [
+                {
+                    "item_id": "0f2b1c4e-aaaa-bbbb-cccc-000000000004",
+                    "description": "Harbour Kayak",
+                    "status": "planned",
+                    "amount": "179.00",
+                    "currency": "AUD",
+                }
+            ],
+        },
+    )
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
@@ -185,6 +205,7 @@ def settings() -> Settings:
         trips_api_base_url="http://trips.test",
         transport_api_base_url="http://transport.test",
         accommodation_api_base_url="http://accommodation.test",
+        activity_api_base_url="http://activity.test",
     )
 
 
@@ -196,6 +217,7 @@ def client(settings: Settings) -> Iterator[TestClient]:
         trips_transport=httpx.MockTransport(trips_handler),
         provider_transport=httpx.MockTransport(provider_handler),
         accommodation_transport=httpx.MockTransport(accommodation_handler),
+        activity_transport=httpx.MockTransport(activity_handler),
     )
     with TestClient(app) as test_client:
         yield test_client

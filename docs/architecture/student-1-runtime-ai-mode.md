@@ -3,7 +3,7 @@
 Related architecture: [Student 1 Release 0 architecture, runtime modes, and decision traceability](./student-1-release-0-architecture.md)
 Shared AI-Mode contract: [`ai-services/ai-mode/README.md`](../../ai-services/ai-mode/README.md)
 Related ADR: [ADR-0002](./decisions/0002-student-1-internal-api-and-observability.md)
-Runtime prompt asset: [`student-1/backend/backend_service/prompts/runtime_ai_suggestions_v1.md`](../../student-1/backend/backend_service/prompts/runtime_ai_suggestions_v1.md)
+Runtime prompt asset: [`student-1/backend/backend_service/prompts/runtime_ai_suggestions_v2.md`](../../student-1/backend/backend_service/prompts/runtime_ai_suggestions_v2.md)
 
 ## 1. Scope and boundary
 
@@ -63,6 +63,21 @@ Student 1 builds bounded prompt context from:
 - optional `interests`
 - optional `constraints`
 - bounded existing itinerary context
+- bounded selected accommodation context from Student 1 associations, enriched
+  with Student 2 name/location data when available
+- bounded selected activity context from Student 1 associations, enriched with
+  Student 4 name, duration, and price data when available
+- bounded selected transport context from Student 1 associations, enriched with
+  Student 3 mode, provider, route, departure/arrival, price, and duration data
+  when available
+
+Cross-service context keeps the locally stored opaque identifier and scheduling
+facts even when an external service is unavailable. `source_status` is
+`available`, `partial`, or `unavailable` and describes enrichment completeness
+only; it never asserts booking availability or that unknown time is free.
+Missing fields remain absent rather than being fabricated. The same best-effort
+HTTP clients and enrichment helpers used by trip detail perform the enrichment;
+Student 1 never reads another service's database.
 
 Existing itinerary context stays bounded:
 
@@ -71,8 +86,22 @@ Existing itinerary context stays bounded:
 - `total_existing_items` and `omitted_existing_items` remain visible in the context payload
 - descriptions and notes are truncated before prompt assembly
 - prompt JSON is rendered compactly rather than prettified
-- if the rendered prompt would exceed the shared `AI_MODE_MAX_PROMPT_CHARS` contract, Student 1 deterministically drops optional existing-item notes/descriptions, optional trip notes, optional interests/constraints, then lower-priority context items while recording explicit `budget_adjustments`
+- if the rendered prompt would exceed the shared `AI_MODE_MAX_PROMPT_CHARS` contract, Student 1 deterministically drops optional existing-item notes/descriptions, optional trip notes and interests, then lower-priority context items while recording explicit `budget_adjustments`; requested date, traveller count, goal, explicit constraints, and retained authoritative timing are not silently removed
+- cross-service records have independent configured maxima (6 accommodations,
+  12 activities, and 8 transport selections by default)
+- local cross-service records are prioritised and capped before external HTTP
+  lookups, bounding network fan-out as well as prompt size
+- budget reduction drops lower-priority transport records, then accommodation
+  records, then activity records before removing lower-priority ordinary
+  itinerary items; total/omitted counts remain in the serialized context
 - if the irreducible required context still does not fit, Student 1 returns a `422 VALIDATION_ERROR` before calling the shared AI-Mode service
+
+All context is deterministically serialized with sorted JSON keys. The v2
+prompt asset explicitly declares all downstream and user strings to be
+untrusted reference data that cannot override instructions. Template
+placeholders are replaced in one pass, so placeholder-like context data is not
+recursively substituted. Retry context is a bounded typed JSON structure, with
+retry instructions fixed in the trusted prompt asset.
 
 ## 4. Shared AI-Mode consumer contract used by Student 1
 
@@ -183,9 +212,12 @@ Instead, logs record safe metadata such as:
 | `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects `http://ai-mode:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Student 1 calls to the shared AI-Mode service. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Student-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
-| `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v1.md` | Versioned runtime prompt asset. |
+| `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v2.md` | Versioned runtime prompt asset. |
 | `STUDENT1_BACKEND_AI_MAX_ATTEMPTS` | `2` | Maximum total attempts for retryable model-output failures. |
 | `STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS` | `12` | Maximum existing itinerary items embedded in prompt context. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_ACCOMMODATIONS` | `6` | Maximum selected accommodation records embedded in prompt context. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_ACTIVITIES` | `12` | Maximum selected activity records embedded in prompt context. |
+| `STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT` | `8` | Maximum selected transport records embedded in prompt context. |
 
 ### Shared AI-Mode service
 
