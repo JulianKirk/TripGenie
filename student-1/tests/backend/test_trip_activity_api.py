@@ -3,6 +3,8 @@
 from fastapi.testclient import TestClient
 
 ACTIVITY_ID = "0f2b1c4e-aaaa-bbbb-cccc-000000000004"
+CANONICAL_ACTIVITY_ID = "9982c0e4-5d7a-5508-8a34-43e529576243"
+CANONICAL_TRIP_ID = "trip_2026_sydney_long_weekend"
 SYDNEY = "trip_2027_sydney_getaway"
 TOKYO = "trip_2027_tokyo_city_break"
 
@@ -86,6 +88,52 @@ def test_trip_detail_enriches_activity_from_student_4(
             "start_time": "09:30",
             "name": "Sydney Harbour Kayak",
             "price": "89.50",
+            "pricing_basis": "PER_PERSON",
+            "duration_minutes": 120,
+        }
+    ]
+
+
+def test_canonical_seed_association_enriches_over_http(
+    client: TestClient,
+    database_api,
+    activity_api,
+) -> None:
+    database_api.trips[CANONICAL_TRIP_ID] = {
+        "id": CANONICAL_TRIP_ID,
+        "name": "Sydney Long Weekend",
+        "destination": "Sydney",
+        "start_date": "2026-10-02",
+        "end_date": "2026-10-05",
+        "traveller_count": 2,
+        "status": "planned",
+        "notes": "Focus on harbour views and easy walking routes.",
+    }
+    database_api.trip_activities[(CANONICAL_TRIP_ID, CANONICAL_ACTIVITY_ID)] = {
+        "trip_id": CANONICAL_TRIP_ID,
+        "activity_id": CANONICAL_ACTIVITY_ID,
+        "date": "2026-10-03",
+        "start_time": "09:00",
+    }
+    activity_api.records[CANONICAL_ACTIVITY_ID] = {
+        "id": CANONICAL_ACTIVITY_ID,
+        "name": "Sydney Harbour guided walk",
+        "price": "45.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+    }
+
+    response = client.get(f"/api/trips/{CANONICAL_TRIP_ID}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["activities"] == [
+        {
+            "trip_id": CANONICAL_TRIP_ID,
+            "activity_id": CANONICAL_ACTIVITY_ID,
+            "date": "2026-10-03",
+            "start_time": "09:00",
+            "name": "Sydney Harbour guided walk",
+            "price": "45.00",
             "pricing_basis": "PER_PERSON",
             "duration_minutes": 120,
         }

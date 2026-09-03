@@ -15,11 +15,13 @@ from database_service.models import (
     TripUpdate,
 )
 from database_service.repository import (
+    CROSS_SERVICE_SEED_MARKER_KEY,
     SEED_MARKER_COMPLETED,
     SEED_MARKER_KEY,
     SEED_MARKER_SKIPPED_EXISTING_DATA,
     DatabaseService,
 )
+from database_service.seed_data import SEED_TRIP_ACTIVITIES
 from fastapi.testclient import TestClient
 
 LEGACY_SCHEMA_SQL = """
@@ -109,12 +111,86 @@ def test_reinitialisation_does_not_restore_deleted_seed_trip(
     assert excinfo.value.code == "NOT_FOUND"
 
 
+def test_cross_service_seed_is_added_to_an_existing_seeded_volume(
+    service: DatabaseService,
+    database_path,
+) -> None:
+    service.initialize()
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("DELETE FROM trip_activities")
+        connection.execute(
+            "DELETE FROM schema_metadata WHERE key = ?",
+            (CROSS_SERVICE_SEED_MARKER_KEY,),
+        )
+        connection.commit()
+
+    service.initialize()
+    service.initialize()
+
+    with sqlite3.connect(database_path) as connection:
+        records = connection.execute(
+            """
+            SELECT trip_id, activity_id, date, start_time
+            FROM trip_activities
+            """
+        ).fetchall()
+
+    assert records == [
+        (
+            record["trip_id"],
+            record["activity_id"],
+            record["date"],
+            record["start_time"],
+        )
+        for record in SEED_TRIP_ACTIVITIES
+    ]
+
+
+def test_cross_service_seed_does_not_overwrite_an_existing_association(
+    service: DatabaseService,
+    database_path,
+) -> None:
+    service.initialize()
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE trip_activities
+            SET date = '2026-10-04', start_time = '10:30'
+            WHERE trip_id = 'trip_2026_sydney_long_weekend'
+            """
+        )
+        connection.execute(
+            "DELETE FROM schema_metadata WHERE key = ?",
+            (CROSS_SERVICE_SEED_MARKER_KEY,),
+        )
+        connection.commit()
+
+    service.initialize()
+
+    with sqlite3.connect(database_path) as connection:
+        record = connection.execute(
+            """
+            SELECT date, start_time
+            FROM trip_activities
+            WHERE trip_id = 'trip_2026_sydney_long_weekend'
+            """
+        ).fetchone()
+
+    assert record == ("2026-10-04", "10:30")
+
+
 def test_reinitialisation_preserves_deleted_seed_item_and_narrowed_trip_window(
     service: DatabaseService,
 ) -> None:
     service.initialize()
 
     service.delete_itinerary_item("item_2026_sydney_harbour_walk")
+    service.remove_trip_activity(
+        "trip_2026_sydney_long_weekend",
+        str(SEED_TRIP_ACTIVITIES[0]["activity_id"]),
+    )
     updated_trip = service.update_trip(
         "trip_2026_sydney_long_weekend",
         TripUpdate.model_validate({"start_date": "2026-10-04"}),
@@ -125,9 +201,11 @@ def test_reinitialisation_preserves_deleted_seed_item_and_narrowed_trip_window(
 
     reloaded_trip = service.get_trip("trip_2026_sydney_long_weekend")
     reloaded_items = service.list_itinerary_items("trip_2026_sydney_long_weekend")
+    reloaded_activities = service.list_trip_activities("trip_2026_sydney_long_weekend")
 
     assert reloaded_trip["start_date"] == "2026-10-04"
     assert reloaded_items == []
+    assert reloaded_activities == []
 
 
 class FailingSeedDatabaseService(DatabaseService):
@@ -180,8 +258,7 @@ def test_failed_initialisation_does_not_leave_false_seed_marker(
     recovered_service.initialize()
 
     assert (
-        _schema_metadata_value(database_path, SEED_MARKER_KEY)
-        == SEED_MARKER_COMPLETED
+        _schema_metadata_value(database_path, SEED_MARKER_KEY) == SEED_MARKER_COMPLETED
     )
 
 

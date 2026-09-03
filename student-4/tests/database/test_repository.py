@@ -17,6 +17,7 @@ from student4_database_service.models import (
     Activity,
     ActivityAvailabilitySchedule,
     ActivityCategory,
+    ActivityIdAlias,
     Category,
     LocationDetails,
 )
@@ -75,6 +76,83 @@ def test_seed_database_populates_at_least_ten_rows_per_table(
         assert seed_data.seed_database(session) == 0
 
 
+def test_seed_uses_the_stable_sydney_activity_id(
+    session_factory: sessionmaker[Session],
+) -> None:
+    expected_id = UUID("9982c0e4-5d7a-5508-8a34-43e529576243")
+    assert expected_id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+
+    with session_factory() as session:
+        seed_data.seed_database(session)
+        activity = session.get(Activity, expected_id)
+
+        assert activity is not None
+        assert activity.name == "Sydney Harbour guided walk"
+        assert seed_data.seed_database(session) == 0
+
+
+@pytest.mark.parametrize("deterministic_rows_exist", [False, True])
+def test_seed_migrates_the_legacy_uuid4_catalogue_without_duplicates(
+    session_factory: sessionmaker[Session],
+    deterministic_rows_exist: bool,
+) -> None:
+    with session_factory() as session:
+        seed_categories(session)
+        if deterministic_rows_exist:
+            assert seed_data.seed_activities(session) == 10
+
+        legacy_rows: list[Activity] = []
+        for payload in seed_data.SAMPLE_ACTIVITY_DATA:
+            legacy_row = Activity.from_message(ActivityWrite.model_validate(payload))
+            session.add(legacy_row)
+            legacy_rows.append(legacy_row)
+        session.commit()
+        legacy_ids = [row.id for row in legacy_rows]
+
+        before = session.scalar(select(func.count()).select_from(Activity))
+        assert before == (20 if deterministic_rows_exist else 10)
+        canonical_existed = (
+            session.get(Activity, seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID) is not None
+        )
+        assert canonical_existed is deterministic_rows_exist
+
+        assert seed_data.seed_database(session) == 0
+
+        repository = ActivityRepository(session)
+        canonical = repository.get(seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID)
+        legacy_record = repository.get(legacy_ids[0])
+        rows, total = repository.search(ActivityQueryRequest(limit=100))
+        aliases = session.scalar(select(func.count()).select_from(ActivityIdAlias))
+
+        assert total == 10
+        assert aliases == 10
+        assert session.get(Activity, legacy_ids[0]) is None
+        sydney_alias = session.get(ActivityIdAlias, legacy_ids[0])
+        assert sydney_alias is not None
+        assert sydney_alias.activity_id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+        assert canonical is not None
+        assert canonical.id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+        assert canonical.name == "Sydney Harbour guided walk"
+        assert legacy_record is not None
+        assert legacy_record.id == legacy_ids[0]
+        assert legacy_record.name == canonical.name
+        assert legacy_ids[0] not in {row.id for row in rows}
+        assert seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID in {row.id for row in rows}
+        assert session.execute(text("PRAGMA foreign_key_check")).all() == []
+
+        assert repository.delete(legacy_ids[0]) is True
+        assert session.get(ActivityIdAlias, legacy_ids[0]) is not None
+        assert repository.get(legacy_ids[0]) is None
+        assert seed_data.seed_database(session) == 1
+        restored_legacy = repository.get(legacy_ids[0])
+        assert restored_legacy is not None
+        assert restored_legacy.id == legacy_ids[0]
+
+        assert seed_data.seed_database(session) == 0
+        assert session.scalar(select(func.count()).select_from(Activity)) == 10
+        assert session.scalar(select(func.count()).select_from(ActivityIdAlias)) == 10
+
+
 def test_seed_repairs_missing_categories_without_overwriting_existing_values(
     session_factory: sessionmaker[Session],
 ) -> None:
@@ -109,10 +187,10 @@ def test_seed_preserves_existing_catalogue_while_repairing_categories(
         session.delete(category)
         session.commit()
 
-        assert seed_data.seed_database(session) == 1
+        assert seed_data.seed_database(session) == 11
         rows, total = repository.search(ActivityQueryRequest())
-        assert total == 1
-        assert [row.id for row in rows] == [sentinel.id]
+        assert total == 11
+        assert sentinel.id in {row.id for row in rows}
         assert session.get(Category, CategoryCode.NIGHTLIFE) is not None
 
 
