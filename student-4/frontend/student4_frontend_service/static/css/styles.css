@@ -9,6 +9,8 @@ a { color: var(--accent-dark); }
 .site-header p { margin: 0; color: #d6e0dd; }
 .site-nav { display: flex; gap: 1rem; margin-top: .75rem; font: .85rem var(--tg-font-ui, sans-serif); }
 .site-nav a { color: white; }
+.site-header__home { display: inline-block; margin-top: 1rem; padding: .4rem .8rem; color: white; border: 1px solid #a9c6bd; border-radius: 6px; text-decoration: none; }
+.site-header__home:hover, .site-header__home:focus-visible { color: var(--ink); background: white; }
 .eyebrow { margin: 0; color: var(--muted); font: 700 .72rem var(--tg-font-ui, "Trebuchet MS", sans-serif); letter-spacing: .08em; text-transform: uppercase; }
 .site-header .eyebrow { color: #a9c6bd; }
 .loading { display: none; padding: .5rem 1rem; background: var(--tg-warning, #fff4d6); text-align: center; }

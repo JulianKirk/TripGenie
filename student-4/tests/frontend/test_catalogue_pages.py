@@ -25,6 +25,7 @@ def test_index_is_full_htmx_page_with_tripgenie_shell(backend: FakeBackend) -> N
     assert response.status_code == 200
     assert "<!DOCTYPE html>" in response.text
     assert 'href="http://localhost:8080/theme.css"' in response.text
+    assert 'href="http://localhost:8080">Home</a>' in response.text
     assert 'src="https://unpkg.com/htmx.org@2.0.4"' in response.text
     assert 'class="site-header"' in response.text
     assert 'id="activity-filters"' in response.text
@@ -143,6 +144,7 @@ def test_detail_dialog_renders_full_activity(backend: FakeBackend) -> None:
     assert "Ages 8+" in response.text
     assert "Outdoor" in response.text
     assert "Tour" in response.text
+    assert "Add to trip" in response.text
     assert "Unknown" not in response.text
 
 

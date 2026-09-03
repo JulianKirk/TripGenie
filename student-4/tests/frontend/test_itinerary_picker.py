@@ -20,10 +20,10 @@ def frontend(backend: FakeBackend) -> TestClient:
     )
 
 
-def test_active_activity_offers_add_to_itinerary(backend: FakeBackend) -> None:
+def test_active_activity_offers_add_to_trip(backend: FakeBackend) -> None:
     text = frontend(backend).get(f"/activity/{ACTIVITY_ID}").text
 
-    assert "Add to itinerary" in text
+    assert "Add to trip" in text
     assert f'hx-get="/activity/{ACTIVITY_ID}/itineraries"' in text
     assert 'hx-target="#itinerary-picker"' in text
 
@@ -40,8 +40,8 @@ def test_inactive_activity_does_not_offer_new_itinerary_selection(
     text = frontend(backend).get(f"/activity/{ACTIVITY_ID}").text
 
     assert "This activity is inactive" in text
-    assert "Add to itinerary" not in text
-    assert "Manage itinerary" in text
+    assert "Add to trip" not in text
+    assert "Manage trip" in text
 
 
 def test_inactive_selected_activity_remains_visible_and_removable(

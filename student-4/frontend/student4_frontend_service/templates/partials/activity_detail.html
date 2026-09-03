@@ -20,7 +20,7 @@
     {% if schedules.one_off %}<h4>One-off dates</h4><ul>{% for row in schedules.one_off %}<li>{{ row.date.isoformat() }} · {{ row.start_time.strftime('%H:%M') }}–{{ row.end_time.strftime('%H:%M') }}</li>{% endfor %}</ul>{% endif %}
     <section class="itinerary-section">
       <h3>Trip itinerary</h3>
-      <button class="button button--primary" type="button" hx-get="/activity/{{ activity.id }}/itineraries" hx-target="#itinerary-picker">{{ 'Add to itinerary' if activity.is_active else 'Manage itinerary' }}</button>
+      <button class="button button--primary" type="button" hx-get="/activity/{{ activity.id }}/itineraries" hx-target="#itinerary-picker">{{ 'Add to trip' if activity.is_active else 'Manage trip' }}</button>
       {% if not activity.is_active %}<p class="banner banner--warning">This activity is inactive and cannot be newly added to an itinerary. Existing selections remain available to update or remove.</p>{% endif %}
       <div id="itinerary-picker"></div>
     </section>

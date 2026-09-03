@@ -117,7 +117,9 @@ def test_itinerary_operations_stay_on_student_4_backend(
     backend: FakeBackend,
 ) -> None:
     picker = run(backend_client.itineraries(UUID(ACTIVITY_ID)))
-    write = ItinerarySelectionWrite(date="2027-04-02", start_time="09:30")
+    write = ItinerarySelectionWrite.model_validate(
+        {"date": "2027-04-02", "start_time": "09:30"}
+    )
     run(backend_client.put_itinerary(UUID(ACTIVITY_ID), TRIP_ID, write))
     run(backend_client.delete_itinerary(UUID(ACTIVITY_ID), TRIP_ID))
 

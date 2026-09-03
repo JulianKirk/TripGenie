@@ -11,8 +11,8 @@ call the database, shared location service, or itinerary service directly.
 - Server-rendered activity cards and full detail dialogs.
 - A management view with complete create/edit forms, activation state, and
   explicit permanent-delete confirmation.
-- Add, reschedule, and remove activity selections through Student 4's
-  itinerary proxy.
+- Add activities to a trip, reschedule them, and remove selections through
+  Student 4's itinerary proxy.
 - Progressive enhancement: the initial page and explicit search submission
   work without JavaScript; HTMX adds live fragment updates.
 - Degraded health and safe HTML error states when the backend is unavailable.

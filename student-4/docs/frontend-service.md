@@ -216,8 +216,8 @@ Recurring schedules are grouped by weekday for readability. One-off schedules
 show their ISO date. Times remain in local `HH:MM` form. The page does not invent
 bookable time slots from a flexible interval.
 
-Each card opens the detail dialog, where an **Add to itinerary** or **Manage
-itinerary** button loads `GET /activity/{id}/itineraries` from the Student 4
+Each card opens the detail dialog, where an **Add to trip** or **Manage trip**
+button loads `GET /activity/{id}/itineraries` from the Student 4
 backend. Each trip has add/update and remove actions plus optional date and
 start-time controls. Those actions send `PUT` or `DELETE` to that same Student
 4 backend. Dates are bounded by each row's returned `start_date` and
