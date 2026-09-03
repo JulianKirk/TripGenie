@@ -188,14 +188,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r ai-services/agentic-loop/requirements.txt pytest
       - name: Start the service
-        # Compose pulls in whatever the service depends on -- its database, and
-        # for student 2 the two backends it calls. The overlay publishes student
-        # 3's backend, which is internal-only in the main file.
+        # Compose normally pulls in whatever the service depends on. A matrix
+        # entry can select --no-deps when it explicitly lists the complete
+        # owned slice and its external integrations are optional for the loop.
         run: |
+          compose_args=()
+          if [ "${{ matrix.no_deps }}" = "true" ]; then
+            compose_args+=(--no-deps)
+          fi
           docker compose \
             -f docker-compose.yml \
             -f ai-services/agentic-loop/docker-compose.agentic.yml \
-            up -d --build ${{ matrix.compose }}
+            up -d --build "${compose_args[@]}" ${{ matrix.compose }}
       - name: Wait for the service to answer
         run: |
           for _ in $(seq 1 20); do

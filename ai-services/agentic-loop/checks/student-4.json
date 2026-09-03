@@ -1,7 +1,12 @@
 {
-  "goal": "Validate the student 4 activities service with a local multi-agent workflow",
-  "_note": "student-4 has no backend yet -- its Dockerfile serves a static directory. This file checks that the container is up; replace these with real endpoint checks when the backend lands.",
+  "goal": "Validate the Student 4 activities frontend, backend readiness, and database-backed category catalogue",
+  "_note": "All checks are read-only. Health may be degraded because the CI slice intentionally omits optional shared-location, itinerary, and AI services; readiness depends only on the owned database.",
   "checks": [
-    {"label": "GET / (placeholder static server)", "path": "${SERVICE_URL}/", "contains": ["<html"]}
+    {"label": "GET frontend /health", "path": "${SERVICE_URL}/health", "contains": ["\"status\":\"degraded\"", "\"service\":\"student-4-frontend\""]},
+    {"label": "GET frontend /ready", "path": "${SERVICE_URL}/ready", "contains": ["\"status\":\"ready\"", "\"service\":\"student-4-frontend\""]},
+    {"label": "GET frontend /", "path": "${SERVICE_URL}/", "contains": ["<html", "Activities &amp; Attractions", "http://localhost:8080/theme.css"]},
+    {"label": "GET backend /health", "path": "${BACKEND_URL}/health", "contains": ["\"status\":\"degraded\"", "\"database\":\"ok\"", "\"location\":\"unreachable\""]},
+    {"label": "GET backend /ready", "path": "${BACKEND_URL}/ready", "contains": ["\"status\":\"ready\"", "\"database\":\"ok\""]},
+    {"label": "GET /activity/categories", "path": "${BACKEND_URL}/activity/categories", "contains": ["ADVENTURE", "CULTURE", "WILDLIFE"], "nfr_ms": 500}
   ]
 }

@@ -12,10 +12,11 @@ than one showing the selection without it. Callers get `None` and render a dash.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class TransportDetails(BaseModel):
@@ -34,6 +35,8 @@ class TransportDetails(BaseModel):
     destination: str
     departure_time: str
     arrival_time: str
+    departure_utc_offset: int | None = Field(default=None, ge=-720, le=840)
+    arrival_utc_offset: int | None = Field(default=None, ge=-720, le=840)
     duration_minutes: int = Field(gt=0)
     price: float = Field(ge=0)
     # Whether `price` multiplies by the party size. Whole-vehicle hire does not,
@@ -44,6 +47,24 @@ class TransportDetails(BaseModel):
     # enums are lower case throughout, and this has to match what that service
     # actually sends rather than what the neighbouring client happens to use.
     pricing_basis: Literal["per_traveller", "per_vehicle"] = "per_traveller"
+
+    @model_validator(mode="after")
+    def validate_authoritative_timing(self) -> TransportDetails:
+        offsets = (self.departure_utc_offset, self.arrival_utc_offset)
+        if (offsets[0] is None) != (offsets[1] is None):
+            raise ValueError("departure and arrival UTC offsets must be paired")
+
+        departure = datetime.fromisoformat(self.departure_time)
+        arrival = datetime.fromisoformat(self.arrival_time)
+        if departure.tzinfo is not None or arrival.tzinfo is not None:
+            raise ValueError("transport timestamps must be local wall-clock values")
+        if offsets[0] is not None and offsets[1] is not None:
+            departure -= timedelta(minutes=offsets[0])
+            arrival -= timedelta(minutes=offsets[1])
+
+        if arrival - departure != timedelta(minutes=self.duration_minutes):
+            raise ValueError("transport duration must match timestamps and UTC offsets")
+        return self
 
     def cost_for(self, traveller_count: int) -> float:
         """What this option contributes for a party of `traveller_count`."""

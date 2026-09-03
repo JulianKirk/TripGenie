@@ -9,8 +9,9 @@ microservice. Its callers are the Student 4 frontend and other backend services,
 including itinerary and budget services. Neither the frontend nor another
 student's service accesses the Student 4 database service directly.
 
-The target compose address is `http://student-4-backend:8008`; examples use
-`http://localhost:8008`.
+The target Compose address is `http://student-4-backend:8008`. The examples use
+`http://localhost:8008` for a backend started directly with Uvicorn or published
+with `docker run -p 8008:8008`; Compose keeps this port internal.
 
 ```text
 frontend / other students' backends
@@ -52,6 +53,12 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
+| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://ai-mode:8006`; when unset, only recommendations are unavailable. |
+| `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
+| `AI_PROMPT_MAX_CHARS` | `12000` | Maximum rendered planning or evaluation prompt size, aligned with AI Mode. |
+| `AI_MAX_CANDIDATES` | `20` | Maximum authoritative activity records evaluated by AI. |
+| `AI_PLAN_PROMPT_ASSET` | `activity_search_plan_v1.md` | Packaged search-planning prompt. |
+| `AI_EVALUATION_PROMPT_ASSET` | `activity_recommendations_v1.md` | Packaged grounded-evaluation prompt. |
 
 ### Publicly writable data
 
@@ -91,6 +98,62 @@ Errors use `{"detail": "..."}`.
 
 `502` and `503` are retryable. An unknown location in a well-formed search is
 an empty result, not an error.
+
+## AI-assisted activity search
+
+AI suggestions are advisory and use two explicit stages. Planning turns a
+traveller's question and optional trip into the same structured `ActivityQuery`
+accepted by `QUERY /activity`. Evaluation executes that query, loads the real
+matching activity details, and lets AI shortlist only supplied identifiers.
+Neither route writes catalogue or itinerary data.
+
+`GET /activity/trips` returns `{"available": true, "trips": [...]}` for the
+optional context picker. If Student 1 is unavailable it returns
+`{"available": false, "trips": []}` so ordinary catalogue use continues.
+
+### POST /activity/recommendations/plan
+
+```json
+{
+  "question": "Something outdoors and relaxed for our first morning",
+  "trip_id": "trip_2026_sydney_long_weekend"
+}
+```
+
+The response includes the validated `query`, a readable `summary`, and whether
+trip context was loaded. A selected trip's resolvable destination and traveller
+count are applied after model output. Paging is fixed to the first 20 active
+activities.
+
+The planning prompt documents every supported filter and requires all explicit
+constraints to be represented structurally. Before validation, the backend also
+reconciles unambiguous category, price, duration, party, age, accessibility and
+booking phrases from the original question. This prevents a small model from
+silently omitting or contradicting a constraint such as “outdoor”, “under $100”
+or “no more than three hours”.
+
+### POST /activity/recommendations/evaluate
+
+```json
+{
+  "question": "Something outdoors and relaxed for our first morning",
+  "trip_id": "trip_2026_sydney_long_weekend",
+  "query": {"categories": {"codes": ["OUTDOOR"], "match": "ANY"}},
+  "summary": "outdoor activities in Sydney",
+  "attempt": 1
+}
+```
+
+A `complete` response includes `matched_count`, `evaluated_count`, one to three
+grounded recommendations, the query used, and model provenance. When no result
+is suitable, attempt one may return `retry` with one materially changed query
+and `revision_explanation`. Attempt two returns `no_match` instead of looping.
+Activities already present in the selected trip are excluded.
+
+The response distinguishes catalogue matches from the smaller AI shortlist.
+Unknown model-generated activity identifiers are rejected with `502`; duplicate
+identifiers are collapsed. The traveller still uses the normal itinerary
+endpoint to add a recommendation.
 
 ## Response representations
 
@@ -155,6 +218,17 @@ curl "http://localhost:8008/health"
 
 The top-level status is `degraded` when either dependency is unreachable, while
 the endpoint still returns `200` because the backend itself is alive.
+
+## GET /ready
+
+Reports whether the backend can accept activity traffic. The database service
+is the required readiness dependency; shared location, itinerary, and AI
+services remain runtime dependencies so their outages do not prevent the owned
+Student 4 slice from starting.
+
+The endpoint returns `200` with `status: "ready"` when the database responds,
+or `503` with `status: "not_ready"` while it is unavailable. Docker Compose
+uses this endpoint to gate the frontend startup.
 
 ## GET /activity/categories
 

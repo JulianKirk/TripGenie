@@ -60,6 +60,30 @@ class LocationClient:
             await self._load()
         return {item: self._names[item] for item in wanted if item in self._names}
 
+    async def vocabulary(self) -> tuple[list[str], list[str]]:
+        if not self._loaded:
+            await self._load()
+        countries = sorted(self._country_ids)
+        cities = sorted({city for _, city in self._city_ids})
+        return countries, cities
+
+    async def destination_filter(self, destination: str) -> dict[str, str] | None:
+        if not self._loaded:
+            await self._load()
+        wanted = normalise(destination)
+        country_id = self._country_ids.get(wanted)
+        if country_id is not None:
+            return {"country": self._names[country_id]}
+        matches = [
+            (owner, city_id)
+            for (owner, city), city_id in self._city_ids.items()
+            if city == wanted
+        ]
+        if len(matches) != 1:
+            return None
+        owner, city_id = matches[0]
+        return {"country": self._names[owner], "city": self._names[city_id]}
+
     def _lookup(
         self, country: str, city: str | None
     ) -> tuple[UUID, UUID | None] | None:

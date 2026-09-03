@@ -63,6 +63,17 @@ def test_read_operations_use_only_public_backend_routes(
     ]
 
 
+def test_ready_uses_the_backend_readiness_contract(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    readiness = run(backend_client.ready())
+
+    assert readiness.status == "ok"
+    assert backend.last_request.method == "GET"
+    assert backend.last_request.url.path == "/ready"
+
+
 def test_activity_mutations_use_documented_methods_and_payloads(
     backend_client: BackendClient,
     backend: FakeBackend,
@@ -129,6 +140,61 @@ def test_itinerary_operations_stay_on_student_4_backend(
         ("PUT", f"/activity/{ACTIVITY_ID}/itineraries/{TRIP_ID}"),
         ("DELETE", f"/activity/{ACTIVITY_ID}/itineraries/{TRIP_ID}"),
     ]
+
+
+def test_ai_operations_use_recommendation_routes_and_long_timeout(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    backend.overrides[("POST", "/activity/recommendations/plan")] = httpx.Response(
+        200,
+        json={
+            "question": "Outdoor ideas",
+            "query": {"categories": {"codes": ["OUTDOOR"], "match": "ANY"}},
+            "summary": "outdoor activities",
+            "trip_context_available": False,
+        },
+    )
+    backend.overrides[("POST", "/activity/recommendations/evaluate")] = httpx.Response(
+        200,
+        json={
+            "status": "no_match",
+            "attempt": 2,
+            "query": {"limit": 20, "offset": 0},
+            "summary": "outdoor activities",
+            "matched_count": 0,
+            "evaluated_count": 0,
+            "recommended": [],
+            "overview": "No suitable activities were found.",
+            "considerations": [],
+            "disclaimer": "Try changing the filters.",
+            "run_id": "run-1",
+            "model": "qwen2.5:3b",
+            "provider": "ollama",
+        },
+    )
+
+    plan = run(backend_client.plan_recommendations({"question": "Outdoor ideas"}))
+    result = run(
+        backend_client.evaluate_recommendations(
+            {
+                "question": plan.question,
+                "query": plan.query.model_dump(mode="json", exclude_none=True),
+                "summary": plan.summary,
+                "attempt": 2,
+            }
+        )
+    )
+
+    assert plan.summary == "outdoor activities"
+    assert result.status == "no_match"
+    assert [request.url.path for request in backend.requests] == [
+        "/activity/recommendations/plan",
+        "/activity/recommendations/evaluate",
+    ]
+    assert all(
+        request.extensions["timeout"]["read"] == 210.0 for request in backend.requests
+    )
 
 
 def test_backend_validation_detail_is_preserved(
@@ -277,3 +343,41 @@ def test_non_json_backend_error_does_not_leak_body(
         run(backend_client.activity(UUID(ACTIVITY_ID)))
 
     assert "secret proxy dump" not in raised.value.detail
+
+
+def test_inconsistent_ai_status_payload_is_rejected(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    backend.overrides[("POST", "/activity/recommendations/evaluate")] = httpx.Response(
+        200,
+        json={
+            "status": "retry",
+            "attempt": 2,
+            "query": {},
+            "summary": "broader activities",
+            "matched_count": 0,
+            "evaluated_count": 0,
+            "recommended": [],
+            "overview": "The first search was too narrow.",
+            "considerations": [],
+            "disclaimer": "Review the revised search.",
+            "run_id": "run-1",
+            "model": "model-1",
+            "provider": "provider-1",
+        },
+    )
+
+    with pytest.raises(FrontendError) as raised:
+        run(
+            backend_client.evaluate_recommendations(
+                {
+                    "question": "Outdoor ideas",
+                    "query": {},
+                    "summary": "outdoor activities",
+                    "attempt": 1,
+                }
+            )
+        )
+
+    assert raised.value.kind == "malformed_upstream"

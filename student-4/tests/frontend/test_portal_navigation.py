@@ -34,4 +34,4 @@ def test_shared_portal_opens_the_student_4_frontend() -> None:
     student_4 = next(
         href for label, href in portal.links.items() if label.startswith("Student 4")
     )
-    assert student_4 == "http://localhost:8094"
+    assert student_4 == "http://localhost:8084"

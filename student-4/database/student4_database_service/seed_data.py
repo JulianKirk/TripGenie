@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from student4_database_service.enums import CategoryCode
-from student4_database_service.models import Activity, Category
+from student4_database_service.models import (
+    Activity,
+    ActivityIdAlias,
+    Category,
+)
 from student4_database_service.schemas import ActivityWrite
 
 if TYPE_CHECKING:
@@ -74,6 +79,37 @@ CATEGORY_SEEDS = (
 
 SHARED_LOCATION_NAMESPACE = UUID("9a7c1f2e-3b4d-5e6f-8a9b-0c1d2e3f4a5b")
 AUSTRALIA_ID = uuid5(SHARED_LOCATION_NAMESPACE, "country:australia")
+ACTIVITY_SEED_NAMESPACE = UUID("cb327a7c-8a95-5fea-a895-4a04ca6d95da")
+
+
+def _activity_seed_id(seed_key: str) -> UUID:
+    return uuid5(
+        ACTIVITY_SEED_NAMESPACE,
+        f"activity:{seed_key}",
+    )
+
+
+SAMPLE_ACTIVITY_SEED_KEYS = (
+    "sydney harbour guided walk",
+    "melbourne museum discovery",
+    "great barrier reef snorkelling",
+    "barossa valley tasting tour",
+    "blue mountains family hike",
+    "salamanca market food walk",
+    "darwin sunset wildlife cruise",
+    "brisbane riverside sunrise yoga",
+    "perth evening food crawl",
+    "canberra national gallery visit",
+    "royal botanic garden accessible stroll",
+    "sydney harbour sunrise kayak",
+    "museum of contemporary art highlights tour",
+    "the rocks evening food walk",
+)
+HISTORICAL_ACTIVITY_CATALOGUE_SIZE = 10
+SAMPLE_ACTIVITY_IDS = tuple(
+    _activity_seed_id(seed_key) for seed_key in SAMPLE_ACTIVITY_SEED_KEYS
+)
+SYDNEY_HARBOUR_GUIDED_WALK_ID = SAMPLE_ACTIVITY_IDS[0]
 
 
 def _location(city: str, street: str, street_number: int) -> dict[str, object]:
@@ -249,6 +285,77 @@ SAMPLE_ACTIVITY_DATA: tuple[dict[str, object], ...] = (
         "categories": ["CULTURE"],
         "availability_schedules": _weekly("MONDAY", "10:00", "15:00"),
     },
+    {
+        "name": "Royal Botanic Garden accessible stroll",
+        "description": (
+            "A relaxed, step-free guided stroll through the harbour-side gardens."
+        ),
+        "price": "22.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 12,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Step-free route with accessible toilets nearby.",
+        "location_details": _location("Sydney", "Mrs Macquaries Road", 1),
+        "categories": ["OUTDOOR", "TOUR", "WELLNESS"],
+        "availability_schedules": _weekly("SUNDAY", "09:00", "12:00"),
+    },
+    {
+        "name": "Sydney Harbour sunrise kayak",
+        "description": (
+            "A guided sunrise paddle with close-up harbour and skyline views."
+        ),
+        "price": "95.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 8,
+        "booking_required": True,
+        "booking_notes": "Advance booking and basic swimming ability required.",
+        "location_details": _location("Sydney", "Hickson Road", 5),
+        "categories": ["ADVENTURE", "OUTDOOR"],
+        "availability_schedules": _weekly("SATURDAY", "06:00", "09:00"),
+    },
+    {
+        "name": "Museum of Contemporary Art highlights tour",
+        "description": (
+            "An accessible guided introduction to contemporary Australian art."
+        ),
+        "price": "30.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 15,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Lift access and accessible toilets are available.",
+        "location_details": _location("Sydney", "George Street", 140),
+        "categories": ["CULTURE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "10:00", "16:00"),
+    },
+    {
+        "name": "The Rocks evening food walk",
+        "description": (
+            "A small-group tasting walk through historic lanes and local eateries."
+        ),
+        "price": "80.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 150,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 10,
+        "booking_required": True,
+        "location_details": _location("Sydney", "Playfair Street", 12),
+        "categories": ["FOOD_DRINK", "NIGHTLIFE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "17:30", "21:00"),
+    },
 )
 
 
@@ -270,14 +377,98 @@ def seed_categories(session: Session) -> int:
     return inserted
 
 
-def seed_activities(session: Session) -> int:
-    if session.scalar(select(func.count()).select_from(Activity)):
-        return 0
-    for payload in SAMPLE_ACTIVITY_DATA:
-        message = ActivityWrite.model_validate(payload)
-        session.add(Activity.from_message(message))
+def _activity_payload(activity: Activity) -> dict[str, object]:
+    return activity.to_record().model_dump(
+        mode="json",
+        exclude={
+            "id": True,
+            "location_details": {"id": True},
+            "availability_schedules": {"__all__": {"id": True}},
+        },
+    )
+
+
+def _migrate_legacy_seed_activities(session: Session) -> None:
+    rows = list(
+        session.scalars(
+            select(Activity).options(
+                selectinload(Activity.location_details),
+                selectinload(Activity.category_links),
+                selectinload(Activity.availability_schedules),
+            )
+        )
+    )
+    messages = [
+        ActivityWrite.model_validate(payload) for payload in SAMPLE_ACTIVITY_DATA
+    ]
+    matches_by_message: list[list[Activity]] = []
+    for message in messages:
+        expected = message.model_dump(mode="json")
+        matches = [
+            row
+            for row in rows
+            if row.id not in SAMPLE_ACTIVITY_IDS and _activity_payload(row) == expected
+        ]
+        matches_by_message.append(matches)
+
+    # Recognise both the current catalogue and the historical ten-row catalogue shipped
+    # before the four Sydney AI-demo activities were added. Partial or
+    # ambiguous matches may be user-created records, so only migrate a complete
+    # known cohort. A historical cohort is accepted only when none of the newer
+    # payloads are also present under legacy IDs.
+    if all(len(matches) == 1 for matches in matches_by_message):
+        cohort_size = len(messages)
+    elif all(
+        len(matches) == 1
+        for matches in matches_by_message[:HISTORICAL_ACTIVITY_CATALOGUE_SIZE]
+    ) and all(
+        not matches
+        for matches in matches_by_message[HISTORICAL_ACTIVITY_CATALOGUE_SIZE:]
+    ):
+        cohort_size = HISTORICAL_ACTIVITY_CATALOGUE_SIZE
+    else:
+        return
+
+    legacy_rows = [matches[0] for matches in matches_by_message[:cohort_size]]
+
+    if len({row.id for row in legacy_rows}) != cohort_size:
+        return
+
+    for activity_id, message, legacy in zip(
+        SAMPLE_ACTIVITY_IDS[:cohort_size],
+        messages[:cohort_size],
+        legacy_rows,
+        strict=True,
+    ):
+        canonical = session.get(Activity, activity_id)
+        if canonical is None:
+            canonical = Activity.from_message(message)
+            canonical.id = activity_id
+            session.add(canonical)
+            session.flush()
+        session.add(ActivityIdAlias(alias_id=legacy.id, activity_id=activity_id))
+        session.delete(legacy)
     session.commit()
-    return len(SAMPLE_ACTIVITY_DATA)
+
+
+def seed_activities(session: Session) -> int:
+    _migrate_legacy_seed_activities(session)
+    inserted = 0
+    for activity_id, payload in zip(
+        SAMPLE_ACTIVITY_IDS,
+        SAMPLE_ACTIVITY_DATA,
+        strict=True,
+    ):
+        if session.get(Activity, activity_id) is not None:
+            continue
+        message = ActivityWrite.model_validate(payload)
+        activity = Activity.from_message(message)
+        activity.id = activity_id
+        session.add(activity)
+        inserted += 1
+    if inserted:
+        session.commit()
+    return inserted
 
 
 def seed_database(session: Session) -> int:

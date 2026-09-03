@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import pytest
@@ -11,6 +13,7 @@ from backend_service.ai_contract import (
     sanitise_log_value,
 )
 from backend_service.config import (
+    AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX,
     AI_MAX_ATTEMPTS_MAX,
     AI_MAX_ATTEMPTS_MIN,
     Settings,
@@ -29,6 +32,15 @@ def ai_settings(**overrides: object) -> Settings:
     }
     settings_kwargs.update(overrides)
     return Settings(**settings_kwargs)
+
+
+def prompt_context(ai_mode_api, request_index: int = -1) -> dict[str, object]:
+    prompt = str(ai_mode_api.requests[request_index]["prompt"])
+    start_marker = "Trip request context:\n"
+    end_marker = "\n\nTyped retry context for this attempt:"
+    context_start = prompt.index(start_marker) + len(start_marker)
+    context_end = prompt.index(end_marker)
+    return json.loads(prompt[context_start:context_end])
 
 
 def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
@@ -102,19 +114,20 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
     assert payload["approval_required"] is True
     assert payload["attempt_count"] == 1
     assert payload["model"] == "qwen2.5:0.5b"
-    assert payload["prompt_asset"] == "runtime_ai_suggestions_v1.md"
+    assert payload["prompt_asset"] == "runtime_ai_suggestions_v2.md"
     assert [item["title"] for item in payload["suggestions"]] == [
         "Waterside Lunch",
         "Barangaroo Reserve Walk",
     ]
     assert all(item["persisted"] is False for item in payload["suggestions"])
-    assert all(
-        item["approval_required"] is True for item in payload["suggestions"]
-    )
+    assert all(item["approval_required"] is True for item in payload["suggestions"])
 
     assert database_api.requests == [
         ("GET", "/internal/trips/trip_2027_sydney_getaway"),
         ("GET", "/internal/trips/trip_2027_sydney_getaway/itinerary-items"),
+        ("GET", "/internal/trips/trip_2027_sydney_getaway/accommodations"),
+        ("GET", "/internal/trips/trip_2027_sydney_getaway/activities"),
+        ("GET", "/internal/trips/trip_2027_sydney_getaway/transport"),
     ]
     assert len(ai_mode_api.requests) == 1
     ai_mode_request = ai_mode_api.requests[0]
@@ -126,16 +139,939 @@ def test_ai_suggestions_success_builds_bounded_context_and_returns_drafts(
     assert "Harbour Walk" in ai_mode_request["prompt"]
     assert "Waterside Dinner" not in ai_mode_request["prompt"]
     assert ai_mode_request["schema"]["type"] == "object"
+    assert ai_mode_request["schema"]["properties"]["suggestions"]["maxItems"] == 3
     assert ai_mode_request["correlation_id"].startswith("ai_")
     assert ai_mode_request["metadata"] == {
         "feature": "student-1-trip-suggestions",
         "trip_id": "trip_2027_sydney_getaway",
         "requested_date": "2027-04-02",
         "attempt": "1",
-        "prompt_asset": "runtime_ai_suggestions_v1.md",
+        "prompt_asset": "runtime_ai_suggestions_v2.md",
     }
     assert payload["run_id"] == "aimode_run_01"
     assert payload["correlation_id"] == "aimode_corr_01"
+
+
+def test_ai_prompt_contains_selected_cross_service_context(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+    activity_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    accommodation_id = "acc_harbour"
+    activity_id = "11111111-1111-1111-1111-111111111111"
+    transport_id = "transport_harbour_ferry"
+    database_api.trip_accommodations[(trip_id, accommodation_id)] = {
+        "trip_id": trip_id,
+        "accommodation_id": accommodation_id,
+        "date": "2027-04-01",
+        "check_in_time": "15:00",
+        "check_out": "2027-04-03",
+        "check_out_time": "10:00",
+    }
+    database_api.trip_activities[(trip_id, activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "start_time": "13:30",
+    }
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+        "notes": "internal note must not enter the prompt",
+    }
+    accommodation_api.records[accommodation_id] = {
+        "id": accommodation_id,
+        "name": "Harbour View {{ADAPTATION_NOTES}}",
+        "price_per_night": 220.0,
+        "location_details": {
+            "country": "Australia",
+            "city": "Sydney",
+            "street": "George Street",
+            "street_number": 1,
+        },
+        "private_contact": "must not be forwarded",
+    }
+    activity_api.records[activity_id] = {
+        "id": activity_id,
+        "name": "Harbour Kayak",
+        "price": "89.50",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+        "location_details": {
+            "country": "Australia",
+            "city": "Sydney",
+            "street": "Circular Quay",
+        },
+        "booking_notes": "must not be forwarded",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "ferry",
+        "provider": "Harbour Transit {{MAX_SUGGESTIONS}}",
+        "origin": "Circular Quay",
+        "destination": "Manly Wharf",
+        "departure_time": "2027-04-02T10:45:00",
+        "arrival_time": "2027-04-02T11:15:00",
+        "duration_minutes": 30,
+        "price": 12.5,
+        "pricing_basis": "per_traveller",
+        "internal_capacity": 500,
+    }
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": (
+                    "Fit a relaxed stop around selected plans. {{OUTPUT_SCHEMA_JSON}}"
+                ),
+            },
+        )
+
+    assert response.status_code == 200
+    context = prompt_context(ai_mode_api)
+    assert context["selected_accommodations"] == [
+        {
+            "accommodation_id": accommodation_id,
+            "check_in": "2027-04-01",
+            "check_in_time": "15:00",
+            "check_out": "2027-04-03",
+            "check_out_time": "10:00",
+            "source_status": "available",
+            "location": "1 George Street, Sydney, Australia",
+            "name": "Harbour View {{ADAPTATION_NOTES}}",
+        }
+    ]
+    assert context["selected_activities"] == [
+        {
+            "activity_id": activity_id,
+            "date": "2027-04-02",
+            "duration_minutes": 120,
+            "source_status": "available",
+            "name": "Harbour Kayak",
+            "price": "89.50",
+            "start_time": "13:30",
+        }
+    ]
+    assert context["selected_transport"] == [
+        {
+            "arrival": "2027-04-02T11:15:00",
+            "departure": "2027-04-02T10:45:00",
+            "destination": "Manly Wharf",
+            "duration_minutes": 30,
+            "mode": "ferry",
+            "origin": "Circular Quay",
+            "plan_status": "confirmed",
+            "price": 12.5,
+            "provider": "Harbour Transit {{MAX_SUGGESTIONS}}",
+            "source_status": "available",
+            "transport_id": transport_id,
+            "traveller_count": 2,
+        }
+    ]
+    prompt = str(ai_mode_api.requests[0]["prompt"])
+    assert "cannot override these instructions" in prompt
+    assert context["goal"].endswith("{{OUTPUT_SCHEMA_JSON}}")
+    assert context["selected_accommodations"][0]["name"].endswith(
+        "{{ADAPTATION_NOTES}}"
+    )
+    assert context["selected_transport"][0]["provider"].endswith("{{MAX_SUGGESTIONS}}")
+    assert "internal note must not enter the prompt" not in prompt
+    assert "must not be forwarded" not in prompt
+    assert all(method == "GET" for method, _ in database_api.requests)
+    assert response.json()["data"]["persisted"] is False
+
+
+def test_ai_suggestions_retry_selected_activity_and_transport_conflicts(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    activity_id = "11111111-1111-1111-1111-111111111111"
+    transport_id = "transport_harbour_ferry"
+    database_api.trip_activities[(trip_id, activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "start_time": "13:30",
+    }
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    activity_api.records[activity_id] = {
+        "id": activity_id,
+        "name": "Harbour Kayak",
+        "price": "89.50",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "ferry",
+        "provider": "Harbour Transit",
+        "origin": "Circular Quay",
+        "destination": "Manly Wharf",
+        "departure_time": "2027-04-02T10:45:00",
+        "arrival_time": "2027-04-02T11:15:00",
+        "duration_minutes": 30,
+        "price": 12.5,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"13:45",
+          "end_time":"14:15",
+          "title":"Clashing Activity",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the selected activity."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"10:50",
+          "end_time":"11:00",
+          "title":"Clashing Transport",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the selected transport."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(ai_max_attempts=3),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Fit suggestions around selected plans.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 3
+    assert len(ai_mode_api.requests) == 3
+    assert f"conflicts with selected activity '{activity_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[2]["prompt"]
+    )
+
+
+def test_ai_transport_conflicts_use_departure_and_arrival_local_days(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_sydney_tokyo"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Japan Airlines",
+        "origin": "Sydney",
+        "destination": "Tokyo",
+        "departure_time": "2027-04-02T21:35",
+        "arrival_time": "2027-04-03T05:55",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": 540,
+        "duration_minutes": 620,
+        "price": 1245.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"05:00",
+          "end_time":"05:30",
+          "title":"Before Tokyo Arrival",
+          "category":"activity",
+          "rationale":"This overlaps the arrival-day transport window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"06:30",
+          "end_time":"07:00",
+          "title":"After Tokyo Arrival",
+          "category":"activity",
+          "rationale":"This starts after the authoritative local arrival."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-03",
+                "goal": "Plan around the overnight flight.",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["attempt_count"] == 2
+    assert [item["title"] for item in payload["suggestions"]] == ["After Tokyo Arrival"]
+    assert (
+        prompt_context(ai_mode_api, 0)["selected_transport"][0]["duration_minutes"]
+        == 620
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_transport_conflicts_handle_westbound_local_arrival_before_departure(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_sydney_los_angeles"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Pacific Air",
+        "origin": "Sydney",
+        "destination": "Los Angeles",
+        "departure_time": "2027-04-02T11:00",
+        "arrival_time": "2027-04-02T06:30",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": -420,
+        "duration_minutes": 810,
+        "price": 980.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"05:45",
+          "end_time":"06:15",
+          "title":"Before Los Angeles Arrival",
+          "category":"activity",
+          "rationale":"This overlaps the westbound arrival window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"11:30",
+          "end_time":"12:00",
+          "title":"After Sydney Departure",
+          "category":"activity",
+          "rationale":"This overlaps the westbound departure window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"07:00",
+          "end_time":"08:00",
+          "title":"Between Local Boundaries",
+          "category":"activity",
+          "rationale":"Naive itinerary times use local wall-clock boundaries."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(ai_max_attempts=3),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Respect both westbound local time boundaries.",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["attempt_count"] == 3
+    assert [item["title"] for item in payload["suggestions"]] == [
+        "Between Local Boundaries"
+    ]
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[2]["prompt"]
+    )
+
+
+def test_ai_transport_incomplete_offset_pair_degrades_without_invented_window(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_incomplete_offsets"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Incomplete Air",
+        "origin": "Sydney",
+        "destination": "Tokyo",
+        "departure_time": "2027-04-02T21:35",
+        "arrival_time": "2027-04-03T05:55",
+        "departure_utc_offset": 660,
+        "duration_minutes": 620,
+        "price": 1245.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"05:00",
+          "end_time":"05:30",
+          "title":"Unknown Transport Timing",
+          "category":"activity",
+          "rationale":"Incomplete offsets cannot establish a validation window."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-03",
+                "goal": "Do not fabricate timing from incomplete transport data.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 1
+    assert prompt_context(ai_mode_api)["selected_transport"] == [
+        {
+            "plan_status": "confirmed",
+            "source_status": "unavailable",
+            "transport_id": transport_id,
+            "traveller_count": 2,
+        }
+    ]
+
+
+def test_ai_validation_keeps_activity_timing_when_prompt_budget_omits_record(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    target_activity_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    for index in range(11):
+        activity_id = f"00000000-0000-0000-0000-{index + 1:012d}"
+        database_api.trip_activities[(trip_id, activity_id)] = {
+            "trip_id": trip_id,
+            "activity_id": activity_id,
+            "date": "2027-04-02",
+            "start_time": f"{index + 1:02d}:00",
+        }
+        activity_api.records[activity_id] = {
+            "id": activity_id,
+            "name": f"Earlier activity {index} " + ("x" * 150),
+            "price": "20.00",
+            "pricing_basis": "PER_PERSON",
+            "duration_minutes": 30,
+        }
+    database_api.trip_activities[(trip_id, target_activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": target_activity_id,
+        "date": "2027-04-02",
+        "start_time": "23:00",
+    }
+    activity_api.records[target_activity_id] = {
+        "id": target_activity_id,
+        "name": "Budget-omitted late activity " + ("z" * 150),
+        "price": "50.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"23:15",
+          "end_time":"23:45",
+          "title":"Late Clashing Suggestion",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the omitted selected activity."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(
+            ai_max_attempts=2,
+            ai_max_context_activities=12,
+            ai_mode_max_prompt_chars=5000,
+        ),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Find a late activity without overlapping selected plans.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 2
+    initial_context = prompt_context(ai_mode_api, 0)
+    visible_activity_ids = {
+        activity["activity_id"]
+        for activity in initial_context.get("selected_activities", [])
+    }
+    assert target_activity_id not in visible_activity_ids
+    assert initial_context["omitted_selected_activities"] >= 1
+    assert initial_context["budget_adjustments"]["dropped_activities"] >= 1
+    assert f"conflicts with selected activity '{target_activity_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_validation_keeps_transport_timing_when_prompt_budget_omits_record(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    for index in range(7):
+        transport_id = f"transport_budget_{index:02d}"
+        database_api.trip_transport[(trip_id, transport_id)] = {
+            "trip_id": trip_id,
+            "transport_id": transport_id,
+            "traveller_count": 2,
+            "plan_status": "confirmed",
+            "added_on": "2027-04-01",
+        }
+        transport_api.records[transport_id] = {
+            "id": transport_id,
+            "type": "train",
+            "provider": f"Earlier provider {index} " + ("p" * 160),
+            "origin": "Earlier origin " + ("o" * 160),
+            "destination": "Earlier destination " + ("d" * 155),
+            "departure_time": f"2027-04-02T{index + 1:02d}:00",
+            "arrival_time": f"2027-04-02T{index + 1:02d}:30",
+            "duration_minutes": 30,
+            "price": 20.0,
+            "pricing_basis": "per_traveller",
+        }
+
+    target_transport_id = "transport_budget_zz"
+    database_api.trip_transport[(trip_id, target_transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": target_transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[target_transport_id] = {
+        "id": target_transport_id,
+        "type": "flight",
+        "provider": "Budget-omitted Pacific Air " + ("p" * 150),
+        "origin": "Sydney " + ("o" * 165),
+        "destination": "Los Angeles " + ("d" * 160),
+        "departure_time": "2027-04-02T11:00",
+        "arrival_time": "2027-04-02T06:30",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": -420,
+        "duration_minutes": 810,
+        "price": 980.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"05:45",
+          "end_time":"06:15",
+          "title":"Clashing Omitted Transport",
+          "category":"activity",
+          "rationale":"This overlaps an omitted transport arrival window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(
+            ai_max_attempts=2,
+            ai_max_context_transport=8,
+            ai_mode_max_prompt_chars=5000,
+        ),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Avoid all selected transport windows.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 2
+    initial_context = prompt_context(ai_mode_api, 0)
+    visible_transport_ids = {
+        transport["transport_id"]
+        for transport in initial_context.get("selected_transport", [])
+    }
+    assert target_transport_id not in visible_transport_ids
+    assert initial_context["omitted_selected_transport"] >= 1
+    assert initial_context["budget_adjustments"]["dropped_transport"] >= 1
+    assert f"conflicts with selected transport '{target_transport_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_validation_does_not_invent_activity_end_time_when_duration_is_unknown(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    activity_id = "11111111-1111-1111-1111-111111111111"
+    database_api.trip_activities[(trip_id, activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "start_time": "13:30",
+    }
+    activity_api.unavailable = True
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"13:45",
+          "end_time":"14:15",
+          "title":"Suggestion With Unknown Activity Duration",
+          "category":"activity",
+          "rationale":"No authoritative activity end time is available."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Do not infer unavailable timing.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 1
+    assert prompt_context(ai_mode_api)["selected_activities"][0] == {
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "source_status": "unavailable",
+        "start_time": "13:30",
+    }
+
+
+def test_ai_prompt_keeps_local_cross_service_facts_when_enrichment_is_unavailable(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+    activity_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    database_api.trip_accommodations[(trip_id, "acc_missing")] = {
+        "trip_id": trip_id,
+        "accommodation_id": "acc_missing",
+        "date": "2027-04-01",
+        "check_in_time": "14:00",
+        "check_out": "2027-04-03",
+        "check_out_time": None,
+    }
+    database_api.trip_activities[(trip_id, "activity_missing")] = {
+        "trip_id": trip_id,
+        "activity_id": "activity_missing",
+        "date": "2027-04-02",
+        "start_time": "16:00",
+    }
+    database_api.trip_transport[(trip_id, "transport_missing")] = {
+        "trip_id": trip_id,
+        "transport_id": "transport_missing",
+        "traveller_count": 2,
+        "plan_status": "pending",
+        "added_on": "2027-04-01",
+        "notes": None,
+    }
+    accommodation_api.unavailable = True
+    activity_api.unavailable = True
+    transport_api.unavailable = True
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Work around the selected records.",
+            },
+        )
+
+    assert response.status_code == 200
+    context = prompt_context(ai_mode_api)
+    assert context["selected_accommodations"][0] == {
+        "accommodation_id": "acc_missing",
+        "check_in": "2027-04-01",
+        "check_in_time": "14:00",
+        "check_out": "2027-04-03",
+        "source_status": "unavailable",
+    }
+    assert context["selected_activities"][0] == {
+        "activity_id": "activity_missing",
+        "date": "2027-04-02",
+        "source_status": "unavailable",
+        "start_time": "16:00",
+    }
+    assert context["selected_transport"][0] == {
+        "plan_status": "pending",
+        "source_status": "unavailable",
+        "transport_id": "transport_missing",
+        "traveller_count": 2,
+    }
+
+
+def test_ai_prompt_marks_partial_accommodation_enrichment(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    accommodation_id = "acc_partial"
+    database_api.trip_accommodations[(trip_id, accommodation_id)] = {
+        "trip_id": trip_id,
+        "accommodation_id": accommodation_id,
+        "date": "2027-04-01",
+        "check_in_time": "15:00",
+        "check_out": "2027-04-03",
+        "check_out_time": "10:00",
+    }
+    accommodation_api.records[accommodation_id] = {
+        "id": accommodation_id,
+        "name": "Partial Harbour Hotel",
+        "price_per_night": 150.0,
+    }
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Respect the selected stay.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert prompt_context(ai_mode_api)["selected_accommodations"] == [
+        {
+            "accommodation_id": accommodation_id,
+            "check_in": "2027-04-01",
+            "check_in_time": "15:00",
+            "check_out": "2027-04-03",
+            "check_out_time": "10:00",
+            "name": "Partial Harbour Hotel",
+            "source_status": "partial",
+        }
+    ]
+
+
+def test_ai_cross_service_caps_apply_before_fanout_and_serialize_deterministically(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+    activity_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    database_api.trip_accommodations[(trip_id, "acc_far")] = {
+        "trip_id": trip_id,
+        "accommodation_id": "acc_far",
+        "date": "2027-04-03",
+        "check_in_time": None,
+        "check_out": None,
+        "check_out_time": None,
+    }
+    database_api.trip_accommodations[(trip_id, "acc_active")] = {
+        "trip_id": trip_id,
+        "accommodation_id": "acc_active",
+        "date": "2027-04-01",
+        "check_in_time": None,
+        "check_out": "2027-04-03",
+        "check_out_time": None,
+    }
+    database_api.trip_activities[(trip_id, "activity_other")] = {
+        "trip_id": trip_id,
+        "activity_id": "activity_other",
+        "date": "2027-04-03",
+        "start_time": "09:00",
+    }
+    database_api.trip_activities[(trip_id, "activity_requested")] = {
+        "trip_id": trip_id,
+        "activity_id": "activity_requested",
+        "date": "2027-04-02",
+        "start_time": "16:00",
+    }
+    database_api.trip_transport[(trip_id, "transport_cancelled")] = {
+        "trip_id": trip_id,
+        "transport_id": "transport_cancelled",
+        "traveller_count": 2,
+        "plan_status": "cancelled",
+        "added_on": "2027-04-01",
+        "notes": None,
+    }
+    database_api.trip_transport[(trip_id, "transport_confirmed")] = {
+        "trip_id": trip_id,
+        "transport_id": "transport_confirmed",
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-02",
+        "notes": None,
+    }
+    settings = ai_settings(
+        ai_max_context_accommodations=1,
+        ai_max_context_activities=1,
+        ai_max_context_transport=1,
+    )
+    request = {
+        "requested_date": "2027-04-02",
+        "goal": "Use deterministic capped context.",
+        "constraints": "Keep every selected timing authoritative.",
+    }
+
+    with client_factory(
+        database_api.handle,
+        settings_override=settings,
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        first = client.post(f"/api/trips/{trip_id}/ai-suggestions", json=request)
+        second = client.post(f"/api/trips/{trip_id}/ai-suggestions", json=request)
+
+    assert first.status_code == second.status_code == 200
+    assert ai_mode_api.requests[0]["prompt"] == ai_mode_api.requests[1]["prompt"]
+    context = prompt_context(ai_mode_api, 0)
+    assert context["constraints"] == request["constraints"]
+    assert context["total_selected_accommodations"] == 2
+    assert context["omitted_selected_accommodations"] == 1
+    assert context["selected_accommodations"][0]["accommodation_id"] == "acc_active"
+    assert context["total_selected_activities"] == 2
+    assert context["omitted_selected_activities"] == 1
+    assert context["selected_activities"][0]["activity_id"] == "activity_requested"
+    assert context["total_selected_transport"] == 2
+    assert context["omitted_selected_transport"] == 1
+    assert context["selected_transport"][0]["transport_id"] == "transport_confirmed"
+    assert accommodation_api.calls == ["acc_active", "acc_active"]
+    assert activity_api.calls == ["activity_requested", "activity_requested"]
+    assert transport_api.calls == ["transport_confirmed", "transport_confirmed"]
+    dataset_paths = [
+        f"/internal/trips/{trip_id}/itinerary-items",
+        f"/internal/trips/{trip_id}/accommodations",
+        f"/internal/trips/{trip_id}/activities",
+        f"/internal/trips/{trip_id}/transport",
+    ]
+    for path in dataset_paths:
+        assert database_api.requests.count(("GET", path)) == 2
+    assert all(method == "GET" for method, _ in database_api.requests)
 
 
 def test_health_reports_shared_ai_mode_status(
@@ -269,10 +1205,7 @@ def test_ai_suggestions_retries_once_then_succeeds(
     assert response.status_code == 200
     assert response.json()["data"]["attempt_count"] == 2
     assert len(ai_mode_api.requests) == 2
-    assert (
-        "The previous response could not be used."
-        in ai_mode_api.requests[1]["prompt"]
-    )
+    assert '"status":"retry"' in ai_mode_api.requests[1]["prompt"]
     assert "response body was not valid JSON" in ai_mode_api.requests[1]["prompt"]
 
 
@@ -618,6 +1551,57 @@ def test_health_is_degraded_when_ai_mode_is_unavailable_but_crud_still_works(
     assert trips_response.json()["data"][0]["id"] == "trip_2027_sydney_getaway"
 
 
+def test_ai_snapshot_enrichment_does_not_block_readiness_or_crud(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    accommodation_id = "acc_blocking"
+    database_api.trip_accommodations[(trip_id, accommodation_id)] = {
+        "trip_id": trip_id,
+        "accommodation_id": accommodation_id,
+        "date": "2027-04-01",
+        "check_out": "2027-04-03",
+    }
+    accommodation_api.records[accommodation_id] = {
+        "id": accommodation_id,
+        "name": "Slow Hotel",
+        "price_per_night": 100.0,
+        "location_details": {"city": "Sydney", "country": "Australia"},
+    }
+    accommodation_api.block_requests = True
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            ai_request = executor.submit(
+                client.post,
+                f"/api/trips/{trip_id}/ai-suggestions",
+                json={
+                    "requested_date": "2027-04-02",
+                    "goal": "Plan around the accommodation.",
+                },
+            )
+            assert accommodation_api.request_started.wait(timeout=2)
+            ready_request = executor.submit(client.get, "/ready")
+            trips_request = executor.submit(client.get, "/api/trips")
+            try:
+                ready_response = ready_request.result(timeout=2)
+                trips_response = trips_request.result(timeout=2)
+            finally:
+                accommodation_api.release_requests.set()
+            ai_response = ai_request.result(timeout=5)
+
+    assert ready_response.status_code == 200
+    assert trips_response.status_code == 200
+    assert ai_response.status_code == 200
+
+
 def test_ready_skips_live_ai_mode_probe_and_reports_non_authoritative_status(
     client_factory,
     database_api,
@@ -742,6 +1726,21 @@ def test_ai_prompt_budget_settings_validation() -> None:
         ai_settings(ai_mode_max_prompt_chars=AI_MODE_PROMPT_MAX_CHARS_MAX + 1)
 
 
+@pytest.mark.parametrize(
+    "setting_name",
+    [
+        "ai_max_context_accommodations",
+        "ai_max_context_activities",
+        "ai_max_context_transport",
+    ],
+)
+def test_ai_cross_service_context_limits_are_bounded(setting_name: str) -> None:
+    assert ai_settings(**{setting_name: AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX})
+
+    with pytest.raises(ValueError, match="must be between 1 and 50"):
+        ai_settings(**{setting_name: AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX + 1})
+
+
 def test_ai_prompt_asset_allows_valid_custom_asset() -> None:
     settings = ai_settings(ai_prompt_asset="runtime_ai_suggestions_test.md")
 
@@ -821,8 +1820,7 @@ def test_ai_suggestions_reject_invalid_correlation_id_header(
 
 def test_log_sanitiser_replaces_control_characters() -> None:
     assert (
-        sanitise_log_value("safe\nvalue\twith\rcontrols")
-        == "safe?value?with?controls"
+        sanitise_log_value("safe\nvalue\twith\rcontrols") == "safe?value?with?controls"
     )
 
 

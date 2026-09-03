@@ -27,7 +27,7 @@ DATABASE_URL=sqlite:///student-4/database/activities.db \
 ```
 
 `SEED_DATA=0` disables seeding. By default, an empty database receives ten
-fixed categories and ten sample activities. Seed operations are idempotent and
+fixed categories and fourteen sample activities. Seed operations are idempotent and
 do not overwrite an existing activity catalogue. A populated development
 database is included at `student-4/database/activities.db` for assignment
 inspection.

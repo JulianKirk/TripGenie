@@ -17,6 +17,7 @@ from student4_database_service.models import (
     Activity,
     ActivityAvailabilitySchedule,
     ActivityCategory,
+    ActivityIdAlias,
     Category,
     LocationDetails,
 )
@@ -59,7 +60,7 @@ def test_seed_database_populates_at_least_ten_rows_per_table(
     session_factory: sessionmaker[Session],
 ) -> None:
     with session_factory() as session:
-        assert seed_data.seed_database(session) == 20
+        assert seed_data.seed_database(session) == 24
 
         for model in (
             Activity,
@@ -73,6 +74,110 @@ def test_seed_database_populates_at_least_ten_rows_per_table(
             assert count >= 10
 
         assert seed_data.seed_database(session) == 0
+
+
+def test_seed_uses_the_stable_sydney_activity_id(
+    session_factory: sessionmaker[Session],
+) -> None:
+    expected_id = UUID("9982c0e4-5d7a-5508-8a34-43e529576243")
+    assert expected_id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+
+    with session_factory() as session:
+        seed_data.seed_database(session)
+        activity = session.get(Activity, expected_id)
+
+        assert activity is not None
+        assert activity.name == "Sydney Harbour guided walk"
+        assert seed_data.seed_database(session) == 0
+
+
+@pytest.mark.parametrize("deterministic_rows_exist", [False, True])
+def test_seed_migrates_the_legacy_uuid4_catalogue_without_duplicates(
+    session_factory: sessionmaker[Session],
+    deterministic_rows_exist: bool,
+) -> None:
+    with session_factory() as session:
+        seed_categories(session)
+        if deterministic_rows_exist:
+            assert seed_data.seed_activities(session) == 14
+
+        legacy_rows: list[Activity] = []
+        for payload in seed_data.SAMPLE_ACTIVITY_DATA:
+            legacy_row = Activity.from_message(ActivityWrite.model_validate(payload))
+            session.add(legacy_row)
+            legacy_rows.append(legacy_row)
+        session.commit()
+        legacy_ids = [row.id for row in legacy_rows]
+
+        before = session.scalar(select(func.count()).select_from(Activity))
+        assert before == (28 if deterministic_rows_exist else 14)
+        canonical_existed = (
+            session.get(Activity, seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID) is not None
+        )
+        assert canonical_existed is deterministic_rows_exist
+
+        assert seed_data.seed_database(session) == 0
+
+        repository = ActivityRepository(session)
+        canonical = repository.get(seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID)
+        legacy_record = repository.get(legacy_ids[0])
+        rows, total = repository.search(ActivityQueryRequest(limit=100))
+        aliases = session.scalar(select(func.count()).select_from(ActivityIdAlias))
+
+        assert total == 14
+        assert aliases == 14
+        assert session.get(Activity, legacy_ids[0]) is None
+        sydney_alias = session.get(ActivityIdAlias, legacy_ids[0])
+        assert sydney_alias is not None
+        assert sydney_alias.activity_id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+        assert canonical is not None
+        assert canonical.id == seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID
+        assert canonical.name == "Sydney Harbour guided walk"
+        assert legacy_record is not None
+        assert legacy_record.id == legacy_ids[0]
+        assert legacy_record.name == canonical.name
+        assert legacy_ids[0] not in {row.id for row in rows}
+        assert seed_data.SYDNEY_HARBOUR_GUIDED_WALK_ID in {row.id for row in rows}
+        assert session.execute(text("PRAGMA foreign_key_check")).all() == []
+
+        assert repository.delete(legacy_ids[0]) is True
+        assert session.get(ActivityIdAlias, legacy_ids[0]) is not None
+        assert repository.get(legacy_ids[0]) is None
+        assert seed_data.seed_database(session) == 1
+        restored_legacy = repository.get(legacy_ids[0])
+        assert restored_legacy is not None
+        assert restored_legacy.id == legacy_ids[0]
+
+        assert seed_data.seed_database(session) == 0
+        assert session.scalar(select(func.count()).select_from(Activity)) == 14
+        assert session.scalar(select(func.count()).select_from(ActivityIdAlias)) == 14
+
+
+def test_seed_migrates_the_historical_ten_activity_catalogue(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        seed_categories(session)
+        legacy_rows = [
+            Activity.from_message(ActivityWrite.model_validate(payload))
+            for payload in seed_data.SAMPLE_ACTIVITY_DATA[:10]
+        ]
+        session.add_all(legacy_rows)
+        session.commit()
+        legacy_ids = [row.id for row in legacy_rows]
+
+        assert seed_data.seed_database(session) == 4
+
+        rows, total = ActivityRepository(session).search(
+            ActivityQueryRequest(limit=100)
+        )
+        aliases = session.scalar(select(func.count()).select_from(ActivityIdAlias))
+
+        assert total == 14
+        assert aliases == 10
+        assert len({row.name for row in rows}) == 14
+        assert all(session.get(Activity, legacy_id) is None for legacy_id in legacy_ids)
+        assert session.execute(text("PRAGMA foreign_key_check")).all() == []
 
 
 def test_seed_repairs_missing_categories_without_overwriting_existing_values(
@@ -89,7 +194,7 @@ def test_seed_repairs_missing_categories_without_overwriting_existing_values(
         )
         session.commit()
 
-        assert seed_data.seed_database(session) == 19
+        assert seed_data.seed_database(session) == 23
         existing = session.get(Category, CategoryCode.ADVENTURE)
         assert existing is not None
         assert existing.label == "Custom adventure"
@@ -109,10 +214,10 @@ def test_seed_preserves_existing_catalogue_while_repairing_categories(
         session.delete(category)
         session.commit()
 
-        assert seed_data.seed_database(session) == 1
+        assert seed_data.seed_database(session) == 15
         rows, total = repository.search(ActivityQueryRequest())
-        assert total == 1
-        assert [row.id for row in rows] == [sentinel.id]
+        assert total == 15
+        assert sentinel.id in {row.id for row in rows}
         assert session.get(Category, CategoryCode.NIGHTLIFE) is not None
 
 
@@ -128,6 +233,10 @@ def test_seed_city_ids_match_the_shared_location_contract() -> None:
         "19a552d3-4191-5f2b-a4ed-db910fc5eb9c",
         "93b2c6d6-5d0e-5151-ae7d-685e08aab942",
         "6b831972-3b36-5af8-a491-78f597f89c18",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
     ]
     actual_city_ids = [
         str(cast("dict[str, object]", payload["location_details"])["city_id"])
@@ -135,6 +244,54 @@ def test_seed_city_ids_match_the_shared_location_contract() -> None:
     ]
 
     assert actual_city_ids == expected_city_ids
+
+
+def test_seeded_catalogue_supports_ai_showcase_filtering(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        seed_data.seed_database(session)
+        repository = ActivityRepository(session)
+
+        accessible_culture, accessible_total = repository.search(
+            ActivityQueryRequest.model_validate(
+                {
+                    "categories": {"codes": ["CULTURE"]},
+                    "price": {"max": "40.00"},
+                    "duration_minutes": {"max": 120},
+                    "party_size": 1,
+                    "accessibility": {"wheelchair_accessible": True},
+                    "is_active": True,
+                }
+            )
+        )
+        sydney_outdoors, sydney_total = repository.search(
+            ActivityQueryRequest.model_validate(
+                {
+                    "location_details": {
+                        "city_id": "96318064-7cdc-54a8-a8d8-bb2c67d12c3e"
+                    },
+                    "categories": {"codes": ["OUTDOOR"]},
+                    "price": {"max": "100.00"},
+                    "duration_minutes": {"max": 180},
+                    "party_size": 2,
+                    "is_active": True,
+                }
+            )
+        )
+
+    assert [activity.name for activity in accessible_culture] == [
+        "Canberra national gallery visit",
+        "Melbourne museum discovery",
+        "Museum of Contemporary Art highlights tour",
+    ]
+    assert accessible_total == 3
+    assert [activity.name for activity in sydney_outdoors] == [
+        "Royal Botanic Garden accessible stroll",
+        "Sydney Harbour guided walk",
+        "Sydney Harbour sunrise kayak",
+    ]
+    assert sydney_total == 3
 
 
 def test_repository_contains_populated_sqlite_database() -> None:
@@ -159,7 +316,7 @@ def test_repository_contains_populated_sqlite_database() -> None:
         foreign_key_issues = connection.execute("PRAGMA foreign_key_check").fetchall()
         seeded_places = connection.execute(
             """
-            SELECT activities.name, location_details.city_id
+            SELECT activities.id, activities.name, location_details.city_id
             FROM activities
             JOIN location_details ON location_details.activity_id = activities.id
             ORDER BY activities.name
@@ -169,7 +326,18 @@ def test_repository_contains_populated_sqlite_database() -> None:
     assert all(count >= 10 for count in counts.values()), counts
     assert integrity == ("ok",)
     assert foreign_key_issues == []
-    assert [(name, str(UUID(city_id))) for name, city_id in seeded_places] == [
+    expected_ids_by_name = {
+        payload["name"]: activity_id
+        for activity_id, payload in zip(
+            seed_data.SAMPLE_ACTIVITY_IDS,
+            seed_data.SAMPLE_ACTIVITY_DATA,
+            strict=True,
+        )
+    }
+    assert {
+        name: UUID(activity_id) for activity_id, name, _city_id in seeded_places
+    } == expected_ids_by_name
+    assert [(name, str(UUID(city_id))) for _id, name, city_id in seeded_places] == [
         ("Barossa Valley tasting tour", "4cbde40d-2241-55c6-80f2-8e714e7b9cd0"),
         ("Blue Mountains family hike", "50097d54-8fcd-52d3-867e-a1491b538f38"),
         (
@@ -192,13 +360,29 @@ def test_repository_contains_populated_sqlite_database() -> None:
             "Melbourne museum discovery",
             "bc37aae2-9766-5646-93dd-09fc42211aa6",
         ),
+        (
+            "Museum of Contemporary Art highlights tour",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
         ("Perth evening food crawl", "93b2c6d6-5d0e-5151-ae7d-685e08aab942"),
+        (
+            "Royal Botanic Garden accessible stroll",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
         (
             "Salamanca Market food walk",
             "b6b18900-77fa-5ca3-957b-9b2ce5ee5e84",
         ),
         (
             "Sydney Harbour guided walk",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
+        (
+            "Sydney Harbour sunrise kayak",
+            "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
+        ),
+        (
+            "The Rocks evening food walk",
             "96318064-7cdc-54a8-a8d8-bb2c67d12c3e",
         ),
     ]

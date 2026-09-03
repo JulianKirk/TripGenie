@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from copy import deepcopy
+from threading import Event
 
 import httpx
 import pytest
@@ -827,8 +828,18 @@ class FakeAccommodationApi:
     def __init__(self, records: dict[str, dict] | None = None) -> None:
         self.records = records or {}
         self.calls: list[str] = []
+        self.unavailable = False
+        self.block_requests = False
+        self.request_started = Event()
+        self.release_requests = Event()
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        if self.block_requests:
+            self.request_started.set()
+            if not self.release_requests.wait(timeout=10):
+                raise httpx.ReadTimeout("blocked request timed out", request=request)
+        if self.unavailable:
+            raise httpx.ConnectError("unavailable", request=request)
         accommodation_id = request.url.path.rsplit("/", 1)[-1]
         self.calls.append(accommodation_id)
         record = self.records.get(accommodation_id)
@@ -851,8 +862,11 @@ class FakeActivityApi:
     def __init__(self, records: dict[str, dict] | None = None) -> None:
         self.records = records or {}
         self.calls: list[str] = []
+        self.unavailable = False
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        if self.unavailable:
+            raise httpx.ConnectError("unavailable", request=request)
         activity_id = request.url.path.rsplit("/", 1)[-1]
         self.calls.append(activity_id)
         record = self.records.get(activity_id)
@@ -866,10 +880,33 @@ def activity_api() -> FakeActivityApi:
     return FakeActivityApi()
 
 
+class FakeTransportApi:
+    def __init__(self, records: dict[str, dict] | None = None) -> None:
+        self.records = records or {}
+        self.calls: list[str] = []
+        self.unavailable = False
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if self.unavailable:
+            raise httpx.ConnectError("unavailable", request=request)
+        transport_id = request.url.path.rsplit("/", 1)[-1]
+        self.calls.append(transport_id)
+        record = self.records.get(transport_id)
+        if record is None:
+            return httpx.Response(404, json={"detail": "not found"})
+        return data_response(200, record)
+
+
+@pytest.fixture
+def transport_api() -> FakeTransportApi:
+    return FakeTransportApi()
+
+
 @pytest.fixture
 def client_factory(
     accommodation_api: FakeAccommodationApi,
     activity_api: FakeActivityApi,
+    transport_api: FakeTransportApi,
 ):
     def _make(
         handler,
@@ -885,6 +922,7 @@ def client_factory(
             ),
             accommodation_transport=httpx.MockTransport(accommodation_api.handle),
             activity_transport=httpx.MockTransport(activity_api.handle),
+            transport_api_transport=httpx.MockTransport(transport_api.handle),
         )
         return TestClient(app)
 

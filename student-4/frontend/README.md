@@ -13,6 +13,8 @@ call the database, shared location service, or itinerary service directly.
   explicit permanent-delete confirmation in the edit flow.
 - Add activities to a trip, reschedule them, and remove selections through
   Student 4's itinerary proxy.
+- Ask for trip-aware AI suggestions, see the advanced filters it runs and any
+  one-time revision, and review a grounded shortlist of real activities.
 - Progressive enhancement: the initial page and explicit search submission
   work without JavaScript; HTMX adds live fragment updates.
 - Degraded health and safe HTML error states when the backend is unavailable.
@@ -23,6 +25,7 @@ call the database, shared location service, or itinerary service directly.
 |---|---|---|
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend base URL. |
 | `BACKEND_TIMEOUT` | `5` | Positive request timeout in seconds. |
+| `AI_TIMEOUT` | `210` | Positive timeout for AI planning and evaluation calls only. |
 
 ## Run locally
 
@@ -38,8 +41,11 @@ BACKEND_URL=http://127.0.0.1:8008 \
 
 Browse and manage entries at `http://127.0.0.1:8084/`.
 
-The temporary Compose service is published on `http://localhost:8094` while
-the legacy `student-4-service` placeholder continues to own port 8084.
+Compose publishes the frontend on the assignment port at
+`http://localhost:8084`. Start the complete owned slice with
+`docker compose up --build --remove-orphans student-4`. The orphan cleanup is
+required once when upgrading from the retired `student-4-service` placeholder,
+which previously occupied port 8084.
 
 ## HTML routes
 
@@ -60,6 +66,9 @@ the legacy `student-4-service` placeholder continues to own port 8084.
 | `PUT /activity/{id}/itineraries/{trip_id}` | Add or reschedule. |
 | `DELETE /activity/{id}/itineraries/{trip_id}` | Remove selection. |
 | `GET /health` | Frontend and backend status. |
+| `GET /ready` | Readiness status; returns `503` until the backend is ready. |
+| `POST /suggestions/plan` | Plan an advanced search from a prompt and optional trip. |
+| `POST /suggestions/evaluate` | Evaluate real matches and render a shortlist or one retry. |
 
 Backend validation remains authoritative. Browser forms are translated into
 allow-listed structured payloads; no arbitrary browser JSON is forwarded.
@@ -73,5 +82,5 @@ allow-listed structured payloads; no arbitrary browser JSON is forwarded.
 .venv/bin/mypy --config-file student-4/pyproject.toml \
   student-4/frontend/student4_frontend_service student-4/tests/frontend
 docker build -f student-4/frontend/Dockerfile \
-  -t student-4-frontend student-4/frontend
+  -t student-4-frontend student-4
 ```

@@ -19,6 +19,17 @@ a { color: var(--accent-dark); }
 .app-layout { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 1.25rem; align-items: start; margin-top: 1.25rem; }
 .panel { min-width: 0; padding: 1.2rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 8px rgb(23 32 42 / 5%); }
 .intro { border-top: 4px solid #e0b84f; }
+.ai-panel { margin-top: 1.25rem; border-top: 4px solid var(--accent); }
+.ai-panel form { display: grid; gap: .75rem; }
+.ai-working { color: var(--muted); font-weight: 700; }
+.ai-progress, .ai-result { padding: 1rem; margin-top: 1rem; background: #f3faf7; border: 1px solid #b9dacf; border-radius: var(--radius); }
+.ai-progress h3, .ai-result h3 { margin: .25rem 0; }
+.ai-progress__track { height: .35rem; overflow: hidden; background: #d8e8e2; border-radius: 999px; }
+.ai-progress__track span { display: block; width: 45%; height: 100%; background: var(--accent); animation: ai-progress 1.2s ease-in-out infinite alternate; }
+.ai-result__grid { margin-top: 1rem; }
+.ai-reason { padding-left: .75rem; border-left: 3px solid var(--accent); }
+@keyframes ai-progress { to { transform: translateX(120%); } }
+@media (prefers-reduced-motion: reduce) { .ai-progress__track span { width: 100%; animation: none; } }
 .intro h2 { margin: .25rem 0; font-size: clamp(1.6rem, 4vw, 2.35rem); }
 .panel-heading, .activity-card__heading, .pager { display: flex; gap: 1rem; justify-content: space-between; align-items: center; }
 .panel-heading h2 { margin: .1rem 0; }

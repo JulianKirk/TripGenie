@@ -116,13 +116,17 @@ graphify extract .
 The `Graphify Update` GitHub Actions workflow runs after changes are merged to
 `main`. It performs the no-LLM code update and, when the portable graph changes,
 commits only `graph.json`, `graph.html`, and `GRAPH_REPORT.md` as
-`github-actions[bot]`. This gives every contributor the same current code graph
-after pulling `main`, without requiring local Git hooks.
+`github-actions[bot]` on the `automation/graphify-update` branch. The workflow
+opens or updates a pull request for those generated outputs so repositories that
+require all changes to reach `main` through a pull request remain protected.
+After that pull request is merged, every contributor receives the same current
+code graph when they next pull `main`, without requiring local Git hooks.
 
-The repository must allow GitHub Actions to write repository contents. In
-GitHub, check **Settings → Actions → General → Workflow permissions**.
-Branch protection must also permit `github-actions[bot]` to push the generated
-artifact commit to `main`.
+The repository must allow GitHub Actions to write repository contents and create
+pull requests. In GitHub, check **Settings → Actions → General → Workflow
+permissions**, then enable **Allow GitHub Actions to create and approve pull
+requests**. The workflow creates the graph pull request but never approves or
+merges it.
 
 This workflow intentionally performs code-only extraction, which is
 deterministic and does not need an API key. Documentation, paper, and image

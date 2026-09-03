@@ -1,18 +1,8 @@
 function syncDependentControls(root = document) {
-  const country = root.querySelector("#country");
-  const city = root.querySelector("#city");
-  if (country && city) city.disabled = !country.value.trim();
-
-  const categories = [...root.querySelectorAll('input[name="category"]')];
-  const categoryMatch = root.querySelector("#category_match");
-  if (categoryMatch) categoryMatch.disabled = !categories.some((item) => item.checked);
-
   const date = root.querySelector("#date");
   const start = root.querySelector("#start_time");
   const end = root.querySelector("#end_time");
   if (date && start && end) {
-    start.disabled = !date.value;
-    end.disabled = !date.value;
     start.required = Boolean(date.value && end.value);
     end.required = Boolean(date.value && start.value);
   }

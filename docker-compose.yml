@@ -330,14 +330,15 @@ services:
       start_period: 10s
 
   # Student 4: Activities & Attractions Management
-  # Existing placeholder webpage; retained until the real Student 4 frontend
-  # replaces it.
-  student-4-service:
-    build:
-      context: ./student-4
-      dockerfile: Dockerfile
-    ports:
-      - "8084:8084"
+  # Grouping target for the complete Student 4 slice:
+  # `docker compose up --build --remove-orphans student-4`. The orphan cleanup
+  # retires the old source-serving `student-4-service` container on upgrade.
+  student-4:
+    image: alpine:3
+    command: ["true"]
+    depends_on:
+      student-4-frontend:
+        condition: service_healthy
 
   # Public activity API. It is the only caller of the Student 4 database
   # service and proxies itinerary choices to Student 1.
@@ -349,26 +350,48 @@ services:
       DATABASE_URL: http://student-4-database:8009
       LOCATION_URL: http://shared-backend:9100
       ITINERARY_URL: http://student-1-backend:8001
-    ports:
-      - "8008:8008"
+      AI_MODE_URL: "${STUDENT4_BACKEND_AI_MODE_URL:-http://ai-mode:8006}"
+      AI_MODE_TIMEOUT: "${STUDENT4_BACKEND_AI_MODE_TIMEOUT:-100}"
+      AI_PROMPT_MAX_CHARS: "${STUDENT4_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
+      AI_MAX_CANDIDATES: "${STUDENT4_BACKEND_AI_MAX_CANDIDATES:-20}"
+    expose:
+      - "8008"
     depends_on:
-      - student-4-database
-      - shared-backend
-      - student-1-backend
+      student-4-database:
+        condition: service_healthy
+      shared-backend:
+        condition: service_started
+      student-1-backend:
+        condition: service_started
+      ai-mode:
+        condition: service_started
 
-  # HTMX frontend. Kept alongside the legacy placeholder until the team
-  # retires the old student-4-service entry.
+  # HTMX frontend. Talks to the Student 4 backend and nothing else.
   student-4-frontend:
     build:
-      context: ./student-4/frontend
-      dockerfile: Dockerfile
+      context: ./student-4
+      dockerfile: frontend/Dockerfile
     environment:
       BACKEND_URL: "${STUDENT4_FRONTEND_BACKEND_URL:-http://student-4-backend:8008}"
       BACKEND_TIMEOUT: "${STUDENT4_FRONTEND_BACKEND_TIMEOUT:-5}"
+      AI_TIMEOUT: "${STUDENT4_FRONTEND_AI_TIMEOUT:-210}"
     ports:
-      - "8094:8084"
+      - "${STUDENT4_FRONTEND_HOST_PORT:-8084}:8084"
     depends_on:
-      - student-4-backend
+      student-4-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Internal-only database. The backend reaches it at
   # http://student-4-database:8009 on the Compose network.

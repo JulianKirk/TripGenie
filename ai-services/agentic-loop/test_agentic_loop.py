@@ -1,4 +1,36 @@
+import json
+import subprocess
+from pathlib import Path
+
 import agentic_loop as loop
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_registered_compose_services_exist():
+    registered_services = json.loads(
+        (Path(__file__).parent / "services.json").read_text()
+    )
+    result = subprocess.run(
+        ["docker", "compose", "config", "--services"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    compose_services = set(result.stdout.splitlines())
+
+    missing_services = {
+        compose_service
+        for service in registered_services
+        for compose_service in service["compose"].split()
+        if compose_service not in compose_services
+    }
+
+    assert not missing_services, (
+        "Agentic Loop registry references unknown Compose services: "
+        f"{sorted(missing_services)}"
+    )
 
 
 def test_prompt_substitution():

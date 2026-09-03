@@ -411,6 +411,127 @@ class ActivityQuery(StrictModel):
         return self
 
 
+class RecommendationPlanRequest(StrictModel):
+    question: Annotated[str, Field(min_length=1, max_length=500)]
+    trip_id: str | None = None
+
+    @field_validator("question")
+    @classmethod
+    def question_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            message = "must not be blank"
+            raise ValueError(message)
+        return cleaned
+
+
+class ActivitySearchPlanDraft(StrictModel):
+    query: ActivityQuery
+    summary: Annotated[str, Field(min_length=1, max_length=300)]
+
+
+class RecommendationPlan(StrictModel):
+    question: str
+    trip_id: str | None = None
+    query: ActivityQuery
+    summary: str
+    trip_context_available: bool = Field(strict=True)
+
+
+class ActivitySuggestionDraft(StrictModel):
+    activity_id: UUID
+    reason: Annotated[str, Field(min_length=1, max_length=240)]
+
+
+class ActivityEvaluationDraft(StrictModel):
+    overview: Annotated[str, Field(min_length=1, max_length=400)]
+    suggestions: list[ActivitySuggestionDraft] = Field(
+        default_factory=list, max_length=3
+    )
+    considerations: list[Annotated[str, Field(min_length=1, max_length=180)]] = Field(
+        default_factory=list, max_length=3
+    )
+    disclaimer: Annotated[str, Field(min_length=1, max_length=200)]
+    revised_query: ActivityQuery | None = None
+    revised_summary: Annotated[str, Field(min_length=1, max_length=300)] | None = None
+    revision_explanation: Annotated[str, Field(min_length=1, max_length=300)] | None = (
+        None
+    )
+
+    @model_validator(mode="after")
+    def one_outcome(self) -> Self:
+        if self.suggestions and self.revised_query is not None:
+            message = "suggestions and revised_query are mutually exclusive"
+            raise ValueError(message)
+        revision_fields = (
+            self.revised_query,
+            self.revised_summary,
+            self.revision_explanation,
+        )
+        if any(value is None for value in revision_fields) and any(
+            value is not None for value in revision_fields
+        ):
+            message = "all revised search fields must be supplied together"
+            raise ValueError(message)
+        return self
+
+
+class RecommendationEvaluationRequest(StrictModel):
+    question: Annotated[str, Field(min_length=1, max_length=500)]
+    trip_id: str | None = None
+    query: ActivityQuery
+    summary: Annotated[str, Field(min_length=1, max_length=300)]
+    attempt: int = Field(default=1, ge=1, le=2, strict=True)
+
+    @field_validator("question")
+    @classmethod
+    def evaluation_question_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            message = "must not be blank"
+            raise ValueError(message)
+        return cleaned
+
+
+class RecommendedActivity(StrictModel):
+    reason: str
+    activity: Activity
+
+
+class RecommendationEvaluationResponse(StrictModel):
+    status: Literal["complete", "retry", "no_match"]
+    attempt: int = Field(ge=1, le=2, strict=True)
+    query: ActivityQuery
+    summary: str
+    matched_count: int = Field(ge=0, strict=True)
+    evaluated_count: int = Field(ge=0, strict=True)
+    recommended: list[RecommendedActivity] = Field(default_factory=list)
+    overview: str
+    considerations: list[str] = Field(default_factory=list)
+    disclaimer: str
+    revision_explanation: str | None = None
+    run_id: str
+    model: str
+    provider: str
+
+    @model_validator(mode="after")
+    def consistent_status(self) -> Self:
+        if self.status == "complete" and not self.recommended:
+            message = "complete responses require at least one recommendation"
+            raise ValueError(message)
+        if self.status == "retry" and (
+            self.recommended or self.revision_explanation is None or self.attempt != 2
+        ):
+            message = "retry responses require attempt two and a revision explanation"
+            raise ValueError(message)
+        if self.status == "no_match" and (
+            self.recommended or self.revision_explanation is not None
+        ):
+            message = "no-match responses cannot contain recommendations or a revision"
+            raise ValueError(message)
+        return self
+
+
 class InternalQueryResponse(StrictModel):
     activities: list[InternalSummary]
     total: int = Field(ge=0, strict=True)
@@ -524,6 +645,11 @@ class ItineraryTrip(StrictModel):
     notes: str | None = None
 
 
+class TripDirectory(StrictModel):
+    available: bool = Field(strict=True)
+    trips: list[ItineraryTrip] = Field(default_factory=list)
+
+
 class TripActivityWire(StrictModel):
     trip_id: str
     activity_id: str
@@ -551,6 +677,8 @@ class StudentDeleteResponse(StrictModel):
 
 
 class DependencyHealth(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     status: str
     service: str | None = None
 

@@ -10,7 +10,7 @@ database or shared reference services.
 
 ```text
               browser
-                 |  :8094 host / :8084 container  HTML
+                 |  :8084 host / container  HTML
                  v
        student-4-frontend -- Jinja templates + HTMX
                  |  :8008  activity and itinerary-proxy routes
@@ -33,6 +33,7 @@ booking or payment workflow.
 |---|---|---|
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend-service base URL. |
 | `BACKEND_TIMEOUT` | `5` | Backend request timeout in seconds. |
+| `AI_TIMEOUT` | `210` | Timeout for each AI planning or evaluation request only. |
 
 Run the frontend with:
 
@@ -40,8 +41,10 @@ Run the frontend with:
 docker compose up student-4-frontend
 ```
 
-Then open `http://localhost:8094`. The separate port keeps the new service
-available while the legacy Student 4 placeholder still owns port 8084.
+Then open `http://localhost:8084`. Start the complete Student 4 slice with
+`docker compose up --build --remove-orphans student-4`. The orphan cleanup
+removes the retired `student-4-service` directory-server container if it exists,
+freeing the assignment port for the real frontend.
 
 ## HTML routes
 
@@ -64,9 +67,16 @@ These routes return pages or fragments, not a public JSON API.
 | `GET /manage/activity/{id}/delete` | Permanent-delete confirmation fragment. |
 | `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
+| `GET /ready` | Readiness JSON; returns `503` until the backend is ready. |
+| `POST /suggestions/plan` | Translate a prompt and optional trip into advanced filters. |
+| `POST /suggestions/evaluate` | Run the planned search and evaluate authoritative matches. |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
 reached, matching the other frontend services.
+
+`GET /ready` returns `503` until the public backend reports that its required
+database dependency is ready. Docker Compose uses this endpoint to gate the
+Student 4 grouping target.
 
 ## Page structure
 
@@ -80,6 +90,32 @@ The traveller page has four regions:
 
 The catalogue includes inactive entries and provides creation, replacement,
 deactivation and deletion without requiring a separate management page.
+
+## AI activity suggestions
+
+The catalogue's AI panel accepts a natural-language request and an optional
+trip selected from Student 1 through the Student 4 backend. It is an assisted
+version of the existing advanced search, not a separate catalogue.
+
+HTMX chains truthful stages in the live region:
+
+1. **Understanding your request** while AI produces a structured query.
+2. **Searching for ...** with a readable summary of the validated filters.
+3. **Evaluating the activities that match** while real catalogue results are
+   checked against the request and trip.
+4. Either a final count such as **12 activities matched; AI shortlisted 3**, or
+   one visible filter adjustment followed by a second and final attempt.
+
+The final structured query replaces the advanced-filter form out of band. A
+traveller can inspect and edit every chosen filter, and normal searching and
+pagination continue without another model call. Recommendation cards use
+authoritative activity records, link to the existing detail and trip-picker
+dialogs, and state that nothing has been saved.
+
+The staged interaction carries only the original question, selected trip,
+validated query, summary and attempt number. Candidate activities never make a
+browser round trip: the backend reruns the query and grounds model identifiers
+against its fresh result set.
 
 The initial `GET /` concurrently requests the backend's first activity page and
 `GET /activity/categories`. Category rows are rendered in the backend-provided
@@ -105,9 +141,10 @@ immediately through the `change` trigger. The form submits ordinary query
 parameters to this frontend route; the frontend builds the JSON body described
 by [`QUERY /activity`](./backend-service-api.md#query-activity).
 
-`offset` is not a form control. Pager buttons carry their own offset and use
-`hx-include="#activity-filters"`. Changing a filter therefore returns to the
-first page automatically.
+Pager buttons are associated with the filter form, carry their own offset and
+use `hx-include="#activity-filters"`. They therefore work as ordinary form
+submissions as well as HTMX requests. Changing a filter returns to the first
+page automatically because the filter form itself has no offset value.
 
 ## Filter controls
 
@@ -136,11 +173,9 @@ strings or explicit nulls.
 ### Text and location
 
 The search box matches activity names and descriptions. Country and city use
-the public names accepted by the backend. With JavaScript, city is disabled
-until a country is present because a city name without its country is
-ambiguous. Baseline HTML leaves it enabled so country and city can be submitted
-together without JavaScript. The frontend drops an unpaired city server-side
-as a second line of defence.
+the public names accepted by the backend. A city name without its country is
+ambiguous, but the control remains enabled so travellers can enter the fields
+in either order. The frontend drops an unpaired city server-side.
 
 Street is free text because exact addresses belong to Student 4 rather than the
 shared location service. It is labelled "Street or address" so it also makes
@@ -156,8 +191,7 @@ rendered as supporting help text but are never used as filter values.
 
 An adjacent selector controls whether selected values use `ANY` or `ALL`
 matching. `ANY` is the default because it produces the least surprising broad
-search. JavaScript disables the control when no category is selected; baseline
-HTML keeps it available for progressive enhancement.
+search. The selector remains available while categories are being chosen.
 
 ### Price, duration and party suitability
 
@@ -284,7 +318,7 @@ The results header shows `total` matches. Previous and next controls calculate
 offsets from the response's `limit` and `offset`, retain every active filter via
 `hx-include`, and target only the results region.
 
-Controls that would move before zero or beyond `total` are disabled. Backend
+Controls that would move before zero or beyond `total` are omitted. Backend
 ordering is used as returned; the frontend never re-sorts a page locally because
 that would make pagination inconsistent.
 
