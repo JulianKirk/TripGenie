@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: graphify-update-main
@@ -40,6 +41,7 @@ jobs:
         run: graphify update .
 
       - name: Commit portable graph outputs
+        id: graph_update
         shell: bash
         run: |
           graph_files=(
@@ -50,6 +52,7 @@ jobs:
 
           if git diff --quiet -- "${graph_files[@]}"; then
             echo 'Graphify outputs are already current.'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -59,8 +62,52 @@ jobs:
 
           if git diff --cached --quiet; then
             echo 'Graphify produced no portable changes.'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git commit -m 'chore: update Graphify graph [skip ci]'
-          git push origin HEAD:main
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Push graph update branch
+        if: steps.graph_update.outputs.changed == 'true'
+        env:
+          GRAPHIFY_BRANCH: automation/graphify-update
+        shell: bash
+        run: |
+          remote_sha=$(git ls-remote --heads origin "refs/heads/$GRAPHIFY_BRANCH" | cut -f1)
+
+          if [ -n "$remote_sha" ]; then
+            git push \
+              --force-with-lease="refs/heads/$GRAPHIFY_BRANCH:$remote_sha" \
+              origin "HEAD:refs/heads/$GRAPHIFY_BRANCH"
+          else
+            git push origin "HEAD:refs/heads/$GRAPHIFY_BRANCH"
+          fi
+
+      - name: Open graph update pull request
+        if: steps.graph_update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GRAPHIFY_BRANCH: automation/graphify-update
+        shell: bash
+        run: |
+          existing_pr=$(
+            gh pr list \
+              --base main \
+              --head "$GRAPHIFY_BRANCH" \
+              --state open \
+              --json url \
+              --jq '.[0].url'
+          )
+
+          if [ -n "$existing_pr" ]; then
+            echo "Updated existing Graphify pull request: $existing_pr"
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$GRAPHIFY_BRANCH" \
+            --title 'chore: update Graphify graph' \
+            --body 'Automated code-only Graphify refresh after changes reached `main`. Review and merge this pull request to publish the updated portable graph outputs.'
