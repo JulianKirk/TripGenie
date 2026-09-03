@@ -26,8 +26,12 @@ from .models import (
     TripDetail,
     TripRecord,
     TripStatus,
+    TripTransportCreate,
+    TripTransportDetail,
+    TripTransportRecord,
     TripUpdate,
 )
+from .transport_client import TransportClient
 from .trip_rules import (
     ensure_trip_detail_supported,
     validate_stay_window,
@@ -45,12 +49,14 @@ class BackendService:
         settings: Settings,
         accommodations: AccommodationClient | None = None,
         activities: ActivityClient | None = None,
+        transport: TransportClient | None = None,
     ) -> None:
         self._client = client
         self._ai_suggestions = ai_suggestions
         self._settings = settings
         self._accommodations = accommodations
         self._activities = activities
+        self._transport = transport
 
     def list_trips(
         self,
@@ -68,7 +74,7 @@ class BackendService:
             message=VALIDATION_ERROR_MESSAGE,
         )
         created_trip = self._client.create_trip(payload)
-        return self._build_trip_detail(created_trip, [], [], [])
+        return self._build_trip_detail(created_trip, [], [], [], [])
 
     def _enrich_accommodations(
         self,
@@ -143,17 +149,104 @@ class BackendService:
             for record in activities
         ]
 
+    def _enrich_transport(
+        self,
+        transport: list[TripTransportRecord],
+    ) -> list[TripTransportDetail]:
+        """The pinned transport, labelled with what Student 3 owns.
+
+        A trip stores the option id and the party size. The route, the times
+        and the price live in the transport service, and `estimated_cost` is
+        worked out there too -- per-vehicle hire must not be multiplied by the
+        traveller count. When that service cannot be reached the labels stay
+        None and the page shows the selection without them.
+        """
+        if not transport:
+            return []
+
+        found = (
+            self._transport.details([record.transport_id for record in transport])
+            if self._transport is not None
+            else {}
+        )
+        detailed: list[TripTransportDetail] = []
+        for record in transport:
+            extra = found.get(record.transport_id)
+            detailed.append(
+                TripTransportDetail(
+                    **record.model_dump(mode="json"),
+                    origin=extra.origin if extra else None,
+                    destination=extra.destination if extra else None,
+                    provider=extra.provider if extra else None,
+                    type=extra.type if extra else None,
+                    departure_time=extra.departure_time if extra else None,
+                    arrival_time=extra.arrival_time if extra else None,
+                    duration_minutes=extra.duration_minutes if extra else None,
+                    price=extra.price if extra else None,
+                    pricing_basis=extra.pricing_basis if extra else None,
+                    estimated_cost=(
+                        extra.cost_for(record.traveller_count) if extra else None
+                    ),
+                )
+            )
+        # Departure order is the only order a traveller reads a journey in.
+        # Rows with no detail sink to the end rather than jumbling the rest.
+        detailed.sort(key=lambda row: (row.departure_time is None, row.departure_time))
+        return detailed
+
+    def list_trip_transport(self, trip_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trip_transport(trip_id)
+        return [
+            record.model_dump(mode="json")
+            for record in self._enrich_transport(records)
+        ]
+
+    def add_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+        payload: TripTransportCreate,
+    ) -> dict[str, object]:
+        trip = self._client.get_trip(trip_id)
+        record = self._client.add_trip_transport(
+            trip_id,
+            transport_id,
+            payload.traveller_count,
+            payload.plan_status.value,
+            payload.added_on or trip.start_date,
+            payload.notes,
+        )
+        return self._enrich_transport([record])[0].model_dump(mode="json")
+
+    def remove_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+    ) -> dict[str, object]:
+        deleted = self._client.remove_trip_transport(trip_id, transport_id)
+        return deleted.model_dump(mode="json")
+
+    def list_trips_for_transport(self, transport_id: str) -> list[dict[str, object]]:
+        records = self._client.list_trips_for_transport(transport_id)
+        return [record.model_dump(mode="json") for record in records]
+
+    def transport_traveller_totals(self) -> list[dict[str, object]]:
+        records = self._client.transport_traveller_totals()
+        return [record.model_dump(mode="json") for record in records]
+
     def get_trip(self, trip_id: str) -> dict[str, object]:
         trip = self._client.get_trip(trip_id)
         ensure_trip_detail_supported(trip)
         items = self._client.list_itinerary_items(trip_id)
         accommodations = self._client.list_trip_accommodations(trip_id)
         activities = self._client.list_trip_activities(trip_id)
+        transport = self._client.list_trip_transport(trip_id)
         return self._build_trip_detail(
             trip,
             items,
             self._enrich_accommodations(accommodations),
             self._enrich_activities(activities),
+            self._enrich_transport(transport),
         )
 
     def get_trip_day(self, trip_id: str, trip_day: str) -> dict[str, object]:
@@ -215,11 +308,13 @@ class BackendService:
         refreshed_items = self._client.list_itinerary_items(trip_id)
         accommodations = self._client.list_trip_accommodations(trip_id)
         activities = self._client.list_trip_activities(trip_id)
+        transport = self._client.list_trip_transport(trip_id)
         return self._build_trip_detail(
             updated_trip,
             refreshed_items,
             self._enrich_accommodations(accommodations),
             self._enrich_activities(activities),
+            self._enrich_transport(transport),
         )
 
     def delete_trip(self, trip_id: str) -> dict[str, object]:
@@ -518,6 +613,7 @@ class BackendService:
         items: list[ItineraryItemRecord],
         accommodations: list[TripAccommodationDetail],
         activities: list[TripActivityDetail],
+        transport: list[TripTransportDetail],
     ) -> dict[str, object]:
         ensure_trip_detail_supported(trip)
         items_by_date: dict[str, list[ItineraryItemRecord]] = {}
@@ -537,6 +633,7 @@ class BackendService:
             days=days,
             accommodations=accommodations,
             activities=activities,
+            transport=transport,
         ).model_dump(mode="json")
 
     def _probe_database(self) -> DependencyStatus:

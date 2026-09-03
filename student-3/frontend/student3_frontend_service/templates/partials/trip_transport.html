@@ -4,7 +4,7 @@
       <p class="section-eyebrow">Trip plan</p>
       <h2 id="trip-heading">Transport for {{ summary.trip_id }}</h2>
     </div>
-    <a class="button button--primary" href="{{ request.url_for('new_entry_form') }}?trip_id={{ summary.trip_id }}">Add transport</a>
+    <a class="button button--primary" href="{{ request.url_for('browse') }}">Browse transport</a>
   </div>
 
   <dl class="detail-grid">
@@ -46,12 +46,14 @@
               <td>{{ planned.option.type_label }} · {{ planned.option.provider }}</td>
               <td>{{ planned.option.duration_label }}</td>
               <td>{{ planned.entry.traveller_count }}</td>
-              <td>${{ "%.2f" | format(planned.entry.estimated_cost) }}</td>
-              <td><span class="status status--{{ planned.entry.booking_status.value }}">{{ planned.entry.status_label }}</span></td>
+              <td>${{ "%.2f" | format(planned.estimated_cost) }}</td>
+              <td><span class="status status--{{ planned.entry.plan_status.value }}">{{ planned.entry.status_label }}</span></td>
               <td>
                 <div class="actions-cell">
-                <a href="{{ request.url_for('edit_entry_form', booking_id=planned.entry.id) }}">Edit</a>
-                <a href="{{ request.url_for('delete_entry_confirmation', booking_id=planned.entry.id) }}">Remove</a>
+                <a href="{{ request.url_for('view_option', transport_id=planned.option.id) }}">Open</a>
+                <form method="post" action="{{ request.url_for('remove_from_itinerary', transport_id=planned.option.id, trip_id=summary.trip_id) }}">
+                  <button class="button button--link" type="submit">Remove</button>
+                </form>
               </div>
               </td>
             </tr>

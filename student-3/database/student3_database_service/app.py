@@ -13,17 +13,12 @@ from .config import Settings
 from .errors import ApiError, bad_request, validation_error
 from .models import (
     AvailabilityStatus,
-    BookingIdentifier,
-    BookingStatus,
     DataEnvelope,
     DeleteResponse,
     ErrorBody,
     ErrorDetail,
     ErrorEnvelope,
     HealthResponse,
-    TransportBookingCreate,
-    TransportBookingRecord,
-    TransportBookingUpdate,
     TransportIdentifier,
     TransportOptionCreate,
     TransportOptionRecord,
@@ -35,7 +30,6 @@ from .repository import DatabaseService
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
 TRANSPORT_TYPE_VALUES = ", ".join(item.value for item in TransportType)
 AVAILABILITY_STATUS_VALUES = ", ".join(item.value for item in AvailabilityStatus)
-BOOKING_STATUS_VALUES = ", ".join(item.value for item in BookingStatus)
 ISO_DATETIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
 TRIP_ID_PATTERN = re.compile(r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
 TRANSPORT_ID_PATTERN = re.compile(r"^transport_[A-Za-z0-9][A-Za-z0-9_-]{2,53}$")
@@ -275,17 +269,6 @@ def parse_transport_id_filter(
     )
 
 
-def parse_booking_status_filter(
-    value: Annotated[str | None, Query(alias="booking_status")] = None,
-) -> BookingStatus | None:
-    return _parse_enum_filter(
-        value,
-        field="booking_status",
-        enum_type=BookingStatus,
-        allowed=BOOKING_STATUS_VALUES,
-    )
-
-
 def _ensure_ordered_range(
     lower: object | None,
     upper: object | None,
@@ -356,10 +339,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "departure_to",
         ),
     )
-    booking_query_params = Depends(
-        allow_query_params("trip_id", "transport_id", "booking_status"),
-    )
-    option_booking_query_params = Depends(allow_query_params("booking_status"))
 
     @router.get(
         "/health",
@@ -463,94 +442,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service: DatabaseService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.delete_transport_option(transport_id))
-
-    @router.get(
-        "/transport-options/{transport_id}/bookings",
-        dependencies=[option_booking_query_params],
-        response_model=DataEnvelope[list[TransportBookingRecord]],
-    )
-    def list_bookings_for_option(
-        transport_id: TransportIdentifier,
-        booking_status: Annotated[
-            BookingStatus | None,
-            Depends(parse_booking_status_filter),
-        ],
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(
-            service.list_transport_bookings(
-                transport_id=transport_id,
-                booking_status=booking_status,
-            ),
-        )
-
-    @router.get(
-        "/transport-bookings",
-        dependencies=[booking_query_params],
-        response_model=DataEnvelope[list[TransportBookingRecord]],
-    )
-    def list_transport_bookings(
-        trip_id: Annotated[str | None, Depends(parse_trip_id_filter)],
-        transport_id: Annotated[str | None, Depends(parse_transport_id_filter)],
-        booking_status: Annotated[
-            BookingStatus | None,
-            Depends(parse_booking_status_filter),
-        ],
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(
-            service.list_transport_bookings(
-                trip_id=trip_id,
-                transport_id=transport_id,
-                booking_status=booking_status,
-            ),
-        )
-
-    @router.post(
-        "/transport-bookings",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportBookingRecord],
-        status_code=status.HTTP_201_CREATED,
-    )
-    def create_transport_booking(
-        payload: TransportBookingCreate,
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(service.create_transport_booking(payload))
-
-    @router.get(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportBookingRecord],
-    )
-    def get_transport_booking(
-        booking_id: BookingIdentifier,
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(service.get_transport_booking(booking_id))
-
-    @router.patch(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[TransportBookingRecord],
-    )
-    def update_transport_booking(
-        booking_id: BookingIdentifier,
-        payload: TransportBookingUpdate,
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(service.update_transport_booking(booking_id, payload))
-
-    @router.delete(
-        "/transport-bookings/{booking_id}",
-        dependencies=[no_query_params],
-        response_model=DataEnvelope[DeleteResponse],
-    )
-    def delete_transport_booking(
-        booking_id: BookingIdentifier,
-        service: DatabaseService = Depends(get_service),
-    ) -> dict[str, object]:
-        return envelope(service.delete_transport_booking(booking_id))
 
     app.include_router(router)
     return app

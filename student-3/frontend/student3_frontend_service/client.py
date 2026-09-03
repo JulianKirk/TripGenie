@@ -12,8 +12,8 @@ from .models import (
     DataEnvelope,
     DeleteResponse,
     ErrorEnvelope,
+    ItinerarySelectionResponse,
     TransportOptionRecord,
-    TransportPlanEntryRecord,
     TransportRecommendation,
     TripDirectory,
     TripTransportSummary,
@@ -157,65 +157,55 @@ class BackendApiClient:
         )
         return envelope.data
 
-    async def list_entries_for_option(
+    async def itinerary_selections(
         self,
         transport_id: str,
-    ) -> list[TransportPlanEntryRecord]:
+    ) -> ItinerarySelectionResponse:
+        """Every trip, marked with whether it already holds this option."""
         envelope = await self._request_model(
             "GET",
-            f"{self._api_prefix}/transport-options/{transport_id}/plan-entries",
+            f"{self._api_prefix}/transport-options/{transport_id}/itineraries",
             expected_statuses={200},
-            response_type=DataEnvelope[list[TransportPlanEntryRecord]],
-            malformed_message="Backend API returned a malformed entry list response.",
+            response_type=DataEnvelope[ItinerarySelectionResponse],
+            malformed_message=(
+                "Backend API returned a malformed itinerary selection response."
+            ),
         )
         return envelope.data
 
-    async def create_plan_entry(
+    async def add_to_itinerary(
         self,
+        transport_id: str,
+        trip_id: str,
         payload: dict[str, object],
-    ) -> TransportPlanEntryRecord:
+    ) -> ItinerarySelectionResponse:
         envelope = await self._request_model(
-            "POST",
-            f"{self._api_prefix}/transport-bookings",
-            json=payload,
-            expected_statuses={201},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message="Backend API returned a malformed entry create response.",
-        )
-        return envelope.data
-
-    async def get_plan_entry(self, booking_id: str) -> TransportPlanEntryRecord:
-        envelope = await self._request_model(
-            "GET",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
-            expected_statuses={200},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message="Backend API returned a malformed entry response.",
-        )
-        return envelope.data
-
-    async def update_plan_entry(
-        self,
-        booking_id: str,
-        payload: dict[str, object],
-    ) -> TransportPlanEntryRecord:
-        envelope = await self._request_model(
-            "PATCH",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
+            "PUT",
+            f"{self._api_prefix}/transport-options/{transport_id}"
+            f"/itineraries/{trip_id}",
             json=payload,
             expected_statuses={200},
-            response_type=DataEnvelope[TransportPlanEntryRecord],
-            malformed_message="Backend API returned a malformed entry update response.",
+            response_type=DataEnvelope[ItinerarySelectionResponse],
+            malformed_message=(
+                "Backend API returned a malformed itinerary selection response."
+            ),
         )
         return envelope.data
 
-    async def delete_plan_entry(self, booking_id: str) -> DeleteResponse:
+    async def remove_from_itinerary(
+        self,
+        transport_id: str,
+        trip_id: str,
+    ) -> ItinerarySelectionResponse:
         envelope = await self._request_model(
             "DELETE",
-            f"{self._api_prefix}/transport-bookings/{booking_id}",
+            f"{self._api_prefix}/transport-options/{transport_id}"
+            f"/itineraries/{trip_id}",
             expected_statuses={200},
-            response_type=DataEnvelope[DeleteResponse],
-            malformed_message="Backend API returned a malformed entry delete response.",
+            response_type=DataEnvelope[ItinerarySelectionResponse],
+            malformed_message=(
+                "Backend API returned a malformed itinerary selection response."
+            ),
         )
         return envelope.data
 

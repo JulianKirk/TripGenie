@@ -19,9 +19,8 @@ from .models import (
     DependencyStatus,
     FrontendHealthDependencies,
     HealthResponse,
-    PlanStatus,
+    ItinerarySelectionResponse,
     TransportOptionRecord,
-    TransportPlanEntryRecord,
     TransportType,
     TripDirectory,
 )
@@ -36,12 +35,6 @@ TYPE_OPTIONS = [
 ]
 AVAILABILITY_OPTIONS = [
     (item.value, item.value.replace("_", " ").title()) for item in AvailabilityStatus
-]
-PLAN_STATUS_OPTIONS = [
-    (PlanStatus.PENDING.value, "Shortlisted"),
-    (PlanStatus.CONFIRMED.value, "In the itinerary"),
-    (PlanStatus.COMPLETED.value, "Journey taken"),
-    (PlanStatus.CANCELLED.value, "Removed"),
 ]
 # Real civil UTC offsets, including the half and quarter hour ones, so the
 # field is a pick rather than a number of minutes the user has to work out.
@@ -203,34 +196,6 @@ def _option_payload(form: dict[str, str]) -> dict[str, object]:
     return payload
 
 
-def _entry_payload(form: dict[str, str]) -> dict[str, object]:
-    payload: dict[str, object] = {}
-    for name in ("trip_id", "transport_id", "booking_date", "booking_status", "notes"):
-        value = (form.get(name) or "").strip()
-        if value:
-            payload[name] = value
-
-    travellers = (form.get("traveller_count") or "").strip()
-    if travellers:
-        try:
-            payload["traveller_count"] = int(travellers)
-        except ValueError:
-            payload["traveller_count"] = travellers
-
-    cost = (form.get("estimated_cost") or "").strip()
-    if cost:
-        try:
-            payload["estimated_cost"] = float(cost)
-        except ValueError:
-            payload["estimated_cost"] = cost
-
-    identifier = (form.get("id") or "").strip()
-    if identifier:
-        payload["id"] = identifier
-
-    return payload
-
-
 def empty_option_form() -> dict[str, str]:
     return {
         "id": "",
@@ -269,19 +234,6 @@ def option_to_form(option: TransportOptionRecord) -> dict[str, str]:
         "capacity": str(option.capacity),
         "availability_status": option.availability_status.value,
         "notes": option.notes or "",
-    }
-
-
-def entry_to_form(entry: TransportPlanEntryRecord) -> dict[str, str]:
-    return {
-        "id": entry.id,
-        "trip_id": entry.trip_id,
-        "transport_id": entry.transport_id,
-        "traveller_count": str(entry.traveller_count),
-        "booking_date": entry.booking_date,
-        "estimated_cost": f"{entry.estimated_cost:.2f}",
-        "booking_status": entry.booking_status.value,
-        "notes": entry.notes or "",
     }
 
 
@@ -378,6 +330,67 @@ def create_app(
             option_list_error=option_list_error,
             selected_option_id=None,
             filters={},
+        )
+
+    async def safe_selections(
+        client: BackendApiClient,
+        transport_id: str,
+    ) -> tuple[ItinerarySelectionResponse | None, ApiError | None]:
+        """The trips holding this option, or why they could not be read.
+
+        Folded into a return value rather than raised: the option itself is
+        this page's subject, and losing the trip list is not a reason to lose
+        the page.
+        """
+        try:
+            return await client.itinerary_selections(transport_id), None
+        except ApiError as exc:
+            return None, exc
+
+    async def _selection_change(
+        request: Request,
+        client: BackendApiClient,
+        transport_id: str,
+        change,
+    ) -> Response:
+        """Apply a tick or an untick, then re-render the option page.
+
+        No redirect: the traveller is looking at one option, and the useful
+        result of ticking a trip is that same page with the trip now ticked.
+        A refusal -- an unusable option, or a party too large for the service
+        -- renders in place with the reason, rather than losing the page.
+        """
+        options, list_error = await safe_list_options(client)
+        try:
+            option = await client.get_transport_option(transport_id)
+        except ApiError as exc:
+            return render_error(
+                request,
+                exc,
+                title="Transport option unavailable",
+                retry_url=path_for(request, "browse"),
+                options=options,
+                option_list_error=list_error,
+            )
+
+        selection_error: ApiError | None = None
+        try:
+            selections = await change()
+        except ApiError as exc:
+            selection_error = exc
+            selections, _ = await safe_selections(client, transport_id)
+
+        return render(
+            request,
+            "partials/option_detail.html",
+            page_title=f"{option.origin} to {option.destination}",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=option.id,
+            filters={},
+            option=option,
+            selections=selections,
+            selection_error=selection_error,
         )
 
     async def safe_list_options(
@@ -542,6 +555,54 @@ def create_app(
     def empty_ai_form() -> dict[str, str]:
         return {"trip_id": "", "origin": "", "destination": "", "question": ""}
 
+    @app.post("/options/{transport_id}/itineraries", name="add_to_itinerary")
+    async def add_to_itinerary(
+        request: Request,
+        transport_id: str,
+        client: ClientDep,
+    ) -> Response:
+        """Tick a trip: attach this option to it.
+
+        Saved by the itinerary service, which owns what belongs to a trip. The
+        traveller stays on the option page, which is where they were looking.
+        """
+        form = await request.form()
+        trip_id = str(form.get("trip_id") or "").strip()
+        travellers = str(form.get("traveller_count") or "1").strip()
+
+        payload: dict[str, object] = {}
+        if travellers.isdigit():
+            payload["traveller_count"] = int(travellers)
+        else:
+            payload["traveller_count"] = travellers
+        notes = str(form.get("notes") or "").strip()
+        if notes:
+            payload["notes"] = notes
+
+        return await _selection_change(
+            request,
+            client,
+            transport_id,
+            lambda: client.add_to_itinerary(transport_id, trip_id, payload),
+        )
+
+    @app.post(
+        "/options/{transport_id}/itineraries/{trip_id}/remove",
+        name="remove_from_itinerary",
+    )
+    async def remove_from_itinerary(
+        request: Request,
+        transport_id: str,
+        trip_id: str,
+        client: ClientDep,
+    ) -> Response:
+        return await _selection_change(
+            request,
+            client,
+            transport_id,
+            lambda: client.remove_from_itinerary(transport_id, trip_id),
+        )
+
     @app.get("/suggestions", name="ai_form", response_model=None)
     async def ai_form(
         request: Request,
@@ -674,7 +735,6 @@ def create_app(
         options, list_error = await safe_list_options(client)
         try:
             option = await client.get_transport_option(transport_id)
-            entries = await client.list_entries_for_option(transport_id)
         except ApiError as exc:
             return render_error(
                 request,
@@ -685,6 +745,11 @@ def create_app(
                 option_list_error=list_error,
             )
 
+        # The itinerary list is a convenience, not the point of the page. If
+        # the itinerary service is down the option should still render, with a
+        # note, rather than the whole page failing.
+        selections, selection_error = await safe_selections(client, transport_id)
+
         return render(
             request,
             "partials/option_detail.html",
@@ -694,7 +759,8 @@ def create_app(
             selected_option_id=option.id,
             filters={},
             option=option,
-            entries=entries,
+            selections=selections,
+            selection_error=selection_error,
         )
 
     @app.get(
@@ -910,231 +976,6 @@ def create_app(
         )
 
     # ---------------------------------------------------------- plan entries
-
-    def entry_form_context(
-        options: list[TransportOptionRecord],
-        directory: TripDirectory,
-    ) -> dict[str, object]:
-        """Shared picker context for every plan-entry form render."""
-        return {
-            "plan_status_options": PLAN_STATUS_OPTIONS,
-            "trip_options": trip_choices(directory),
-            "trips_available": directory.available,
-            "trips_unavailable_hint": TRIPS_UNAVAILABLE_HINT,
-            "transport_options_choices": transport_choices(options),
-        }
-
-    @app.get("/plan/new", name="new_entry_form", response_model=None)
-    async def new_entry_form(
-        request: Request,
-        client: ClientDep,
-        transport_id: Annotated[str | None, Query()] = None,
-        trip_id: Annotated[str | None, Query()] = None,
-    ) -> Response:
-        options, list_error = await safe_list_options(client)
-        directory = await client.trip_directory()
-        form = {
-            "id": "",
-            "trip_id": (trip_id or "").strip(),
-            "transport_id": (transport_id or "").strip(),
-            "traveller_count": "1",
-            "booking_date": "",
-            "estimated_cost": "",
-            "booking_status": PlanStatus.PENDING.value,
-            "notes": "",
-        }
-        return render(
-            request,
-            "partials/plan_entry_form.html",
-            page_title="Add transport to a trip",
-            options=options,
-            option_list_error=list_error,
-            selected_option_id=form["transport_id"] or None,
-            filters={},
-            form=form,
-            form_action=path_for(request, "create_entry"),
-            form_title="Add transport to a trip",
-            submit_label="Add to trip",
-            errors_by_field={},
-            error=None,
-            **entry_form_context(options, directory),
-        )
-
-    @app.post("/plan", name="create_entry", response_model=None)
-    async def create_entry(request: Request, client: ClientDep) -> Response:
-        form = dict(await request.form())
-        submitted = {key: str(value) for key, value in form.items()}
-        try:
-            created = await client.create_plan_entry(_entry_payload(submitted))
-        except ApiError as exc:
-            options, list_error = await safe_list_options(client)
-            directory = await client.trip_directory()
-            return render(
-                request,
-                "partials/plan_entry_form.html",
-                page_title="Add transport to a trip",
-                options=options,
-                option_list_error=list_error,
-                selected_option_id=submitted.get("transport_id") or None,
-                filters={},
-                form=submitted,
-                form_action=path_for(request, "create_entry"),
-                form_title="Add transport to a trip",
-                submit_label="Add to trip",
-                errors_by_field=error_details_by_field(exc),
-                error=exc,
-                **entry_form_context(options, directory),
-            )
-
-        return RedirectResponse(
-            path_for(request, "trip_transport", trip_id=created.trip_id),
-            status_code=303,
-        )
-
-    @app.get("/plan/{booking_id}/edit", name="edit_entry_form", response_model=None)
-    async def edit_entry_form(
-        request: Request,
-        booking_id: str,
-        client: ClientDep,
-    ) -> Response:
-        options, list_error = await safe_list_options(client)
-        directory = await client.trip_directory()
-        try:
-            entry = await client.get_plan_entry(booking_id)
-        except ApiError as exc:
-            return render_error(
-                request,
-                exc,
-                title="Plan entry unavailable",
-                retry_url=path_for(request, "browse"),
-                options=options,
-                option_list_error=list_error,
-            )
-
-        return render(
-            request,
-            "partials/plan_entry_form.html",
-            page_title="Edit planned transport",
-            options=options,
-            option_list_error=list_error,
-            selected_option_id=entry.transport_id,
-            filters={},
-            form=entry_to_form(entry),
-            form_action=path_for(request, "update_entry", booking_id=entry.id),
-            form_title="Edit planned transport",
-            submit_label="Save changes",
-            errors_by_field={},
-            error=None,
-            is_edit=True,
-            cancel_url=path_for(request, "trip_transport", trip_id=entry.trip_id),
-            **entry_form_context(options, directory),
-        )
-
-    @app.post("/plan/{booking_id}/edit", name="update_entry", response_model=None)
-    async def update_entry(
-        request: Request,
-        booking_id: str,
-        client: ClientDep,
-    ) -> Response:
-        form = dict(await request.form())
-        submitted = {key: str(value) for key, value in form.items()}
-        payload = _entry_payload(submitted)
-        payload.pop("id", None)
-        try:
-            updated = await client.update_plan_entry(booking_id, payload)
-        except ApiError as exc:
-            options, list_error = await safe_list_options(client)
-            directory = await client.trip_directory()
-            return render(
-                request,
-                "partials/plan_entry_form.html",
-                page_title="Edit planned transport",
-                options=options,
-                option_list_error=list_error,
-                selected_option_id=submitted.get("transport_id") or None,
-                filters={},
-                form={**submitted, "id": booking_id},
-                form_action=path_for(request, "update_entry", booking_id=booking_id),
-                form_title="Edit planned transport",
-                submit_label="Save changes",
-                errors_by_field=error_details_by_field(exc),
-                error=exc,
-                is_edit=True,
-                **entry_form_context(options, directory),
-            )
-
-        return RedirectResponse(
-            path_for(request, "trip_transport", trip_id=updated.trip_id),
-            status_code=303,
-        )
-
-    @app.get(
-        "/plan/{booking_id}/delete",
-        name="delete_entry_confirmation",
-        response_model=None,
-    )
-    async def delete_entry_confirmation(
-        request: Request,
-        booking_id: str,
-        client: ClientDep,
-    ) -> Response:
-        options, list_error = await safe_list_options(client)
-        try:
-            entry = await client.get_plan_entry(booking_id)
-        except ApiError as exc:
-            return render_error(
-                request,
-                exc,
-                title="Plan entry unavailable",
-                retry_url=path_for(request, "browse"),
-                options=options,
-                option_list_error=list_error,
-            )
-
-        return render(
-            request,
-            "partials/delete_confirmation.html",
-            page_title="Remove planned transport",
-            options=options,
-            option_list_error=list_error,
-            selected_option_id=entry.transport_id,
-            filters={},
-            confirm_title="Remove this transport from the trip?",
-            confirm_body=(
-                f"{entry.traveller_count} traveller(s), planned "
-                f"{entry.booking_date}, estimated ${entry.estimated_cost:.2f}."
-            ),
-            blocked_reason=None,
-            form_action=path_for(request, "delete_entry", booking_id=entry.id),
-            cancel_url=path_for(request, "trip_transport", trip_id=entry.trip_id),
-            error=None,
-        )
-
-    @app.post("/plan/{booking_id}/delete", name="delete_entry", response_model=None)
-    async def delete_entry(
-        request: Request,
-        booking_id: str,
-        client: ClientDep,
-    ) -> Response:
-        try:
-            entry = await client.get_plan_entry(booking_id)
-            await client.delete_plan_entry(booking_id)
-        except ApiError as exc:
-            options, list_error = await safe_list_options(client)
-            return render_error(
-                request,
-                exc,
-                title="Unable to remove planned transport",
-                retry_url=path_for(request, "browse"),
-                options=options,
-                option_list_error=list_error,
-            )
-
-        return RedirectResponse(
-            path_for(request, "trip_transport", trip_id=entry.trip_id),
-            status_code=303,
-        )
-
 
     return app
 

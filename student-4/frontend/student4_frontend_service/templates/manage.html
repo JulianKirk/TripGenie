@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="app-shell">
+  <div class="panel-heading"><div><p class="eyebrow">Catalogue administration</p><h2>Manage catalogue</h2><p>Create, edit, deactivate, or permanently delete activities and attractions.</p></div><button class="button button--primary" hx-get="/manage/activity/new" hx-target="#activity-dialog">Create activity</button></div>
+  <section class="panel">
+    {% include "partials/management_results.html" %}
+  </section>
+  <div id="activity-dialog"></div>
+</main>
+{% endblock %}

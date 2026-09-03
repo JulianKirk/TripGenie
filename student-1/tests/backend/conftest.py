@@ -96,6 +96,7 @@ class FakeDatabaseApi:
         # entity as the database service keeps it.
         self.trip_accommodations: dict[tuple[str, str], dict[str, object]] = {}
         self.trip_activities: dict[tuple[str, str], dict[str, object]] = {}
+        self.trip_transport: dict[tuple[str, str], dict[str, object]] = {}
         self.items: dict[str, dict[str, object]] = {
             "item_2027_sydney_harbour_walk": {
                 "id": "item_2027_sydney_harbour_walk",
@@ -215,6 +216,40 @@ class FakeDatabaseApi:
             and method == "GET"
         ):
             return self._list_trips_for_activity(path_parts[2])
+
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["internal", "trips"]
+            and path_parts[3] == "transport"
+            and method == "GET"
+        ):
+            return self._list_trip_transport(path_parts[2])
+
+        if (
+            len(path_parts) == 5
+            and path_parts[:2] == ["internal", "trips"]
+            and path_parts[3] == "transport"
+        ):
+            trip_id, transport_id = path_parts[2], path_parts[4]
+            if method == "PUT":
+                return self._add_trip_transport(trip_id, transport_id, request)
+            if method == "DELETE":
+                return self._remove_trip_transport(trip_id, transport_id)
+
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["internal", "transport"]
+            and path_parts[3] == "trips"
+            and method == "GET"
+        ):
+            return self._list_trips_for_transport(path_parts[2])
+
+        if (
+            len(path_parts) == 2
+            and path_parts == ["internal", "transport-traveller-totals"]
+            and method == "GET"
+        ):
+            return self._transport_traveller_totals()
 
         if len(path_parts) == 3 and path_parts[:2] == ["internal", "itinerary-items"]:
             item_id = path_parts[2]
@@ -351,6 +386,81 @@ class FakeDatabaseApi:
             [trip for trip in self._list_trips({}) if trip["id"] in trip_ids],
         )
 
+    def _list_trip_transport(self, trip_id: str) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+        records = sorted(
+            (
+                deepcopy(record)
+                for (pinned_trip, _), record in self.trip_transport.items()
+                if pinned_trip == trip_id
+            ),
+            key=lambda record: (record["added_on"], record["transport_id"]),
+        )
+        return data_response(200, records)
+
+    def _add_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+        body = self._request_json(request)
+        record = {
+            "trip_id": trip_id,
+            "transport_id": transport_id,
+            "traveller_count": int(body["traveller_count"]),
+            "plan_status": str(body.get("plan_status") or "pending"),
+            "added_on": str(body["added_on"]),
+            "notes": body.get("notes"),
+        }
+        self.trip_transport[(trip_id, transport_id)] = record
+        return data_response(200, deepcopy(record))
+
+    def _remove_trip_transport(
+        self,
+        trip_id: str,
+        transport_id: str,
+    ) -> httpx.Response:
+        if trip_id not in self.trips:
+            return self._trip_not_found(trip_id)
+        if self.trip_transport.pop((trip_id, transport_id), None) is None:
+            return error_response(
+                404,
+                "NOT_FOUND",
+                f"Trip transport '{transport_id}' was not found.",
+                [{"field": "id", "issue": "resource does not exist"}],
+            )
+        return data_response(200, {"id": transport_id, "deleted": True})
+
+    def _list_trips_for_transport(self, transport_id: str) -> httpx.Response:
+        trip_ids = {
+            trip_id
+            for trip_id, pinned_id in self.trip_transport
+            if pinned_id == transport_id
+        }
+        return data_response(
+            200,
+            [trip for trip in self._list_trips({}) if trip["id"] in trip_ids],
+        )
+
+    def _transport_traveller_totals(self) -> httpx.Response:
+        totals: dict[str, int] = {}
+        for record in self.trip_transport.values():
+            if record["plan_status"] == "cancelled":
+                continue
+            key = str(record["transport_id"])
+            totals[key] = totals.get(key, 0) + int(record["traveller_count"])
+        return data_response(
+            200,
+            [
+                {"transport_id": key, "travellers": value}
+                for key, value in sorted(totals.items())
+            ],
+        )
+
     def _trip_not_found(self, trip_id: str) -> httpx.Response:
         return error_response(
             404,
@@ -455,6 +565,11 @@ class FakeDatabaseApi:
         self.trip_activities = {
             key: value
             for key, value in self.trip_activities.items()
+            if key[0] != trip_id
+        }
+        self.trip_transport = {
+            key: value
+            for key, value in self.trip_transport.items()
             if key[0] != trip_id
         }
         return data_response(200, {"id": trip_id, "deleted": True})

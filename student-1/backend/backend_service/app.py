@@ -34,6 +34,8 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TransportIdentifier,
+    TransportTravellerTotal,
     TripAccommodationCreate,
     TripAccommodationRecord,
     TripActivityCreate,
@@ -44,9 +46,12 @@ from .models import (
     TripIdentifier,
     TripRecord,
     TripStatus,
+    TripTransportCreate,
+    TripTransportDetail,
     TripUpdate,
 )
 from .service import BackendService
+from .transport_client import TransportClient
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
 TRIP_STATUS_VALUES = ", ".join(status.value for status in TripStatus)
@@ -241,6 +246,7 @@ def create_app(
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
     accommodation_transport: httpx.BaseTransport | None = None,
     activity_transport: httpx.BaseTransport | None = None,
+    transport_api_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     resolved_database_transport = database_transport or transport
@@ -257,12 +263,17 @@ def create_app(
         )
         activities = ActivityClient(app_settings, transport=activity_transport)
         ai_mode_client = AiModeClient(app_settings, transport=ai_mode_transport)
+        transport_options = TransportClient(
+            app_settings,
+            transport=transport_api_transport,
+        )
         app.state.backend_service = BackendService(
             client,
             AiSuggestionService(ai_mode_client, app_settings),
             app_settings,
             accommodations,
             activities,
+            transport_options,
         )
         try:
             yield
@@ -271,6 +282,7 @@ def create_app(
             await ai_mode_client.close()
             accommodations.close()
             activities.close()
+            transport_options.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -614,6 +626,69 @@ def create_app(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.list_trips_for_activity(activity_id))
+
+    @router.get(
+        "/trips/{trip_id}/transport",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripTransportDetail]],
+    )
+    def list_trip_transport(
+        trip_id: TripIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trip_transport(trip_id))
+
+    @router.put(
+        "/trips/{trip_id}/transport/{transport_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TripTransportDetail],
+    )
+    def add_trip_transport(
+        trip_id: TripIdentifier,
+        transport_id: TransportIdentifier,
+        payload: TripTransportCreate,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        """PUT, not POST, matching the accommodation and activity pins.
+
+        Re-sending the same selection is a no-op; sending a different party
+        size updates it rather than creating a second row.
+        """
+        return envelope(service.add_trip_transport(trip_id, transport_id, payload))
+
+    @router.delete(
+        "/trips/{trip_id}/transport/{transport_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[dict[str, object]],
+    )
+    def remove_trip_transport(
+        trip_id: TripIdentifier,
+        transport_id: TransportIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.remove_trip_transport(trip_id, transport_id))
+
+    @router.get(
+        "/transport/{transport_id}/trips",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripRecord]],
+    )
+    def list_trips_for_transport(
+        transport_id: TransportIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trips_for_transport(transport_id))
+
+    @router.get(
+        "/transport-traveller-totals",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TransportTravellerTotal]],
+    )
+    def transport_traveller_totals(
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        """Travellers pinned per option, so Student 3 can derive seats."""
+        return envelope(service.transport_traveller_totals())
 
     app.include_router(router)
     return app

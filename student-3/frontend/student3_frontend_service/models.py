@@ -37,6 +37,17 @@ class AvailabilityStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PricingBasis(str, Enum):
+    """Whether the price multiplies by the party size.
+
+    A car hire is sold per vehicle; a shuttle of the same capacity is sold per
+    seat. The page has to say which, or a per-vehicle total reads as a mistake.
+    """
+
+    PER_TRAVELLER = "per_traveller"
+    PER_VEHICLE = "per_vehicle"
+
+
 class PlanStatus(str, Enum):
     """Plan states. TripGenie does not place reservations with carriers."""
 
@@ -119,7 +130,10 @@ class TransportOptionRecord(LenientModel):
     price: float
     capacity: int
     availability_status: AvailabilityStatus
-    seats_remaining: int
+    pricing_basis: PricingBasis = PricingBasis.PER_TRAVELLER
+    # None means the itinerary service could not be reached, so the seat
+    # count is unknown. Not the same as none left.
+    seats_remaining: int | None = None
     notes: str | None = None
 
     @property
@@ -148,23 +162,67 @@ class TransportOptionRecord(LenientModel):
         return self.availability_status.value.replace("_", " ").title()
 
 
-class TransportPlanEntryRecord(LenientModel):
-    id: str
+class TripTransportPin(LenientModel):
+    """One transport option selected for one trip.
+
+    Stored by the itinerary service, not here: which transport belongs to which
+    trip is the itinerary's business, the same way it is for accommodation and
+    activities. This service owns the option, not the choice.
+    """
+
     trip_id: str
     transport_id: str
     traveller_count: int
-    booking_date: str
-    estimated_cost: float
-    booking_status: PlanStatus
+    plan_status: PlanStatus
+    added_on: str
     notes: str | None = None
 
     @property
     def status_label(self) -> str:
-        return PLAN_STATUS_LABELS[self.booking_status]
+        return PLAN_STATUS_LABELS[self.plan_status]
 
     @property
     def is_active(self) -> bool:
-        return self.booking_status in ACTIVE_PLAN_STATUSES
+        return self.plan_status in ACTIVE_PLAN_STATUSES
+
+
+class ItinerarySelection(LenientModel):
+    """One trip, and whether this option is already part of it."""
+
+    trip_id: str
+    name: str
+    destination: str
+    start_date: str
+    end_date: str
+    selected: bool = False
+    traveller_count: int | None = None
+    plan_status: PlanStatus | None = None
+    estimated_cost: float | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} \u2014 {self.destination}"
+
+    @property
+    def dates_label(self) -> str:
+        return f"{self.start_date} to {self.end_date}"
+
+    @property
+    def status_label(self) -> str | None:
+        if self.plan_status is None:
+            return None
+        return PLAN_STATUS_LABELS[self.plan_status]
+
+
+class ItinerarySelectionResponse(LenientModel):
+    transport_id: str
+    currency: str
+    seats_remaining: int | None = None
+    itineraries: list[ItinerarySelection] = Field(default_factory=list)
+
+    @property
+    def selected_count(self) -> int:
+        return sum(1 for row in self.itineraries if row.selected)
 
 
 class TripSummary(LenientModel):
@@ -205,8 +263,9 @@ class TransportRecommendation(LenientModel):
 
 
 class PlannedTransport(LenientModel):
-    entry: TransportPlanEntryRecord
+    entry: TripTransportPin
     option: TransportOptionRecord
+    estimated_cost: float
 
 
 class TripTransportSummary(LenientModel):

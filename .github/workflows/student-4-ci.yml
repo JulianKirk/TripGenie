@@ -16,6 +16,62 @@ on:
   workflow_dispatch:
 
 jobs:
+  frontend:
+    name: Build and Validate Student 4 Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: student-4/pyproject.toml
+      - name: Install frontend and development dependencies
+        run: python -m pip install -e "./student-4[dev]"
+      - name: Validate the installed frontend package
+        run: python -c "import student4_frontend_service"
+      - name: Compile frontend source and tests
+        run: |
+          python -m compileall \
+            student-4/frontend/student4_frontend_service \
+            student-4/tests/frontend
+      - name: Lint and check frontend formatting
+        run: |
+          ruff check student-4/frontend student-4/tests/frontend
+          ruff format --check student-4/frontend student-4/tests/frontend
+      - name: Type check frontend
+        run: |
+          mypy --config-file student-4/pyproject.toml \
+            student-4/frontend/student4_frontend_service \
+            student-4/tests/frontend
+      - name: Run frontend tests
+        run: pytest student-4/tests/frontend -q
+      - name: Build frontend image
+        run: |
+          docker build \
+            -f student-4/frontend/Dockerfile \
+            -t student-4-frontend \
+            student-4/frontend
+      - name: Smoke test degraded frontend health
+        run: |
+          docker run -d --name student-4-frontend -p 18084:8084 \
+            -e BACKEND_URL=http://127.0.0.1:65534 \
+            -e BACKEND_TIMEOUT=0.25 \
+            student-4-frontend
+          for _ in $(seq 1 10); do
+            response=$(curl --fail --silent --show-error \
+              http://127.0.0.1:18084/health || true)
+            if echo "$response" | grep -q '"status":"degraded"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs student-4-frontend
+          exit 1
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
   database:
     name: Build and Validate Student 4 Database
     runs-on: ubuntu-latest

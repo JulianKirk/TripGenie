@@ -25,6 +25,8 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TransportIdentifier,
+    TransportTravellerTotal,
     TripAccommodationCreate,
     TripAccommodationRecord,
     TripActivityCreate,
@@ -33,6 +35,8 @@ from .models import (
     TripIdentifier,
     TripRecord,
     TripStatus,
+    TripTransportCreate,
+    TripTransportRecord,
     TripUpdate,
 )
 from .repository import DatabaseService
@@ -491,6 +495,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service: DatabaseService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.list_trips_for_activity(activity_id))
+
+    @router.get(
+        "/trips/{trip_id}/transport",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripTransportRecord]],
+    )
+    def list_trip_transport(
+        trip_id: TripIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trip_transport(trip_id))
+
+    @router.put(
+        "/trips/{trip_id}/transport/{transport_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[TripTransportRecord],
+    )
+    def add_trip_transport(
+        trip_id: TripIdentifier,
+        transport_id: TransportIdentifier,
+        payload: TripTransportCreate,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(
+            service.add_trip_transport(
+                trip_id,
+                transport_id,
+                payload.traveller_count,
+                payload.plan_status.value,
+                payload.added_on,
+                payload.notes,
+            ),
+        )
+
+    @router.delete(
+        "/trips/{trip_id}/transport/{transport_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[DeleteResponse],
+    )
+    def remove_trip_transport(
+        trip_id: TripIdentifier,
+        transport_id: TransportIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.remove_trip_transport(trip_id, transport_id))
+
+    @router.get(
+        "/transport/{transport_id}/trips",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TripRecord]],
+    )
+    def list_trips_for_transport(
+        transport_id: TransportIdentifier,
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.list_trips_for_transport(transport_id))
+
+    @router.get(
+        "/transport-traveller-totals",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[list[TransportTravellerTotal]],
+    )
+    def transport_traveller_totals(
+        service: DatabaseService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.transport_traveller_totals())
 
     app.include_router(router)
     return app
