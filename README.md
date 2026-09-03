@@ -78,3 +78,53 @@ TripGenie/
     ├── test/
     └── deploy/
 ```
+
+---
+
+## 4. Repository Knowledge Graph
+
+Graphify builds a navigable knowledge graph of the services, APIs,
+documentation, and source relationships in this repository. The portable
+outputs are committed so every team member can use them without rebuilding
+first:
+
+- `graphify-out/graph.html` — interactive graph that opens in a browser
+- `graphify-out/GRAPH_REPORT.md` — architecture report and suggested queries
+- `graphify-out/graph.json` — raw graph used by Graphify queries
+
+### Using Graphify
+
+The repository's initial agent guidance lives in `AGENTS.md`. It tells coding
+agents to consult the committed graph for architecture and dependency
+questions. Developers can open the report or interactive graph without any
+local setup. To run focused terminal queries, optionally install Graphify:
+
+```bash
+uv tool install --upgrade graphifyy
+graphify query "how do the backend services reach their databases?"
+```
+
+`graphify update .` refreshes code only. After changing documentation or
+images, a full semantic extraction requires a supported LLM backend:
+
+```bash
+graphify extract .
+```
+
+### Central graph updates on GitHub
+
+The `Graphify Update` GitHub Actions workflow runs after changes are merged to
+`main`. It performs the no-LLM code update and, when the portable graph changes,
+commits only `graph.json`, `graph.html`, and `GRAPH_REPORT.md` as
+`github-actions[bot]`. This gives every contributor the same current code graph
+after pulling `main`, without requiring local Git hooks.
+
+The repository must allow GitHub Actions to write repository contents. In
+GitHub, check **Settings → Actions → General → Workflow permissions**.
+Branch protection must also permit `github-actions[bot]` to push the generated
+artifact commit to `main`.
+
+This workflow intentionally performs code-only extraction, which is
+deterministic and does not need an API key. Documentation, paper, and image
+changes still require semantic extraction with a supported LLM backend before
+their relationships can be added to the committed graph.
