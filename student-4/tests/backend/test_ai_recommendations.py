@@ -228,7 +228,7 @@ def test_plan_retries_once_after_an_unusable_ai_answer() -> None:
     with TestClient(app) as client:
         response = client.post(
             "/activity/recommendations/plan",
-            json={"question": "Something short"},
+            json={"question": "Something no more than 2 hours long"},
         )
 
     assert response.status_code == 200
@@ -238,6 +238,158 @@ def test_plan_retries_once_after_an_unusable_ai_answer() -> None:
         "2",
     ]
     assert "previous answer could not be used" in requests[1]["prompt"]
+
+
+def test_plan_discards_filters_not_stated_by_the_traveller() -> None:
+    from student4_backend_service.app import create_app
+
+    prompts: list[str] = []
+    itinerary = FakeItinerary()
+    itinerary.trips[0]["notes"] = "Focus on harbour views and easy walking routes."
+
+    def ai(request: httpx.Request) -> httpx.Response:
+        prompts.append(cast("dict[str, Any]", json.loads(request.content))["prompt"])
+        return httpx.Response(
+            200,
+            json=_ai_response(
+                {
+                    "query": {
+                        "text": "harbour views",
+                        "categories": {
+                            "codes": ["CULTURE", "OUTDOOR"],
+                            "match": "ANY",
+                        },
+                        "price": {"min": "0.00", "max": "100.00"},
+                        "duration_minutes": {"min": 0, "max": 180},
+                        "accessibility": {"wheelchair_accessible": True},
+                    },
+                    "summary": "Harbour views with wheelchair accessibility",
+                }
+            ),
+        )
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(FakeDatabase().handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(itinerary.handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/activity/recommendations/plan",
+            json={
+                "question": "For this trip, recommend an activity for two people.",
+                "trip_id": SYDNEY,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["query"] == {
+        "location": {"country": "australia", "city": "sydney"},
+        "party_size": 2,
+        "sort": "NAME_ASC",
+        "include_inactive": False,
+        "limit": 20,
+        "offset": 0,
+    }
+    assert response.json()["summary"] == (
+        "activities for Sydney Getaway in Sydney (2 travellers)"
+    )
+    assert "harbour views" not in prompts[0]
+    assert "easy walking routes" not in prompts[0]
+
+
+def test_plan_maps_water_to_adventure_without_invented_limits() -> None:
+    from student4_backend_service.app import create_app
+
+    def ai(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_ai_response(
+                {
+                    "query": {
+                        "text": "water",
+                        "categories": {"codes": ["WILDLIFE"], "match": "ANY"},
+                        "price": {"min": "0.00", "max": "100.00"},
+                        "duration_minutes": {"min": 0, "max": 180},
+                    },
+                    "summary": "Water activities under $100",
+                }
+            ),
+        )
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(FakeDatabase().handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(FakeItinerary().handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/activity/recommendations/plan",
+            json={
+                "question": "For this trip, recommend a water activity.",
+                "trip_id": SYDNEY,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["query"]["categories"] == {
+        "codes": ["ADVENTURE"],
+        "match": "ANY",
+    }
+    assert "text" not in response.json()["query"]
+    assert "price" not in response.json()["query"]
+    assert "duration_minutes" not in response.json()["query"]
+    assert response.json()["summary"].startswith("adventure activities")
+
+
+def test_plan_cleans_invented_availability_before_validating_ai_answer() -> None:
+    from student4_backend_service.app import create_app
+
+    requests: list[dict[str, Any]] = []
+
+    def ai(request: httpx.Request) -> httpx.Response:
+        requests.append(cast("dict[str, Any]", json.loads(request.content)))
+        return httpx.Response(
+            200,
+            json=_ai_response(
+                {
+                    "query": {
+                        "party_size": 2,
+                        "availability": {
+                            "date": "2027-04-02",
+                            "start_time": "10:00:00+10:00",
+                            "end_time": "17:00:00+10:00",
+                        },
+                    },
+                    "summary": "activities for two people",
+                }
+            ),
+        )
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(FakeDatabase().handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(FakeItinerary().handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/activity/recommendations/plan",
+            json={
+                "question": "For this trip, give me something to do for 2 people.",
+                "trip_id": SYDNEY,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["query"]["party_size"] == 2
+    assert "availability" not in response.json()["query"]
+    assert len(requests) == 1
 
 
 def test_trip_directory_supports_the_optional_ai_context_picker() -> None:
@@ -316,6 +468,56 @@ def test_evaluation_searches_real_rows_and_grounds_recommendations() -> None:
     assert {method for method, _, _ in database.calls} == {"QUERY", "GET"}
     location_schema = ai_requests[0]["schema"]["$defs"]["LocationFilter"]["properties"]
     assert "street" not in location_schema
+
+
+def test_evaluation_falls_back_to_real_candidates_when_ai_returns_none() -> None:
+    from student4_backend_service.app import create_app
+
+    from tests.backend.test_activity_api import public_payload
+
+    database = FakeDatabase()
+
+    def ai(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_ai_response(
+                {
+                    "overview": "No suitable activity found.",
+                    "suggestions": [],
+                    "considerations": ["An invented preference."],
+                    "disclaimer": "This is a test.",
+                }
+            ),
+        )
+
+    app = create_app(
+        Settings(ai_mode_url="http://ai-mode.test"),
+        database_transport=httpx.MockTransport(database.handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(FakeItinerary().handle),
+        ai_mode_transport=httpx.MockTransport(ai),
+    )
+    with TestClient(app) as client:
+        assert client.post("/activity", json=public_payload()).status_code == 201
+        response = client.post(
+            "/activity/recommendations/evaluate",
+            json={
+                "question": "Recommend an activity for two people.",
+                "query": {"party_size": 2},
+                "summary": "activities for two people",
+                "attempt": 1,
+            },
+        )
+
+    result = response.json()
+    assert response.status_code == 200
+    assert result["status"] == "complete"
+    assert result["matched_count"] == 1
+    assert result["evaluated_count"] == 1
+    assert result["recommended"][0]["activity"]["name"] == "Harbour Kayak"
+    assert result["overview"] == "Found 1 suitable activities matching the search."
+    assert result["considerations"] == []
+    assert result["disclaimer"].startswith("Review activity details")
 
 
 def test_first_evaluation_can_return_one_revised_search() -> None:

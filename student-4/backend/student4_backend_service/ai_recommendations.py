@@ -82,9 +82,77 @@ def _trip_summary(summary: str, trip: ItineraryTrip) -> str:
     )
 
 
+def _trip_prompt_context(trip: ItineraryTrip) -> dict[str, object]:
+    """Expose trip constraints without leaking notes as inferred preferences."""
+    return trip.model_dump(
+        mode="json",
+        include={
+            "id",
+            "name",
+            "destination",
+            "start_date",
+            "end_date",
+            "traveller_count",
+        },
+    )
+
+
+def _occupied_times(existing: list[TripActivityWire]) -> list[dict[str, object]]:
+    """Expose occupied slots without activity identities or content."""
+    return [
+        row.model_dump(
+            mode="json",
+            include={"date", "start_time"},
+            exclude_none=True,
+        )
+        for row in existing
+    ]
+
+
+def _range_summary(query: ActivityQuery) -> list[str]:
+    details: list[str] = []
+    price = query.price
+    duration = query.duration_minutes
+    if price and price.max is not None:
+        details.append(f"up to ${price.max:.2f}")
+    if price and price.min is not None:
+        details.append(f"from ${price.min:.2f}")
+    if duration and duration.max is not None:
+        details.append(f"up to {duration.max} minutes")
+    if duration and duration.min is not None:
+        details.append(f"at least {duration.min} minutes")
+    return details
+
+
+def _query_summary(query: ActivityQuery, *, trip_supplies_context: bool) -> str:
+    """Describe only constraints present in the authoritative query."""
+    categories = query.categories.codes if query.categories else []
+    category_text = " or ".join(
+        "food and drink" if code == "FOOD_DRINK" else code.casefold()
+        for code in categories
+    )
+    base = f"{category_text} activities" if category_text else "activities"
+    if query.text:
+        base += f' matching "{query.text}"'
+
+    details: list[str] = []
+    if not trip_supplies_context and query.location:
+        place = query.location.city or query.location.country
+        if place:
+            details.append(f"in {place}")
+    if not trip_supplies_context and query.party_size:
+        details.append(f"for {query.party_size} people")
+    details.extend(_range_summary(query))
+    if query.accessibility:
+        details.append("with the requested accessibility")
+    return " ".join((base, *details))
+
+
 async def _generate_plan_draft(
     prompt: str,
     *,
+    question: str,
+    implicit_date: str | None,
     ai: AiModeClient,
     settings: Settings,
 ) -> ActivitySearchPlanDraft:
@@ -107,7 +175,14 @@ async def _generate_plan_draft(
             },
         )
         try:
-            return ActivitySearchPlanDraft.model_validate_json(generated.response)
+            body = json.loads(generated.response)
+            if isinstance(body, dict) and isinstance(body.get("query"), dict):
+                body["query"], _ = apply_explicit_filters(
+                    question,
+                    body["query"],
+                    implicit_date=implicit_date,
+                )
+            return ActivitySearchPlanDraft.model_validate(body)
         except (ValueError, ValidationError) as exc:
             last_error = exc
     raise HTTPException(
@@ -132,10 +207,8 @@ async def plan_search(
         "known_cities": cities,
     }
     if trip is not None:
-        context["trip"] = trip.model_dump(mode="json")
-        context["existing_itinerary_activities"] = [
-            row.model_dump(mode="json") for row in existing
-        ]
+        context["trip"] = _trip_prompt_context(trip)
+        context["occupied_itinerary_times"] = _occupied_times(existing)
     prompt = _prompt_asset(settings.ai_plan_prompt_asset).replace(
         "{{CONTEXT_JSON}}",
         json.dumps(context, separators=(",", ":"), sort_keys=True),
@@ -145,7 +218,18 @@ async def plan_search(
             status.HTTP_400_BAD_REQUEST,
             "There is too much context for one AI request.",
         )
-    draft = await _generate_plan_draft(prompt, ai=ai, settings=settings)
+    implicit_date = (
+        trip.start_date.isoformat()
+        if trip is not None and trip.start_date == trip.end_date
+        else None
+    )
+    draft = await _generate_plan_draft(
+        prompt,
+        question=payload.question,
+        implicit_date=implicit_date,
+        ai=ai,
+        settings=settings,
+    )
 
     destination = (
         await location.destination_filter(trip.destination)
@@ -155,14 +239,10 @@ async def plan_search(
     query_seed = draft.query.model_dump(mode="json", exclude_none=True)
     if destination is not None:
         query_seed["location"] = destination
-    query_body, recovered_filters = apply_explicit_filters(
+    query_body, _ = apply_explicit_filters(
         payload.question,
         query_seed,
-        implicit_date=(
-            trip.start_date.isoformat()
-            if trip is not None and trip.start_date == trip.end_date
-            else None
-        ),
+        implicit_date=implicit_date,
     )
     query_body.update(
         sort="NAME_ASC",
@@ -182,18 +262,15 @@ async def plan_search(
         ):
             query_body.pop("availability")
 
-    summary = draft.summary
-    if summary.strip().rstrip(".").casefold() == "no filters applied":
-        summary = (
-            payload.question.strip().rstrip(".") if recovered_filters else "activities"
-        )
+    final_query = ActivityQuery.model_validate(query_body)
+    summary = _query_summary(final_query, trip_supplies_context=trip is not None)
     if trip is not None:
         summary = _trip_summary(summary, trip)
 
     return RecommendationPlan(
         question=payload.question,
         trip_id=payload.trip_id,
-        query=query_body,
+        query=final_query,
         summary=summary,
         trip_context_available=trip is not None,
     )
@@ -327,10 +404,8 @@ async def evaluate_search(
         ],
     }
     if trip is not None:
-        context["trip"] = trip.model_dump(mode="json")
-        context["existing_itinerary_activities"] = [
-            row.model_dump(mode="json") for row in existing
-        ]
+        context["trip"] = _trip_prompt_context(trip)
+        context["occupied_itinerary_times"] = _occupied_times(existing)
     prompt = _prompt_asset(settings.ai_evaluation_prompt_asset).replace(
         "{{CONTEXT_JSON}}",
         json.dumps(context, separators=(",", ":"), sort_keys=True),
@@ -376,6 +451,17 @@ async def evaluate_search(
             RecommendedActivity(reason=suggestion.reason, activity=activity)
         )
 
+    used_fallback = not recommended and bool(candidates)
+    if used_fallback:
+        party = f" for {query.party_size} people" if query.party_size else ""
+        recommended = [
+            RecommendedActivity(
+                reason=f"Matches the applied activity search{party}.",
+                activity=activity,
+            )
+            for activity in candidates[:3]
+        ]
+
     status_value = "complete" if recommended else "no_match"
     response_query = query
     response_summary = payload.summary
@@ -405,9 +491,17 @@ async def evaluate_search(
         matched_count=found.total,
         evaluated_count=len(candidates),
         recommended=recommended,
-        overview=draft.overview,
-        considerations=list(draft.considerations),
-        disclaimer=draft.disclaimer,
+        overview=(
+            f"Found {len(candidates)} suitable activities matching the search."
+            if used_fallback
+            else draft.overview
+        ),
+        considerations=[] if used_fallback else list(draft.considerations),
+        disclaimer=(
+            "Review activity details and availability before adding one."
+            if used_fallback
+            else draft.disclaimer
+        ),
         revision_explanation=revision_explanation,
         run_id=generated.run_id,
         model=generated.model,
