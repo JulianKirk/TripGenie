@@ -411,7 +411,7 @@ def _migrate_legacy_seed_activities(session: Session) -> None:
         ]
         matches_by_message.append(matches)
 
-    # Recognise both the current catalogue and the ten-row catalogue shipped
+    # Recognise both the current catalogue and the historical ten-row catalogue shipped
     # before the four Sydney AI-demo activities were added. Partial or
     # ambiguous matches may be user-created records, so only migrate a complete
     # known cohort. A historical cohort is accepted only when none of the newer
