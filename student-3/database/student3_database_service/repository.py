@@ -16,28 +16,23 @@ from .errors import (
     validation_error,
 )
 from .models import (
-    BOOKABLE_AVAILABILITY_STATUSES,
-    CAPACITY_CONSUMING_BOOKING_STATUSES,
     MAX_TRANSPORT_DURATION_MINUTES,
     AvailabilityStatus,
-    BookingStatus,
-    TransportBookingCreate,
-    TransportBookingRecord,
-    TransportBookingUpdate,
+    PricingBasis,
     TransportOptionCreate,
     TransportOptionRecord,
     TransportOptionStored,
     TransportOptionUpdate,
     TransportType,
 )
-from .seed_data import SEED_TRANSPORT_BOOKINGS, SEED_TRANSPORT_OPTIONS
+from .seed_data import SEED_TRANSPORT_OPTIONS
 
 VALIDATION_MESSAGE = "One or more fields failed validation."
 
 # Patching any of these invalidates a previously derived (or overridden)
 # estimated_cost, so the per-traveller default is recalculated unless the caller
 # sends an explicit estimated_cost in the same request.
-ESTIMATED_COST_DRIVERS = frozenset({"traveller_count", "transport_id"})
+_PRICING_BASIS_SQL = ", ".join(f"'{basis.value}'" for basis in PricingBasis)
 
 OPTION_FIELDS = (
     "id",
@@ -53,40 +48,15 @@ OPTION_FIELDS = (
     "price",
     "capacity",
     "availability_status",
+    "pricing_basis",
     "notes",
 )
-BOOKING_FIELDS = (
-    "id",
-    "trip_id",
-    "transport_id",
-    "traveller_count",
-    "booking_date",
-    "estimated_cost",
-    "booking_status",
-    "notes",
-)
-
 SEED_MARKER_KEY = "student3_demo_seed_v1"
 SEED_MARKER_COMPLETED = "completed"
 SEED_MARKER_SKIPPED_EXISTING_DATA = "skipped-existing-data"
 
 _TRANSPORT_TYPE_SQL = ", ".join(f"'{item.value}'" for item in TransportType)
 _AVAILABILITY_SQL = ", ".join(f"'{item.value}'" for item in AvailabilityStatus)
-_BOOKING_STATUS_SQL = ", ".join(f"'{item.value}'" for item in BookingStatus)
-_CAPACITY_CONSUMING_SQL = ", ".join(
-    f"'{item.value}'" for item in sorted(CAPACITY_CONSUMING_BOOKING_STATUSES)
-)
-
-# seats_remaining is never stored: a stale copy would contradict the bookings
-# table, so it is recomputed by this subquery on every read.
-SEATS_REMAINING_SQL = f"""
-    transport_options.capacity - COALESCE((
-        SELECT SUM(booked.traveller_count)
-        FROM transport_bookings AS booked
-        WHERE booked.transport_id = transport_options.id
-          AND booked.booking_status IN ({_CAPACITY_CONSUMING_SQL})
-    ), 0) AS seats_remaining
-"""
 
 SCHEMA_STATEMENTS = (
     f"""
@@ -106,24 +76,13 @@ CREATE TABLE IF NOT EXISTS transport_options (
     availability_status TEXT NOT NULL CHECK (
         availability_status IN ({_AVAILABILITY_SQL})
     ),
+    pricing_basis TEXT NOT NULL DEFAULT 'per_traveller' CHECK (
+        pricing_basis IN ({_PRICING_BASIS_SQL})
+    ),
     notes TEXT,
     CHECK (
         (departure_utc_offset IS NULL) = (arrival_utc_offset IS NULL)
     )
-)
-""",
-    f"""
-CREATE TABLE IF NOT EXISTS transport_bookings (
-    id TEXT PRIMARY KEY,
-    trip_id TEXT NOT NULL,
-    transport_id TEXT NOT NULL REFERENCES transport_options(id),
-    traveller_count INTEGER NOT NULL CHECK (traveller_count > 0),
-    booking_date TEXT NOT NULL,
-    estimated_cost REAL NOT NULL CHECK (estimated_cost >= 0),
-    booking_status TEXT NOT NULL CHECK (
-        booking_status IN ({_BOOKING_STATUS_SQL})
-    ),
-    notes TEXT
 )
 """,
     """
@@ -140,14 +99,6 @@ CREATE INDEX IF NOT EXISTS idx_transport_options_route_departure
     """
 CREATE INDEX IF NOT EXISTS idx_transport_options_type_price
     ON transport_options (type, price)
-""",
-    """
-CREATE INDEX IF NOT EXISTS idx_transport_bookings_trip
-    ON transport_bookings (trip_id, booking_date)
-""",
-    """
-CREATE INDEX IF NOT EXISTS idx_transport_bookings_transport_status
-    ON transport_bookings (transport_id, booking_status)
 """,
 )
 
@@ -166,6 +117,7 @@ INSERT INTO transport_options (
     price,
     capacity,
     availability_status,
+    pricing_basis,
     notes
 ) VALUES (
     :id,
@@ -181,6 +133,7 @@ INSERT INTO transport_options (
     :price,
     :capacity,
     :availability_status,
+    :pricing_basis,
     :notes
 )
 """
@@ -200,41 +153,7 @@ SET
     price = :price,
     capacity = :capacity,
     availability_status = :availability_status,
-    notes = :notes
-WHERE id = :id
-"""
-
-INSERT_BOOKING_SQL = """
-INSERT INTO transport_bookings (
-    id,
-    trip_id,
-    transport_id,
-    traveller_count,
-    booking_date,
-    estimated_cost,
-    booking_status,
-    notes
-) VALUES (
-    :id,
-    :trip_id,
-    :transport_id,
-    :traveller_count,
-    :booking_date,
-    :estimated_cost,
-    :booking_status,
-    :notes
-)
-"""
-
-UPDATE_BOOKING_SQL = """
-UPDATE transport_bookings
-SET
-    trip_id = :trip_id,
-    transport_id = :transport_id,
-    traveller_count = :traveller_count,
-    booking_date = :booking_date,
-    estimated_cost = :estimated_cost,
-    booking_status = :booking_status,
+    pricing_basis = :pricing_basis,
     notes = :notes
 WHERE id = :id
 """
@@ -260,15 +179,6 @@ def duration_minutes(
         arrives -= timedelta(minutes=arrival_utc_offset)
 
     return int((arrives - departs).total_seconds() // 60)
-
-
-def default_estimated_cost(price: float, traveller_count: int) -> float:
-    """Per-traveller fare total used when a booking omits ``estimated_cost``.
-
-    Multiplication happens in whole cents so the result cannot inherit a
-    binary floating point remainder from the fare.
-    """
-    return round(round(price * 100) * traveller_count) / 100
 
 
 class DatabaseService:
@@ -346,7 +256,7 @@ class DatabaseService:
         departure_to: str | None = None,
     ) -> list[dict[str, object]]:
         columns = ", ".join(f"transport_options.{name}" for name in OPTION_FIELDS)
-        sql = f"SELECT {columns}, {SEATS_REMAINING_SQL} FROM transport_options"
+        sql = f"SELECT {columns} FROM transport_options"
         conditions: list[str] = []
         params: list[object] = []
 
@@ -446,7 +356,6 @@ class DatabaseService:
                 self._normalise_empty_payload(merged)
                 self._apply_option_derived_fields(merged)
                 self._validate_option_record(merged)
-                self._ensure_capacity_covers_bookings(connection, merged)
                 connection.execute(UPDATE_OPTION_SQL, merged)
 
             option_row = self._get_option_view(connection, transport_id)
@@ -457,150 +366,12 @@ class DatabaseService:
         with self._connect() as connection:
             with self._write_transaction(connection):
                 self._get_option_row(connection, transport_id)
-                booking_count = connection.execute(
-                    "SELECT COUNT(*) FROM transport_bookings WHERE transport_id = ?",
-                    (transport_id,),
-                ).fetchone()[0]
-                if booking_count:
-                    raise conflict(
-                        (
-                            f"Transport option '{transport_id}' still has "
-                            f"{booking_count} booking(s)."
-                        ),
-                        [
-                            {
-                                "field": "id",
-                                "issue": (
-                                    "delete the dependent bookings before "
-                                    "deleting the transport option"
-                                ),
-                            },
-                        ],
-                    )
-
                 connection.execute(
                     "DELETE FROM transport_options WHERE id = ?",
                     (transport_id,),
                 )
 
         return {"id": transport_id, "deleted": True}
-
-    def list_transport_bookings(
-        self,
-        *,
-        trip_id: str | None = None,
-        transport_id: str | None = None,
-        booking_status: BookingStatus | None = None,
-    ) -> list[dict[str, object]]:
-        sql = f"SELECT {', '.join(BOOKING_FIELDS)} FROM transport_bookings"
-        conditions: list[str] = []
-        params: list[object] = []
-
-        if trip_id is not None:
-            conditions.append("trip_id = ?")
-            params.append(trip_id)
-
-        if transport_id is not None:
-            conditions.append("transport_id = ?")
-            params.append(transport_id)
-
-        if booking_status is not None:
-            conditions.append("booking_status = ?")
-            params.append(booking_status.value)
-
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-
-        sql += " ORDER BY booking_date ASC, id ASC"
-
-        with self._connect() as connection:
-            if transport_id is not None:
-                self._get_option_row(connection, transport_id)
-            rows = connection.execute(sql, params).fetchall()
-
-        return [self._serialise_booking(row) for row in rows]
-
-    def create_transport_booking(
-        self,
-        payload: TransportBookingCreate,
-    ) -> dict[str, object]:
-        record = payload.model_dump(mode="json")
-        record["id"] = record.get("id") or self._generate_id("booking")
-        self._normalise_empty_payload(record)
-
-        with self._connect() as connection:
-            with self._write_transaction(connection):
-                option = dict(
-                    self._get_option_row(connection, str(record["transport_id"])),
-                )
-                self._apply_booking_derived_fields(record, option)
-                self._validate_booking_record(record, option)
-                self._ensure_option_accepts_new_booking(record, option)
-                self._ensure_seats_available(connection, record, option)
-                try:
-                    connection.execute(INSERT_BOOKING_SQL, record)
-                except sqlite3.IntegrityError as exc:
-                    self._raise_integrity_error(
-                        exc,
-                        "transport booking",
-                        str(record["id"]),
-                    )
-
-            booking_row = self._get_booking_row(connection, str(record["id"]))
-
-        return self._serialise_booking(booking_row)
-
-    def get_transport_booking(self, booking_id: str) -> dict[str, object]:
-        with self._connect() as connection:
-            booking_row = self._get_booking_row(connection, booking_id)
-
-        return self._serialise_booking(booking_row)
-
-    def update_transport_booking(
-        self,
-        booking_id: str,
-        payload: TransportBookingUpdate,
-    ) -> dict[str, object]:
-        updates = payload.model_dump(exclude_unset=True, mode="json")
-        if not updates:
-            raise validation_error(
-                VALIDATION_MESSAGE,
-                [{"field": "body", "issue": "at least one field must be provided"}],
-            )
-
-        with self._connect() as connection:
-            with self._write_transaction(connection):
-                existing = dict(self._get_booking_row(connection, booking_id))
-                merged = existing | updates
-                self._normalise_empty_payload(merged)
-                option = dict(
-                    self._get_option_row(connection, str(merged["transport_id"])),
-                )
-                if "estimated_cost" not in updates and (
-                    ESTIMATED_COST_DRIVERS & updates.keys()
-                ):
-                    merged["estimated_cost"] = None
-                self._apply_booking_derived_fields(merged, option)
-                self._validate_booking_record(merged, option)
-                if self._is_reactivating_booking(existing, merged):
-                    self._ensure_option_accepts_new_booking(merged, option)
-                self._ensure_seats_available(connection, merged, option)
-                connection.execute(UPDATE_BOOKING_SQL, merged)
-
-            booking_row = self._get_booking_row(connection, booking_id)
-
-        return self._serialise_booking(booking_row)
-
-    def delete_transport_booking(self, booking_id: str) -> dict[str, object]:
-        with self._connect() as connection:
-            with self._write_transaction(connection):
-                self._get_booking_row(connection, booking_id)
-                connection.execute(
-                    "DELETE FROM transport_bookings WHERE id = ?",
-                    (booking_id,),
-                )
-
-        return {"id": booking_id, "deleted": True}
 
     def _get_option_row(
         self,
@@ -624,7 +395,7 @@ class DatabaseService:
         columns = ", ".join(f"transport_options.{name}" for name in OPTION_FIELDS)
         option_row = connection.execute(
             f"""
-            SELECT {columns}, {SEATS_REMAINING_SQL}
+            SELECT {columns}
             FROM transport_options
             WHERE transport_options.id = ?
             """,
@@ -635,23 +406,42 @@ class DatabaseService:
 
         return option_row
 
-    def _get_booking_row(
-        self,
-        connection: sqlite3.Connection,
-        booking_id: str,
-    ) -> sqlite3.Row:
-        booking_row = connection.execute(
-            f"SELECT {', '.join(BOOKING_FIELDS)} FROM transport_bookings WHERE id = ?",
-            (booking_id,),
-        ).fetchone()
-        if booking_row is None:
-            raise not_found("Transport booking", booking_id)
-
-        return booking_row
-
     def _ensure_schema(self, connection: sqlite3.Connection) -> None:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
+        self._migrate_pricing_basis(connection)
+
+    @staticmethod
+    def _migrate_pricing_basis(connection: sqlite3.Connection) -> None:
+        """Add `pricing_basis` to a table that predates it.
+
+        `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a
+        database created before this column existed keeps its old shape and
+        every insert then fails on the missing bind. A named volume outlives a
+        deployment, so this has to migrate rather than assume a fresh file.
+
+        The CHECK constraint that a fresh database gets cannot be added by
+        ALTER TABLE. A migrated database therefore enforces the values in the
+        model only -- the same trade Student 1 documents on their stay window.
+        """
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(transport_options)")
+        }
+        if not columns or "pricing_basis" in columns:
+            return
+
+        connection.execute(
+            "ALTER TABLE transport_options ADD COLUMN pricing_basis TEXT "
+            f"NOT NULL DEFAULT '{PricingBasis.PER_TRAVELLER.value}'",
+        )
+        # Whole-vehicle hire is the case this column exists for, and the only
+        # way to recognise it in older rows is the note that says so.
+        connection.execute(
+            "UPDATE transport_options SET pricing_basis = ? "
+            "WHERE notes LIKE '%per vehicle%'",
+            (PricingBasis.PER_VEHICLE.value,),
+        )
 
     def _ensure_seed_data(self, connection: sqlite3.Connection) -> None:
         if self._get_schema_metadata(connection, SEED_MARKER_KEY) is not None:
@@ -668,40 +458,18 @@ class DatabaseService:
         options = [dict(option) for option in SEED_TRANSPORT_OPTIONS]
         for option in options:
             option.setdefault("notes", None)
+            option.setdefault("pricing_basis", PricingBasis.PER_TRAVELLER.value)
             self._apply_option_derived_fields(option)
             self._validate_option_record(option)
 
-        prices = {str(option["id"]): float(option["price"]) for option in options}
-        bookings = [dict(booking) for booking in SEED_TRANSPORT_BOOKINGS]
-        for booking in bookings:
-            booking.setdefault("notes", None)
-            transport_id = str(booking["transport_id"])
-            if transport_id not in prices:
-                raise internal_error(
-                    "Seed data references an unknown transport option.",
-                    [{"field": "transport_id", "issue": transport_id}],
-                )
-
-            if booking.get("estimated_cost") is None:
-                booking["estimated_cost"] = default_estimated_cost(
-                    prices[transport_id],
-                    int(booking["traveller_count"]),
-                )
-
-            TransportBookingRecord.model_validate(booking)
-
         connection.executemany(INSERT_OPTION_SQL, options)
-        connection.executemany(INSERT_BOOKING_SQL, bookings)
         self._set_schema_metadata(connection, SEED_MARKER_KEY, SEED_MARKER_COMPLETED)
 
     def _database_has_existing_rows(self, connection: sqlite3.Connection) -> bool:
         options_exist = connection.execute(
             "SELECT EXISTS(SELECT 1 FROM transport_options LIMIT 1)",
         ).fetchone()[0]
-        bookings_exist = connection.execute(
-            "SELECT EXISTS(SELECT 1 FROM transport_bookings LIMIT 1)",
-        ).fetchone()[0]
-        return bool(options_exist or bookings_exist)
+        return bool(options_exist)
 
     def _get_schema_metadata(
         self,
@@ -777,17 +545,6 @@ class DatabaseService:
             arrival_offset,
         )
 
-    @staticmethod
-    def _apply_booking_derived_fields(
-        record: dict[str, object],
-        option: dict[str, object],
-    ) -> None:
-        if record.get("estimated_cost") is None:
-            record["estimated_cost"] = default_estimated_cost(
-                float(option["price"]),
-                int(record["traveller_count"]),
-            )
-
     def _validate_option_record(self, record: dict[str, object]) -> None:
         minutes = int(record["duration_minutes"])
         if minutes <= 0:
@@ -817,144 +574,6 @@ class DatabaseService:
             )
 
         TransportOptionStored.model_validate(record)
-
-    def _validate_booking_record(
-        self,
-        record: dict[str, object],
-        option: dict[str, object],
-    ) -> None:
-        TransportBookingRecord.model_validate(record)
-
-        booking_date = str(record["booking_date"])
-        departure_date = str(option["departure_time"])[:10]
-        if booking_date > departure_date:
-            raise validation_error(
-                VALIDATION_MESSAGE,
-                [
-                    {
-                        "field": "booking_date",
-                        "issue": (
-                            "must be on or before the transport departure date "
-                            f"({departure_date})"
-                        ),
-                    },
-                ],
-            )
-
-    @staticmethod
-    def _is_reactivating_booking(
-        existing: dict[str, object],
-        merged: dict[str, object],
-    ) -> bool:
-        was_active = (
-            BookingStatus(str(existing["booking_status"]))
-            in CAPACITY_CONSUMING_BOOKING_STATUSES
-        )
-        is_active = (
-            BookingStatus(str(merged["booking_status"]))
-            in CAPACITY_CONSUMING_BOOKING_STATUSES
-        )
-        changed_transport = existing["transport_id"] != merged["transport_id"]
-        return is_active and (not was_active or changed_transport)
-
-    @staticmethod
-    def _ensure_option_accepts_new_booking(
-        record: dict[str, object],
-        option: dict[str, object],
-    ) -> None:
-        status = BookingStatus(str(record["booking_status"]))
-        if status not in CAPACITY_CONSUMING_BOOKING_STATUSES:
-            return
-
-        availability = AvailabilityStatus(str(option["availability_status"]))
-        if availability in BOOKABLE_AVAILABILITY_STATUSES:
-            return
-
-        raise validation_error(
-            VALIDATION_MESSAGE,
-            [
-                {
-                    "field": "transport_id",
-                    "issue": (
-                        "transport option is not bookable while its "
-                        f"availability_status is '{availability.value}'"
-                    ),
-                },
-            ],
-        )
-
-    def _ensure_seats_available(
-        self,
-        connection: sqlite3.Connection,
-        record: dict[str, object],
-        option: dict[str, object],
-    ) -> None:
-        status = BookingStatus(str(record["booking_status"]))
-        if status not in CAPACITY_CONSUMING_BOOKING_STATUSES:
-            return
-
-        booked = connection.execute(
-            f"""
-            SELECT COALESCE(SUM(traveller_count), 0)
-            FROM transport_bookings
-            WHERE transport_id = ?
-              AND id != ?
-              AND booking_status IN ({_CAPACITY_CONSUMING_SQL})
-            """,
-            (record["transport_id"], record["id"]),
-        ).fetchone()[0]
-
-        capacity = int(option["capacity"])
-        requested = int(record["traveller_count"])
-        if booked + requested <= capacity:
-            return
-
-        raise conflict(
-            (
-                f"Transport option '{option['id']}' has "
-                f"{max(capacity - booked, 0)} seat(s) remaining."
-            ),
-            [
-                {
-                    "field": "traveller_count",
-                    "issue": (
-                        f"exceeds remaining capacity ({capacity - booked} "
-                        f"of {capacity})"
-                    ),
-                },
-            ],
-        )
-
-    def _ensure_capacity_covers_bookings(
-        self,
-        connection: sqlite3.Connection,
-        record: dict[str, object],
-    ) -> None:
-        booked = connection.execute(
-            f"""
-            SELECT COALESCE(SUM(traveller_count), 0)
-            FROM transport_bookings
-            WHERE transport_id = ?
-              AND booking_status IN ({_CAPACITY_CONSUMING_SQL})
-            """,
-            (record["id"],),
-        ).fetchone()[0]
-
-        capacity = int(record["capacity"])
-        if booked <= capacity:
-            return
-
-        raise validation_error(
-            VALIDATION_MESSAGE,
-            [
-                {
-                    "field": "capacity",
-                    "issue": (
-                        f"must be at least {booked} to cover existing bookings"
-                    ),
-                },
-            ],
-        )
 
     def _raise_integrity_error(
         self,
@@ -988,7 +607,3 @@ class DatabaseService:
     @staticmethod
     def _serialise_option(row: sqlite3.Row) -> dict[str, object]:
         return TransportOptionRecord.model_validate(dict(row)).model_dump(mode="json")
-
-    @staticmethod
-    def _serialise_booking(row: sqlite3.Row) -> dict[str, object]:
-        return TransportBookingRecord.model_validate(dict(row)).model_dump(mode="json")

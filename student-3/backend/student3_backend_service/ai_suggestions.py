@@ -44,11 +44,16 @@ def select_candidates(
     Sorted cheapest first so that when the list is truncated the traveller still
     sees the options most likely to matter.
     """
+    # A seat count of None means the itinerary service could not be reached, so
+    # the figure is unknown rather than zero. An unknown count must not empty
+    # the candidate list: the operator-declared status above still excludes
+    # anything a traveller could not take, and advice during that outage is
+    # more useful than none at all.
     usable = [
         option
         for option in options
         if option.availability_status not in UNSUITABLE_STATUSES
-        and option.seats_remaining > 0
+        and (option.seats_remaining is None or option.seats_remaining > 0)
     ]
     usable.sort(key=lambda option: (option.price, option.departure_time, option.id))
     return usable[:limit]
@@ -102,7 +107,7 @@ def build_prompt(
             {
                 "transport_id": planned.option.id,
                 "route": f"{planned.option.origin} to {planned.option.destination}",
-                "plan_state": planned.entry.booking_status.value,
+                "plan_state": planned.entry.plan_status.value,
             }
             for planned in trip_plan.planned
         ]

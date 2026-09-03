@@ -8,8 +8,8 @@ from student3_frontend_service.config import Settings as FrontendSettings
 
 SHUTTLE_ID = "transport_2027_zqn_snow_shuttle"
 FLIGHT_ID = "transport_2026_qf401_mel_syd"
+HIRE_ID = "transport_2026_europcar_gold_coast"
 TOKYO_ID = "transport_2027_jl772_syd_hnd"
-BOOKED_ENTRY = "booking_2027_queenstown_transfer"
 SYDNEY_TRIP = "trip_2026_sydney_long_weekend"
 QUEENSTOWN_TRIP = "trip_2027_queenstown_ski_escape"
 
@@ -118,9 +118,10 @@ def test_browse_lists_the_seeded_options(client: TestClient) -> None:
 def test_browse_shows_derived_duration_and_seats(client: TestClient) -> None:
     response = client.get("/")
 
-    # 35 minutes for the Queenstown shuttle, 8 of 11 seats left.
+    # 35 minutes for the Queenstown shuttle. Every seat is free: selections
+    # live in the itinerary service, and this harness starts with none.
     assert "35m" in response.text
-    assert "8 / 11" in response.text
+    assert "11 / 11" in response.text
 
 
 def test_browse_marks_a_cross_timezone_leg(client: TestClient) -> None:
@@ -187,22 +188,15 @@ def test_browse_empty_filter_result_explains_itself(client: TestClient) -> None:
 # --------------------------------------------------------------- option detail
 
 
-def test_option_detail_shows_the_plan_entries(client: TestClient) -> None:
-    response = client.get(f"/options/{FLIGHT_ID}")
-
-    assert response.status_code == 200
-    assert "Melbourne" in response.text
-    assert SYDNEY_TRIP in response.text
-    assert "In the itinerary" in response.text
-
-
 def test_option_detail_explains_availability_versus_seats(
     client: TestClient,
 ) -> None:
     response = client.get("/options/transport_2026_sq232_syd_sin")
 
     assert "Sold Out" in response.text
-    assert "252 of 253" in response.text
+    # Full on paper, every seat free in fact: the two are separate facts, which
+    # is the whole point of showing them together.
+    assert "253 of 253" in response.text
     assert "declared by the operator" in response.text
 
 
@@ -310,45 +304,6 @@ def test_update_option_redirects_back_to_the_detail(client: TestClient) -> None:
     assert "50m" in detail.text
 
 
-def test_update_option_cannot_shrink_capacity_below_the_plan(
-    client: TestClient,
-) -> None:
-    response = _post(
-        client,
-        f"/options/{SHUTTLE_ID}/edit",
-        NEW_OPTION
-        | {
-            "type": "transfer",
-            "provider": "Queenstown Snow Shuttle",
-            "origin": "Queenstown Airport",
-            "destination": "Queenstown Town Centre",
-            "departure_time": "2027-07-10T14:20",
-            "arrival_time": "2027-07-10T14:55",
-            "price": "28.00",
-            "capacity": "2",
-        },
-    )
-
-    assert response.status_code == 200
-    assert "to cover existing bookings" in response.text
-
-
-def test_delete_confirmation_warns_when_trips_still_plan_it(
-    client: TestClient,
-) -> None:
-    response = client.get(f"/options/{FLIGHT_ID}/delete")
-
-    assert response.status_code == 200
-    assert "1 trip(s) still plan this transport" in response.text
-
-
-def test_delete_blocked_option_replays_the_conflict(client: TestClient) -> None:
-    response = _post(client, f"/options/{FLIGHT_ID}/delete", {})
-
-    assert response.status_code == 200
-    assert "CONFLICT" in response.text
-
-
 def test_delete_unused_option_returns_to_browse(client: TestClient) -> None:
     created = _post(client, "/options", NEW_OPTION | {"id": "transport_ui_disposable"})
     assert created.status_code == 303
@@ -409,152 +364,43 @@ def test_compare_keeps_checkboxes_ticked(client: TestClient) -> None:
 # ---------------------------------------------------------------- plan entries
 
 
-def test_trip_transport_shows_the_composed_plan(client: TestClient) -> None:
+def test_trip_transport_shows_the_composed_plan(
+    client: TestClient,
+    itinerary: Any,
+) -> None:
+    """The trip page joins the itinerary's selections to this service's options.
+
+    Seeded through the itinerary stub rather than a local table, because that
+    is where a selection now lives.
+    """
+    itinerary.pin(SYDNEY_TRIP, FLIGHT_ID, travellers=2)
+
     response = client.get(f"/trips/{SYDNEY_TRIP}/transport")
 
     assert response.status_code == 200
     assert f"Transport for {SYDNEY_TRIP}" in response.text
-    assert "$789.00" in response.text
-    assert "In the itinerary" in response.text
+    assert "Sydney" in response.text
+    assert "Shortlisted" in response.text
 
 
-def test_trip_transport_is_empty_for_an_unplanned_trip(client: TestClient) -> None:
-    response = client.get("/trips/trip_2030_unplanned_trip/transport")
+def test_trip_transport_is_empty_for_a_trip_with_no_selections(
+    client: TestClient,
+) -> None:
+    response = client.get(f"/trips/{SYDNEY_TRIP}/transport")
 
     assert response.status_code == 200
     assert "No transport planned for this trip yet" in response.text
 
 
-def test_new_entry_form_prefills_from_the_query(client: TestClient) -> None:
-    response = client.get("/plan/new", params={"transport_id": SHUTTLE_ID})
+def test_an_unknown_trip_reports_itself(client: TestClient) -> None:
+    """The itinerary service owns trips, so an unknown one is its 404.
 
-    assert response.status_code == 200
-    assert f'value="{SHUTTLE_ID}"' in response.text
-    assert "No reservation is made" in response.text
+    Worth pinning: while the selections lived here, any identifier returned an
+    empty plan, which quietly implied a trip existed when it did not.
+    """
+    response = client.get("/trips/trip_2030_unplanned_trip/transport")
 
-
-def test_create_entry_redirects_to_the_trip_plan(client: TestClient) -> None:
-    response = _post(client, "/plan", NEW_ENTRY)
-
-    assert response.status_code == 303
-    assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"
-
-    plan = client.get(f"/trips/{QUEENSTOWN_TRIP}/transport")
-    # 28.00 x 2 derived by the database, plus the seeded 3-traveller entry.
-    assert "$56.00" in plan.text
-
-
-def test_create_entry_replays_a_capacity_conflict(client: TestClient) -> None:
-    response = _post(
-        client,
-        "/plan",
-        NEW_ENTRY | {"traveller_count": "9", "booking_status": "confirmed"},
-    )
-
-    assert response.status_code == 200
-    assert "exceeds remaining capacity" in response.text
-
-
-def test_create_entry_replays_a_late_booking_date(client: TestClient) -> None:
-    response = _post(client, "/plan", NEW_ENTRY | {"booking_date": "2027-07-11"})
-
-    assert response.status_code == 200
-    assert "must be on or before the transport departure date" in response.text
-
-
-def test_create_entry_rejects_a_sold_out_option(client: TestClient) -> None:
-    response = _post(
-        client,
-        "/plan",
-        NEW_ENTRY
-        | {
-            "trip_id": "trip_2026_singapore_stopover",
-            "transport_id": "transport_2026_sq232_syd_sin",
-            "booking_date": "2026-08-01",
-        },
-    )
-
-    assert response.status_code == 200
-    assert "is not bookable while its availability_status" in response.text
-
-
-def test_edit_entry_form_is_prefilled(client: TestClient) -> None:
-    response = client.get(f"/plan/{BOOKED_ENTRY}/edit")
-
-    assert response.status_code == 200
-    assert f'value="{QUEENSTOWN_TRIP}"' in response.text
-    assert 'value="3"' in response.text
-
-
-def test_update_entry_redirects_to_the_trip_plan(client: TestClient) -> None:
-    response = _post(
-        client,
-        f"/plan/{BOOKED_ENTRY}/edit",
-        {
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": "4",
-            "booking_date": "2027-05-02",
-            "estimated_cost": "",
-            "booking_status": "confirmed",
-            "notes": "",
-        },
-    )
-
-    assert response.status_code == 303
-    assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"
-
-    plan = client.get(f"/trips/{QUEENSTOWN_TRIP}/transport")
-    assert "$112.00" in plan.text
-
-
-def test_cancelling_an_entry_drops_it_from_the_total(client: TestClient) -> None:
-    before = client.get(f"/trips/{QUEENSTOWN_TRIP}/transport")
-    assert "$84.00" in before.text
-
-    response = _post(
-        client,
-        f"/plan/{BOOKED_ENTRY}/edit",
-        {
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": "3",
-            "booking_date": "2027-05-02",
-            "estimated_cost": "84.00",
-            "booking_status": "cancelled",
-            "notes": "",
-        },
-    )
-    assert response.status_code == 303
-
-    after = client.get(f"/trips/{QUEENSTOWN_TRIP}/transport")
-    assert "$0.00" in after.text
-    assert "Removed" in after.text
-
-
-def test_delete_entry_confirmation_describes_the_entry(client: TestClient) -> None:
-    response = client.get(f"/plan/{BOOKED_ENTRY}/delete")
-
-    assert response.status_code == 200
-    assert "3 traveller(s)" in response.text
-    assert "$84.00" in response.text
-
-
-def test_delete_entry_returns_to_the_trip_plan(client: TestClient) -> None:
-    response = _post(client, f"/plan/{BOOKED_ENTRY}/delete", {})
-
-    assert response.status_code == 303
-    assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"
-
-    plan = client.get(f"/trips/{QUEENSTOWN_TRIP}/transport")
-    assert "No transport planned for this trip yet" in plan.text
-
-
-def test_unknown_entry_renders_an_error_panel(client: TestClient) -> None:
-    response = client.get("/plan/booking_missing_reference/edit")
-
-    assert response.status_code == 200
-    assert "Plan entry unavailable" in response.text
+    assert "NOT_FOUND" in response.text
 
 
 # ------------------------------------------------------------------- wording
@@ -570,7 +416,7 @@ def test_no_page_promises_a_real_reservation(client: TestClient) -> None:
         "/",
         "/compare",
         "/options/new",
-        "/plan/new",
+        f"/options/{SHUTTLE_ID}",
         f"/options/{SHUTTLE_ID}",
         f"/trips/{SYDNEY_TRIP}/transport",
     ]
@@ -614,7 +460,7 @@ def test_the_shell_is_htmx_boosted(client: TestClient) -> None:
 
 
 def test_pages_share_the_navigation_shell(client: TestClient) -> None:
-    for path in ("/", "/compare", "/options/new", "/plan/new"):
+    for path in ("/", "/compare", "/options/new", f"/options/{SHUTTLE_ID}"):
         response = client.get(path)
         assert 'id="app-shell"' in response.text, path
         assert "Browse &amp; filter" in response.text, path
@@ -656,7 +502,7 @@ def test_no_screen_duplicates_the_site_header_over_htmx(
         "/",
         "/compare",
         "/options/new",
-        "/plan/new",
+        f"/options/{SHUTTLE_ID}",
         f"/options/{SHUTTLE_ID}",
         f"/trips/{SYDNEY_TRIP}/transport",
     ]
@@ -696,68 +542,6 @@ def test_compare_actions_row_has_one_cell_per_option(client: TestClient) -> None
 
 
 # --------------------------------------------------------------- input controls
-
-
-def test_trip_field_is_a_picker_when_student_1_is_reachable(
-    client_with_trips: TestClient,
-) -> None:
-    response = client_with_trips.get("/plan/new")
-
-    assert response.status_code == 200
-    assert '<select id="trip_id" name="trip_id">' in response.text
-    # Readable label, not a raw identifier.
-    assert "Sydney Long Weekend" in response.text
-    assert "Sydney, 2026-10-02 to 2026-10-05" in response.text
-    assert "Queenstown Ski Escape" in response.text
-
-
-def test_trip_picker_preselects_the_trip_from_the_query(
-    client_with_trips: TestClient,
-) -> None:
-    response = client_with_trips.get("/plan/new", params={"trip_id": SYDNEY_TRIP})
-
-    assert f'value="{SYDNEY_TRIP}" selected' in response.text
-
-
-def test_trip_field_degrades_to_text_when_student_1_is_down(
-    client: TestClient,
-) -> None:
-    """A dependency outage must not make the form unusable.
-
-    The default fixture has Student 1 unreachable, so this is the degraded path.
-    """
-    response = client.get("/plan/new")
-
-    assert response.status_code == 200
-    assert '<select id="trip_id"' not in response.text
-    assert '<input id="trip_id" name="trip_id" type="text"' in response.text
-    assert "trips service is unavailable" in response.text
-
-
-def test_transport_field_is_always_a_picker(client: TestClient) -> None:
-    """Transport options are Student 3's own data, so the picker never degrades."""
-    response = client.get("/plan/new")
-
-    assert '<select id="transport_id" name="transport_id">' in response.text
-    assert "Queenstown Airport to Queenstown Town Centre" in response.text
-    assert "Queenstown Snow Shuttle" in response.text
-
-
-def test_transport_picker_preselects_from_the_query(client: TestClient) -> None:
-    response = client.get("/plan/new", params={"transport_id": SHUTTLE_ID})
-
-    assert f'value="{SHUTTLE_ID}" selected' in response.text
-
-
-def test_plan_form_uses_native_date_and_number_controls(
-    client: TestClient,
-) -> None:
-    response = client.get("/plan/new")
-
-    assert '<input id="booking_date" name="booking_date" type="date"' in response.text
-    assert 'id="traveller_count"' in response.text
-    assert 'type="number"' in response.text
-    assert 'min="1"' in response.text
 
 
 def test_option_form_uses_datetime_and_number_controls(client: TestClient) -> None:
@@ -801,28 +585,6 @@ def test_browse_filters_use_native_controls(client: TestClient) -> None:
     assert 'id="departure_from" name="departure_from" type="datetime-local"' in (
         response.text
     )
-
-
-def test_picking_from_the_dropdowns_creates_a_plan_entry(
-    client_with_trips: TestClient,
-) -> None:
-    """End to end with picker values, which are the plain identifiers."""
-    response = _post(
-        client_with_trips,
-        "/plan",
-        {
-            "trip_id": QUEENSTOWN_TRIP,
-            "transport_id": SHUTTLE_ID,
-            "traveller_count": "2",
-            "booking_date": "2027-05-03",
-            "estimated_cost": "",
-            "booking_status": "pending",
-            "notes": "",
-        },
-    )
-
-    assert response.status_code == 303, response.text
-    assert response.headers["location"] == f"/trips/{QUEENSTOWN_TRIP}/transport"
 
 
 # ------------------------------------------------------------- AI suggestions
@@ -892,7 +654,7 @@ def test_a_suggestion_links_to_human_review_not_a_save(
     )
 
     assert "Review and add to a trip" in response.text
-    assert "/plan/new?transport_id=transport_2027_adl_metro_bus" in response.text
+    assert "/options/transport_2027_adl_metro_bus" in response.text
 
 
 def test_asking_does_not_save_anything(ai_client: TestClient) -> None:
@@ -988,3 +750,113 @@ def test_the_ai_timeout_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS", "45.5")
 
     assert FrontendSettings.from_env().ai_timeout_seconds == 45.5
+
+
+# ------------------------------------------------------- itinerary tick-list
+
+
+def test_the_option_page_offers_every_trip(client: TestClient) -> None:
+    response = client.get(f"/options/{FLIGHT_ID}")
+    flat = " ".join(response.text.split())
+
+    assert "Your itineraries" in flat
+    assert flat.count("Add to this trip") == 2
+    assert 'name="traveller_count"' in response.text
+
+
+def test_the_page_says_where_the_choice_is_kept(client: TestClient) -> None:
+    """A traveller should be able to tell this is not a reservation."""
+    flat = " ".join(client.get(f"/options/{FLIGHT_ID}").text.split())
+
+    assert "Your itinerary keeps the choice" in flat
+    assert "nothing is reserved and no payment is taken" in flat
+
+
+def test_ticking_a_trip_shows_it_as_selected(client: TestClient) -> None:
+    response = _post(
+        client,
+        f"/options/{FLIGHT_ID}/itineraries",
+        {"trip_id": SYDNEY_TRIP, "traveller_count": "2"},
+    )
+    flat = " ".join(response.text.split())
+
+    assert response.status_code == 200, response.text
+    assert "Remove from this trip" in flat
+    assert "$378.00" in flat
+    assert "Shortlisted" in flat
+
+
+def test_ticking_reduces_the_seats_shown(client: TestClient) -> None:
+    before = " ".join(client.get(f"/options/{FLIGHT_ID}").text.split())
+    assert "180 of 180 seats free" in before
+
+    _post(
+        client,
+        f"/options/{FLIGHT_ID}/itineraries",
+        {"trip_id": SYDNEY_TRIP, "traveller_count": "3"},
+    )
+
+    after = " ".join(client.get(f"/options/{FLIGHT_ID}").text.split())
+    assert "177 of 180 seats free" in after
+
+
+def test_a_refusal_renders_on_the_page_rather_than_replacing_it(
+    client: TestClient,
+) -> None:
+    """A party too large for the vehicle is a message, not a lost page."""
+    response = _post(
+        client,
+        f"/options/{HIRE_ID}/itineraries",
+        {"trip_id": SYDNEY_TRIP, "traveller_count": "99"},
+    )
+    flat = " ".join(response.text.split())
+
+    assert response.status_code == 200
+    assert "CONFLICT" in flat
+    assert "Your itineraries" in flat
+    assert "Add to this trip" in flat
+
+
+def test_a_per_vehicle_option_says_so(client: TestClient) -> None:
+    """Otherwise the total reads as an arithmetic mistake."""
+    response = _post(
+        client,
+        f"/options/{HIRE_ID}/itineraries",
+        {"trip_id": SYDNEY_TRIP, "traveller_count": "4"},
+    )
+    flat = " ".join(response.text.split())
+
+    assert "$612.00" in flat
+    assert "priced per vehicle" in flat
+
+
+def test_unticking_puts_the_trip_back(client: TestClient) -> None:
+    _post(
+        client,
+        f"/options/{FLIGHT_ID}/itineraries",
+        {"trip_id": SYDNEY_TRIP, "traveller_count": "2"},
+    )
+
+    response = _post(
+        client,
+        f"/options/{FLIGHT_ID}/itineraries/{SYDNEY_TRIP}/remove",
+        {},
+    )
+    flat = " ".join(response.text.split())
+
+    assert response.status_code == 200
+    assert "Add to this trip" in flat
+    assert "Remove from this trip" not in flat
+
+
+def test_the_option_page_survives_an_itinerary_outage(
+    client_without_itinerary: TestClient,
+) -> None:
+    """The option is this page's subject; the trip list is a convenience."""
+    response = client_without_itinerary.get(f"/options/{FLIGHT_ID}")
+    flat = " ".join(response.text.split())
+
+    assert response.status_code == 200
+    assert "Melbourne" in flat
+    assert "cannot be reached right now" in flat
+    assert "Add to this trip" not in flat

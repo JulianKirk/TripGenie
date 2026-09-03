@@ -230,3 +230,27 @@ td.actions-cell { display: table-cell; }
 .ai-draft__reason { margin: 0 0 0.4rem; }
 .ai-draft__considerations { margin: 0.2rem 0 0.8rem; padding-left: 1.2rem; }
 .ai-draft h4 { margin: 1rem 0 0.2rem; font-size: 0.9rem; }
+
+/* The itinerary tick-list on an option's page. One row per trip, so choosing
+   is recognition rather than recalling an identifier. */
+.itinerary-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.itinerary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.itinerary-row.is-selected { border-color: var(--accent); background: #eef5fa; }
+.itinerary-row__main { min-width: 0; }
+.itinerary-row__name { margin: 0 0 0.15rem; font-weight: 600; }
+.itinerary-row__name a { text-decoration: none; }
+.itinerary-row__meta { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
+.itinerary-row__action form { display: flex; gap: 0.5rem; align-items: flex-end; margin: 0; }
+.itinerary-add__travellers { display: grid; gap: 0.15rem; font-size: 0.75rem; color: var(--ink-muted); }
+.itinerary-add__travellers input { width: 5rem; padding: 0.35rem 0.4rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.button--link { border: 0; background: none; color: var(--accent); padding: 0; cursor: pointer; text-decoration: underline; }

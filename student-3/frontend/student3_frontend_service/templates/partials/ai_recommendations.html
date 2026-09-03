@@ -71,7 +71,7 @@
               <p class="actions">
                 <a
                   class="button button--primary"
-                  href="{{ request.url_for('new_entry_form') }}?transport_id={{ item.option.id }}{% if form.get('trip_id') %}&amp;trip_id={{ form.get('trip_id') }}{% endif %}"
+                  href="{{ request.url_for('view_option', transport_id=item.option.id) }}"
                 >Review and add to a trip</a>
               </p>
             </li>

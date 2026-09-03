@@ -62,6 +62,7 @@ services:
     environment:
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
+      STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
     ports:
       - "8001:8001"
     depends_on:
@@ -239,6 +240,14 @@ services:
       # Started, not healthy: AI suggestions are advisory, so transport
       # browsing and planning must keep working when AI-Mode does not.
       ai-mode:
+        condition: service_started
+      # The itinerary service holds which transport belongs to which trip, so
+      # every selection and every seat count goes through it. Declared for the
+      # same reason student-2-backend declares it: this service reads Student
+      # 1's API, and bringing it up alone would leave those routes answering
+      # 503. Started rather than healthy, so browsing and comparing still work
+      # when Student 1 is unwell.
+      student-1-backend:
         condition: service_started
     healthcheck:
       test:

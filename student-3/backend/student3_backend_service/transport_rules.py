@@ -4,9 +4,12 @@ from .errors import VALIDATION_ERROR_MESSAGE, ApiError, validation_error
 from .models import (
     ACTIVE_PLAN_STATUSES,
     MAX_COMPARE_SELECTION,
+    AvailabilityStatus,
+    PlannedTransport,
+    PricingBasis,
     TransportOptionRecord,
-    TransportPlanEntryRecord,
     TransportType,
+    TripTransportPin,
 )
 
 # A comparison table stops being readable well before this, and an unbounded
@@ -93,26 +96,43 @@ def ensure_route_is_a_journey(
         )
 
 
-def is_active_plan_entry(entry: TransportPlanEntryRecord) -> bool:
-    return entry.booking_status in ACTIVE_PLAN_STATUSES
+# An operator-declared status a traveller cannot act on. Kept separate from
+# the seat count, which is a different fact.
+UNSELECTABLE_STATUSES = frozenset(
+    {AvailabilityStatus.SOLD_OUT, AvailabilityStatus.CANCELLED},
+)
 
 
-def active_plan_cost_total(entries: list[TransportPlanEntryRecord]) -> float:
-    """Estimated cost of the entries that still count toward a trip.
+def is_active_selection(pin: TripTransportPin) -> bool:
+    """Whether a selection still counts toward a trip's cost and seats."""
+    return pin.plan_status in ACTIVE_PLAN_STATUSES
 
-    Summed in whole cents so a long itinerary cannot accumulate floating point
-    drift, which matters because Student 5's budget feature consumes this.
+
+def selection_cost(option: TransportOptionRecord, traveller_count: int) -> float:
+    """What one selection contributes, in the option's own pricing terms.
+
+    Computed in whole cents so a long itinerary cannot accumulate floating
+    point drift, which matters because Student 5's budget feature consumes the
+    total. Whole-vehicle hire is not multiplied by the party size -- doing so
+    would overstate a car rental by the number of travellers.
     """
+    if option.pricing_basis is PricingBasis.PER_VEHICLE:
+        return round(option.price * 100) / 100
+    return round(option.price * 100) * traveller_count / 100
+
+
+def active_plan_cost_total(planned: list[PlannedTransport]) -> float:
+    """Estimated cost of the selections that still count toward a trip."""
     cents = sum(
-        round(entry.estimated_cost * 100)
-        for entry in entries
-        if is_active_plan_entry(entry)
+        round(item.estimated_cost * 100)
+        for item in planned
+        if is_active_selection(item.entry)
     )
     return cents / 100
 
 
-def count_active_plan_entries(entries: list[TransportPlanEntryRecord]) -> int:
-    return sum(1 for entry in entries if is_active_plan_entry(entry))
+def count_active_plan_entries(planned: list[PlannedTransport]) -> int:
+    return sum(1 for item in planned if is_active_selection(item.entry))
 
 
 def sort_options_for_comparison(
@@ -130,3 +150,57 @@ def missing_trip_error(trip_id: str) -> ApiError:
         VALIDATION_ERROR_MESSAGE,
         [{"field": "trip_id", "issue": f"trip '{trip_id}' does not exist"}],
     )
+
+
+def ensure_option_is_selectable(option: TransportOptionRecord) -> None:
+    """Refuse to attach an option a traveller could not actually take.
+
+    Availability is declared by the operator and is not derived from the seat
+    count, so this is a separate check from capacity below.
+    """
+    if option.availability_status in UNSELECTABLE_STATUSES:
+        raise ApiError(
+            status_code=409,
+            code="CONFLICT",
+            message="That transport option cannot be added to a trip.",
+            details=[
+                {
+                    "field": "transport_id",
+                    "issue": (
+                        f"option is {option.availability_status.value}"
+                    ),
+                },
+            ],
+        )
+
+
+def ensure_seats_available(
+    option: TransportOptionRecord,
+    already_taken: int,
+    requested: int,
+) -> None:
+    """Refuse a selection that would oversubscribe the service.
+
+    Checked when a selection is written rather than derived on every read: the
+    figures live in the itinerary service, so one lookup on a write is cheap
+    where a lookup per option per page is not.
+
+    This guards demo-data integrity. It is not a live inventory guarantee and
+    must never be presented to a traveller as one.
+    """
+    remaining = option.capacity - already_taken
+    if requested > remaining:
+        raise ApiError(
+            status_code=409,
+            code="CONFLICT",
+            message="That transport option does not have room for the party.",
+            details=[
+                {
+                    "field": "traveller_count",
+                    "issue": (
+                        f"only {max(remaining, 0)} of {option.capacity} "
+                        f"seat(s) remain"
+                    ),
+                },
+            ],
+        )

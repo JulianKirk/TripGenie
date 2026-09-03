@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 import pytest
 from conftest import (
+    FakeItineraryApi,
     make_ai_error_transport,
     make_ai_transport,
     make_ai_unreachable_transport,
@@ -24,7 +25,6 @@ from student3_backend_service.app import create_app
 from student3_backend_service.config import Settings
 
 RECOMMEND_PATH = "/api/transport-options/recommendations"
-ENTRIES_PATH = "/api/transport-bookings"
 
 FLIGHT_ID = "transport_2026_qf401_mel_syd"
 SOLD_OUT_ID = "transport_2026_sq232_syd_sin"
@@ -66,6 +66,7 @@ def ai_reply(draft: dict[str, Any], *, done: bool = True) -> httpx.Response:
 def build_client(
     database_transport: httpx.MockTransport,
     ai_transport: httpx.BaseTransport | None,
+    itinerary_transport: httpx.BaseTransport | None = None,
     **overrides: Any,
 ) -> Iterator[TestClient]:
     """A backend wired to a stubbed AI-Mode.
@@ -82,6 +83,7 @@ def build_client(
         settings,
         transport=database_transport,
         ai_transport=ai_transport,
+        trips_transport=itinerary_transport,
     )
     with TestClient(app) as client:
         yield client
@@ -91,6 +93,7 @@ def build_client(
 def capturing_client(
     database_transport: httpx.MockTransport,
     draft: dict[str, Any],
+    itinerary_transport: httpx.BaseTransport | None = None,
     **overrides: Any,
 ) -> Iterator[tuple[TestClient, dict[str, Any]]]:
     """A client that records the request body sent to AI-Mode."""
@@ -103,14 +106,22 @@ def capturing_client(
     with build_client(
         database_transport,
         httpx.MockTransport(handler),
+        itinerary_transport,
         **overrides,
     ) as client:
         yield client, captured
 
 
 @pytest.fixture
-def ai_client(database_transport: httpx.MockTransport) -> Iterator[TestClient]:
-    with build_client(database_transport, make_ai_transport(GOOD_DRAFT)) as client:
+def ai_client(
+    database_transport: httpx.MockTransport,
+    itinerary_transport: httpx.MockTransport,
+) -> Iterator[TestClient]:
+    with build_client(
+        database_transport,
+        make_ai_transport(GOOD_DRAFT),
+        itinerary_transport,
+    ) as client:
         yield client
 
 
@@ -168,13 +179,20 @@ def test_recommendation_resolves_ids_to_real_records(ai_client: TestClient) -> N
 # ------------------------------------------------------------------ no writes
 
 
-def test_recommending_does_not_create_a_plan_entry(ai_client: TestClient) -> None:
-    """Nothing on the AI path may persist. The traveller saves, not the model."""
-    before = len(_data(ai_client.get(ENTRIES_PATH)))
+def test_recommending_does_not_select_anything(
+    ai_client: TestClient,
+    itinerary_api: FakeItineraryApi,
+) -> None:
+    """Nothing on the AI path may persist. The traveller chooses, not the model.
+
+    Asserted against the itinerary service's own state, because that is where a
+    selection would have to land for it to exist at all.
+    """
+    assert itinerary_api.pins == {}
 
     assert ai_client.post(RECOMMEND_PATH, json=ASK).status_code == 200
 
-    assert len(_data(ai_client.get(ENTRIES_PATH))) == before
+    assert itinerary_api.pins == {}
 
 
 # ------------------------------------------------------------------ grounding
@@ -292,17 +310,29 @@ def test_the_prompt_states_the_currency(
     assert "Currency: AUD" in captured["prompt"]
 
 
-def test_a_trip_adds_its_existing_plan_to_the_context(
+def test_a_trip_adds_its_existing_selections_to_the_context(
     database_transport: httpx.MockTransport,
+    itinerary_api: FakeItineraryApi,
+    itinerary_transport: httpx.MockTransport,
 ) -> None:
-    with capturing_client(database_transport, GOOD_DRAFT) as (client, captured):
-        response = client.post(
-            RECOMMEND_PATH,
-            json=ASK | {"trip_id": "trip_2026_sydney_long_weekend"},
-        )
+    """What is already on the trip is context the model should see.
+
+    The selections come from the itinerary service now, so this also pins the
+    read path: a prompt built without that call would silently lose the
+    traveller's existing plan.
+    """
+    trip_id = "trip_2026_sydney_long_weekend"
+    itinerary_api.pin(trip_id, FLIGHT_ID, travellers=2)
+
+    with capturing_client(
+        database_transport,
+        GOOD_DRAFT,
+        itinerary_transport,
+    ) as (client, captured):
+        response = client.post(RECOMMEND_PATH, json=ASK | {"trip_id": trip_id})
         assert response.status_code == 200, response.text
 
-    assert "trip_2026_sydney_long_weekend" in captured["prompt"]
+    assert trip_id in captured["prompt"]
     assert "already_planned" in captured["prompt"]
     assert FLIGHT_ID in captured["prompt"]
 

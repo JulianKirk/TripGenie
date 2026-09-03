@@ -29,43 +29,82 @@
   </p>
 
   <div class="panel__header panel__header--compact">
-    <h3>Trips planning this transport</h3>
-    <a class="button button--primary" href="{{ request.url_for('new_entry_form') }}?transport_id={{ option.id }}">Add to a trip</a>
+    <h3>Your itineraries</h3>
+    {% if selections and selections.seats_remaining is not none %}
+      <span class="tag">{{ selections.seats_remaining }} of {{ option.capacity }} seats free</span>
+    {% endif %}
   </div>
 
-  {% if entries %}
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Trip</th>
-            <th scope="col">Travellers</th>
-            <th scope="col">Added</th>
-            <th scope="col">Estimated cost</th>
-            <th scope="col">Plan state</th>
-            <th scope="col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for entry in entries %}
-            <tr>
-              <th scope="row"><a href="{{ request.url_for('trip_transport', trip_id=entry.trip_id) }}">{{ entry.trip_id }}</a></th>
-              <td>{{ entry.traveller_count }}</td>
-              <td>{{ entry.booking_date }}</td>
-              <td>${{ '%.2f' | format(entry.estimated_cost) }}</td>
-              <td><span class="status status--{{ entry.booking_status.value }}">{{ entry.status_label }}</span></td>
-              <td>
-                <div class="actions-cell">
-                <a href="{{ request.url_for('edit_entry_form', booking_id=entry.id) }}">Edit</a>
-                <a href="{{ request.url_for('delete_entry_confirmation', booking_id=entry.id) }}">Remove</a>
-              </div>
-              </td>
-            </tr>
+  <p class="helper-copy">
+    Tick a trip to add this transport to it. Your itinerary keeps the choice
+    &mdash; nothing is reserved and no payment is taken.
+  </p>
+
+  {% if selection_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ selection_error.code }}</strong></p>
+      <p>{{ selection_error.message }}</p>
+      {% if selection_error.details %}
+        <ul class="field-errors">
+          {% for detail in selection_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
           {% endfor %}
-        </tbody>
-      </table>
+        </ul>
+      {% endif %}
     </div>
+  {% endif %}
+
+  {% if selections is none %}
+    <p class="empty-copy">
+      Your itineraries cannot be reached right now, so this option cannot be
+      added to a trip. Everything else on this page is unaffected.
+    </p>
+  {% elif not selections.itineraries %}
+    <p class="empty-copy">
+      You have no trips yet. Create one in Trips &amp; Itineraries, then come
+      back to add transport to it.
+    </p>
   {% else %}
-    <p class="empty-copy">No trip plans reference this transport yet.</p>
+    <ul class="itinerary-list">
+      {% for row in selections.itineraries %}
+        <li class="itinerary-row{% if row.selected %} is-selected{% endif %}">
+          <div class="itinerary-row__main">
+            <p class="itinerary-row__name">
+              <a href="{{ request.url_for('trip_transport', trip_id=row.trip_id) }}">{{ row.label }}</a>
+              {% if row.selected %}
+                <span class="status status--{{ row.plan_status.value }}">{{ row.status_label }}</span>
+              {% endif %}
+            </p>
+            <p class="itinerary-row__meta">
+              {{ row.dates_label }}
+              {% if row.selected %}
+                &middot; {{ row.traveller_count }} traveller(s)
+                &middot; ${{ '%.2f' | format(row.estimated_cost) }} {{ selections.currency }}
+                {% if option.pricing_basis.value == 'per_vehicle' %}
+                  <span class="footnote">(priced per vehicle)</span>
+                {% endif %}
+              {% endif %}
+            </p>
+          </div>
+
+          <div class="itinerary-row__action">
+            {% if row.selected %}
+              <form method="post" action="{{ request.url_for('remove_from_itinerary', transport_id=option.id, trip_id=row.trip_id) }}">
+                <button class="button" type="submit">Remove from this trip</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ request.url_for('add_to_itinerary', transport_id=option.id) }}" class="itinerary-add">
+                <input type="hidden" name="trip_id" value="{{ row.trip_id }}">
+                <label class="itinerary-add__travellers">
+                  <span>Travellers</span>
+                  <input type="number" name="traveller_count" value="1" min="1" max="{{ option.capacity }}" step="1">
+                </label>
+                <button class="button button--primary" type="submit">Add to this trip</button>
+              </form>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
   {% endif %}
 </section>

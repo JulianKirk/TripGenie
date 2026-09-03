@@ -52,11 +52,16 @@ def test_health_reports_service_metadata(client: TestClient) -> None:
 
 
 def test_seed_data_meets_minimum_record_requirement(client: TestClient) -> None:
-    options = _data(client.get(OPTIONS_PATH))
-    bookings = _data(client.get(BOOKINGS_PATH))
+    """The specification asks for at least ten records per table.
+
+    Only the catalogue is checked now: transport selections moved to the
+    itinerary service, so this database has one domain table. `schema_metadata`
+    is internal bookkeeping rather than domain data and is excluded
+    deliberately, which the Release 0 evidence records.
+    """
+    options = client.get("/internal/transport-options").json()["data"]
 
     assert len(options) >= 10
-    assert len(bookings) >= 10
 
 
 def test_options_are_ordered_by_departure_then_price(client: TestClient) -> None:
@@ -264,23 +269,6 @@ def test_patch_option_rejects_unknown_field(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_capacity_cannot_drop_below_existing_bookings(client: TestClient) -> None:
-    response = client.patch(
-        f"{OPTIONS_PATH}/transport_2027_zqn_snow_shuttle",
-        json={"capacity": 2},
-    )
-
-    assert response.status_code == 422
-    assert _detail_fields(response) == ["capacity"]
-
-
-def test_delete_option_with_bookings_conflicts(client: TestClient) -> None:
-    response = client.delete(f"{OPTIONS_PATH}/transport_2026_qf401_mel_syd")
-
-    assert response.status_code == 409
-    assert _error(response)["code"] == "CONFLICT"
-
-
 def test_delete_option_without_bookings_succeeds(client: TestClient) -> None:
     created = _create_option(client)
     response = client.delete(f"{OPTIONS_PATH}/{created['id']}")
@@ -290,266 +278,12 @@ def test_delete_option_without_bookings_succeeds(client: TestClient) -> None:
     assert client.get(f"{OPTIONS_PATH}/{created['id']}").status_code == 404
 
 
-def test_list_bookings_for_option(client: TestClient) -> None:
-    bookings = _data(
-        client.get(f"{OPTIONS_PATH}/transport_2026_qf401_mel_syd/bookings"),
-    )
-
-    assert [booking["id"] for booking in bookings] == [
-        "booking_2026_sydney_outbound_flight",
-    ]
-
-
 def test_list_bookings_for_unknown_option_returns_not_found(
     client: TestClient,
 ) -> None:
     response = client.get(f"{OPTIONS_PATH}/transport_missing_service/bookings")
 
     assert response.status_code == 404
-
-
-def test_filter_bookings_by_trip_and_status(client: TestClient) -> None:
-    bookings = _data(
-        client.get(
-            BOOKINGS_PATH,
-            params={
-                "trip_id": "trip_2026_melbourne_food_trail",
-                "booking_status": "pending",
-            },
-        ),
-    )
-
-    assert [booking["id"] for booking in bookings] == [
-        "booking_2026_melbourne_geelong_train",
-    ]
-
-
-def test_malformed_trip_id_filter_is_rejected(client: TestClient) -> None:
-    response = client.get(BOOKINGS_PATH, params={"trip_id": "melbourne"})
-
-    assert response.status_code == 422
-    assert _detail_fields(response) == ["trip_id"]
-
-
-def test_create_booking_derives_estimated_cost(client: TestClient) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2027_queenstown_ski_escape",
-            "transport_id": "transport_2027_zqn_snow_shuttle",
-            "traveller_count": 2,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 201, response.text
-    booking = _data(response)
-    assert booking["id"].startswith("booking_")
-    assert booking["estimated_cost"] == 56.00
-
-
-def test_create_booking_accepts_explicit_estimated_cost(client: TestClient) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2027_queenstown_ski_escape",
-            "transport_id": "transport_2027_zqn_snow_shuttle",
-            "traveller_count": 2,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-            "estimated_cost": 40.00,
-        },
-    )
-
-    assert response.status_code == 201
-    assert _data(response)["estimated_cost"] == 40.00
-
-
-def test_create_booking_for_unknown_option_returns_not_found(
-    client: TestClient,
-) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2027_queenstown_ski_escape",
-            "transport_id": "transport_missing_service",
-            "traveller_count": 1,
-            "booking_date": "2027-05-03",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 404
-    assert _error(response)["code"] == "NOT_FOUND"
-
-
-def test_booking_after_departure_is_rejected(client: TestClient) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2027_queenstown_ski_escape",
-            "transport_id": "transport_2027_zqn_snow_shuttle",
-            "traveller_count": 1,
-            "booking_date": "2027-07-11",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 422
-    assert _detail_fields(response) == ["booking_date"]
-
-
-def test_booking_on_sold_out_option_is_rejected(client: TestClient) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2026_singapore_stopover",
-            "transport_id": "transport_2026_sq232_syd_sin",
-            "traveller_count": 1,
-            "booking_date": "2026-08-01",
-            "booking_status": "pending",
-        },
-    )
-
-    assert response.status_code == 422
-    assert _detail_fields(response) == ["transport_id"]
-
-
-def test_cancelled_booking_on_unavailable_option_is_allowed(
-    client: TestClient,
-) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2026_singapore_stopover",
-            "transport_id": "transport_2026_sq232_syd_sin",
-            "traveller_count": 1,
-            "booking_date": "2026-08-01",
-            "booking_status": "cancelled",
-        },
-    )
-
-    assert response.status_code == 201
-
-
-def test_booking_beyond_remaining_capacity_conflicts(client: TestClient) -> None:
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2027_queenstown_ski_escape",
-            "transport_id": "transport_2027_zqn_snow_shuttle",
-            "traveller_count": 9,
-            "booking_date": "2027-05-03",
-            "booking_status": "confirmed",
-        },
-    )
-
-    assert response.status_code == 409
-    assert _error(response)["code"] == "CONFLICT"
-    assert _detail_fields(response) == ["traveller_count"]
-
-
-def test_patch_booking_recomputes_estimated_cost(client: TestClient) -> None:
-    response = client.patch(
-        f"{BOOKINGS_PATH}/booking_2027_queenstown_transfer",
-        json={"traveller_count": 4},
-    )
-
-    assert response.status_code == 200
-    booking = _data(response)
-    assert booking["traveller_count"] == 4
-    assert booking["estimated_cost"] == 112.00
-
-
-def test_patch_booking_keeps_explicit_estimated_cost(client: TestClient) -> None:
-    response = client.patch(
-        f"{BOOKINGS_PATH}/booking_2027_queenstown_transfer",
-        json={"traveller_count": 4, "estimated_cost": 99.00},
-    )
-
-    assert response.status_code == 200
-    assert _data(response)["estimated_cost"] == 99.00
-
-
-def test_cancelling_a_booking_frees_capacity(client: TestClient) -> None:
-    cancel = client.patch(
-        f"{BOOKINGS_PATH}/booking_2026_gold_coast_car_hire",
-        json={"booking_status": "cancelled"},
-    )
-    assert cancel.status_code == 200
-
-    response = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2026_gold_coast_family_break",
-            "transport_id": "transport_2026_europcar_gold_coast",
-            "traveller_count": 5,
-            "booking_date": "2026-10-01",
-            "booking_status": "confirmed",
-            "estimated_cost": 612.00,
-        },
-    )
-
-    assert response.status_code == 201, response.text
-
-
-def test_delete_booking_then_option_succeeds(client: TestClient) -> None:
-    option_id = "transport_2027_adl_metro_bus"
-    assert (
-        client.delete(f"{BOOKINGS_PATH}/booking_2027_adelaide_airport_bus").status_code
-        == 200
-    )
-
-    response = client.delete(f"{OPTIONS_PATH}/{option_id}")
-
-    assert response.status_code == 200
-    assert _data(response)["deleted"] is True
-
-
-def test_unknown_booking_returns_not_found(client: TestClient) -> None:
-    response = client.get(f"{BOOKINGS_PATH}/booking_missing_reference")
-
-    assert response.status_code == 404
-    assert _error(response)["code"] == "NOT_FOUND"
-
-
-def test_option_responses_expose_seats_remaining(client: TestClient) -> None:
-    option = _data(client.get(f"{OPTIONS_PATH}/transport_2027_zqn_snow_shuttle"))
-
-    assert option["capacity"] == 11
-    assert option["seats_remaining"] == 8
-
-
-def test_seats_remaining_updates_after_a_booking(client: TestClient) -> None:
-    created = _create_option(client, capacity=4)
-    assert _data(client.get(f"{OPTIONS_PATH}/{created['id']}"))["seats_remaining"] == 4
-
-    booking = client.post(
-        BOOKINGS_PATH,
-        json={
-            "trip_id": "trip_2026_sydney_long_weekend",
-            "transport_id": created["id"],
-            "traveller_count": 3,
-            "booking_date": "2026-09-01",
-            "booking_status": "confirmed",
-        },
-    )
-    assert booking.status_code == 201, booking.text
-
-    refreshed = _data(client.get(f"{OPTIONS_PATH}/{created['id']}"))
-    assert refreshed["seats_remaining"] == 1
-
-
-def test_sold_out_seed_option_reports_its_real_seat_count(
-    client: TestClient,
-) -> None:
-    option = _data(client.get(f"{OPTIONS_PATH}/transport_2026_sq232_syd_sin"))
-
-    # availability_status is operator-declared; seats_remaining is the truth,
-    # so a consumer can always see the two side by side.
-    assert option["availability_status"] == "sold_out"
-    assert option["seats_remaining"] == 252
 
 
 def test_create_option_accepts_utc_offsets(client: TestClient) -> None:
