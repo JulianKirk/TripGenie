@@ -69,12 +69,19 @@ def observe():
         try:
             response, elapsed = measure(check)
             missing = [t for t in check.get("contains", []) if t not in response.text]
-            if response.status_code != expected:
-                outcome = f"FAIL: HTTP {response.status_code}, expected {expected}"
+            alternatives = check.get("contains_any", [])
+            expected_statuses = expected if isinstance(expected, list) else [expected]
+            if response.status_code not in expected_statuses:
+                outcome = (
+                    f"FAIL: HTTP {response.status_code}, expected "
+                    f"{expected_statuses}"
+                )
             elif not response.text.strip():
                 outcome = "FAIL: empty body"
             elif missing:
                 outcome = f"FAIL: body missing {missing}"
+            elif alternatives and not any(t in response.text for t in alternatives):
+                outcome = f"FAIL: body missing any of {alternatives}"
             else:
                 outcome = f"OK: HTTP {response.status_code} in {elapsed:.0f}ms"
         except Exception as exc:  # noqa: BLE001 - a broken check is evidence, not a crash

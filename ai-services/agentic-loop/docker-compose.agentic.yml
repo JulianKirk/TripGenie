@@ -9,6 +9,10 @@ services:
     ports:
       - "8003:8003"
 
+  student-5-backend:
+    ports:
+      - "18005:8005"
+
   # The ask box, switched off for the loop. AI-Mode reports "degraded" when the
   # model it is configured for is not pulled, student 2's /health passes that
   # through, and the runner's Ollama volume is empty -- so the gate that waits

@@ -1,7 +1,17 @@
 {
-  "goal": "Validate the student 5 budget and expense service with a local multi-agent workflow",
-  "_note": "The workflow starts the Student 5 frontend, backend, and database through the student-5 grouping target.",
+  "goal": "Validate Student 5 budget and expense frontend, API reads, calculations, validation, and AI behavior",
+  "_note": "All checks are read-only. AI passes with structured advice or an explicit recognized dependency state.",
   "checks": [
-    {"label": "GET / (budget frontend)", "path": "${SERVICE_URL}/", "contains": ["<html", "Budget"]}
+    {"label": "GET frontend /health", "path": "${SERVICE_URL}/health", "contains": ["healthy", "student-5-frontend"]},
+    {"label": "GET frontend /ready", "path": "${SERVICE_URL}/ready", "contains": ["ready", "student-5-frontend"]},
+    {"label": "GET frontend /", "path": "${SERVICE_URL}/", "contains": ["<html", "Budget &amp; Expense Management", "http://localhost:8080/theme.css"]},
+    {"label": "GET backend /health", "path": "${BACKEND_URL}/health", "contains": ["healthy", "database"]},
+    {"label": "GET backend /ready", "path": "${BACKEND_URL}/ready", "contains": ["ready", "database"]},
+    {"label": "GET /api/v1/budgets", "path": "${BACKEND_URL}/api/v1/budgets", "contains": ["trip_student5_demo_01", "total_budget"], "nfr_ms": 500},
+    {"label": "GET /api/v1/expenses", "path": "${BACKEND_URL}/api/v1/expenses", "contains": ["Demonstration expense 01", "amount"], "nfr_ms": 500},
+    {"label": "GET /api/v1/expenses filtered", "path": "${BACKEND_URL}/api/v1/expenses?trip_id=trip_student5_demo_01&category=accommodation&date_from=2026-09-01&date_to=2026-09-01", "contains": ["trip_student5_demo_01", "accommodation"]},
+    {"label": "GET seeded budget summary", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/summary", "contains": ["actual_spending", "committed_costs", "remaining_budget", "providers"], "nfr_ms": 500},
+    {"label": "GET malformed budget id", "path": "${BACKEND_URL}/api/v1/budgets/not-a-uuid", "status": 422, "contains": ["VALIDATION_ERROR"]},
+    {"label": "POST seeded budget AI analysis", "method": "POST", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/ai-analysis", "json": {"question": "Where can this trip save money?"}, "status": [200, 503, 504], "contains_any": ["\"analysis\"", "MODEL_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"]}
   ]
 }

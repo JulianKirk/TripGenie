@@ -104,8 +104,21 @@ def test_health_readiness_and_budget_list() -> None:
         page = client.get("/")
 
     assert "Budget &amp; Expense Management" in page.text
+    assert 'href="http://localhost:8080/theme.css"' in page.text
     assert "trip-7" in page.text
     assert "AUD 2000.00" in page.text
+
+
+def test_budget_card_css_contains_long_trip_ids() -> None:
+    with make_client() as client:
+        css = client.get("/static/css/styles.css")
+
+    assert css.status_code == 200
+    assert "minmax(280px, 1fr)" in css.text
+    assert (
+        ".budget-card h3 a { color: var(--ink); overflow-wrap: anywhere; }"
+        in css.text
+    )
 
 
 def test_htmx_detail_filters_expenses_and_shows_incomplete_summary() -> None:
