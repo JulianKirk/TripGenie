@@ -103,7 +103,7 @@ class ExpenseFields(StrictModel):
     payment_method: RequiredText | None = None
     notes: OptionalText | None = None
 
-    @field_validator("payment_method", "notes")
+    @field_validator("payment_method", "notes", mode="before")
     @classmethod
     def blank_optional_text_becomes_none(cls, value: str | None) -> str | None:
         return value or None
@@ -122,6 +122,11 @@ class ExpenseUpdate(StrictModel):
     date: Date | None = None
     payment_method: RequiredText | None = None
     notes: OptionalText | None = None
+
+    @field_validator("payment_method", "notes", mode="before")
+    @classmethod
+    def blank_optional_text_becomes_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class ExpenseRecord(ExpenseFields):
@@ -147,12 +152,21 @@ class ProviderStatus(str, Enum):
     INVALID_RESPONSE = "invalid_response"
 
 
+class ProviderCostItem(StrictModel):
+    item_id: str
+    description: str
+    status: str
+    amount: Money
+    currency: CurrencyCode
+
+
 class ProviderCost(StrictModel):
     provider: str
     status: ProviderStatus
     subtotal: Money | None = None
     currency: CurrencyCode | None = None
     detail: str | None = None
+    items: list[ProviderCostItem] = Field(default_factory=list)
 
 
 class BudgetSummary(StrictModel):
