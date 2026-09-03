@@ -4,6 +4,7 @@ from datetime import date
 from uuid import UUID
 
 from .accommodation_client import AccommodationApiClient
+from .activity_client import ActivityApiClient
 from .ai_analysis import build_budget_analysis_prompt
 from .ai_mode_client import AiModeClient
 from .calculations import calculate_summary
@@ -21,7 +22,6 @@ from .models import (
     ExpenseCreate,
     ExpenseRecord,
     ExpenseUpdate,
-    ProviderCost,
     TripRecord,
 )
 from .transport_client import TransportApiClient
@@ -35,6 +35,7 @@ class BackendService:
         trips: TripsApiClient,
         transport: TransportApiClient,
         accommodation: AccommodationApiClient,
+        activities: ActivityApiClient,
         ai_mode: AiModeClient,
         settings: Settings,
     ) -> None:
@@ -42,6 +43,7 @@ class BackendService:
         self.trips = trips
         self.transport = transport
         self.accommodation = accommodation
+        self.activities = activities
         self.ai_mode = ai_mode
         self.settings = settings
 
@@ -117,10 +119,8 @@ class BackendService:
             "accommodation": self.accommodation.committed_cost(
                 budget.trip_id, budget.currency
             ),
-            "activities": ProviderCost(
-                provider="activities",
-                status="unavailable",
-                detail="provider contract is not available",
+            "activities": self.activities.committed_cost(
+                budget.trip_id, budget.currency
             ),
         }
         return calculate_summary(budget, expenses, providers)

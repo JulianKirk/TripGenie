@@ -9,7 +9,14 @@ from fastapi.testclient import TestClient
 from student4_backend_service.app import create_app
 from student4_backend_service.config import Settings
 
-from tests.backend.test_activity_api import ACTIVITY_ID, FakeDatabase, location_handler
+from tests.backend.test_activity_api import (
+    ACTIVITY_ID,
+    CITY_ID,
+    COUNTRY_ID,
+    FakeDatabase,
+    location_handler,
+    public_payload,
+)
 
 SYDNEY = "trip_2027_sydney_getaway"
 TOKYO = "trip_2027_tokyo_city_break"
@@ -104,6 +111,58 @@ def test_activity_itinerary_picker_adds_schedules_and_removes() -> None:
         removed = client.delete(f"/activity/{ACTIVITY_ID}/itineraries/{SYDNEY}")
         assert removed.status_code == 200
         assert removed.json()["itineraries"][0]["selected"] is False
+
+
+@pytest.mark.parametrize(
+    ("pricing_basis", "expected_total"),
+    [("PER_PERSON", "179.00"), ("FLAT_ADMISSION", "89.50")],
+)
+def test_trip_committed_costs_apply_pricing_basis(
+    pricing_basis: str, expected_total: str
+) -> None:
+    itinerary = FakeItinerary()
+    itinerary.rows[(SYDNEY, ACTIVITY_ID)] = {
+        "trip_id": SYDNEY,
+        "activity_id": ACTIVITY_ID,
+        "date": "2027-04-02",
+    }
+    database = FakeDatabase()
+    activity = public_payload()
+    activity["pricing_basis"] = pricing_basis
+    activity["id"] = ACTIVITY_ID
+    activity["location_details"] = {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "country_id": COUNTRY_ID,
+        "city_id": CITY_ID,
+        "street": "George Street",
+        "street_number": 1,
+    }
+    activity["availability_schedules"][0]["id"] = "44444444-4444-4444-4444-444444444444"
+    database.records[ACTIVITY_ID] = activity
+    app = create_app(
+        Settings(),
+        database_transport=httpx.MockTransport(database.handle),
+        location_transport=httpx.MockTransport(location_handler),
+        itinerary_transport=httpx.MockTransport(itinerary.handle),
+    )
+
+    with TestClient(app) as client:
+        response = client.get(f"/activity/trips/{SYDNEY}/committed-costs")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "committed_cost_total": expected_total,
+        "currency": "AUD",
+        "items": [
+            {
+                "item_id": ACTIVITY_ID,
+                "description": "Harbour Kayak",
+                "status": "planned",
+                "amount": expected_total,
+                "currency": "AUD",
+            }
+        ],
+    }
 
 
 def test_itinerary_start_time_rejects_seconds_instead_of_truncating() -> None:

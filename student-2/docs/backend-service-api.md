@@ -837,11 +837,13 @@ Returns the planned accommodation cost for one trip. This is the provider
 contract used by the budget service: Student 1 supplies the attached stays and
 this service supplies each nightly rate.
 
-Each item costs `price_per_night * (check_out - check_in).days`, matching the
-accommodation stay form. Prices and totals are AUD. A trip with no attached
-accommodations returns an available total of `0.00`; an attached stay without a
-check-out date, nightly rate, or valid accommodation returns `502` so an unknown
-cost is never reported as zero.
+Each item with a check-out costs
+`price_per_night * (check_out - check_in).days`, matching the accommodation
+stay form. An attachment without a check-out contributes one nightly rate as
+its minimum planned estimate. Prices and totals are AUD. A trip with no attached
+accommodations returns an available total of `0.00`; a missing nightly rate or
+invalid accommodation returns `502` so an unknown cost is never reported as
+zero.
 
 ### Example Response `200 OK`
 

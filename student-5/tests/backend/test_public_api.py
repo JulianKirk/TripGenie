@@ -182,8 +182,8 @@ def test_summary_matches_hand_calculation_and_reports_partial_providers(
     assert response.status_code == 200, response.text
     summary = response.json()["data"]
     assert summary["actual_spending"] == "100.10"
-    assert summary["committed_costs"] == "579.20"
-    assert summary["remaining_budget"] == "320.70"
+    assert summary["committed_costs"] == "758.20"
+    assert summary["remaining_budget"] == "141.70"
     assert summary["providers"]["transport"]["status"] == "available"
     assert summary["providers"]["transport"]["items"] == [
         {
@@ -210,7 +210,23 @@ def test_summary_matches_hand_calculation_and_reports_partial_providers(
         ],
         "detail": None,
     }
-    assert summary["committed_costs_complete"] is False
+    assert summary["providers"]["activities"] == {
+        "provider": "activities",
+        "status": "available",
+        "subtotal": "179.00",
+        "currency": "AUD",
+        "items": [
+            {
+                "item_id": "0f2b1c4e-aaaa-bbbb-cccc-000000000004",
+                "description": "Harbour Kayak",
+                "status": "planned",
+                "amount": "179.00",
+                "currency": "AUD",
+            }
+        ],
+        "detail": None,
+    }
+    assert summary["committed_costs_complete"] is True
 
 
 def test_current_transport_payload_without_currency_is_invalid(
