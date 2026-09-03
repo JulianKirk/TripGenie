@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
-from sqlalchemy.orm import Session, sessionmaker
 from student4_database_service.config import Settings
 from student4_database_service.database import (
     create_engine_and_session,
@@ -16,6 +13,12 @@ from student4_database_service.database import (
 from student4_database_service.repository import ActivityRepository
 from student4_database_service.schemas import ActivityWrite
 from student4_database_service.seed_data import seed_categories
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from pathlib import Path
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 SYDNEY = {
     "country_id": "36c95358-ac43-537d-ab58-8f4123ae55c0",

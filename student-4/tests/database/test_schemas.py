@@ -74,7 +74,7 @@ def test_activity_write_rejects_noncanonical_money(price: object) -> None:
         {"maximum_participants": 2**63},
         {
             "location_details": {
-                **cast(dict[str, object], VALID_ACTIVITY["location_details"]),
+                **cast("dict[str, object]", VALID_ACTIVITY["location_details"]),
                 "street_number": 2**63,
             }
         },
@@ -163,7 +163,9 @@ def test_activity_write_rejects_interval_shorter_than_activity() -> None:
 
 
 def test_activity_write_rejects_duplicate_schedules() -> None:
-    schedules = cast(list[dict[str, object]], VALID_ACTIVITY["availability_schedules"])
+    schedules = cast(
+        "list[dict[str, object]]", VALID_ACTIVITY["availability_schedules"]
+    )
     schedule = schedules[0]
 
     with pytest.raises(ValidationError, match="duplicate"):
@@ -207,7 +209,7 @@ def test_query_rejects_contradictory_or_unknown_filters(
 
 
 def test_query_defaults_are_stable_and_city_does_not_require_country() -> None:
-    location = cast(dict[str, object], VALID_ACTIVITY["location_details"])
+    location = cast("dict[str, object]", VALID_ACTIVITY["location_details"])
     query = ActivityQueryRequest.model_validate(
         {"location_details": {"city_id": location["city_id"]}}
     )

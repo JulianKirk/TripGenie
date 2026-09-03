@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import create_engine, event
@@ -11,6 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from student4_database_service.models import Base
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from sqlalchemy.engine import Engine
 
     from student4_database_service.config import Settings

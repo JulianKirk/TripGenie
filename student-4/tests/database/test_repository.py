@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
 from student4_database_service import seed_data
 from student4_database_service.enums import CategoryCode
 from student4_database_service.models import (
@@ -25,6 +23,11 @@ from student4_database_service.models import (
 from student4_database_service.repository import ActivityRepository
 from student4_database_service.schemas import ActivityQueryRequest, ActivityWrite
 from student4_database_service.seed_data import CATEGORY_SEEDS, seed_categories
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 from tests.database.conftest import MELBOURNE, SYDNEY
 
@@ -127,7 +130,7 @@ def test_seed_city_ids_match_the_shared_location_contract() -> None:
         "6b831972-3b36-5af8-a491-78f597f89c18",
     ]
     actual_city_ids = [
-        str(cast(dict[str, object], payload["location_details"])["city_id"])
+        str(cast("dict[str, object]", payload["location_details"])["city_id"])
         for payload in seed_data.SAMPLE_ACTIVITY_DATA
     ]
 

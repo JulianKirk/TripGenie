@@ -35,11 +35,8 @@ filterwarnings = [
 ]
 
 [tool.ruff]
+extend = "../ruff.toml"
 target-version = "py311"
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Body", "fastapi.Depends"]

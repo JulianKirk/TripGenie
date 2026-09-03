@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
 
 from fastapi import APIRouter, Body, HTTPException, status
 
-from student4_database_service.dependencies import SessionDep
+from student4_database_service.dependencies import (  # noqa: TC001  (runtime)
+    SessionDep,
+)
 from student4_database_service.repository import ActivityRepository
 from student4_database_service.schemas import (
     ActivityQueryRequest,

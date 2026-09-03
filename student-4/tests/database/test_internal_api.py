@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from copy import deepcopy
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
@@ -13,6 +11,10 @@ from fastapi.testclient import TestClient
 from student4_database_service.app import create_app
 from student4_database_service.config import Settings
 from student4_database_service.seed_data import seed_categories
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
 EXPECTED_CATEGORY_CODES = [
     "ADVENTURE",
@@ -74,7 +76,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
 def activity_id(client: TestClient) -> str:
     response = client.post("/internal/activity", json=ACTIVITY)
     assert response.status_code == 201
-    return cast(str, response.json()["id"])
+    return cast("str", response.json()["id"])
 
 
 def test_health_opens_the_database(client: TestClient) -> None:
@@ -189,7 +191,7 @@ def test_query_returns_summary_and_pagination_metadata(
 def test_query_combines_country_city_and_street_filters(
     client: TestClient, activity_id: str
 ) -> None:
-    location = cast(dict[str, object], ACTIVITY["location_details"])
+    location = cast("dict[str, object]", ACTIVITY["location_details"])
     response = client.request(
         "QUERY",
         "/internal/activity",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator  # noqa: TC003  (FastAPI reads this at runtime)
 from typing import Annotated
 
 from fastapi import Depends, Request

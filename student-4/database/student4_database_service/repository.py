@@ -176,6 +176,14 @@ class ActivityRepository:
     def _apply_filters(
         self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
     ) -> Select[tuple[Activity]]:
+        statement = self._apply_text_and_location_filters(statement, query)
+        statement = self._apply_category_and_range_filters(statement, query)
+        statement = self._apply_suitability_filters(statement, query)
+        return self._apply_state_and_availability_filters(statement, query)
+
+    def _apply_text_and_location_filters(
+        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
+    ) -> Select[tuple[Activity]]:
         if query.text is not None:
             pattern = _substring_pattern(query.text.casefold())
             statement = statement.where(
@@ -206,7 +214,11 @@ class ActivityRepository:
                 statement = statement.where(
                     Activity.location_details.has(and_(*location_clauses))
                 )
+        return statement
 
+    def _apply_category_and_range_filters(
+        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
+    ) -> Select[tuple[Activity]]:
         categories = query.categories
         if categories is not None:
             category_clauses = [
@@ -232,7 +244,11 @@ class ActivityRepository:
                 statement = statement.where(Activity.duration_minutes >= duration.min)
             if duration.max is not None:
                 statement = statement.where(Activity.duration_minutes <= duration.max)
+        return statement
 
+    def _apply_suitability_filters(
+        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
+    ) -> Select[tuple[Activity]]:
         if query.party_size is not None:
             statement = statement.where(
                 Activity.minimum_participants <= query.party_size,
@@ -259,7 +275,11 @@ class ActivityRepository:
             statement = statement.where(
                 Activity.booking_required == query.booking_required
             )
+        return statement
 
+    def _apply_state_and_availability_filters(
+        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
+    ) -> Select[tuple[Activity]]:
         accessibility = query.accessibility
         if accessibility is not None:
             for field in (
@@ -280,7 +300,8 @@ class ActivityRepository:
     def _availability_clause(self, query: ActivityQueryRequest) -> Any:
         availability = query.availability
         if availability is None:
-            raise AssertionError("availability clause needs an availability filter")
+            message = "availability clause needs an availability filter"
+            raise AssertionError(message)
         weekday = WEEKDAYS[availability.date.weekday()]
         schedule = ActivityAvailabilitySchedule
         clauses = [
