@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, time
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from pydantic import Field, StringConstraints, ValidationError, field_validator
@@ -27,8 +27,11 @@ from .models import (
     LongText,
     ShortText,
     StrictModel,
+    TripAccommodationDetail,
+    TripActivityDetail,
     TripIdentifier,
     TripRecord,
+    TripTransportDetail,
     _normalise_optional_text,
     _validate_iso_date,
 )
@@ -124,6 +127,9 @@ class PromptBudgetAdjustments(StrictModel):
     trip_notes: bool | None = None
     interests: bool | None = None
     constraints: bool | None = None
+    dropped_accommodations: int | None = Field(default=None, ge=1)
+    dropped_activities: int | None = Field(default=None, ge=1)
+    dropped_transport: int | None = Field(default=None, ge=1)
     dropped_items: int | None = Field(default=None, ge=1)
 
 
@@ -143,6 +149,61 @@ class PromptContextItem(StrictModel):
         return _validate_iso_date(value)
 
 
+EnrichmentStatus = Literal["available", "unavailable"]
+
+
+class PromptAccommodationContext(StrictModel):
+    accommodation_id: str
+    enrichment_status: EnrichmentStatus
+    name: PromptText | None = None
+    location: PromptText | None = None
+    check_in: IsoDate
+    check_in_time: str | None = None
+    check_out: IsoDate | None = None
+    check_out_time: str | None = None
+
+    @field_validator("check_in", "check_out")
+    @classmethod
+    def validate_dates(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_date(value)
+
+
+class PromptActivityContext(StrictModel):
+    activity_id: str
+    enrichment_status: EnrichmentStatus
+    name: PromptText | None = None
+    date: IsoDate
+    start_time: str | None = None
+    duration_minutes: int | None = Field(default=None, gt=0)
+    location: PromptText | None = None
+    price: str | None = None
+    pricing_basis: str | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+
+class PromptTransportContext(StrictModel):
+    transport_id: str
+    enrichment_status: EnrichmentStatus
+    mode: PromptText | None = None
+    provider: PromptText | None = None
+    departure: PromptText | None = None
+    arrival: PromptText | None = None
+    origin: PromptText | None = None
+    destination: PromptText | None = None
+    traveller_count: int = Field(ge=1, le=1000)
+    plan_status: str
+    added_on: IsoDate
+
+    @field_validator("added_on")
+    @classmethod
+    def validate_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+
 class PromptContext(StrictModel):
     destination: ShortText
     start_date: IsoDate
@@ -156,6 +217,17 @@ class PromptContext(StrictModel):
     total_existing_items: int = Field(ge=0)
     omitted_existing_items: int = Field(ge=0)
     existing_items: list[PromptContextItem] = Field(default_factory=list)
+    total_selected_accommodations: int = Field(ge=0)
+    omitted_selected_accommodations: int = Field(ge=0)
+    selected_accommodations: list[PromptAccommodationContext] = Field(
+        default_factory=list
+    )
+    total_selected_activities: int = Field(ge=0)
+    omitted_selected_activities: int = Field(ge=0)
+    selected_activities: list[PromptActivityContext] = Field(default_factory=list)
+    total_selected_transport: int = Field(ge=0)
+    omitted_selected_transport: int = Field(ge=0)
+    selected_transport: list[PromptTransportContext] = Field(default_factory=list)
     budget_adjustments: PromptBudgetAdjustments | None = None
 
     @field_validator("start_date", "end_date", "requested_date")
@@ -185,6 +257,9 @@ class PromptBudgetState:
     trip_notes: bool = False
     interests: bool = False
     constraints: bool = False
+    dropped_accommodations: int = 0
+    dropped_activities: int = 0
+    dropped_transport: int = 0
     dropped_items: int = 0
 
 
@@ -193,6 +268,9 @@ def build_prompt_context(
     existing_items: list[ItineraryItemRecord],
     request: AiSuggestionRequest,
     settings: Settings,
+    selected_accommodations: list[TripAccommodationDetail] | None = None,
+    selected_activities: list[TripActivityDetail] | None = None,
+    selected_transport: list[TripTransportDetail] | None = None,
 ) -> PromptContext:
     prioritised_items = sorted(
         existing_items,
@@ -212,6 +290,52 @@ def build_prompt_context(
         ),
     )
     limited_items = prioritised_items[: settings.ai_max_context_items]
+    accommodations = selected_accommodations or []
+    prioritised_accommodations = sorted(
+        accommodations,
+        key=lambda item: (
+            0
+            if (
+                item.date <= request.requested_date
+                and (item.check_out is None or request.requested_date <= item.check_out)
+            )
+            else 1,
+            item.date,
+            item.check_in_time or "",
+            item.accommodation_id,
+        ),
+    )
+    limited_accommodations = prioritised_accommodations[
+        : settings.ai_max_context_accommodations
+    ]
+    activities = selected_activities or []
+    prioritised_activities = sorted(
+        activities,
+        key=lambda item: (
+            0 if item.date == request.requested_date else 1,
+            abs(
+                (
+                    date.fromisoformat(item.date)
+                    - date.fromisoformat(request.requested_date)
+                ).days
+            ),
+            item.date,
+            item.start_time or "",
+            item.activity_id,
+        ),
+    )
+    limited_activities = prioritised_activities[: settings.ai_max_context_activities]
+    transport = selected_transport or []
+    prioritised_transport = sorted(
+        transport,
+        key=lambda item: (
+            item.departure_time is None,
+            item.departure_time or "",
+            item.added_on,
+            item.transport_id,
+        ),
+    )
+    limited_transport = prioritised_transport[: settings.ai_max_context_transport]
 
     return PromptContext(
         destination=trip.destination,
@@ -241,6 +365,94 @@ def build_prompt_context(
             )
             for item in limited_items
         ],
+        total_selected_accommodations=len(accommodations),
+        omitted_selected_accommodations=max(
+            len(accommodations) - len(limited_accommodations),
+            0,
+        ),
+        selected_accommodations=[
+            PromptAccommodationContext(
+                accommodation_id=item.accommodation_id,
+                enrichment_status=(
+                    "available"
+                    if item.name is not None or item.location is not None
+                    else "unavailable"
+                ),
+                name=_truncate_prompt_text(item.name),
+                location=_truncate_prompt_text(item.location),
+                check_in=item.date,
+                check_in_time=item.check_in_time,
+                check_out=item.check_out,
+                check_out_time=item.check_out_time,
+            )
+            for item in limited_accommodations
+        ],
+        total_selected_activities=len(activities),
+        omitted_selected_activities=max(
+            len(activities) - len(limited_activities),
+            0,
+        ),
+        selected_activities=[
+            PromptActivityContext(
+                activity_id=item.activity_id,
+                enrichment_status=(
+                    "available"
+                    if any(
+                        value is not None
+                        for value in (
+                            item.name,
+                            item.duration_minutes,
+                            item.location,
+                            item.price,
+                        )
+                    )
+                    else "unavailable"
+                ),
+                name=_truncate_prompt_text(item.name),
+                date=item.date,
+                start_time=item.start_time,
+                duration_minutes=item.duration_minutes,
+                location=_truncate_prompt_text(item.location),
+                price=item.price,
+                pricing_basis=item.pricing_basis,
+            )
+            for item in limited_activities
+        ],
+        total_selected_transport=len(transport),
+        omitted_selected_transport=max(
+            len(transport) - len(limited_transport),
+            0,
+        ),
+        selected_transport=[
+            PromptTransportContext(
+                transport_id=item.transport_id,
+                enrichment_status=(
+                    "available"
+                    if any(
+                        value is not None
+                        for value in (
+                            item.type,
+                            item.provider,
+                            item.departure_time,
+                            item.arrival_time,
+                            item.origin,
+                            item.destination,
+                        )
+                    )
+                    else "unavailable"
+                ),
+                mode=_truncate_prompt_text(item.type),
+                provider=_truncate_prompt_text(item.provider),
+                departure=_truncate_prompt_text(item.departure_time),
+                arrival=_truncate_prompt_text(item.arrival_time),
+                origin=_truncate_prompt_text(item.origin),
+                destination=_truncate_prompt_text(item.destination),
+                traveller_count=item.traveller_count,
+                plan_status=item.plan_status.value,
+                added_on=item.added_on,
+            )
+            for item in limited_transport
+        ],
     )
 
 
@@ -262,6 +474,9 @@ class AiSuggestionService:
         trip: TripRecord,
         existing_items: list[ItineraryItemRecord],
         request: AiSuggestionRequest,
+        selected_accommodations: list[TripAccommodationDetail] | None = None,
+        selected_activities: list[TripActivityDetail] | None = None,
+        selected_transport: list[TripTransportDetail] | None = None,
         correlation_id: str | None = None,
     ) -> AiSuggestionsResponse:
         run_id = f"ai_{uuid4().hex[:12]}"
@@ -271,6 +486,9 @@ class AiSuggestionService:
             existing_items,
             request,
             self._settings,
+            selected_accommodations,
+            selected_activities,
+            selected_transport,
         )
         prompt_schema = AiModeSuggestionEnvelope.model_json_schema()
         prompt_asset = self._settings.ai_prompt_asset
@@ -287,6 +505,9 @@ class AiSuggestionService:
             constraints_chars=len(request.constraints or ""),
             context_items=len(base_prompt_context.existing_items),
             omitted_items=base_prompt_context.omitted_existing_items,
+            accommodations=len(base_prompt_context.selected_accommodations),
+            activities=len(base_prompt_context.selected_activities),
+            transport=len(base_prompt_context.selected_transport),
         )
 
         failure_note: str | None = None
@@ -309,6 +530,11 @@ class AiSuggestionService:
                 prompt_chars=len(prepared_prompt.prompt),
                 context_items=len(prepared_prompt.prompt_context.existing_items),
                 omitted_items=prepared_prompt.prompt_context.omitted_existing_items,
+                accommodations=len(
+                    prepared_prompt.prompt_context.selected_accommodations
+                ),
+                activities=len(prepared_prompt.prompt_context.selected_activities),
+                transport=len(prepared_prompt.prompt_context.selected_transport),
                 budgeted=prepared_prompt.prompt_context.budget_adjustments is not None,
             )
             generation = await self._client.generate(
@@ -438,9 +664,7 @@ def normalise_suggestions(
         raw_item = suggestion.model_dump(mode="json")
         field_prefix = f"suggestions[{index}]"
         validation_item = {
-            key: value
-            for key, value in raw_item.items()
-            if key != "rationale"
+            key: value for key, value in raw_item.items() if key != "rationale"
         }
 
         try:
@@ -626,6 +850,27 @@ def build_budgeted_prompt(
         if _omit_top_level_field(context_data, field_name="constraints"):
             budget_state.constraints = True
             continue
+        if _drop_low_priority_cross_service_record(
+            context_data,
+            list_field="selected_transport",
+            omitted_field="omitted_selected_transport",
+        ):
+            budget_state.dropped_transport += 1
+            continue
+        if _drop_low_priority_cross_service_record(
+            context_data,
+            list_field="selected_accommodations",
+            omitted_field="omitted_selected_accommodations",
+        ):
+            budget_state.dropped_accommodations += 1
+            continue
+        if _drop_low_priority_cross_service_record(
+            context_data,
+            list_field="selected_activities",
+            omitted_field="omitted_selected_activities",
+        ):
+            budget_state.dropped_activities += 1
+            continue
         if _omit_item_field(context_data, field_name="location"):
             budget_state.item_locations += 1
             continue
@@ -691,6 +936,12 @@ def _apply_budget_adjustments(
         adjustments["interests"] = True
     if budget_state.constraints:
         adjustments["constraints"] = True
+    if budget_state.dropped_accommodations:
+        adjustments["dropped_accommodations"] = budget_state.dropped_accommodations
+    if budget_state.dropped_activities:
+        adjustments["dropped_activities"] = budget_state.dropped_activities
+    if budget_state.dropped_transport:
+        adjustments["dropped_transport"] = budget_state.dropped_transport
     if budget_state.dropped_items:
         adjustments["dropped_items"] = budget_state.dropped_items
 
@@ -734,9 +985,28 @@ def _drop_low_priority_item(context_data: dict[str, object]) -> bool:
         context_data["existing_items"] = items
     else:
         context_data.pop("existing_items", None)
-    context_data["omitted_existing_items"] = int(
-        context_data.get("omitted_existing_items", 0)
-    ) + 1
+    context_data["omitted_existing_items"] = (
+        int(context_data.get("omitted_existing_items", 0)) + 1
+    )
+    return True
+
+
+def _drop_low_priority_cross_service_record(
+    context_data: dict[str, object],
+    *,
+    list_field: str,
+    omitted_field: str,
+) -> bool:
+    records = context_data.get(list_field)
+    if not isinstance(records, list) or not records:
+        return False
+
+    records.pop()
+    if records:
+        context_data[list_field] = records
+    else:
+        context_data.pop(list_field, None)
+    context_data[omitted_field] = int(context_data.get(omitted_field, 0)) + 1
     return True
 
 

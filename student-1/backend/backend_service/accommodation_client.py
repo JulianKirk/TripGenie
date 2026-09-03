@@ -65,4 +65,26 @@ class AccommodationClient:
         return {
             "name": body.get("name"),
             "price_per_night": body.get("price_per_night"),
+            "location": _format_location(body.get("location_details")),
         }
+
+
+def _format_location(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+
+    parts: list[str] = []
+    street_number = value.get("street_number")
+    street = value.get("street")
+    if isinstance(street, str) and street.strip():
+        street_label = street.strip()
+        if isinstance(street_number, int):
+            street_label = f"{street_number} {street_label}"
+        parts.append(street_label)
+
+    for field_name in ("city", "country"):
+        field_value = value.get(field_name)
+        if isinstance(field_value, str) and field_value.strip():
+            parts.append(field_value.strip())
+
+    return ", ".join(parts) or None

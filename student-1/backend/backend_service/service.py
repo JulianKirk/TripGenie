@@ -107,6 +107,7 @@ class BackendService:
                     name=extra.get("name"),
                     price_per_night=rate,
                     total_price=_stay_total(rate, record.date, record.check_out),
+                    location=extra.get("location"),
                 )
             )
         return detailed
@@ -143,6 +144,14 @@ class BackendService:
                 duration_minutes=(
                     found[record.activity_id].duration_minutes
                     if record.activity_id in found
+                    else None
+                ),
+                location=(
+                    found[record.activity_id].location_details.label()
+                    if (
+                        record.activity_id in found
+                        and found[record.activity_id].location_details is not None
+                    )
                     else None
                 ),
             )
@@ -197,8 +206,7 @@ class BackendService:
     def list_trip_transport(self, trip_id: str) -> list[dict[str, object]]:
         records = self._client.list_trip_transport(trip_id)
         return [
-            record.model_dump(mode="json")
-            for record in self._enrich_transport(records)
+            record.model_dump(mode="json") for record in self._enrich_transport(records)
         ]
 
     def add_trip_transport(
@@ -270,10 +278,18 @@ class BackendService:
         ensure_trip_detail_supported(trip)
         self._ensure_date_within_trip(payload.requested_date, trip)
         items = self._client.list_itinerary_items(trip_id)
+        accommodations = self._enrich_accommodations(
+            self._client.list_trip_accommodations(trip_id)
+        )
+        activities = self._enrich_activities(self._client.list_trip_activities(trip_id))
+        transport = self._enrich_transport(self._client.list_trip_transport(trip_id))
         response = await self._ai_suggestions.generate(
             trip_id=trip_id,
             trip=trip,
             existing_items=items,
+            selected_accommodations=accommodations,
+            selected_activities=activities,
+            selected_transport=transport,
             request=payload,
             correlation_id=correlation_id,
         )
@@ -478,8 +494,7 @@ class BackendService:
         ai_mode = await self._ai_mode_status()
         overall_status = (
             "ok"
-            if database.status == "ok"
-            and ai_mode.status in {"ok", "not_configured"}
+            if database.status == "ok" and ai_mode.status in {"ok", "not_configured"}
             else "degraded"
         )
         return HealthResponse(

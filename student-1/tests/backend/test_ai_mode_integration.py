@@ -17,7 +17,13 @@ from backend_service.ai_suggestions import (
 from backend_service.app import create_app as create_student_backend_app
 from backend_service.config import Settings as StudentBackendSettings
 from backend_service.errors import ApiError
-from backend_service.models import ItineraryItemRecord, TripRecord
+from backend_service.models import (
+    ItineraryItemRecord,
+    TripAccommodationDetail,
+    TripActivityDetail,
+    TripRecord,
+    TripTransportDetail,
+)
 from conftest import FakeDatabaseApi
 from fastapi.testclient import TestClient
 
@@ -217,6 +223,96 @@ def test_prompt_budgeting_handles_worst_case_valid_data(database_api) -> None:
     assert "budget_adjustments" in prompt_context
     assert prompt_context["budget_adjustments"]["item_notes"] >= 1
     assert prompt_context["budget_adjustments"]["item_descriptions"] >= 1
+
+
+def test_cross_service_context_limits_and_budget_preserve_itinerary_priority(
+    database_api,
+) -> None:
+    trip = trip_record(database_api)
+    request = AiSuggestionRequest(
+        requested_date="2027-04-02",
+        goal="Keep selected cross-service plans in view.",
+    )
+    long_label = make_long_text("external-", 170)
+    accommodations = [
+        TripAccommodationDetail(
+            trip_id=trip.id,
+            accommodation_id=f"acc_budget_{index:02d}",
+            date="2027-04-01",
+            check_out="2027-04-03",
+            name=long_label,
+            location=long_label,
+        )
+        for index in range(10)
+    ]
+    activities = [
+        TripActivityDetail(
+            trip_id=trip.id,
+            activity_id=f"activity_budget_{index:02d}",
+            date="2027-04-02",
+            start_time="12:00",
+            name=long_label,
+            price="10.00",
+            pricing_basis="PER_PERSON",
+            duration_minutes=60,
+            location=long_label,
+        )
+        for index in range(10)
+    ]
+    transport = [
+        TripTransportDetail(
+            trip_id=trip.id,
+            transport_id=f"transport_budget_{index:02d}",
+            traveller_count=2,
+            plan_status="confirmed",
+            added_on="2027-04-01",
+            type="train",
+            provider=long_label,
+            origin=long_label,
+            destination=long_label,
+            departure_time="2027-04-02T10:00:00",
+            arrival_time="2027-04-02T11:00:00",
+            duration_minutes=60,
+            price=10,
+            pricing_basis="per_traveller",
+            estimated_cost=20,
+        )
+        for index in range(10)
+    ]
+    settings = student_settings(
+        ai_mode_max_prompt_chars=5000,
+        ai_max_context_items=12,
+        ai_max_context_accommodations=10,
+        ai_max_context_activities=10,
+        ai_max_context_transport=10,
+    )
+    context = build_prompt_context(
+        trip,
+        trip_items(database_api),
+        request,
+        settings,
+        accommodations,
+        activities,
+        transport,
+    )
+
+    prepared = build_budgeted_prompt(
+        prompt_asset=settings.ai_prompt_asset,
+        prompt_context=context,
+        output_schema=AiModeSuggestionEnvelope.model_json_schema(),
+        failure_note=None,
+        max_prompt_chars=5000,
+    )
+
+    assert len(prepared.prompt) <= 5000
+    assert prepared.prompt_context.existing_items
+    adjustments = prepared.prompt_context.budget_adjustments
+    assert adjustments is not None
+    assert adjustments.dropped_transport == 10
+    assert adjustments.dropped_accommodations == 10
+    assert adjustments.dropped_activities
+    assert prepared.prompt_context.omitted_selected_transport == 10
+    assert prepared.prompt_context.omitted_selected_accommodations == 10
 
 
 def test_prompt_budgeting_supports_exact_shared_boundary(database_api) -> None:
