@@ -21,6 +21,11 @@
   </dl>
 </div>
 
+{% set question = '' %}
+{% set analysis = none %}
+{% set analysis_error = none %}
+{% include "partials/ai_analysis.html" %}
+
 <div class="panel expenses-panel">
   <div class="panel-heading"><div><p class="eyebrow">Recorded spending</p><h2>Expenses</h2></div><a class="button button--primary" href="/budgets/{{ budget.budget_id }}/expenses/new">Add expense</a></div>
   <form class="filters" method="get" action="/budgets/{{ budget.budget_id }}">

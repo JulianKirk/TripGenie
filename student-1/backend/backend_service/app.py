@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, Response,
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .accommodation_client import AccommodationClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_request, validation_error
@@ -25,6 +26,7 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    TripAccommodationCreate,
     TripAccommodationRecord,
     TripCreate,
     TripDaySelection,
@@ -219,17 +221,24 @@ def create_app(
     settings: Settings | None = None,
     *,
     transport: httpx.BaseTransport | None = None,
+    accommodation_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         client = DatabaseApiClient(app_settings, transport=transport)
-        app.state.backend_service = BackendService(client, app_settings)
+        # Its own transport seam, so a test can fake student 2 without faking
+        # the database service too.
+        accommodations = AccommodationClient(
+            app_settings, transport=accommodation_transport
+        )
+        app.state.backend_service = BackendService(client, app_settings, accommodations)
         try:
             yield
         finally:
             client.close()
+            accommodations.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -454,11 +463,25 @@ def create_app(
     def add_trip_accommodation(
         trip_id: TripIdentifier,
         accommodation_id: AccommodationIdentifier,
+        payload: TripAccommodationCreate | None = None,
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
-        """PUT, not POST: pinning the same accommodation twice is the user
-        clicking a ticked box again, which must not be a conflict."""
-        return envelope(service.add_trip_accommodation(trip_id, accommodation_id))
+        """PUT, not POST: it replaces the pin rather than creating a second
+        one, so re-sending the same stay is a no-op and sending a different
+        stay moves it. The body is optional -- without one this pins to the
+        trip's first day, which is all this endpoint could do before stay
+        dates existed.
+        """
+        return envelope(
+            service.add_trip_accommodation(
+                trip_id,
+                accommodation_id,
+                payload.date if payload else None,
+                payload.check_out if payload else None,
+                payload.check_in_time if payload else None,
+                payload.check_out_time if payload else None,
+            ),
+        )
 
     @router.delete(
         "/trips/{trip_id}/accommodations/{accommodation_id}",

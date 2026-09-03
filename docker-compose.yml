@@ -46,11 +46,21 @@ services:
       - student-1-frontend
 
   # The public face of the trip service. Student 2's backend calls it to pin
-  # accommodations to trips.
+  # accommodations to trips, and this one calls student 2 back for the names
+  # and nightly rates the trip page shows -- the two services reference each
+  # other's data.
+  #
+  # ponytail: deliberately NO depends_on for student-2-backend. That service
+  # already depends on this one, so declaring the reverse is a cycle compose
+  # refuses to start. The dependency is a runtime lookup, not a boot order:
+  # AccommodationClient returns None when student 2 is not up yet and the trip
+  # page renders the stay without a name.
   student-1-backend:
     build:
       context: ./student-1
       dockerfile: backend/Dockerfile
+    environment:
+      STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
     ports:
       - "8001:8001"
     depends_on:
@@ -61,6 +71,10 @@ services:
     build:
       context: ./student-1
       dockerfile: frontend/Dockerfile
+    environment:
+      # A browser address, not a compose one: the trip page links out to
+      # student 2's webpage, and that link is followed on the user's machine.
+      STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
     ports:
       - "8081:8081"
     depends_on:
@@ -258,57 +272,102 @@ services:
       - "8084:8084"
 
   # Student 5: Budget & Expense Management
-  # Same shape as student-1: a grouping container, a public backend, a webpage,
-  # and an internal-only database service.
+  # Grouping target for the complete Student 5 slice:
+  # `docker compose up --build student-5`.
   student-5:
     image: alpine:3
     command: ["true"]
     depends_on:
-      - student-5-frontend
+      student-5-frontend:
+        condition: service_healthy
 
-  # The public /api surface. Reads student 1's trips and student 3's transport
-  # costs; the only caller of the database service behind it.
-  student-5-backend:
-    build:
-      context: ./student-5
-      dockerfile: backend/Dockerfile
-    ports:
-      - "8005:8005"
-    depends_on:
-      - student-5-database
-      - student-1-backend
-      - student-3-backend
-
-  # The budget and expense webpage. Talks to the Student 5 backend only.
   student-5-frontend:
     build:
       context: ./student-5
       dockerfile: frontend/Dockerfile
+    environment:
+      STUDENT5_FRONTEND_BACKEND_BASE_URL: http://student-5-backend:8005
     ports:
       - "8085:8085"
     depends_on:
-      - student-5-backend
+      student-5-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Internal only -- the backend service is the sole caller and reaches it as
-  # http://student-5-database:8007 on the compose network.
+  student-5-backend:
+    build:
+      context: ./student-5
+      dockerfile: backend/Dockerfile
+    environment:
+      STUDENT5_BACKEND_API_PREFIX: /api/v1
+      STUDENT5_BACKEND_DB_API_BASE_URL: http://student-5-database:8007
+      STUDENT5_BACKEND_TRIPS_API_BASE_URL: http://student-1-backend:8001
+      STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
+      STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+    expose:
+      - "8005"
+    depends_on:
+      student-5-database:
+        condition: service_healthy
+      student-1-backend:
+        condition: service_started
+      student-3-backend:
+        condition: service_started
+      ai-mode:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   student-5-database:
     build:
       context: ./student-5
       dockerfile: database/Dockerfile
+    environment:
+      STUDENT5_SQLITE_PATH: /data/student-5/tripgenie.db
     expose:
       - "8007"
     volumes:
-      - student-5-db:/data/student-5
+      - student-5-sqlite:/data/student-5
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Shared AI-Mode Service
-  # The only service that speaks to Ollama. Every student's backend reaches it
-  # over HTTP, so the model client, the approved-model allowlist and the
-  # prompt/response bounds live in one place. Internal only -- its callers are
-  # the backends on this network, not a browser.
-  #
-  # Its image deliberately does not pin an Ollama URL (there is a test in
-  # ai-services/ai-mode/tests asserting so), because where Ollama runs is a
-  # deployment fact. Here it is the container below.
+  # Shared AI gateway. Every student's backend reaches it over HTTP, so the
+  # model client, the approved-model allowlist and the prompt/response bounds
+  # live in one place -- and it is the only service that speaks to Ollama.
+  # Internal only: its callers are the backends on this network, not a browser.
+  # Student 5 waits for the process to start, not for AI readiness, so budget
+  # and expense CRUD remains available without a model.
   ai-mode:
     build:
       context: ./ai-services/ai-mode
@@ -316,7 +375,10 @@ services:
     expose:
       - "8006"
     environment:
-      AI_MODE_OLLAMA_BASE_URL: http://ollama:11434
+      # Where Ollama runs is a deployment fact, not a code one: the container
+      # below by default, `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434`
+      # for a host runtime (which is what main assumes).
+      AI_MODE_OLLAMA_BASE_URL: "${AI_MODE_OLLAMA_BASE_URL:-http://ollama:11434}"
       # The image's own default is qwen2.5:0.5b, which is too small for the
       # accommodation ask box: it reads "under 100 a night" as a number of beds,
       # or as a minimum price, and answers with filters that match nothing. The
@@ -329,8 +391,22 @@ services:
       # measured on this stack, an 8b answering a cold prompt takes ~32s of
       # inference on top of ~11s of loading itself off disk.
       AI_MODE_TIMEOUT_SECONDS: "90"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - ollama
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Local AI Model Runtime (Ollama)
   # The models are not baked into the image: `docker compose exec ollama ollama
@@ -353,4 +429,4 @@ volumes:
   student-1-db:
   student-2-db:
   student-3-sqlite:
-  student-5-db:
+  student-5-sqlite:

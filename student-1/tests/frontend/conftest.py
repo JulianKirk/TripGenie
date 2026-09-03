@@ -98,6 +98,8 @@ class FakeBackendApi:
                 "notes": "Prioritise Asakusa and Shibuya.",
             },
         }
+        # trip_id -> the enriched stays the backend would return for it.
+        self.accommodations: dict[str, list[dict[str, object]]] = {}
         self.items: dict[str, dict[str, object]] = {
             "item_2027_sydney_harbour_walk": {
                 "id": "item_2027_sydney_harbour_walk",
@@ -177,6 +179,14 @@ class FakeBackendApi:
             and method == "POST"
         ):
             return self._create_item(path_parts[2], request)
+
+        if (
+            len(path_parts) == 5
+            and path_parts[:2] == ["api", "trips"]
+            and path_parts[3] == "accommodations"
+            and method == "DELETE"
+        ):
+            return self._remove_accommodation(path_parts[2], path_parts[4])
 
         if len(path_parts) == 3 and path_parts[:2] == ["api", "itinerary-items"]:
             item_id = path_parts[2]
@@ -525,6 +535,40 @@ class FakeBackendApi:
             "notes": trip["notes"],
         }
 
+    def _remove_accommodation(
+        self,
+        trip_id: str,
+        accommodation_id: str,
+    ) -> httpx.Response:
+        stays = self.accommodations.get(trip_id, [])
+        remaining = [
+            stay for stay in stays if stay["accommodation_id"] != accommodation_id
+        ]
+        if len(remaining) == len(stays):
+            return error_response(
+                404,
+                "NOT_FOUND",
+                f"Trip accommodation '{accommodation_id}' was not found.",
+            )
+        self.accommodations[trip_id] = remaining
+        return data_response(200, {"id": accommodation_id, "deleted": True})
+
+    def pin_accommodation(self, trip_id: str, **fields: object) -> None:
+        """Put one enriched stay on a trip, as the backend would return it."""
+        row = {
+            "trip_id": trip_id,
+            "accommodation_id": "acc_1",
+            "date": "2027-04-01",
+            "check_in_time": None,
+            "check_out": None,
+            "check_out_time": None,
+            "name": None,
+            "price_per_night": None,
+            "total_price": None,
+        }
+        row.update(fields)
+        self.accommodations.setdefault(trip_id, []).append(row)
+
     def _trip_detail(self, trip_id: str) -> dict[str, object]:
         trip = deepcopy(self.trips[trip_id])
         days: list[dict[str, object]] = []
@@ -550,6 +594,9 @@ class FakeBackendApi:
             current_day += timedelta(days=1)
 
         trip["days"] = days
+        # The backend enriches these with student 2's name and price before the
+        # frontend ever sees them, so the fake serves them already enriched.
+        trip["accommodations"] = deepcopy(self.accommodations.get(trip_id, []))
         return trip
 
     def _next_trip_id(self) -> str:

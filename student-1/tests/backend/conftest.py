@@ -91,9 +91,9 @@ class FakeDatabaseApi:
                 "notes": "Prioritise Asakusa and Shibuya.",
             },
         }
-        # (trip_id, accommodation_id) -> date, the associative entity as the
-        # database service stores it.
-        self.trip_accommodations: dict[tuple[str, str], str] = {}
+        # (trip_id, accommodation_id) -> the stored row, the associative
+        # entity as the database service keeps it.
+        self.trip_accommodations: dict[tuple[str, str], dict[str, object]] = {}
         self.items: dict[str, dict[str, object]] = {
             "item_2027_sydney_harbour_walk": {
                 "id": "item_2027_sydney_harbour_walk",
@@ -213,19 +213,18 @@ class FakeDatabaseApi:
             return self._trip_not_found(trip_id)
 
         key = (trip_id, accommodation_id)
-        # Idempotent, like the real service: the first date wins.
-        self.trip_accommodations.setdefault(
-            key,
-            str(self._request_json(request)["date"]),
-        )
-        return data_response(
-            200,
-            {
-                "trip_id": trip_id,
-                "accommodation_id": accommodation_id,
-                "date": self.trip_accommodations[key],
-            },
-        )
+        # Replaces the pin, like the real service: PUT moves the stay rather
+        # than keeping whatever the first call recorded.
+        body = self._request_json(request)
+        self.trip_accommodations[key] = {
+            "trip_id": trip_id,
+            "accommodation_id": accommodation_id,
+            "date": str(body["date"]),
+            "check_in_time": body.get("check_in_time"),
+            "check_out": body.get("check_out"),
+            "check_out_time": body.get("check_out_time"),
+        }
+        return data_response(200, self.trip_accommodations[key])
 
     def _remove_trip_accommodation(
         self,
@@ -259,12 +258,8 @@ class FakeDatabaseApi:
     def _trip_accommodation_records(self, trip_id: str) -> list[dict[str, object]]:
         return sorted(
             (
-                {
-                    "trip_id": pinned_trip,
-                    "accommodation_id": accommodation_id,
-                    "date": date,
-                }
-                for (pinned_trip, accommodation_id), date in (
+                dict(record)
+                for (pinned_trip, accommodation_id), record in (
                     self.trip_accommodations.items()
                 )
                 if pinned_trip == trip_id
@@ -502,8 +497,34 @@ def settings() -> Settings:
     return Settings(database_api_base_url="http://database.test")
 
 
+class FakeAccommodationApi:
+    """Student 2's public API, as much of it as this service reads.
+
+    Answers 404 for anything it has not been given, which is also what the real
+    service does for an accommodation it does not know -- and is the shape this
+    service has to survive, since a name it cannot fetch must not cost the page.
+    """
+
+    def __init__(self, records: dict[str, dict] | None = None) -> None:
+        self.records = records or {}
+        self.calls: list[str] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        accommodation_id = request.url.path.rsplit("/", 1)[-1]
+        self.calls.append(accommodation_id)
+        record = self.records.get(accommodation_id)
+        if record is None:
+            return httpx.Response(404, json={"detail": "not found"})
+        return httpx.Response(200, json=record)
+
+
 @pytest.fixture
-def client_factory():
+def accommodation_api() -> FakeAccommodationApi:
+    return FakeAccommodationApi()
+
+
+@pytest.fixture
+def client_factory(accommodation_api: FakeAccommodationApi):
     def _make(
         handler,
         *,
@@ -512,6 +533,8 @@ def client_factory():
         app = create_app(
             settings_override or Settings(database_api_base_url="http://database.test"),
             transport=httpx.MockTransport(handler),
+            # Faked too, so the suite never reaches for a real student 2.
+            accommodation_transport=httpx.MockTransport(accommodation_api.handle),
         )
         return TestClient(app)
 

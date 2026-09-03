@@ -156,6 +156,14 @@ class ItinerarySelection(BaseModel):
 
     `selected` is what the picker draws as ticked or unticked; the frontend
     needs no second call to work it out.
+
+    `start_date` and `end_date` are the itinerary's own window. They are here
+    so the page can bound its date inputs to it -- a stay outside the trip is
+    rejected by student 1, and an input that cannot offer the date beats an
+    error that explains it afterwards.
+
+    `check_in`/`check_out` are the stored stay, present only on a selected
+    itinerary and only when student 1 could be asked for it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -163,6 +171,31 @@ class ItinerarySelection(BaseModel):
     itinerary_id: str
     name: str
     selected: bool
+    start_date: str
+    end_date: str
+    check_in: str | None = None
+    check_in_time: str | None = None
+    check_out: str | None = None
+    check_out_time: str | None = None
+
+
+class StayDates(BaseModel):
+    """The body of a PUT that pins an accommodation to an itinerary.
+
+    Both optional: student 1 defaults a missing check-in to the trip's first
+    day, which is what this endpoint did before a user could pick one.
+
+    ponytail: no ordering or window check here. Student 1 owns those rules --
+    it is the service that stores the row -- and its 422 relays through
+    `client.request` as a message this service can show.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    check_in: str | None = None
+    check_in_time: str | None = None
+    check_out: str | None = None
+    check_out_time: str | None = None
 
 
 class ItinerarySelectionResponse(BaseModel):

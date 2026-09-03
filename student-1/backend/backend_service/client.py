@@ -217,11 +217,19 @@ class DatabaseApiClient:
         trip_id: str,
         accommodation_id: str,
         date: str,
+        check_out: str | None = None,
+        check_in_time: str | None = None,
+        check_out_time: str | None = None,
     ) -> TripAccommodationRecord:
         envelope = self._request_model(
             "PUT",
             f"{self._api_prefix}/trips/{trip_id}/accommodations/{accommodation_id}",
-            json={"date": date},
+            json={
+                "date": date,
+                "check_in_time": check_in_time,
+                "check_out": check_out,
+                "check_out_time": check_out_time,
+            },
             expected_statuses={200},
             response_type=DataEnvelope[TripAccommodationRecord],
             malformed_message=(
@@ -241,8 +249,7 @@ class DatabaseApiClient:
             expected_statuses={200},
             response_type=DataEnvelope[DeleteResponse],
             malformed_message=(
-                "Database API returned a malformed trip accommodation "
-                "delete response."
+                "Database API returned a malformed trip accommodation delete response."
             ),
         )
         return envelope.data
@@ -257,8 +264,7 @@ class DatabaseApiClient:
             expected_statuses={200},
             response_type=DataEnvelope[list[TripRecord]],
             malformed_message=(
-                "Database API returned a malformed accommodation trip "
-                "list response."
+                "Database API returned a malformed accommodation trip list response."
             ),
         )
         return envelope.data
@@ -357,8 +363,7 @@ class DatabaseApiClient:
                 code=envelope.error.code,
                 message=envelope.error.message,
                 details=[
-                    detail.model_dump(mode="json")
-                    for detail in envelope.error.details
+                    detail.model_dump(mode="json") for detail in envelope.error.details
                 ],
             )
 

@@ -402,7 +402,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service: DatabaseService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(
-            service.add_trip_accommodation(trip_id, accommodation_id, payload.date),
+            service.add_trip_accommodation(
+                trip_id,
+                accommodation_id,
+                payload.date,
+                payload.check_out,
+                payload.check_in_time,
+                payload.check_out_time,
+            ),
         )
 
     @router.delete(

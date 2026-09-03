@@ -47,10 +47,37 @@ class ItineraryClient:
         accommodation. One call, so the picker does not ask per itinerary."""
         return await self._data("GET", f"/accommodations/{accommodation_id}/trips")
 
-    async def add(self, accommodation_id: UUID, itinerary_id: str) -> dict[str, Any]:
+    async def add(
+        self,
+        accommodation_id: UUID,
+        itinerary_id: str,
+        check_in: str | None = None,
+        check_out: str | None = None,
+        check_in_time: str | None = None,
+        check_out_time: str | None = None,
+    ) -> dict[str, Any]:
+        """Student 1 calls the check-in `date`, so the rename lives here --
+        this module is already the one place that knows a trip is what we call
+        an itinerary."""
         return await self._data(
-            "PUT", f"/trips/{itinerary_id}/accommodations/{accommodation_id}"
+            "PUT",
+            f"/trips/{itinerary_id}/accommodations/{accommodation_id}",
+            json={
+                "date": check_in,
+                "check_in_time": check_in_time,
+                "check_out": check_out,
+                "check_out_time": check_out_time,
+            },
         )
+
+    async def stays_in(self, itinerary_id: str) -> list[dict[str, Any]]:
+        """Every accommodation pinned to one itinerary, with its stay dates.
+
+        The reverse lookup above answers *which* itineraries hold an
+        accommodation but returns trips, not the rows linking them, so the
+        dates are not in it.
+        """
+        return await self._data("GET", f"/trips/{itinerary_id}/accommodations")
 
     async def remove(self, accommodation_id: UUID, itinerary_id: str) -> dict[str, Any]:
         return await self._data(
