@@ -46,6 +46,7 @@ from .models import (
     _validate_iso_date,
 )
 from .prompt_assets import load_prompt_asset
+from .transport_client import TransportDetails
 
 LOGGER = logging.getLogger(__name__)
 PROMPT_TEXT_LIMIT = 180
@@ -508,7 +509,7 @@ def build_cross_service_time_blocks(
     *,
     selection: _SelectedCrossServiceRecords,
     enriched_activities: list[TripActivityDetail],
-    enriched_transport: list[TripTransportDetail],
+    transport_sources: dict[str, TransportDetails],
 ) -> list[_AuthoritativeTimeBlock]:
     blocks: list[_AuthoritativeTimeBlock] = []
     activities_by_id = {item.activity_id: item for item in enriched_activities}
@@ -532,30 +533,20 @@ def build_cross_service_time_blocks(
             )
         )
 
-    transport_by_id = {item.transport_id: item for item in enriched_transport}
     for pin in selection.transport:
-        enriched = transport_by_id[pin.transport_id]
-        if (
-            pin.plan_status.value == "cancelled"
-            or enriched.departure_time is None
-            or enriched.arrival_time is None
-        ):
+        source = transport_sources.get(pin.transport_id)
+        if pin.plan_status.value == "cancelled" or source is None:
             continue
-        try:
-            start = datetime.fromisoformat(enriched.departure_time)
-            end = datetime.fromisoformat(enriched.arrival_time)
-        except ValueError:
-            continue
-        if end <= start:
-            continue
-        blocks.append(
-            _AuthoritativeTimeBlock(
-                source_type="transport",
-                source_id=pin.transport_id,
-                start=start,
-                end=end,
-            )
-        )
+        for start, end in _transport_local_time_windows(source):
+            if start < end:
+                blocks.append(
+                    _AuthoritativeTimeBlock(
+                        source_type="transport",
+                        source_id=pin.transport_id,
+                        start=start,
+                        end=end,
+                    )
+                )
 
     return sorted(
         blocks,
@@ -566,6 +557,39 @@ def build_cross_service_time_blocks(
             block.source_id,
         ),
     )
+
+
+def _transport_local_time_windows(
+    transport: TransportDetails,
+) -> list[tuple[datetime, datetime]]:
+    departure = datetime.fromisoformat(transport.departure_time)
+    arrival = datetime.fromisoformat(transport.arrival_time)
+    departure_day_end = datetime.combine(
+        departure.date() + timedelta(days=1),
+        time.min,
+    )
+    arrival_day_start = datetime.combine(arrival.date(), time.min)
+
+    if departure.date() == arrival.date():
+        if departure < arrival:
+            return [(departure, arrival)]
+        return [
+            (arrival_day_start, arrival),
+            (departure, departure_day_end),
+        ]
+
+    if departure.date() < arrival.date():
+        windows = [(departure, departure_day_end)]
+        if departure_day_end < arrival_day_start:
+            windows.append((departure_day_end, arrival_day_start))
+        if arrival_day_start < arrival:
+            windows.append((arrival_day_start, arrival))
+        return windows
+
+    return [
+        (arrival_day_start, arrival),
+        (departure, departure_day_end),
+    ]
 
 
 def build_prompt_context(

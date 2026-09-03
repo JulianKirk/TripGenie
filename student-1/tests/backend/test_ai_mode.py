@@ -386,6 +386,245 @@ def test_ai_suggestions_retry_selected_activity_and_transport_conflicts(
     )
 
 
+def test_ai_transport_conflicts_use_departure_and_arrival_local_days(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_sydney_tokyo"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Japan Airlines",
+        "origin": "Sydney",
+        "destination": "Tokyo",
+        "departure_time": "2027-04-02T21:35",
+        "arrival_time": "2027-04-03T05:55",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": 540,
+        "duration_minutes": 620,
+        "price": 1245.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"05:00",
+          "end_time":"05:30",
+          "title":"Before Tokyo Arrival",
+          "category":"activity",
+          "rationale":"This overlaps the arrival-day transport window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"06:30",
+          "end_time":"07:00",
+          "title":"After Tokyo Arrival",
+          "category":"activity",
+          "rationale":"This starts after the authoritative local arrival."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-03",
+                "goal": "Plan around the overnight flight.",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["attempt_count"] == 2
+    assert [item["title"] for item in payload["suggestions"]] == ["After Tokyo Arrival"]
+    assert (
+        prompt_context(ai_mode_api, 0)["selected_transport"][0]["duration_minutes"]
+        == 620
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_transport_conflicts_handle_westbound_local_arrival_before_departure(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_sydney_los_angeles"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Pacific Air",
+        "origin": "Sydney",
+        "destination": "Los Angeles",
+        "departure_time": "2027-04-02T11:00",
+        "arrival_time": "2027-04-02T06:30",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": -420,
+        "duration_minutes": 810,
+        "price": 980.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"05:45",
+          "end_time":"06:15",
+          "title":"Before Los Angeles Arrival",
+          "category":"activity",
+          "rationale":"This overlaps the westbound arrival window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"11:30",
+          "end_time":"12:00",
+          "title":"After Sydney Departure",
+          "category":"activity",
+          "rationale":"This overlaps the westbound departure window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"07:00",
+          "end_time":"08:00",
+          "title":"Between Local Boundaries",
+          "category":"activity",
+          "rationale":"Naive itinerary times use local wall-clock boundaries."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(ai_max_attempts=3),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Respect both westbound local time boundaries.",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["attempt_count"] == 3
+    assert [item["title"] for item in payload["suggestions"]] == [
+        "Between Local Boundaries"
+    ]
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[2]["prompt"]
+    )
+
+
+def test_ai_transport_incomplete_offset_pair_degrades_without_invented_window(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    transport_id = "transport_incomplete_offsets"
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "flight",
+        "provider": "Incomplete Air",
+        "origin": "Sydney",
+        "destination": "Tokyo",
+        "departure_time": "2027-04-02T21:35",
+        "arrival_time": "2027-04-03T05:55",
+        "departure_utc_offset": 660,
+        "duration_minutes": 620,
+        "price": 1245.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-03",
+          "start_time":"05:00",
+          "end_time":"05:30",
+          "title":"Unknown Transport Timing",
+          "category":"activity",
+          "rationale":"Incomplete offsets cannot establish a validation window."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-03",
+                "goal": "Do not fabricate timing from incomplete transport data.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 1
+    assert prompt_context(ai_mode_api)["selected_transport"] == [
+        {
+            "plan_status": "confirmed",
+            "source_status": "unavailable",
+            "transport_id": transport_id,
+            "traveller_count": 2,
+        }
+    ]
+
+
 def test_ai_validation_keeps_activity_timing_when_prompt_budget_omits_record(
     client_factory,
     database_api,
@@ -464,6 +703,103 @@ def test_ai_validation_keeps_activity_timing_when_prompt_budget_omits_record(
     assert initial_context["omitted_selected_activities"] >= 1
     assert initial_context["budget_adjustments"]["dropped_activities"] >= 1
     assert f"conflicts with selected activity '{target_activity_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_validation_keeps_transport_timing_when_prompt_budget_omits_record(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    for index in range(7):
+        transport_id = f"transport_budget_{index:02d}"
+        database_api.trip_transport[(trip_id, transport_id)] = {
+            "trip_id": trip_id,
+            "transport_id": transport_id,
+            "traveller_count": 2,
+            "plan_status": "confirmed",
+            "added_on": "2027-04-01",
+        }
+        transport_api.records[transport_id] = {
+            "id": transport_id,
+            "type": "train",
+            "provider": f"Earlier provider {index} " + ("p" * 160),
+            "origin": "Earlier origin " + ("o" * 160),
+            "destination": "Earlier destination " + ("d" * 155),
+            "departure_time": f"2027-04-02T{index + 1:02d}:00",
+            "arrival_time": f"2027-04-02T{index + 1:02d}:30",
+            "duration_minutes": 30,
+            "price": 20.0,
+            "pricing_basis": "per_traveller",
+        }
+
+    target_transport_id = "transport_budget_zz"
+    database_api.trip_transport[(trip_id, target_transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": target_transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    transport_api.records[target_transport_id] = {
+        "id": target_transport_id,
+        "type": "flight",
+        "provider": "Budget-omitted Pacific Air " + ("p" * 150),
+        "origin": "Sydney " + ("o" * 165),
+        "destination": "Los Angeles " + ("d" * 160),
+        "departure_time": "2027-04-02T11:00",
+        "arrival_time": "2027-04-02T06:30",
+        "departure_utc_offset": 660,
+        "arrival_utc_offset": -420,
+        "duration_minutes": 810,
+        "price": 980.0,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"05:45",
+          "end_time":"06:15",
+          "title":"Clashing Omitted Transport",
+          "category":"activity",
+          "rationale":"This overlaps an omitted transport arrival window."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(
+            ai_max_attempts=2,
+            ai_max_context_transport=8,
+            ai_mode_max_prompt_chars=5000,
+        ),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Avoid all selected transport windows.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 2
+    initial_context = prompt_context(ai_mode_api, 0)
+    visible_transport_ids = {
+        transport["transport_id"]
+        for transport in initial_context.get("selected_transport", [])
+    }
+    assert target_transport_id not in visible_transport_ids
+    assert initial_context["omitted_selected_transport"] >= 1
+    assert initial_context["budget_adjustments"]["dropped_transport"] >= 1
+    assert f"conflicts with selected transport '{target_transport_id}'" in str(
         ai_mode_api.requests[1]["prompt"]
     )
 

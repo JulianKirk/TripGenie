@@ -361,7 +361,7 @@ class BackendService:
         time_blocks = build_cross_service_time_blocks(
             selection=selection,
             enriched_activities=enriched_activities,
-            enriched_transport=enriched_transport,
+            transport_sources=transport_sources,
         )
         return trip, items, cross_service_context, time_blocks
 
