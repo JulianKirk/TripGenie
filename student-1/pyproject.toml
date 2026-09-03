@@ -36,6 +36,7 @@ frontend_service = [
     "templates/partials/*.html",
     "static/css/*.css",
     "static/js/*.js",
+    "static/js/*.txt",
 ]
 
 [tool.pytest.ini_options]

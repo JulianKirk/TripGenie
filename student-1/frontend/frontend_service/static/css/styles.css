@@ -1,18 +1,26 @@
+/* Student 1 trip and itinerary frontend.
+
+   The palette, typography, and base radius come from the team-owned
+   shared/frontend/theme.css contract loaded before this stylesheet. Local
+   values below describe feature-specific layout and state treatments only. */
+
 :root {
   color-scheme: light;
-  --page-bg: #f4f7fb;
-  --surface: #ffffff;
-  --surface-alt: #eef4ff;
-  --border: #c7d5eb;
-  --text: #19304d;
-  --muted: #5d708b;
-  --primary: #1f5fbf;
-  --primary-dark: #174994;
-  --danger: #b43b36;
-  --danger-dark: #8f2b27;
-  --success: #17633d;
-  --shadow: 0 18px 36px rgba(18, 41, 74, 0.08);
-  font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+  --page-bg: var(--tg-canvas, #f2f5f3);
+  --surface: var(--tg-surface, #fff);
+  --border: var(--tg-line, #d7dfda);
+  --text: var(--tg-ink, #17202a);
+  --muted: var(--tg-muted, #617080);
+  --primary: var(--tg-accent, #08785d);
+  --primary-dark: var(--tg-accent-strong, #075b49);
+  --danger: var(--tg-danger, #a12828);
+  --warning: var(--tg-warning, #fff4d6);
+  --error: var(--tg-error, #fde8e8);
+  --radius: var(--tg-radius, 8px);
+  --font-body: var(--tg-font-body, Georgia, "Times New Roman", serif);
+  --surface-alt: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  --danger-dark: color-mix(in srgb, var(--danger) 82%, #000);
+  --shadow: 0 2px 8px rgb(23 32 42 / 6%);
 }
 
 * {
@@ -23,6 +31,8 @@ body {
   margin: 0;
   background: var(--page-bg);
   color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.5;
 }
 
 a {
@@ -35,9 +45,9 @@ a:focus-visible {
 }
 
 .site-header {
-  background: linear-gradient(135deg, #153c7a, #2665cf);
+  background: var(--text);
   color: #fff;
-  padding: 2rem 1.5rem;
+  padding: 1.5rem;
 }
 
 .site-header__inner {
@@ -86,8 +96,25 @@ a:focus-visible {
 
 .site-header__home:hover,
 .site-header__home:focus-visible {
-  color: var(--primary-dark);
-  background: #fff;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  color: #fff;
+  background: var(--primary-dark);
+  border-radius: var(--radius);
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  color: #fff;
+  transform: translateY(0);
 }
 
 .loading-indicator {
@@ -116,7 +143,6 @@ a:focus-visible {
   max-width: 1200px;
   margin: 0 auto;
   padding: 1.5rem;
-  outline: none;
 }
 
 .app-layout {
@@ -129,7 +155,7 @@ a:focus-visible {
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 1.5rem;
 }
@@ -145,7 +171,7 @@ a:focus-visible {
 }
 
 .panel--danger {
-  border-color: rgba(180, 59, 54, 0.35);
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
 }
 
 .panel__header {
@@ -186,7 +212,7 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border-radius: 0.7rem;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   padding: 0.75rem 1rem;
   text-decoration: none;
@@ -212,13 +238,13 @@ a:focus-visible {
 }
 
 .button--secondary {
-  background: #d9e7ff;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-dark);
 }
 
 .button--secondary:hover,
 .button--secondary:focus-visible {
-  background: #c8dbff;
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface));
   color: var(--primary-dark);
 }
 
@@ -230,7 +256,7 @@ a:focus-visible {
 
 .button--ghost:hover,
 .button--ghost:focus-visible {
-  background: #f7faff;
+  background: var(--surface-alt);
   color: var(--text);
 }
 
@@ -256,15 +282,15 @@ a:focus-visible {
 .trip-list__link {
   display: block;
   padding: 0.95rem 1rem;
-  border-radius: 0.9rem;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: #f9fbff;
+  background: var(--surface);
   text-decoration: none;
 }
 
 .trip-list__link.is-active {
   border-color: var(--primary);
-  background: #e7f0ff;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
 }
 
 .trip-list__title {
@@ -288,8 +314,8 @@ a:focus-visible {
 
 .summary-grid div {
   padding: 1rem;
-  border-radius: 0.85rem;
-  background: #f8fbff;
+  border-radius: var(--radius);
+  background: var(--page-bg);
   border: 1px solid var(--border);
 }
 
@@ -339,10 +365,10 @@ input,
 select,
 textarea {
   width: 100%;
-  border-radius: 0.7rem;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   padding: 0.8rem 0.9rem;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
 }
 
@@ -350,14 +376,8 @@ textarea {
   resize: vertical;
 }
 
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-button:focus-visible,
-.button:focus-visible,
-.trip-list__link:focus-visible,
-.pill:focus-visible {
-  outline: 3px solid rgba(31, 95, 191, 0.28);
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primary) 55%, transparent);
   outline-offset: 2px;
 }
 
@@ -373,20 +393,20 @@ button:focus-visible,
 }
 
 .banner {
-  border-radius: 0.85rem;
+  border-radius: var(--radius);
   padding: 1rem;
   margin-bottom: 1rem;
   border: 1px solid transparent;
 }
 
 .banner--error {
-  background: #fff1f0;
-  border-color: rgba(180, 59, 54, 0.32);
+  background: var(--error);
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
 }
 
 .banner--info {
-  background: #eef4ff;
-  border-color: rgba(31, 95, 191, 0.24);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
 }
 
 .day-selector {
@@ -404,14 +424,14 @@ button:focus-visible,
   border-radius: 999px;
   border: 1px solid var(--border);
   padding: 0.55rem 0.9rem;
-  background: #fff;
+  background: var(--surface);
   text-decoration: none;
   font-weight: 600;
 }
 
 .pill--active {
   border-color: var(--primary);
-  background: #e8f1ff;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
 }
 
 .day-list {
@@ -420,9 +440,9 @@ button:focus-visible,
 }
 
 .day-card {
-  border-radius: 0.95rem;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   padding: 1rem;
 }
 
@@ -447,15 +467,15 @@ button:focus-visible,
   gap: 1rem;
   justify-content: space-between;
   align-items: start;
-  border-radius: 0.85rem;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: #fbfdff;
+  background: var(--surface-alt);
   padding: 1rem;
 }
 
 .item-card--draft {
-  border-color: #d8ccff;
-  background: #fcf9ff;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: color-mix(in srgb, var(--warning) 58%, var(--surface));
 }
 
 .item-card__content h5 {
@@ -470,13 +490,13 @@ button:focus-visible,
 
 .mode-panel {
   margin-top: 1.5rem;
-  border-radius: 1rem;
+  border-radius: var(--radius);
   padding: 1.5rem;
 }
 
 .mode-panel--ai {
-  background: linear-gradient(180deg, #f7f3ff, #efe8ff);
-  border: 1px solid #d8ccff;
+  background: color-mix(in srgb, var(--warning) 58%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
 }
 
 .ai-loading-indicator {
@@ -494,8 +514,8 @@ button:focus-visible,
 
 .ai-result-meta div {
   padding: 0.75rem;
-  border-radius: 0.8rem;
-  background: #fff;
+  border-radius: var(--radius);
+  background: var(--surface);
   border: 1px solid var(--border);
 }
 
@@ -524,15 +544,15 @@ button:focus-visible,
   align-items: center;
   border-radius: 999px;
   padding: 0.25rem 0.65rem;
-  background: #e8f1ff;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
 }
 
 .badge--warning {
-  background: #fff4dc;
-  color: #7b5200;
+  background: var(--warning);
+  color: var(--text);
 }
 
 .stack-form {
@@ -568,6 +588,30 @@ fieldset[disabled] {
   }
 }
 
+@media (max-width: 480px) {
+  .site-header,
+  .app-shell {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .htmx-indicator {
+    transition: none;
+  }
+
+  .button:hover,
+  .button:focus-visible {
+    transform: none;
+  }
+}
+
 /* Accommodation booked on a trip. A row is a link plus a bin, side by side --
    the bin is a sibling of the anchor rather than a child, because a control
    nested inside a link stops being reachable as its own control. */
@@ -584,7 +628,7 @@ fieldset[disabled] {
   align-items: stretch;
   gap: 0.25rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--surface);
   overflow: hidden;
 }

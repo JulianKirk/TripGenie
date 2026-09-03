@@ -791,7 +791,7 @@ def anyio_backend() -> str:
 
 @pytest.fixture
 def client_factory(backend_api: FakeBackendApi):
-    def factory(handler=None) -> TestClient:
+    def factory(handler=None, *, root_path: str = "") -> TestClient:
         app = create_app(
             Settings(
                 backend_base_url="http://backend.test",
@@ -801,7 +801,7 @@ def client_factory(backend_api: FakeBackendApi):
             ),
             transport=httpx.MockTransport(handler or backend_api.handle),
         )
-        return TestClient(app)
+        return TestClient(app, root_path=root_path)
 
     return factory
 
