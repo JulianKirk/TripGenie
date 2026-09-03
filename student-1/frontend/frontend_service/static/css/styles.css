@@ -6,23 +6,20 @@
 
 :root {
   color-scheme: light;
-  --page-bg: var(--tg-canvas);
-  --surface: var(--tg-surface);
-  --surface-alt: color-mix(in srgb, var(--tg-accent) 6%, var(--tg-surface));
-  --border: var(--tg-line);
-  --text: var(--tg-ink);
-  --muted: var(--tg-muted);
-  --primary: var(--tg-accent);
-  --primary-dark: var(--tg-accent-strong);
-  --danger: var(--tg-danger);
-  --danger-dark: color-mix(in srgb, var(--tg-danger) 82%, #000);
-  --warning: var(--tg-warning);
-  --error: var(--tg-error);
-  --radius: var(--tg-radius);
-  --primary-wash: color-mix(in srgb, var(--primary) 12%, var(--surface));
-  --primary-wash-strong: color-mix(in srgb, var(--primary) 20%, var(--surface));
-  --ai-surface: color-mix(in srgb, var(--warning) 58%, var(--surface));
-  --ai-border: color-mix(in srgb, var(--primary) 32%, var(--border));
+  --page-bg: var(--tg-canvas, #f2f5f3);
+  --surface: var(--tg-surface, #fff);
+  --border: var(--tg-line, #d7dfda);
+  --text: var(--tg-ink, #17202a);
+  --muted: var(--tg-muted, #617080);
+  --primary: var(--tg-accent, #08785d);
+  --primary-dark: var(--tg-accent-strong, #075b49);
+  --danger: var(--tg-danger, #a12828);
+  --warning: var(--tg-warning, #fff4d6);
+  --error: var(--tg-error, #fde8e8);
+  --radius: var(--tg-radius, 8px);
+  --font-body: var(--tg-font-body, Georgia, "Times New Roman", serif);
+  --surface-alt: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  --danger-dark: color-mix(in srgb, var(--danger) 82%, #000);
   --shadow: 0 2px 8px rgb(23 32 42 / 6%);
 }
 
@@ -34,7 +31,7 @@ body {
   margin: 0;
   background: var(--page-bg);
   color: var(--text);
-  font-family: var(--tg-font-body);
+  font-family: var(--font-body);
   line-height: 1.5;
 }
 
@@ -146,7 +143,6 @@ a:focus-visible {
   max-width: 1200px;
   margin: 0 auto;
   padding: 1.5rem;
-  outline: none;
 }
 
 .app-layout {
@@ -242,13 +238,13 @@ a:focus-visible {
 }
 
 .button--secondary {
-  background: var(--primary-wash);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-dark);
 }
 
 .button--secondary:hover,
 .button--secondary:focus-visible {
-  background: var(--primary-wash-strong);
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface));
   color: var(--primary-dark);
 }
 
@@ -294,7 +290,7 @@ a:focus-visible {
 
 .trip-list__link.is-active {
   border-color: var(--primary);
-  background: var(--primary-wash);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
 }
 
 .trip-list__title {
@@ -362,8 +358,7 @@ input,
 select,
 textarea,
 button {
-  font-family: var(--tg-font-ui);
-  font-size: inherit;
+  font: inherit;
 }
 
 input,
@@ -410,7 +405,7 @@ textarea {
 }
 
 .banner--info {
-  background: var(--primary-wash);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
 }
 
@@ -436,7 +431,7 @@ textarea {
 
 .pill--active {
   border-color: var(--primary);
-  background: var(--primary-wash);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
 }
 
 .day-list {
@@ -479,8 +474,8 @@ textarea {
 }
 
 .item-card--draft {
-  border-color: var(--ai-border);
-  background: var(--ai-surface);
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: color-mix(in srgb, var(--warning) 58%, var(--surface));
 }
 
 .item-card__content h5 {
@@ -500,8 +495,8 @@ textarea {
 }
 
 .mode-panel--ai {
-  background: var(--ai-surface);
-  border: 1px solid var(--ai-border);
+  background: color-mix(in srgb, var(--warning) 58%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
 }
 
 .ai-loading-indicator {
@@ -549,7 +544,7 @@ textarea {
   align-items: center;
   border-radius: 999px;
   padding: 0.25rem 0.65rem;
-  background: var(--primary-wash);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;

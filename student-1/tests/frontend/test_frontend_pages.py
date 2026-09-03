@@ -42,13 +42,25 @@ def test_theme_and_local_assets_follow_the_shared_contract(
     client,
     client_factory,
 ) -> None:
+    page = client.get("/")
     css = client.get("/static/css/styles.css")
     htmx = client.get("/static/js/htmx.min.js")
 
+    shared_theme_link = 'href="http://localhost:8080/theme.css"'
+    local_stylesheet_link = 'href="http://testserver/static/css/styles.css"'
+    assert page.text.index(shared_theme_link) < page.text.index(local_stylesheet_link)
+    assert "Trip &amp; Itinerary Management" in page.text
+    assert "Generate draft suggestions" in page.text
+    assert "Selected transport" in page.text
+    assert "Selected activities" in page.text
+    assert "Accommodations" in page.text
     assert css.status_code == 200
-    assert "--page-bg: var(--tg-canvas);" in css.text
-    assert "--primary: var(--tg-accent);" in css.text
-    assert "font-family: var(--tg-font-body);" in css.text
+    assert "--page-bg: var(--tg-canvas, #f2f5f3);" in css.text
+    assert "--primary: var(--tg-accent, #08785d);" in css.text
+    assert '--font-body: var(--tg-font-body, Georgia, "Times New Roman", serif);' in (
+        css.text
+    )
+    assert "outline: none;" not in css.text
     assert htmx.status_code == 200
     assert "htmx" in htmx.text
 
