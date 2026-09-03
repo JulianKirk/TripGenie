@@ -379,6 +379,17 @@ def create_app(
         except ApiError as exc:
             selection_error = exc
             selections, _ = await safe_selections(client, transport_id)
+        else:
+            # A selection changes the derived seat count. Refresh the option
+            # before rendering so the detail grid and itinerary summary agree
+            # without requiring a full-page reload.
+            try:
+                option = await client.get_transport_option(transport_id)
+            except ApiError:
+                # The selection itself succeeded, so retain the original
+                # option rather than replacing that success with a 500 if the
+                # follow-up refresh is temporarily unavailable.
+                pass
 
         return render(
             request,

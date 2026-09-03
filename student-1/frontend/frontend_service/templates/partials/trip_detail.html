@@ -178,6 +178,89 @@
     {% endif %}
   </section>
 
+  <section class="panel panel--nested" aria-labelledby="transport-heading">
+    <div class="panel__header">
+      <div>
+        <h3 id="transport-heading">Selected transport</h3>
+        <p class="muted-copy">Transport saved to this trip from the transport service.</p>
+      </div>
+    </div>
+
+    {% if trip.transport %}
+      <ul class="item-list">
+        {% for journey in trip.transport %}
+          <li class="item-card">
+            <div class="item-card__content">
+              <h4>
+                {% if journey.provider %}{{ journey.provider }}{% if journey.type %} {{ journey.type.replace('_', ' ').lower() }}{% endif %}{% else %}{{ journey.transport_id }}{% endif %}
+              </h4>
+              {% if journey.origin or journey.destination %}
+                <p class="item-card__meta">{{ journey.origin or 'Origin unavailable' }} to {{ journey.destination or 'Destination unavailable' }}</p>
+              {% endif %}
+              {% if journey.departure_time or journey.arrival_time %}
+                <p>
+                  <strong>Schedule:</strong>
+                  {{ journey.departure_time or 'Departure unavailable' }} to {{ journey.arrival_time or 'Arrival unavailable' }}
+                </p>
+              {% endif %}
+              <p>
+                <strong>Travellers:</strong> {{ journey.traveller_count }} traveller{% if journey.traveller_count != 1 %}s{% endif %}
+                · <strong>Status:</strong> {{ journey.plan_status.value.title() }}
+              </p>
+              {% if journey.estimated_cost is not none %}
+                <p><strong>Cost:</strong> ${{ '%.2f'|format(journey.estimated_cost) }} estimated total</p>
+              {% elif journey.price is not none %}
+                <p><strong>Price:</strong> ${{ '%.2f'|format(journey.price) }}{% if journey.pricing_basis %} {{ journey.pricing_basis.replace('_', ' ') }}{% endif %}</p>
+              {% endif %}
+              {% if journey.duration_minutes is not none %}
+                <p><strong>Duration:</strong> {{ journey.duration_minutes }} minutes</p>
+              {% endif %}
+              {% if journey.notes %}
+                <p class="muted-copy"><strong>Notes:</strong> {{ journey.notes }}</p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-copy">No transport selected for this trip yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel panel--nested" aria-labelledby="activities-heading">
+    <div class="panel__header">
+      <div>
+        <h3 id="activities-heading">Selected activities</h3>
+        <p class="muted-copy">Activities saved to this trip from the activities service.</p>
+      </div>
+    </div>
+
+    {% if trip.activities %}
+      <ul class="item-list">
+        {% for activity in trip.activities %}
+          <li class="item-card">
+            <div class="item-card__content">
+              <h4>{{ activity.name or activity.activity_id }}</h4>
+              <p class="item-card__meta">
+                {{ activity.date }}{% if activity.start_time %} at {{ activity.start_time }}{% else %} · Time not recorded{% endif %}
+              </p>
+              {% if activity.price is not none %}
+                <p>
+                  <strong>Price:</strong> ${{ activity.price }}{% if activity.pricing_basis == 'PER_PERSON' %} per person{% elif activity.pricing_basis == 'FLAT_ADMISSION' %} flat admission{% elif activity.pricing_basis %} {{ activity.pricing_basis.replace('_', ' ').lower() }}{% endif %}
+                </p>
+              {% endif %}
+              {% if activity.duration_minutes is not none %}
+                <p><strong>Duration:</strong> {{ activity.duration_minutes }} minutes</p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-copy">No activities selected for this trip yet.</p>
+    {% endif %}
+  </section>
+
   <section class="panel panel--nested" aria-labelledby="accommodation-heading">
     <div class="panel__header">
       <div>

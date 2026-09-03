@@ -784,6 +784,7 @@ def test_ticking_a_trip_shows_it_as_selected(client: TestClient) -> None:
     assert "Remove from this trip" in flat
     assert "$378.00" in flat
     assert "Shortlisted" in flat
+    assert "<dt>Seats remaining</dt><dd>178 of 180</dd>" in response.text
 
 
 def test_ticking_reduces_the_seats_shown(client: TestClient) -> None:
@@ -847,6 +848,7 @@ def test_unticking_puts_the_trip_back(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Add to this trip" in flat
     assert "Remove from this trip" not in flat
+    assert "<dt>Seats remaining</dt><dd>180 of 180</dd>" in response.text
 
 
 def test_the_option_page_survives_an_itinerary_outage(

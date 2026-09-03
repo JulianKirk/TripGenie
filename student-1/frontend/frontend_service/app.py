@@ -6,9 +6,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, time
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode
 
-import httpx
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +33,11 @@ from .models import (
     TripRecord,
     TripStatus,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    import httpx
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(PACKAGE_ROOT / "templates"))
@@ -107,7 +112,7 @@ class AiSuggestionResultView:
 
 
 def get_backend_client(request: Request) -> BackendApiClient:
-    return request.app.state.backend_client
+    return cast(BackendApiClient, request.app.state.backend_client)
 
 
 def envelope(payload: object) -> dict[str, object]:
@@ -952,7 +957,7 @@ def create_app(
     app_settings = settings or Settings.from_env()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         client = BackendApiClient(app_settings, transport=transport)
         app.state.backend_client = client
         app.state.settings = app_settings

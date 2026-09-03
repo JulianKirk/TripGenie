@@ -102,6 +102,10 @@ class FakeBackendApi:
         }
         # trip_id -> the enriched stays the backend would return for it.
         self.accommodations: dict[str, list[dict[str, object]]] = {}
+        # These mirrors include every field in the real backend response so a
+        # page test exercises the same strict contract as Compose does.
+        self.activities: dict[str, list[dict[str, object]]] = {}
+        self.transport: dict[str, list[dict[str, object]]] = {}
         self.items: dict[str, dict[str, object]] = {
             "item_2027_sydney_harbour_walk": {
                 "id": "item_2027_sydney_harbour_walk",
@@ -681,6 +685,42 @@ class FakeBackendApi:
         row.update(fields)
         self.accommodations.setdefault(trip_id, []).append(row)
 
+    def pin_activity(self, trip_id: str, **fields: object) -> None:
+        row = {
+            "trip_id": trip_id,
+            "activity_id": "activity_1",
+            "date": "2027-04-01",
+            "start_time": None,
+            "name": None,
+            "price": None,
+            "pricing_basis": None,
+            "duration_minutes": None,
+        }
+        row.update(fields)
+        self.activities.setdefault(trip_id, []).append(row)
+
+    def pin_transport(self, trip_id: str, **fields: object) -> None:
+        row = {
+            "trip_id": trip_id,
+            "transport_id": "transport_1",
+            "traveller_count": 2,
+            "plan_status": "pending",
+            "added_on": "2027-04-01",
+            "notes": None,
+            "origin": None,
+            "destination": None,
+            "provider": None,
+            "type": None,
+            "departure_time": None,
+            "arrival_time": None,
+            "duration_minutes": None,
+            "price": None,
+            "pricing_basis": None,
+            "estimated_cost": None,
+        }
+        row.update(fields)
+        self.transport.setdefault(trip_id, []).append(row)
+
     def _trip_detail(self, trip_id: str) -> dict[str, object]:
         trip = deepcopy(self.trips[trip_id])
         days: list[dict[str, object]] = []
@@ -709,6 +749,8 @@ class FakeBackendApi:
         # The backend enriches these with student 2's name and price before the
         # frontend ever sees them, so the fake serves them already enriched.
         trip["accommodations"] = deepcopy(self.accommodations.get(trip_id, []))
+        trip["activities"] = deepcopy(self.activities.get(trip_id, []))
+        trip["transport"] = deepcopy(self.transport.get(trip_id, []))
         return trip
 
     def _next_trip_id(self) -> str:
