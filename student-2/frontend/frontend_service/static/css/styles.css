@@ -29,6 +29,8 @@ body {
 .masthead__eyebrow { margin: 0; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .masthead__title { margin: 0.2rem 0; font-size: 1.6rem; }
 .masthead__subtitle { margin: 0; color: var(--muted); }
+.masthead__home { display: inline-block; margin-top: 1rem; padding: 0.4rem 0.8rem; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; text-decoration: none; }
+.masthead__home:hover, .masthead__home:focus-visible { color: #fff; background: var(--primary); }
 
 .layout { padding: 1.5rem clamp(1rem, 5vw, 3rem); }
 

@@ -23,6 +23,7 @@ class TestPage:
         assert "<!DOCTYPE html>" in response.text
         assert 'id="filters"' in response.text
         assert LISTING["name"] in response.text
+        assert 'href="http://localhost:8080">Home</a>' in response.text
 
     def test_results_are_a_fragment(self, client):
         response = client.get("/accommodation", headers=HTMX)

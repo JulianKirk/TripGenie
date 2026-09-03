@@ -49,6 +49,8 @@ a { color: var(--accent); }
 .site-header__title { margin: 0.25rem 0; font-size: 1.6rem; }
 .site-header__title a { color: #fff; text-decoration: none; }
 .site-header__subtitle { margin: 0; max-width: 70ch; color: #c6d4e0; font-size: 0.9rem; }
+.site-header__home { display: inline-block; margin-top: 1rem; padding: 0.4rem 0.8rem; color: #fff; border: 1px solid #9fb4c7; border-radius: 6px; text-decoration: none; }
+.site-header__home:hover, .site-header__home:focus-visible { color: var(--ink); background: #fff; }
 
 .loading-indicator {
   display: none;

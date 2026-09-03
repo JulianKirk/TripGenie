@@ -74,6 +74,22 @@ a:focus-visible {
   color: rgba(255, 255, 255, 0.92);
 }
 
+.site-header__home {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.45rem 0.8rem;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.site-header__home:hover,
+.site-header__home:focus-visible {
+  color: var(--primary-dark);
+  background: #fff;
+}
+
 .loading-indicator {
   max-width: 1200px;
   margin: 0 auto;

@@ -36,18 +36,50 @@ EXPENSE_FIELDS = (
     "notes",
 )
 CATEGORIES = ("accommodation", "transport", "activities", "food", "shopping", "other")
+FIELD_LABELS = {
+    "trip_id": "Trip",
+    "currency": "Currency",
+    "total_budget": "Total budget",
+    "accommodation_budget": "Accommodation allocation",
+    "transport_budget": "Transport allocation",
+    "activities_budget": "Activities allocation",
+    "food_budget": "Food allocation",
+    "other_budget": "Other allocation",
+    "category": "Category",
+    "description": "Description",
+    "amount": "Amount",
+    "date": "Date",
+}
 
 
 def _fields(form: Any, names: tuple[str, ...]) -> dict[str, str]:
     return {name: str(form.get(name, "")).strip() for name in names}
 
 
+def _friendly_issue(field: str, issue: str) -> str:
+    label = FIELD_LABELS.get(field, field.replace("_", " ").title())
+    lowered = issue.lower()
+    if field == "currency" and "pattern" in lowered:
+        return "Currency must use three uppercase letters, for example AUD."
+    if "field required" in lowered:
+        return f"{label} is required."
+    if "greater than or equal to 0" in lowered:
+        return f"{label} must be zero or more."
+    if "greater than 0" in lowered:
+        return f"{label} must be greater than zero."
+    if field == "date" and "valid date" in lowered:
+        return "Enter a valid date."
+    if lowered.startswith("must "):
+        return f"{label} {issue}."
+    return f"{label}: {issue.rstrip('.')}."
+
+
 def _errors_by_field(error: BackendError) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = {}
     for detail in error.details:
-        grouped.setdefault(str(detail.get("field", "form")), []).append(
-            str(detail.get("issue", error))
-        )
+        field = str(detail.get("field", "form"))
+        issue = str(detail.get("issue", error))
+        grouped.setdefault(field, []).append(_friendly_issue(field, issue))
     return grouped
 
 

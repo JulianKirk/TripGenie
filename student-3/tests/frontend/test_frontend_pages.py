@@ -110,6 +110,7 @@ def test_browse_lists_the_seeded_options(client: TestClient) -> None:
     assert "14 option(s)" in response.text
     assert "Queenstown Airport" in response.text
     assert "Melbourne" in response.text
+    assert 'href="http://localhost:8080">Home</a>' in response.text
 
 
 def test_browse_shows_derived_duration_and_seats(client: TestClient) -> None:
