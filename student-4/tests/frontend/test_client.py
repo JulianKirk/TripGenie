@@ -63,6 +63,17 @@ def test_read_operations_use_only_public_backend_routes(
     ]
 
 
+def test_ready_uses_the_backend_readiness_contract(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    readiness = run(backend_client.ready())
+
+    assert readiness.status == "ok"
+    assert backend.last_request.method == "GET"
+    assert backend.last_request.url.path == "/ready"
+
+
 def test_activity_mutations_use_documented_methods_and_payloads(
     backend_client: BackendClient,
     backend: FakeBackend,

@@ -7,12 +7,14 @@ on:
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'shared/frontend/index.html'
   pull_request:
     paths:
       - 'student-4/**'
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'shared/frontend/index.html'
   workflow_dispatch:
 
 jobs:
@@ -52,7 +54,7 @@ jobs:
           docker build \
             -f student-4/frontend/Dockerfile \
             -t student-4-frontend \
-            student-4/frontend
+            student-4
       - name: Smoke test degraded frontend health
         run: |
           docker run -d --name student-4-frontend -p 18084:8084 \
@@ -84,11 +86,12 @@ jobs:
           cache: pip
           cache-dependency-path: student-4/pyproject.toml
       - name: Install database and development dependencies
+        run: python -m pip install -e "./student-4[dev]"
+      - name: Validate the installed service packages
         run: |
-          python -m pip install -e "./student-4[dev]"
-          python -m pip install -e "./student-4/backend"
-      - name: Validate the installed package
-        run: python -c "import student4_database_service"
+          python -c "import student4_backend_service"
+          python -c "import student4_database_service"
+          python -c "import student4_frontend_service"
       - name: Lint and check formatting
         run: |
           ruff check student-4
@@ -141,3 +144,30 @@ jobs:
           exit 1
       - name: Validate Compose configuration
         run: docker compose config --quiet
+
+  compose:
+    name: Validate Student 4 Compose Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the shared Compose configuration
+        run: docker compose config --quiet
+      # AI, itinerary, and shared-location calls are advisory for this smoke
+      # test. The database is the backend's readiness dependency, so the owned
+      # three-service slice can be verified without starting the whole stack.
+      - name: Bring the Student 4 slice up and wait for readiness
+        run: |
+          docker compose up -d --build --wait --no-deps \
+            student-4-database student-4-backend student-4-frontend
+      - name: Check the frontend on its assignment port
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8084/ready
+          curl --fail --silent --show-error http://127.0.0.1:8084/ > /dev/null
+      - name: Compose logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color \
+            student-4-database student-4-backend student-4-frontend
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

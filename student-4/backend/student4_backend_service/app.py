@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import httpx  # noqa: TC002 (public transport test seam)
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response, status
 
 from . import errors
 from .activity_routes import router as activity_router
@@ -66,6 +66,23 @@ def create_app(
             service=settings.service_name,
             database=database,
             location=shared,
+        )
+
+    @app.get(
+        "/ready",
+        response_model=HealthResponse,
+        responses={503: {"model": HealthResponse}},
+    )
+    async def ready(response: Response, db: DbDep) -> HealthResponse:
+        database = await state(db.health)
+        is_ready = database == "ok"
+        if not is_ready:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return HealthResponse(
+            status="ready" if is_ready else "not_ready",
+            service=settings.service_name,
+            database=database,
+            location="not_checked",
         )
 
     app.include_router(recommendation_router)

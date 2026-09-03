@@ -24,6 +24,6 @@ USER tripgenie
 EXPOSE 8008
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/health', timeout=2)"]
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/ready', timeout=2)"]
 
 CMD ["uvicorn", "student4_backend_service.app:app", "--host", "0.0.0.0", "--port", "8008"]

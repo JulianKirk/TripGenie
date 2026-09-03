@@ -204,6 +204,43 @@ def test_health_degrades_when_backend_is_unavailable(backend: FakeBackend) -> No
     }
 
 
+def test_ready_rejects_traffic_when_backend_is_unavailable(
+    backend: FakeBackend,
+) -> None:
+    backend.overrides[("GET", "/ready")] = httpx.Response(
+        503,
+        json={
+            "status": "not_ready",
+            "service": "student-4-backend",
+            "database": "unreachable",
+            "location": "not_checked",
+        },
+    )
+    client = frontend(backend)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "service": "student-4-frontend",
+        "backend": "unavailable",
+    }
+
+
+def test_ready_accepts_traffic_when_backend_is_ready(backend: FakeBackend) -> None:
+    client = frontend(backend)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "service": "student-4-frontend",
+        "backend": "ok",
+    }
+
+
 def test_static_assets_are_served(backend: FakeBackend) -> None:
     client = frontend(backend)
 

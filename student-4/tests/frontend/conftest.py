@@ -104,7 +104,7 @@ class FakeBackend:
     @staticmethod
     def _default_response(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if path == "/health":
+        if path in {"/health", "/ready"}:
             return httpx.Response(
                 200,
                 json={

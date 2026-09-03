@@ -26,13 +26,15 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["database", "frontend"]
+where = ["backend", "database", "frontend"]
 include = [
+    "student4_backend_service*",
     "student4_database_service*",
     "student4_frontend_service*",
 ]
 
 [tool.setuptools.package-data]
+student4_backend_service = ["prompts/*.md"]
 student4_frontend_service = [
     "templates/*.html",
     "templates/macros/*.html",

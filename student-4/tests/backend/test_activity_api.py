@@ -445,6 +445,47 @@ def test_health_degrades_when_a_dependency_is_unreachable() -> None:
     assert response.json()["database"] == "unreachable"
 
 
+def test_ready_rejects_traffic_when_database_is_unreachable() -> None:
+    def unavailable(request: httpx.Request) -> httpx.Response:
+        message = "offline"
+        raise httpx.ConnectError(message, request=request)
+
+    app = create_app(
+        Settings(),
+        database_transport=httpx.MockTransport(unavailable),
+        location_transport=httpx.MockTransport(location_handler),
+    )
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "service": "student-4-backend",
+        "database": "unreachable",
+        "location": "not_checked",
+    }
+
+
+def test_ready_accepts_traffic_when_database_is_available() -> None:
+    database = FakeDatabase()
+    app = create_app(
+        Settings(),
+        database_transport=httpx.MockTransport(database.handle),
+        location_transport=httpx.MockTransport(location_handler),
+    )
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "service": "student-4-backend",
+        "database": "ok",
+        "location": "not_checked",
+    }
+
+
 def test_health_degrades_for_a_non_object_dependency_response() -> None:
     def invalid_health(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[])
