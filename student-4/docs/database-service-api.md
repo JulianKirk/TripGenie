@@ -29,7 +29,7 @@ responses.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///student-4/database/activities.db` | SQLAlchemy SQLite URL. |
-| `SEED_DATA` | `1` | Seed ten categories and ten activities into an empty catalogue; set to `0` in isolated tests. |
+| `SEED_DATA` | `1` | Seed ten categories and fourteen activities into an empty catalogue; set to `0` in isolated tests. |
 
 The eventual container path and volume may override `DATABASE_URL` without
 changing this API contract.
@@ -210,7 +210,8 @@ The categories route is registered before the UUID detail route so the literal
 word `categories` cannot be interpreted as an activity identifier.
 
 The repository includes a populated development database at
-`student-4/database/activities.db`. It contains at least ten rows in each
+`student-4/database/activities.db`. It contains ten categories and fourteen
+activities, with at least ten rows in each
 Student 4 table for assignment inspection. Runtime seeding is idempotent and
 does not replace an activity catalogue after it contains data.
 

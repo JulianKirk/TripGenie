@@ -1,0 +1,25 @@
+<section class="panel ai-panel" aria-labelledby="ai-suggestions-heading">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">AI assisted search</p>
+      <h2 id="ai-suggestions-heading">AI activity suggestions</h2>
+    </div>
+    <span class="pill">Advisory only</span>
+  </div>
+  <p class="field-hint">Describe what would suit you. The AI will run the same advanced search shown below, evaluate the real matches, and shortlist the strongest options; nothing is added to a trip until you choose it.</p>
+  <form hx-post="/suggestions/plan" hx-target="#ai-suggestions" hx-swap="innerHTML" hx-indicator="#ai-understanding">
+    <label class="field" for="ai-question">What would you like to do?
+      <textarea id="ai-question" name="question" maxlength="500" required placeholder="Something outdoors, accessible, and relaxed for our first morning"></textarea>
+    </label>
+    <label class="field" for="ai-trip">Trip context (optional)
+      <select id="ai-trip" name="trip_id" {% if not trip_directory.available %}disabled{% endif %}>
+        <option value="">No trip selected</option>
+        {% for trip in trip_directory.trips %}<option value="{{ trip.id }}">{{ trip.name }} — {{ trip.destination }}, {{ trip.start_date }} to {{ trip.end_date }}</option>{% endfor %}
+      </select>
+      {% if not trip_directory.available %}<span class="field-hint">Trips are temporarily unavailable; suggestions can still use your prompt.</span>{% endif %}
+    </label>
+    <button class="button button--primary" type="submit">Ask for suggestions</button>
+    <span id="ai-understanding" class="htmx-indicator ai-working" role="status">Understanding your request…</span>
+  </form>
+  <div id="ai-suggestions" class="ai-suggestions" aria-live="polite"></div>
+</section>

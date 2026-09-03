@@ -460,3 +460,31 @@ def test_health_degrades_for_a_non_object_dependency_response() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
     assert response.json()["database"] == "unreachable"
+
+
+def test_health_accepts_extra_fields_from_a_healthy_dependency() -> None:
+    database = FakeDatabase()
+
+    def live_shared_health(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "service": "shared-backend",
+                    "database": "ok",
+                },
+            )
+        return location_handler(request)
+
+    app = create_app(
+        Settings(),
+        database_transport=httpx.MockTransport(database.handle),
+        location_transport=httpx.MockTransport(live_shared_health),
+    )
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["location"] == "ok"

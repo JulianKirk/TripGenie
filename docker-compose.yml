@@ -349,12 +349,17 @@ services:
       DATABASE_URL: http://student-4-database:8009
       LOCATION_URL: http://shared-backend:9100
       ITINERARY_URL: http://student-1-backend:8001
+      AI_MODE_URL: "${STUDENT4_BACKEND_AI_MODE_URL:-http://ai-mode:8006}"
+      AI_MODE_TIMEOUT: "${STUDENT4_BACKEND_AI_MODE_TIMEOUT:-100}"
+      AI_PROMPT_MAX_CHARS: "${STUDENT4_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
+      AI_MAX_CANDIDATES: "${STUDENT4_BACKEND_AI_MAX_CANDIDATES:-20}"
     ports:
       - "8008:8008"
     depends_on:
       - student-4-database
       - shared-backend
       - student-1-backend
+      - ai-mode
 
   # HTMX frontend. Kept alongside the legacy placeholder until the team
   # retires the old student-4-service entry.
@@ -365,6 +370,7 @@ services:
     environment:
       BACKEND_URL: "${STUDENT4_FRONTEND_BACKEND_URL:-http://student-4-backend:8008}"
       BACKEND_TIMEOUT: "${STUDENT4_FRONTEND_BACKEND_TIMEOUT:-5}"
+      AI_TIMEOUT: "${STUDENT4_FRONTEND_AI_TIMEOUT:-210}"
     ports:
       - "8094:8084"
     depends_on:

@@ -1,0 +1,16 @@
+<div class="ai-progress" role="status">
+  {% if retry %}
+    <p class="eyebrow">Search adjusted</p>
+    <h3>No strong matches</h3>
+    <p>{{ revision_explanation }}</p>
+    <p><strong>Searching again for {{ plan.summary }}.</strong></p>
+  {% else %}
+    <p class="eyebrow">Search planned</p>
+    <h3>Searching for {{ plan.summary }}.</h3>
+  {% endif %}
+  <p class="field-hint">Evaluating the activities that match against your request{% if plan.trip_id %} and selected trip{% endif %}…</p>
+  <div class="ai-progress__track" aria-hidden="true"><span></span></div>
+  <form hx-post="/suggestions/evaluate" hx-trigger="load" hx-target="#ai-suggestions" hx-swap="innerHTML">
+    <input type="hidden" name="state" value="{{ state_json }}">
+  </form>
+</div>

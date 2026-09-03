@@ -100,7 +100,12 @@ SAMPLE_ACTIVITY_SEED_KEYS = (
     "brisbane riverside sunrise yoga",
     "perth evening food crawl",
     "canberra national gallery visit",
+    "royal botanic garden accessible stroll",
+    "sydney harbour sunrise kayak",
+    "museum of contemporary art highlights tour",
+    "the rocks evening food walk",
 )
+HISTORICAL_ACTIVITY_CATALOGUE_SIZE = 10
 SAMPLE_ACTIVITY_IDS = tuple(
     _activity_seed_id(seed_key) for seed_key in SAMPLE_ACTIVITY_SEED_KEYS
 )
@@ -280,6 +285,77 @@ SAMPLE_ACTIVITY_DATA: tuple[dict[str, object], ...] = (
         "categories": ["CULTURE"],
         "availability_schedules": _weekly("MONDAY", "10:00", "15:00"),
     },
+    {
+        "name": "Royal Botanic Garden accessible stroll",
+        "description": (
+            "A relaxed, step-free guided stroll through the harbour-side gardens."
+        ),
+        "price": "22.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 12,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Step-free route with accessible toilets nearby.",
+        "location_details": _location("Sydney", "Mrs Macquaries Road", 1),
+        "categories": ["OUTDOOR", "TOUR", "WELLNESS"],
+        "availability_schedules": _weekly("SUNDAY", "09:00", "12:00"),
+    },
+    {
+        "name": "Sydney Harbour sunrise kayak",
+        "description": (
+            "A guided sunrise paddle with close-up harbour and skyline views."
+        ),
+        "price": "95.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 8,
+        "booking_required": True,
+        "booking_notes": "Advance booking and basic swimming ability required.",
+        "location_details": _location("Sydney", "Hickson Road", 5),
+        "categories": ["ADVENTURE", "OUTDOOR"],
+        "availability_schedules": _weekly("SATURDAY", "06:00", "09:00"),
+    },
+    {
+        "name": "Museum of Contemporary Art highlights tour",
+        "description": (
+            "An accessible guided introduction to contemporary Australian art."
+        ),
+        "price": "30.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 90,
+        "minimum_participants": 1,
+        "maximum_participants": 15,
+        "booking_required": False,
+        "wheelchair_accessible": True,
+        "step_free_access": True,
+        "accessible_toilet": True,
+        "accessibility_notes": "Lift access and accessible toilets are available.",
+        "location_details": _location("Sydney", "George Street", 140),
+        "categories": ["CULTURE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "10:00", "16:00"),
+    },
+    {
+        "name": "The Rocks evening food walk",
+        "description": (
+            "A small-group tasting walk through historic lanes and local eateries."
+        ),
+        "price": "80.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 150,
+        "minimum_age": 12,
+        "minimum_participants": 2,
+        "maximum_participants": 10,
+        "booking_required": True,
+        "location_details": _location("Sydney", "Playfair Street", 12),
+        "categories": ["FOOD_DRINK", "NIGHTLIFE", "TOUR"],
+        "availability_schedules": _weekly("FRIDAY", "17:30", "21:00"),
+    },
 )
 
 
@@ -322,10 +398,10 @@ def _migrate_legacy_seed_activities(session: Session) -> None:
             )
         )
     )
-    legacy_rows: list[Activity] = []
     messages = [
         ActivityWrite.model_validate(payload) for payload in SAMPLE_ACTIVITY_DATA
     ]
+    matches_by_message: list[list[Activity]] = []
     for message in messages:
         expected = message.model_dump(mode="json")
         matches = [
@@ -333,18 +409,34 @@ def _migrate_legacy_seed_activities(session: Session) -> None:
             for row in rows
             if row.id not in SAMPLE_ACTIVITY_IDS and _activity_payload(row) == expected
         ]
-        # Partial or ambiguous matches may be user-created records, so only
-        # migrate when the complete former catalogue is uniquely identifiable.
-        if len(matches) != 1:
-            return
-        legacy_rows.append(matches[0])
+        matches_by_message.append(matches)
 
-    if len({row.id for row in legacy_rows}) != len(SAMPLE_ACTIVITY_IDS):
+    # Recognise both the current catalogue and the historical ten-row catalogue shipped
+    # before the four Sydney AI-demo activities were added. Partial or
+    # ambiguous matches may be user-created records, so only migrate a complete
+    # known cohort. A historical cohort is accepted only when none of the newer
+    # payloads are also present under legacy IDs.
+    if all(len(matches) == 1 for matches in matches_by_message):
+        cohort_size = len(messages)
+    elif all(
+        len(matches) == 1
+        for matches in matches_by_message[:HISTORICAL_ACTIVITY_CATALOGUE_SIZE]
+    ) and all(
+        not matches
+        for matches in matches_by_message[HISTORICAL_ACTIVITY_CATALOGUE_SIZE:]
+    ):
+        cohort_size = HISTORICAL_ACTIVITY_CATALOGUE_SIZE
+    else:
+        return
+
+    legacy_rows = [matches[0] for matches in matches_by_message[:cohort_size]]
+
+    if len({row.id for row in legacy_rows}) != cohort_size:
         return
 
     for activity_id, message, legacy in zip(
-        SAMPLE_ACTIVITY_IDS,
-        messages,
+        SAMPLE_ACTIVITY_IDS[:cohort_size],
+        messages[:cohort_size],
         legacy_rows,
         strict=True,
     ):
