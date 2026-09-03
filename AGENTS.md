@@ -15,7 +15,8 @@ the current Graphify guidance as the complete project instructions.
 - Treat the repository source and service documentation as authoritative. The
   graph is a navigation aid and may lag changes on an unmerged branch.
 - The `Graphify Update` GitHub Actions workflow refreshes the shared code graph
-  after changes reach `main`; contributors do not need local Git hooks.
+  after changes reach `main` and opens or updates a follow-up pull request for
+  the generated outputs; contributors do not need local Git hooks.
 - `graphify update .` refreshes code relationships only. Documentation, paper,
   and image changes require semantic extraction with a supported LLM backend.
   Never imply that those relationships were refreshed by the code-only job.
