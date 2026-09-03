@@ -4,11 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ page_title }} · TripGenie Student 1</title>
+  {# Shared theme contract used by the portal and the other student frontends.
+     Student 1's feature stylesheet is intentionally loaded after it. #}
+  <link rel="stylesheet" href="http://localhost:8080/theme.css">
   <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
-  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{{ request.url_for('static', path='js/htmx.min.js') }}" defer></script>
   <script src="{{ request.url_for('static', path='js/app.js') }}" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#app-shell">Skip to trip planner</a>
   <header class="site-header">
     <div class="site-header__inner">
       <p class="site-header__eyebrow">TripGenie Student 1</p>

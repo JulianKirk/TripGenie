@@ -29,7 +29,41 @@ def test_dashboard_renders_full_page_theme_and_accessible_controls(client) -> No
     assert "Generate draft suggestions" in response.text
     assert "persisted=false" in response.text
     assert "Delete trip" in response.text
+    assert 'href="http://localhost:8080/theme.css"' in response.text
+    assert 'href="http://testserver/static/css/styles.css"' in response.text
+    assert 'src="http://testserver/static/js/htmx.min.js"' in response.text
+    assert "unpkg.com" not in response.text
+    assert 'class="skip-link" href="#app-shell"' in response.text
+    assert '<nav class="panel panel--sidebar"' in response.text
     assert 'href="http://localhost:8080">Home</a>' in response.text
+
+
+def test_theme_and_local_assets_follow_the_shared_contract(
+    client,
+    client_factory,
+) -> None:
+    css = client.get("/static/css/styles.css")
+    htmx = client.get("/static/js/htmx.min.js")
+
+    assert css.status_code == 200
+    assert "--page-bg: var(--tg-canvas);" in css.text
+    assert "--primary: var(--tg-accent);" in css.text
+    assert "font-family: var(--tg-font-body);" in css.text
+    assert htmx.status_code == 200
+    assert "htmx" in htmx.text
+
+    with client_factory(root_path="/tripgenie/student-1") as prefixed_client:
+        page = prefixed_client.get("/")
+
+    assert page.status_code == 200
+    assert (
+        'href="http://testserver/tripgenie/student-1/static/css/styles.css"'
+        in page.text
+    )
+    assert (
+        'src="http://testserver/tripgenie/student-1/static/js/htmx.min.js"' in page.text
+    )
+    assert 'src="http://testserver/tripgenie/student-1/static/js/app.js"' in page.text
 
 
 def test_htmx_trip_navigation_returns_shell_fragment_only(client) -> None:
@@ -386,10 +420,7 @@ def test_invalid_htmx_filter_keeps_history_state_but_uses_safe_add_item_link(
     assert 'value="20270402"' in response.text
     assert '<option value="meal" selected>' in response.text
     assert "items/new?date=2027-04-01" in response.text
-    assert (
-        "20270402"
-        not in response.text.split("items/new?date=")[1].split('"', 1)[0]
-    )
+    assert "20270402" not in response.text.split("items/new?date=")[1].split('"', 1)[0]
 
     refresh_response = client.get(response.headers["HX-Push-Url"])
     assert refresh_response.status_code == 422

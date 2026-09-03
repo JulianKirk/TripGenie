@@ -14,6 +14,8 @@ This FastAPI + Jinja + HTMX frontend renders TripGenie's Trip & Itinerary Manage
 
 ## Runtime notes
 
+- The page loads the team-owned `http://localhost:8080/theme.css` contract before Student 1's feature stylesheet, matching the shared portal and the other themed student frontends. Student 1 keeps only layout and feature-state styling locally.
+- HTMX 2.0.4 is packaged with the frontend and served from its own `/static` mount, so CRUD navigation does not depend on a public CDN and generated asset URLs retain any application root path.
 - The UI keeps **UI mode** and **AI mode** visually distinct. Issue #12 replaces the disabled placeholder with an accessible AI suggestion form and HTMX result states.
 - Form submissions preserve entered values and show backend field/general errors for both normal page loads and HTMX swaps.
 - AI results are always labelled as drafts and route users into the normal itinerary-item create form for review/edit/save. There is no silent bulk persistence path.
