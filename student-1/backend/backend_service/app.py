@@ -12,6 +12,12 @@ from fastapi.responses import JSONResponse
 
 from .accommodation_client import AccommodationClient
 from .activity_client import ActivityClient
+from .ai_mode_client import AiModeClient
+from .ai_suggestions import (
+    AiSuggestionRequest,
+    AiSuggestionService,
+    AiSuggestionsResponse,
+)
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_request, validation_error
@@ -73,6 +79,12 @@ def _validation_detail_field(location: tuple[object, ...]) -> str:
         return ".".join(filtered)
 
     return str(location[-1]) if location else "body"
+
+
+def _validation_detail_issue(message: str) -> str:
+    if message.startswith("Value error, "):
+        return message.removeprefix("Value error, ")
+    return message
 
 
 def _ensure_allowed_query_params(request: Request, allowed: set[str]) -> None:
@@ -230,31 +242,44 @@ def create_app(
     settings: Settings | None = None,
     *,
     transport: httpx.BaseTransport | None = None,
+    database_transport: httpx.BaseTransport | None = None,
+    ai_mode_transport: httpx.AsyncBaseTransport | None = None,
     accommodation_transport: httpx.BaseTransport | None = None,
     activity_transport: httpx.BaseTransport | None = None,
     transport_api_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
+    resolved_database_transport = database_transport or transport
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        client = DatabaseApiClient(app_settings, transport=transport)
-        # Its own transport seam, so a test can fake student 2 without faking
-        # the database service too.
+        client = DatabaseApiClient(
+            app_settings,
+            transport=resolved_database_transport,
+        )
         accommodations = AccommodationClient(
-            app_settings, transport=accommodation_transport
+            app_settings,
+            transport=accommodation_transport,
         )
         activities = ActivityClient(app_settings, transport=activity_transport)
+        ai_mode_client = AiModeClient(app_settings, transport=ai_mode_transport)
         transport_options = TransportClient(
-            app_settings, transport=transport_api_transport
+            app_settings,
+            transport=transport_api_transport,
         )
         app.state.backend_service = BackendService(
-            client, app_settings, accommodations, activities, transport_options
+            client,
+            AiSuggestionService(ai_mode_client, app_settings),
+            app_settings,
+            accommodations,
+            activities,
+            transport_options,
         )
         try:
             yield
         finally:
             client.close()
+            await ai_mode_client.close()
             accommodations.close()
             activities.close()
             transport_options.close()
@@ -277,7 +302,7 @@ def create_app(
         details = [
             {
                 "field": _validation_detail_field(tuple(error["loc"])),
-                "issue": error["msg"],
+                "issue": _validation_detail_issue(str(error["msg"])),
             }
             for error in exc.errors()
         ]
@@ -300,10 +325,10 @@ def create_app(
         dependencies=[no_query_params],
         response_model=DataEnvelope[HealthResponse],
     )
-    def health(
+    async def health(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
-        return envelope(service.health().model_dump(mode="json"))
+        return envelope((await service.health()).model_dump(mode="json"))
 
     @app.get(
         "/ready",
@@ -311,7 +336,7 @@ def create_app(
         response_model=DataEnvelope[HealthResponse],
         responses={503: {"model": DataEnvelope[HealthResponse]}},
     )
-    def ready(
+    async def ready(
         response: Response,
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
@@ -370,6 +395,29 @@ def create_app(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(service.get_trip_day(trip_id, trip_day))
+
+    @router.post(
+        "/trips/{trip_id}/ai-suggestions",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AiSuggestionsResponse],
+    )
+    async def create_ai_suggestions(
+        trip_id: TripIdentifier,
+        payload: AiSuggestionRequest,
+        request: Request,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        correlation_id = (
+            request.headers.get("X-Correlation-ID")
+            or request.headers.get("X-Request-ID")
+        )
+        return envelope(
+            await service.create_ai_suggestions(
+                trip_id,
+                payload,
+                correlation_id=correlation_id,
+            ),
+        )
 
     @router.patch(
         "/trips/{trip_id}",

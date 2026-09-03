@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -12,11 +13,15 @@ from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from .client import BackendApiClient
 from .config import Settings
 from .errors import ApiError, validation_error
 from .models import (
+    AiSuggestionDraft,
+    AiSuggestionReviewPayload,
+    AiSuggestionsResponse,
     DataEnvelope,
     DependencyStatus,
     FrontendHealthDependencies,
@@ -53,6 +58,15 @@ EDIT_ITEM_DESCRIPTION = (
     "Adjust timing, location, and notes while keeping the backend contract "
     "authoritative."
 )
+AI_MODE_DESCRIPTION = (
+    "Request draft itinerary suggestions for one trip day, then review and "
+    "save each draft through the normal CRUD form."
+)
+AI_REVIEW_NOTICE = (
+    "You are reviewing an AI-generated draft. Edit anything needed before "
+    "saving it as a normal itinerary item."
+)
+AI_REVIEW_PREPARATION_ERROR = "The AI draft could not be prepared for review."
 RECOVER_TRIP_AFTER_ITEM_ERROR = (
     "Unable to recover the trip after itinerary validation failed"
 )
@@ -62,6 +76,7 @@ ITEM_FORM_DEFAULT_DATE_MESSAGE = (
     "the trip start date."
 )
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ISO_TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
 
 
 @dataclass(slots=True)
@@ -69,6 +84,26 @@ class DateFilterResolution:
     raw_value: str
     selected_date: str | None
     error: ApiError | None
+
+
+@dataclass(slots=True)
+class AiSuggestionReviewCard:
+    draft: AiSuggestionDraft
+    review_action: str
+    review_payload: str
+
+
+@dataclass(slots=True)
+class AiSuggestionResultView:
+    requested_date: str
+    model: str
+    prompt_asset: str
+    run_id: str
+    correlation_id: str
+    attempt_count: int
+    approval_required: bool
+    persisted: bool
+    suggestions: list[AiSuggestionReviewCard]
 
 
 def get_backend_client(request: Request) -> BackendApiClient:
@@ -147,6 +182,15 @@ def empty_item_form(date_value: str = "") -> dict[str, str]:
     }
 
 
+def empty_ai_form(date_value: str = "") -> dict[str, str]:
+    return {
+        "requested_date": date_value,
+        "goal": "",
+        "interests": "",
+        "constraints": "",
+    }
+
+
 def item_form_from_record(item: ItineraryItemRecord) -> dict[str, str]:
     return {
         "id": item.id,
@@ -158,6 +202,22 @@ def item_form_from_record(item: ItineraryItemRecord) -> dict[str, str]:
         "description": item.description or "",
         "category": item.category.value,
         "notes": item.notes or "",
+    }
+
+
+def item_form_from_ai_review_payload(
+    payload: AiSuggestionReviewPayload,
+) -> dict[str, str]:
+    return {
+        "id": "",
+        "date": payload.date,
+        "start_time": payload.start_time or "",
+        "end_time": payload.end_time or "",
+        "title": payload.title,
+        "location": payload.location or "",
+        "description": payload.description or "",
+        "category": payload.category.value,
+        "notes": payload.notes or "",
     }
 
 
@@ -219,6 +279,15 @@ def item_payload_from_form(
     return payload
 
 
+def ai_payload_from_form(values: dict[str, str]) -> dict[str, object]:
+    return {
+        "requested_date": values["requested_date"].strip(),
+        "goal": values["goal"].strip(),
+        "interests": normalise_optional_text(values["interests"]),
+        "constraints": normalise_optional_text(values["constraints"]),
+    }
+
+
 def iso_date_or_none(value: str | None) -> str | None:
     cleaned = normalise_optional_text(value)
     if cleaned is None:
@@ -228,6 +297,23 @@ def iso_date_or_none(value: str | None) -> str | None:
         if ISO_DATE_PATTERN.fullmatch(cleaned) is None:
             raise ValueError
         date.fromisoformat(cleaned)
+    except ValueError:
+        return None
+
+    return cleaned
+
+
+def iso_time_or_none(value: str | None) -> str | None:
+    cleaned = normalise_optional_text(value)
+    if cleaned is None:
+        return None
+
+    try:
+        if ISO_TIME_PATTERN.fullmatch(cleaned) is None:
+            raise ValueError
+        parsed = time.fromisoformat(cleaned)
+        if parsed.second or parsed.microsecond:
+            raise ValueError
     except ValueError:
         return None
 
@@ -374,6 +460,160 @@ def validate_filter_state(
     return display_days, date_resolution.error, date_resolution
 
 
+def build_ai_review_payload(suggestion: AiSuggestionDraft) -> str:
+    return json.dumps(
+        {
+            "date": suggestion.date,
+            "start_time": suggestion.start_time,
+            "end_time": suggestion.end_time,
+            "title": suggestion.title,
+            "location": suggestion.location,
+            "description": suggestion.description,
+            "category": suggestion.category.value,
+            "notes": suggestion.notes,
+            "ai_rationale": suggestion.rationale,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def build_ai_result_view(
+    request: Request,
+    *,
+    trip_id: str,
+    result: AiSuggestionsResponse,
+) -> AiSuggestionResultView:
+    return AiSuggestionResultView(
+        requested_date=result.requested_date,
+        model=result.model,
+        prompt_asset=result.prompt_asset,
+        run_id=result.run_id,
+        correlation_id=result.correlation_id,
+        attempt_count=result.attempt_count,
+        approval_required=result.approval_required,
+        persisted=result.persisted,
+        suggestions=[
+            AiSuggestionReviewCard(
+                draft=suggestion,
+                review_action=path_for(request, "new_item_form", trip_id=trip_id),
+                review_payload=build_ai_review_payload(suggestion),
+            )
+            for suggestion in result.suggestions
+        ],
+    )
+
+
+def prefilled_item_form_from_query(
+    request: Request,
+    *,
+    trip: TripDetail,
+) -> tuple[dict[str, str], ApiError | None, str | None, str | None]:
+    requested_date = normalise_optional_text(request.query_params.get("date"))
+    date_resolution = resolve_filter_date(trip, requested_date)
+    form_error = (
+        item_form_query_error(trip=trip, date_error=date_resolution.error)
+        if date_resolution.error is not None
+        else None
+    )
+
+    return (
+        empty_item_form(date_resolution.selected_date or trip.start_date),
+        form_error,
+        None,
+        None,
+    )
+
+
+def _validation_detail_field(
+    location: tuple[object, ...],
+    *,
+    fallback: str,
+) -> str:
+    filtered = [str(part) for part in location if part not in {"body", "query", "path"}]
+    if filtered:
+        return ".".join(filtered)
+    return fallback
+
+
+def _validation_detail_issue(message: str) -> str:
+    if message.startswith("Value error, "):
+        return message.removeprefix("Value error, ")
+    return message
+
+
+def ai_review_error_from_validation(exc: ValidationError) -> ApiError:
+    details: list[dict[str, str]] = []
+    for error in exc.errors():
+        if error["type"] == "json_invalid":
+            details.append(
+                {
+                    "field": "ai_review",
+                    "issue": "must contain a valid AI draft payload",
+                }
+            )
+            continue
+
+        details.append(
+            {
+                "field": _validation_detail_field(
+                    tuple(error["loc"]),
+                    fallback="ai_review",
+                ),
+                "issue": _validation_detail_issue(str(error["msg"])),
+            }
+        )
+
+    return validation_error(AI_REVIEW_PREPARATION_ERROR, details)
+
+
+def prefilled_item_form_from_ai_review(
+    draft_payload: str,
+    *,
+    trip: TripDetail,
+) -> tuple[dict[str, str], ApiError | None, str | None, str | None]:
+    if not draft_payload.strip():
+        return (
+            empty_item_form(trip.start_date),
+            validation_error(
+                AI_REVIEW_PREPARATION_ERROR,
+                [
+                    {
+                        "field": "ai_review",
+                        "issue": "must contain a valid AI draft payload",
+                    }
+                ],
+            ),
+            AI_REVIEW_NOTICE,
+            None,
+        )
+
+    try:
+        payload = AiSuggestionReviewPayload.model_validate_json(draft_payload)
+    except ValidationError as exc:
+        return (
+            empty_item_form(trip.start_date),
+            ai_review_error_from_validation(exc),
+            AI_REVIEW_NOTICE,
+            None,
+        )
+
+    date_resolution = resolve_filter_date(trip, payload.date)
+    form_error = None
+    if date_resolution.error is not None:
+        form_error = validation_error(
+            AI_REVIEW_PREPARATION_ERROR,
+            date_resolution.error.details,
+        )
+
+    return (
+        item_form_from_ai_review_payload(payload),
+        form_error,
+        AI_REVIEW_NOTICE,
+        normalise_optional_text(payload.ai_rationale),
+    )
+
+
 def render_screen(
     request: Request,
     *,
@@ -510,6 +750,8 @@ def render_item_form_screen(
     form_error: ApiError | None = None,
     show_id_field: bool = False,
     status_code: int = 200,
+    ai_review_notice: str | None = None,
+    ai_review_rationale: str | None = None,
 ) -> Response:
     return render_screen(
         request,
@@ -529,6 +771,8 @@ def render_item_form_screen(
         item_form=item_form,
         show_id_field=show_id_field,
         trip=trip,
+        ai_review_notice=ai_review_notice,
+        ai_review_rationale=ai_review_rationale,
     )
 
 
@@ -576,6 +820,9 @@ def render_trip_detail_screen(
     page_error: ApiError | None = None,
     status_code: int = 200,
     push_url: str | None = None,
+    ai_form: dict[str, str] | None = None,
+    ai_error: ApiError | None = None,
+    ai_result: AiSuggestionResultView | None = None,
 ) -> Response:
     display_days, filter_error, date_resolution = validate_filter_state(
         trip,
@@ -586,6 +833,10 @@ def render_trip_detail_screen(
     effective_status = status_code
     if page_error is None and filter_error is not None and status_code == 200:
         effective_status = filter_error.status_code
+
+    effective_ai_form = ai_form or empty_ai_form(
+        date_resolution.selected_date or trip.start_date,
+    )
 
     return render_screen(
         request,
@@ -606,6 +857,10 @@ def render_trip_detail_screen(
         },
         selected_date=date_resolution.selected_date,
         add_item_date=date_resolution.selected_date or trip.start_date,
+        ai_form=effective_ai_form,
+        ai_error=ai_error,
+        ai_errors_by_field=error_details_by_field(ai_error),
+        ai_result=ai_result,
         # Browser-facing, so a row can link out to student 2's own page.
         accommodation_ui_url=request.app.state.settings.accommodation_ui_url,
     )
@@ -979,6 +1234,111 @@ def create_app(
             ),
         )
 
+    @app.post("/trips/{trip_id}/ai-suggestions", name="generate_ai_suggestions")
+    async def generate_ai_suggestions(
+        trip_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        values = await read_form_values(
+            request,
+            (
+                "requested_date",
+                "goal",
+                "interests",
+                "constraints",
+                "view_date",
+                "view_category",
+            ),
+        )
+        selected_date = normalise_optional_text(values["view_date"])
+        category_value = normalise_optional_text(values["view_category"])
+        trips, trip_list_error = await safe_list_trips(client)
+        try:
+            result = await client.generate_ai_suggestions(
+                trip_id,
+                ai_payload_from_form(values),
+            )
+        except ApiError as exc:
+            try:
+                trip = await client.get_trip(trip_id)
+            except ApiError as trip_exc:
+                return render_error_screen(
+                    request,
+                    error=trip_exc,
+                    error_title="Unable to reload the trip after the AI request failed",
+                    page_title="Trip unavailable",
+                    trips=trips,
+                    selected_trip_id=trip_id,
+                    trip_list_error=trip_list_error,
+                    retry_url=path_for(request, "view_trip", trip_id=trip_id),
+                    fallback_url=path_for(request, "dashboard"),
+                )
+
+            return render_trip_detail_screen(
+                request,
+                trip=trip,
+                trips=trips,
+                trip_list_error=trip_list_error,
+                selected_date=selected_date,
+                category_value=category_value,
+                status_code=exc.status_code,
+                ai_form={
+                    "requested_date": values["requested_date"],
+                    "goal": values["goal"],
+                    "interests": values["interests"],
+                    "constraints": values["constraints"],
+                },
+                ai_error=exc,
+                push_url=build_query_url(
+                    path_for(request, "view_trip", trip_id=trip_id),
+                    date_value=selected_date,
+                    category_value=category_value,
+                ),
+            )
+
+        try:
+            trip = await client.get_trip(trip_id)
+        except ApiError as exc:
+            return render_error_screen(
+                request,
+                error=exc,
+                error_title=(
+                    "Suggestions were generated, but the trip could not be reloaded"
+                ),
+                page_title="Trip unavailable",
+                trips=trips,
+                selected_trip_id=trip_id,
+                trip_list_error=trip_list_error,
+                retry_url=path_for(request, "view_trip", trip_id=trip_id),
+                fallback_url=path_for(request, "dashboard"),
+            )
+
+        return render_trip_detail_screen(
+            request,
+            trip=trip,
+            trips=trips,
+            trip_list_error=trip_list_error,
+            selected_date=selected_date,
+            category_value=category_value,
+            ai_form={
+                "requested_date": values["requested_date"],
+                "goal": values["goal"],
+                "interests": values["interests"],
+                "constraints": values["constraints"],
+            },
+            ai_result=build_ai_result_view(
+                request,
+                trip_id=trip_id,
+                result=result,
+            ),
+            push_url=build_query_url(
+                path_for(request, "view_trip", trip_id=trip_id),
+                date_value=selected_date,
+                category_value=category_value,
+            ),
+        )
+
     @app.get("/trips/{trip_id}/edit", name="edit_trip_form")
     async def edit_trip_form(
         trip_id: str,
@@ -1192,11 +1552,11 @@ def create_app(
             )
 
         requested_date = normalise_optional_text(request.query_params.get("date"))
-        date_resolution = resolve_filter_date(trip, requested_date)
-        form_error = (
-            item_form_query_error(trip=trip, date_error=date_resolution.error)
-            if date_resolution.error is not None
-            else None
+        item_form, form_error, ai_review_notice, ai_review_rationale = (
+            prefilled_item_form_from_query(
+                request,
+                trip=trip,
+            )
         )
         return render_item_form_screen(
             request,
@@ -1214,10 +1574,65 @@ def create_app(
                 trip=trip,
                 requested_date=requested_date,
             ),
-            item_form=empty_item_form(date_resolution.selected_date or trip.start_date),
+            item_form=item_form,
             form_error=form_error,
             show_id_field=True,
             status_code=form_error.status_code if form_error is not None else 200,
+            ai_review_notice=ai_review_notice,
+            ai_review_rationale=ai_review_rationale,
+        )
+
+    @app.post("/trips/{trip_id}/items/new", name="review_ai_item_form")
+    async def review_ai_item_form(
+        trip_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        values = await read_form_values(request, ("draft_payload",))
+        trips, trip_list_error = await safe_list_trips(client)
+        try:
+            trip = await client.get_trip(trip_id)
+        except ApiError as exc:
+            return render_error_screen(
+                request,
+                error=exc,
+                error_title="Unable to open the itinerary form",
+                page_title="Itinerary form unavailable",
+                trips=trips,
+                selected_trip_id=trip_id,
+                trip_list_error=trip_list_error,
+                retry_url=path_for(request, "new_item_form", trip_id=trip_id),
+                fallback_url=path_for(request, "view_trip", trip_id=trip_id),
+            )
+
+        item_form, form_error, ai_review_notice, ai_review_rationale = (
+            prefilled_item_form_from_ai_review(
+                values["draft_payload"],
+                trip=trip,
+            )
+        )
+        return render_item_form_screen(
+            request,
+            trip=trip,
+            trips=trips,
+            selected_trip_id=trip_id,
+            trip_list_error=trip_list_error,
+            form_title="Add itinerary item",
+            form_description=CREATE_ITEM_DESCRIPTION,
+            form_action=path_for(request, "create_item", trip_id=trip_id),
+            submit_label="Add itinerary item",
+            cancel_url=item_cancel_url(
+                request,
+                trip_id=trip_id,
+                trip=trip,
+                requested_date=item_form["date"],
+            ),
+            item_form=item_form,
+            form_error=form_error,
+            show_id_field=True,
+            status_code=form_error.status_code if form_error is not None else 200,
+            ai_review_notice=ai_review_notice,
+            ai_review_rationale=ai_review_rationale,
         )
 
     @app.post("/trips/{trip_id}/items", name="create_item")
@@ -1238,6 +1653,8 @@ def create_app(
                 "description",
                 "category",
                 "notes",
+                "ai_draft",
+                "ai_rationale",
             ),
         )
         try:
@@ -1282,6 +1699,12 @@ def create_app(
                 form_error=exc,
                 show_id_field=True,
                 status_code=exc.status_code,
+                ai_review_notice=(
+                    AI_REVIEW_NOTICE
+                    if values["ai_draft"].strip().lower() == "true"
+                    else None
+                ),
+                ai_review_rationale=normalise_optional_text(values["ai_rationale"]),
             )
 
         destination_url = path_for(

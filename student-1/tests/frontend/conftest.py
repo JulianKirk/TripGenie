@@ -76,6 +76,8 @@ class FakeBackendApi:
     def __init__(self) -> None:
         self._trip_counter = 0
         self._item_counter = 0
+        self.ai_requests: list[dict[str, object]] = []
+        self.ai_responses: list[httpx.Response] = []
         self.trips: dict[str, dict[str, object]] = {
             "trip_2027_sydney_getaway": {
                 "id": "trip_2027_sydney_getaway",
@@ -136,10 +138,13 @@ class FakeBackendApi:
                     "detail": "Database API responded successfully.",
                     "code": None,
                 },
-                "ollama": {
-                    "status": "deferred",
-                    "service": "ollama",
-                    "detail": "AI routes are deferred to issue #12.",
+                "ai_mode": {
+                    "status": "not_configured",
+                    "service": "ai-mode",
+                    "detail": (
+                        "Shared AI-Mode is disabled because no runtime base URL is "
+                        "configured."
+                    ),
                     "code": None,
                 },
             },
@@ -179,6 +184,14 @@ class FakeBackendApi:
             and method == "POST"
         ):
             return self._create_item(path_parts[2], request)
+
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["api", "trips"]
+            and path_parts[3] == "ai-suggestions"
+            and method == "POST"
+        ):
+            return self._create_ai_suggestions(path_parts[2], request)
 
         if (
             len(path_parts) == 5
@@ -330,6 +343,105 @@ class FakeBackendApi:
         }
         self.items[item_id] = record
         return data_response(201, deepcopy(record))
+
+    def _create_ai_suggestions(
+        self,
+        trip_id: str,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if trip_id not in self.trips:
+            return error_response(
+                404,
+                "NOT_FOUND",
+                f"Trip '{trip_id}' was not found.",
+                [{"field": "id", "issue": "resource does not exist"}],
+            )
+
+        payload = self._request_json(request)
+        self.ai_requests.append(deepcopy(payload))
+        if self.ai_responses:
+            return self.ai_responses.pop(0)
+
+        details: list[dict[str, str]] = []
+        requested_date = str(payload.get("requested_date", "")).strip()
+        goal = str(payload.get("goal", "")).strip()
+        if not requested_date:
+            details.append({"field": "requested_date", "issue": "must not be blank"})
+        elif not self._is_iso_date(requested_date):
+            details.append(
+                {
+                    "field": "requested_date",
+                    "issue": "must be a valid ISO date in YYYY-MM-DD format",
+                },
+            )
+        else:
+            trip = self.trips[trip_id]
+            if requested_date < str(trip["start_date"]) or requested_date > str(
+                trip["end_date"]
+            ):
+                details.append(
+                    {
+                        "field": "requested_date",
+                        "issue": (
+                            f"must fall between {trip['start_date']} and "
+                            f"{trip['end_date']}"
+                        ),
+                    },
+                )
+        if not goal:
+            details.append({"field": "goal", "issue": "must not be blank"})
+
+        if details:
+            return error_response(
+                422,
+                "VALIDATION_ERROR",
+                "One or more fields failed validation.",
+                details,
+            )
+
+        suggestions = [
+            {
+                "date": requested_date,
+                "start_time": "12:30",
+                "end_time": "14:00",
+                "title": "Waterside Lunch",
+                "location": "Barangaroo",
+                "description": "Relaxed lunch with harbour views.",
+                "category": "meal",
+                "notes": "Keep it flexible.",
+                "rationale": "Creates a calm midday stop.",
+                "persisted": False,
+                "approval_required": True,
+            },
+            {
+                "date": requested_date,
+                "start_time": "14:30",
+                "end_time": "16:00",
+                "title": "Reserve Walk",
+                "location": "Barangaroo Reserve",
+                "description": "Gentle foreshore walk with rest stops.",
+                "category": "activity",
+                "notes": "Pause for photos if the weather is good.",
+                "rationale": "Adds a low-energy outdoor option.",
+                "persisted": False,
+                "approval_required": True,
+            },
+        ]
+        return data_response(
+            200,
+            {
+                "trip_id": trip_id,
+                "requested_date": requested_date,
+                "model": "qwen2.5:0.5b",
+                "prompt_asset": "runtime_ai_suggestions_v1.md",
+                "run_id": "ai_demo_run_01",
+                "correlation_id": "ai_demo_run_01",
+                "attempt_count": 1,
+                "persisted": False,
+                "approval_required": True,
+                "suggestions": suggestions,
+            },
+        )
 
     def _get_item(self, item_id: str) -> httpx.Response:
         record = self.items.get(item_id)

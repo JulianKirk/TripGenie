@@ -31,6 +31,27 @@ def bad_gateway(message: str, details: ErrorDetails | None = None) -> ApiError:
     )
 
 
+def ai_output_invalid(message: str, details: ErrorDetails | None = None) -> ApiError:
+    return ApiError(
+        status_code=502,
+        code="AI_OUTPUT_INVALID",
+        message=message,
+        details=details or [],
+    )
+
+
+def dependency_response_too_large(
+    message: str,
+    details: ErrorDetails | None = None,
+) -> ApiError:
+    return ApiError(
+        status_code=502,
+        code="DEPENDENCY_RESPONSE_TOO_LARGE",
+        message=message,
+        details=details or [],
+    )
+
+
 def dependency_timeout(
     message: str,
     details: ErrorDetails | None = None,

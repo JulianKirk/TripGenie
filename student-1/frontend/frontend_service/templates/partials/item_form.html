@@ -8,6 +8,15 @@
     Trip: <strong>{{ trip.name }}</strong> · {{ trip.start_date }} to {{ trip.end_date }}
   </p>
 
+  {% if ai_review_notice %}
+    <div class="banner banner--info" role="status" aria-live="polite">
+      <p><strong>{{ ai_review_notice }}</strong></p>
+      {% if ai_review_rationale %}
+        <p>{{ ai_review_rationale }}</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {% if page_error %}
     <div class="banner banner--error" role="alert">
       <p><strong>{{ page_error.message }}</strong></p>
@@ -23,6 +32,12 @@
 
   <form class="form-grid" action="{{ form_action }}" method="post" novalidate>
     <input type="hidden" name="trip_id" value="{{ trip.id }}">
+    {% if ai_review_notice %}
+      <input type="hidden" name="ai_draft" value="true">
+      {% if ai_review_rationale %}
+        <input type="hidden" name="ai_rationale" value="{{ ai_review_rationale }}">
+      {% endif %}
+    {% endif %}
 
     {% if show_id_field %}
       {% set has_errors = form_errors_by_field.get('id') %}

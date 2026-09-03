@@ -1,0 +1,193 @@
+{% import "macros/forms.html" as forms %}
+
+<section class="mode-panel mode-panel--ai" aria-labelledby="ai-detail-heading">
+  <p class="section-eyebrow">AI mode</p>
+  <h3 id="ai-detail-heading"{% if ai_result or ai_error %} data-autofocus{% endif %}>
+    Draft itinerary suggestions
+  </h3>
+  <p>
+    Request draft suggestions for one trip day. TripGenie never saves AI output automatically — review and edit each draft through the normal itinerary CRUD form first.
+  </p>
+
+  {% if ai_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ ai_error.message }}</strong></p>
+      {% if ai_error.details %}
+        <ul class="banner__list">
+          {% for detail in ai_error.details %}
+            <li>{{ detail.field }}: {{ detail.issue }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form
+    class="form-grid"
+    action="{{ request.url_for('generate_ai_suggestions', trip_id=trip.id) }}"
+    method="post"
+    hx-post="{{ request.url_for('generate_ai_suggestions', trip_id=trip.id) }}"
+    hx-target="#trip-detail-panel"
+    hx-swap="outerHTML"
+    hx-push-url="true"
+    hx-indicator="#ai-suggestion-loading"
+    novalidate
+  >
+    <input type="hidden" name="view_date" value="{{ filter_state.date }}">
+    <input type="hidden" name="view_category" value="{{ filter_state.category }}">
+
+    {% set date_errors = ai_errors_by_field.get('requested_date') %}
+    <div class="form-field">
+      <label for="ai-requested-date">Requested date</label>
+      <input
+        id="ai-requested-date"
+        name="requested_date"
+        type="date"
+        value="{{ ai_form.requested_date }}"
+        {% if date_errors %}aria-invalid="true" aria-describedby="requested_date-errors"{% endif %}
+      >
+      {{ forms.field_errors('requested_date', ai_errors_by_field) }}
+    </div>
+
+    {% set goal_errors = ai_errors_by_field.get('goal') %}
+    <div class="form-field form-field--full">
+      <label for="ai-goal">Goal or request</label>
+      <textarea
+        id="ai-goal"
+        name="goal"
+        rows="3"
+        {% if goal_errors %}aria-invalid="true" aria-describedby="goal-errors"{% endif %}
+      >{{ ai_form.goal }}</textarea>
+      {{ forms.field_errors('goal', ai_errors_by_field) }}
+    </div>
+
+    {% set interests_errors = ai_errors_by_field.get('interests') %}
+    <div class="form-field">
+      <label for="ai-interests">Interests</label>
+      <textarea
+        id="ai-interests"
+        name="interests"
+        rows="3"
+        {% if interests_errors %}aria-invalid="true" aria-describedby="interests-errors"{% endif %}
+      >{{ ai_form.interests }}</textarea>
+      <p class="hint-copy">Optional — include preferred themes, pace, or travel style.</p>
+      {{ forms.field_errors('interests', ai_errors_by_field) }}
+    </div>
+
+    {% set constraints_errors = ai_errors_by_field.get('constraints') %}
+    <div class="form-field">
+      <label for="ai-constraints">Constraints</label>
+      <textarea
+        id="ai-constraints"
+        name="constraints"
+        rows="3"
+        {% if constraints_errors %}aria-invalid="true" aria-describedby="constraints-errors"{% endif %}
+      >{{ ai_form.constraints }}</textarea>
+      <p class="hint-copy">Optional — include budget, timing, accessibility, or energy constraints.</p>
+      {{ forms.field_errors('constraints', ai_errors_by_field) }}
+    </div>
+
+    <div class="form-field form-field--actions">
+      <div class="button-row">
+        <button class="button button--secondary" type="submit">Generate draft suggestions</button>
+        <span class="hint-copy">Returned drafts show <code>persisted=false</code> and <code>approval_required=true</code>.</span>
+      </div>
+    </div>
+  </form>
+
+  <div
+    id="ai-suggestion-loading"
+    class="htmx-indicator ai-loading-indicator"
+    role="status"
+    aria-live="polite"
+  >
+    Generating draft suggestions…
+  </div>
+
+  {% if ai_result %}
+    <section class="panel panel--nested" aria-labelledby="ai-results-heading">
+      <div class="panel__header panel__header--compact">
+        <div>
+          <h4 id="ai-results-heading">Draft results</h4>
+          <p class="muted-copy" role="status" aria-live="polite">
+            {% if ai_result.suggestions %}
+              {{ ai_result.suggestions|length }} draft suggestion{% if ai_result.suggestions|length != 1 %}s{% endif %} ready for review.
+            {% else %}
+              No draft suggestions matched this request.
+            {% endif %}
+          </p>
+        </div>
+        <dl class="ai-result-meta">
+          <div>
+            <dt>Model</dt>
+            <dd>{{ ai_result.model }}</dd>
+          </div>
+          <div>
+            <dt>Prompt asset</dt>
+            <dd>{{ ai_result.prompt_asset }}</dd>
+          </div>
+          <div>
+            <dt>Attempts</dt>
+            <dd>{{ ai_result.attempt_count }}</dd>
+          </div>
+          <div>
+            <dt>Run ID</dt>
+            <dd>{{ ai_result.run_id }}</dd>
+          </div>
+          <div>
+            <dt>Correlation ID</dt>
+            <dd>{{ ai_result.correlation_id }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      {% if ai_result.suggestions %}
+        <ol class="item-list">
+          {% for suggestion in ai_result.suggestions %}
+            <li class="item-card item-card--draft">
+              <div class="item-card__content">
+                <div class="badge-row">
+                  <span class="badge">Draft</span>
+                  <span class="badge badge--warning">Approval required</span>
+                  <span class="badge">persisted=false</span>
+                </div>
+                <h5>{{ suggestion.draft.title }}</h5>
+                <p class="item-card__meta">
+                  {{ suggestion.draft.date }}
+                  {% if suggestion.draft.start_time %}
+                    · {{ suggestion.draft.start_time }}{% if suggestion.draft.end_time %} – {{ suggestion.draft.end_time }}{% endif %}
+                  {% else %}
+                    · Any time
+                  {% endif %}
+                  · {{ suggestion.draft.category.value.title() }}
+                </p>
+                {% if suggestion.draft.location %}
+                  <p><strong>Location:</strong> {{ suggestion.draft.location }}</p>
+                {% endif %}
+                {% if suggestion.draft.description %}
+                  <p>{{ suggestion.draft.description }}</p>
+                {% endif %}
+                {% if suggestion.draft.notes %}
+                  <p class="muted-copy"><strong>Notes:</strong> {{ suggestion.draft.notes }}</p>
+                {% endif %}
+                {% if suggestion.draft.rationale %}
+                  <p class="muted-copy"><strong>Why it fits:</strong> {{ suggestion.draft.rationale }}</p>
+                {% endif %}
+              </div>
+              <div class="button-row">
+                <form action="{{ suggestion.review_action }}" method="post">
+                  <input type="hidden" name="draft_payload" value="{{ suggestion.review_payload }}">
+                  <button class="button button--primary" type="submit">Review and save via CRUD</button>
+                </form>
+              </div>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="empty-copy">
+          Try broadening the goal or relaxing constraints for {{ ai_result.requested_date }}.
+        </p>
+      {% endif %}
+    </section>
+  {% endif %}
+</section>

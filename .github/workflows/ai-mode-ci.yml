@@ -5,12 +5,14 @@ on:
     paths:
       - 'ai-services/ai-mode/**'
       - '.github/workflows/ai-mode-ci.yml'
+      - 'docker-compose.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
   pull_request:
     paths:
       - 'ai-services/ai-mode/**'
       - '.github/workflows/ai-mode-ci.yml'
+      - 'docker-compose.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
   workflow_dispatch:

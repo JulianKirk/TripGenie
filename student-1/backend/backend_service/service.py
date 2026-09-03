@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from .accommodation_client import AccommodationClient
 from .activity_client import ActivityClient
+from .ai_suggestions import AiSuggestionRequest, AiSuggestionService
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, validation_error
@@ -44,12 +45,14 @@ class BackendService:
     def __init__(
         self,
         client: DatabaseApiClient,
+        ai_suggestions: AiSuggestionService,
         settings: Settings,
         accommodations: AccommodationClient | None = None,
         activities: ActivityClient | None = None,
         transport: TransportClient | None = None,
     ) -> None:
         self._client = client
+        self._ai_suggestions = ai_suggestions
         self._settings = settings
         self._accommodations = accommodations
         self._activities = activities
@@ -256,6 +259,26 @@ class BackendService:
             items=items,
         ).model_dump(mode="json")
 
+    async def create_ai_suggestions(
+        self,
+        trip_id: str,
+        payload: AiSuggestionRequest,
+        *,
+        correlation_id: str | None = None,
+    ) -> dict[str, object]:
+        trip = self._client.get_trip(trip_id)
+        ensure_trip_detail_supported(trip)
+        self._ensure_date_within_trip(payload.requested_date, trip)
+        items = self._client.list_itinerary_items(trip_id)
+        response = await self._ai_suggestions.generate(
+            trip_id=trip_id,
+            trip=trip,
+            existing_items=items,
+            request=payload,
+            correlation_id=correlation_id,
+        )
+        return response.model_dump(mode="json")
+
     def update_trip(self, trip_id: str, payload: TripUpdate) -> dict[str, object]:
         updates = payload.model_dump(exclude_unset=True, mode="json")
         if not updates:
@@ -450,26 +473,31 @@ class BackendService:
         deleted = self._client.delete_itinerary_item(item_id)
         return deleted.model_dump(mode="json")
 
-    def health(self) -> HealthResponse:
+    async def health(self) -> HealthResponse:
         database = self._probe_database()
-        ollama = self._ollama_status()
-        overall_status = "ok" if database.status == "ok" else "degraded"
+        ai_mode = await self._ai_mode_status()
+        overall_status = (
+            "ok"
+            if database.status == "ok"
+            and ai_mode.status in {"ok", "not_configured"}
+            else "degraded"
+        )
         return HealthResponse(
             status=overall_status,
             service=self._settings.service_name,
-            dependencies=HealthDependencies(database=database, ollama=ollama),
+            dependencies=HealthDependencies(database=database, ai_mode=ai_mode),
         )
 
     def ready(self) -> tuple[int, HealthResponse]:
         database = self._probe_database()
-        ollama = self._ollama_status()
+        ai_mode = self._ai_suggestions.readiness_dependency_status()
         is_ready = database.status == "ok"
         return (
             200 if is_ready else 503,
             HealthResponse(
                 status="ok" if is_ready else "unavailable",
                 service=self._settings.service_name,
-                dependencies=HealthDependencies(database=database, ollama=ollama),
+                dependencies=HealthDependencies(database=database, ai_mode=ai_mode),
             ),
         )
 
@@ -628,22 +656,8 @@ class BackendService:
             detail=f"Database API reported status '{payload.status}'.",
         )
 
-    def _ollama_status(self) -> DependencyStatus:
-        if self._settings.ollama_base_url is None:
-            return DependencyStatus(
-                status="not_configured",
-                service="ollama",
-                detail=(
-                    "Ollama is not configured for issue #10; CRUD routes do not "
-                    "depend on it."
-                ),
-            )
-
-        return DependencyStatus(
-            status="deferred",
-            service="ollama",
-            detail="Ollama is configured but AI endpoints are deferred to issue #12.",
-        )
+    async def _ai_mode_status(self) -> DependencyStatus:
+        return await self._ai_suggestions.dependency_status()
 
     @staticmethod
     def _dependency_status_from_error(exc: ApiError) -> DependencyStatus:

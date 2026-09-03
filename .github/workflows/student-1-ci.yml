@@ -4,25 +4,25 @@ on:
   push:
     paths:
       - 'student-1/**'
-      - '.github/workflows/student-1-ci.yml'
-      - 'README.md'
-      - 'docs/architecture/student-1-release-0-architecture.md'
-      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
-      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
       - 'docs/reports/release-0/student-1-release-0-plan.md'
       - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
+      - 'ruff.toml'
   pull_request:
     paths:
       - 'student-1/**'
-      - '.github/workflows/student-1-ci.yml'
-      - 'README.md'
-      - 'docs/architecture/student-1-release-0-architecture.md'
-      - 'docs/architecture/decisions/0001-student-1-service-mapping.md'
-      - 'docs/architecture/decisions/0002-student-1-internal-api-and-observability.md'
+      - 'ai-services/ai-mode/**'
+      - 'docs/architecture/student-1-*.md'
       - 'docs/reports/release-0/student-1-release-0-plan.md'
       - 'shared/configuration/**'
+      - '.github/workflows/student-1-ci.yml'
+      - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
+      - 'ruff.toml'
   workflow_dispatch:
 
 jobs:
@@ -54,6 +54,7 @@ jobs:
         run: python -m pytest tests/database
       - name: Build Student 1 database image
         run: docker build -f student-1/database/Dockerfile student-1
+
   backend:
     name: Build and Validate Student 1 Backend
     runs-on: ubuntu-latest
@@ -67,6 +68,7 @@ jobs:
         working-directory: student-1
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e ../ai-services/ai-mode
           python -m pip install -e .[dev]
       - name: Validate installed Student 1 packages
         working-directory: student-1
@@ -82,6 +84,7 @@ jobs:
         run: python -m pytest tests/backend
       - name: Build Student 1 backend image
         run: docker build -f student-1/backend/Dockerfile student-1
+
   frontend:
     name: Build and Validate Student 1 Frontend
     runs-on: ubuntu-latest

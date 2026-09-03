@@ -488,7 +488,7 @@ class DependencyStatus(StrictModel):
 
 class HealthDependencies(StrictModel):
     database: DependencyStatus
-    ollama: DependencyStatus
+    ai_mode: DependencyStatus
 
 
 class HealthResponse(StrictModel):

@@ -69,6 +69,7 @@ class FakeDatabaseApi:
         self.trip_create_calls = 0
         self.trip_update_calls = 0
         self.itinerary_item_list_requests: list[tuple[str, dict[str, str]]] = []
+        self.requests: list[tuple[str, str]] = []
         self.trips: dict[str, dict[str, object]] = {
             "trip_2027_sydney_getaway": {
                 "id": "trip_2027_sydney_getaway",
@@ -131,6 +132,7 @@ class FakeDatabaseApi:
     def handle(self, request: httpx.Request) -> httpx.Response:
         path_parts = request.url.path.strip("/").split("/")
         method = request.method.upper()
+        self.requests.append((method, request.url.path))
 
         if path_parts == ["internal", "health"] and method == "GET":
             return httpx.Response(200, json=self.health_payload)
@@ -694,6 +696,116 @@ class FakeDatabaseApi:
         return json.loads(request.content.decode("utf-8"))
 
 
+class FakeAiModeApi:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, object]] = []
+        self.health_requests = 0
+        self.ready_requests = 0
+        self._queued_generate_responses: list[httpx.Response | Exception] = []
+        self._queued_health_responses: list[httpx.Response | Exception] = []
+        self._queued_ready_responses: list[httpx.Response | Exception] = []
+        self.health_payload = {
+            "status": "ok",
+            "service": "ai-mode",
+            "dependencies": {
+                "ollama": {
+                    "status": "ok",
+                    "service": "ollama",
+                    "detail": (
+                        "Ollama responded successfully and the configured model is "
+                        "available."
+                    ),
+                    "code": None,
+                }
+            },
+        }
+        self.ready_payload = deepcopy(self.health_payload)
+        self._response_counter = 0
+
+    def queue_json_body(
+        self,
+        response_body: str,
+        *,
+        model: str = "qwen2.5:0.5b",
+        status_code: int = 200,
+    ) -> None:
+        self._response_counter += 1
+        self._queued_generate_responses.append(
+            data_response(
+                status_code,
+                {
+                    "run_id": f"aimode_run_{self._response_counter:02d}",
+                    "correlation_id": f"aimode_corr_{self._response_counter:02d}",
+                    "model": model,
+                    "provider": "ollama",
+                    "response": response_body,
+                    "done": True,
+                },
+            )
+        )
+
+    def queue_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_generate_responses.append(response)
+
+    def queue_health_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_health_responses.append(response)
+
+    def queue_ready_response(self, response: httpx.Response | Exception) -> None:
+        self._queued_ready_responses.append(response)
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        method = request.method.upper()
+
+        if path == "/health" and method == "GET":
+            self.health_requests += 1
+            if self._queued_health_responses:
+                queued = self._queued_health_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+            return data_response(200, deepcopy(self.health_payload))
+
+        if path == "/ready" and method == "GET":
+            self.ready_requests += 1
+            if self._queued_ready_responses:
+                queued = self._queued_ready_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+            return data_response(200, deepcopy(self.ready_payload))
+
+        if path == "/generate" and method == "POST":
+            body = self._request_json(request)
+            self.requests.append(body)
+            if self._queued_generate_responses:
+                queued = self._queued_generate_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+
+            self._response_counter += 1
+            return data_response(
+                200,
+                {
+                    "run_id": f"aimode_run_{self._response_counter:02d}",
+                    "correlation_id": body.get("correlation_id", ""),
+                    "model": "qwen2.5:0.5b",
+                    "provider": "ollama",
+                    "response": '{"suggestions":[]}',
+                    "done": True,
+                },
+            )
+
+        return httpx.Response(404, json={"detail": "not found"})
+
+    @staticmethod
+    def _request_json(request: httpx.Request) -> dict[str, object]:
+        if not request.content:
+            return {}
+        return json.loads(request.content.decode("utf-8"))
+
+
 @pytest.fixture
 def database_api() -> FakeDatabaseApi:
     return FakeDatabaseApi()
@@ -723,6 +835,11 @@ class FakeAccommodationApi:
         if record is None:
             return httpx.Response(404, json={"detail": "not found"})
         return httpx.Response(200, json=record)
+
+
+@pytest.fixture
+def ai_mode_api() -> FakeAiModeApi:
+    return FakeAiModeApi()
 
 
 @pytest.fixture
@@ -758,11 +875,14 @@ def client_factory(
         handler,
         *,
         settings_override: Settings | None = None,
+        ai_mode_handler=None,
     ) -> Iterator[TestClient]:
         app = create_app(
             settings_override or Settings(database_api_base_url="http://database.test"),
-            transport=httpx.MockTransport(handler),
-            # Faked too, so the suite never reaches for a real student 2.
+            database_transport=httpx.MockTransport(handler),
+            ai_mode_transport=(
+                httpx.MockTransport(ai_mode_handler) if ai_mode_handler else None
+            ),
             accommodation_transport=httpx.MockTransport(accommodation_api.handle),
             activity_transport=httpx.MockTransport(activity_api.handle),
         )

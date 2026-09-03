@@ -21,9 +21,13 @@ def test_dashboard_renders_full_page_theme_and_accessible_controls(client) -> No
     assert 'id="trip-list-heading"' in response.text
     assert 'id="filter-date"' in response.text
     assert 'id="filter-category"' in response.text
+    assert 'id="ai-requested-date"' in response.text
+    assert 'id="ai-goal"' in response.text
+    assert 'id="ai-interests"' in response.text
+    assert 'id="ai-constraints"' in response.text
     assert 'role="status"' in response.text
-    assert "Generate suggestions in issue #12" in response.text
-    assert "<fieldset disabled>" in response.text
+    assert "Generate draft suggestions" in response.text
+    assert "persisted=false" in response.text
     assert "Delete trip" in response.text
     assert 'href="http://localhost:8080">Home</a>' in response.text
 
@@ -49,7 +53,7 @@ def test_empty_state_renders_when_no_trips(client, backend_api) -> None:
     assert response.status_code == 200
     assert "Plan your first trip" in response.text
     assert "Create trip" in response.text
-    assert "Generate suggestions in issue #12" in response.text
+    assert "AI draft suggestions unlock after you create a trip" in response.text
 
 
 def test_trip_create_success_redirects_for_full_page_and_swaps_for_htmx(client) -> None:
