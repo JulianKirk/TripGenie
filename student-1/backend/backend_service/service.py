@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from typing import Any
 
 from .accommodation_client import AccommodationClient
-from .activity_client import ActivityClient
-from .ai_suggestions import AiSuggestionRequest, AiSuggestionService
+from .activity_client import ActivityClient, ActivityDetails
+from .ai_suggestions import (
+    AiSuggestionRequest,
+    AiSuggestionService,
+    prepare_cross_service_prompt_context,
+    select_cross_service_records,
+)
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, validation_error
@@ -31,7 +37,7 @@ from .models import (
     TripTransportRecord,
     TripUpdate,
 )
-from .transport_client import TransportClient
+from .transport_client import TransportClient, TransportDetails
 from .trip_rules import (
     ensure_trip_detail_supported,
     validate_stay_window,
@@ -79,6 +85,8 @@ class BackendService:
     def _enrich_accommodations(
         self,
         accommodations: list[TripAccommodationRecord],
+        *,
+        sources: dict[str, dict[str, Any]] | None = None,
     ) -> list[TripAccommodationDetail]:
         """The pinned accommodations, with the name and price student 2 owns.
 
@@ -91,11 +99,9 @@ class BackendService:
             return []
 
         found = (
-            self._accommodations.details(
-                [record.accommodation_id for record in accommodations]
-            )
-            if self._accommodations is not None
-            else {}
+            sources
+            if sources is not None
+            else self._accommodation_sources(accommodations)
         )
         detailed: list[TripAccommodationDetail] = []
         for record in accommodations:
@@ -111,17 +117,25 @@ class BackendService:
             )
         return detailed
 
+    def _accommodation_sources(
+        self,
+        accommodations: list[TripAccommodationRecord],
+    ) -> dict[str, dict[str, Any]]:
+        if self._accommodations is None:
+            return {}
+        return self._accommodations.details(
+            [record.accommodation_id for record in accommodations]
+        )
+
     def _enrich_activities(
         self,
         activities: list[TripActivityRecord],
+        *,
+        sources: dict[str, ActivityDetails] | None = None,
     ) -> list[TripActivityDetail]:
         if not activities:
             return []
-        found = (
-            self._activities.details([record.activity_id for record in activities])
-            if self._activities is not None
-            else {}
-        )
+        found = sources if sources is not None else self._activity_sources(activities)
         return [
             TripActivityDetail(
                 **record.model_dump(mode="json"),
@@ -149,9 +163,19 @@ class BackendService:
             for record in activities
         ]
 
+    def _activity_sources(
+        self,
+        activities: list[TripActivityRecord],
+    ) -> dict[str, ActivityDetails]:
+        if self._activities is None:
+            return {}
+        return self._activities.details([record.activity_id for record in activities])
+
     def _enrich_transport(
         self,
         transport: list[TripTransportRecord],
+        *,
+        sources: dict[str, TransportDetails] | None = None,
     ) -> list[TripTransportDetail]:
         """The pinned transport, labelled with what Student 3 owns.
 
@@ -164,11 +188,7 @@ class BackendService:
         if not transport:
             return []
 
-        found = (
-            self._transport.details([record.transport_id for record in transport])
-            if self._transport is not None
-            else {}
-        )
+        found = sources if sources is not None else self._transport_sources(transport)
         detailed: list[TripTransportDetail] = []
         for record in transport:
             extra = found.get(record.transport_id)
@@ -191,14 +211,27 @@ class BackendService:
             )
         # Departure order is the only order a traveller reads a journey in.
         # Rows with no detail sink to the end rather than jumbling the rest.
-        detailed.sort(key=lambda row: (row.departure_time is None, row.departure_time))
+        detailed.sort(
+            key=lambda row: (
+                row.departure_time is None,
+                row.departure_time or "",
+                row.transport_id,
+            )
+        )
         return detailed
+
+    def _transport_sources(
+        self,
+        transport: list[TripTransportRecord],
+    ) -> dict[str, TransportDetails]:
+        if self._transport is None:
+            return {}
+        return self._transport.details([record.transport_id for record in transport])
 
     def list_trip_transport(self, trip_id: str) -> list[dict[str, object]]:
         records = self._client.list_trip_transport(trip_id)
         return [
-            record.model_dump(mode="json")
-            for record in self._enrich_transport(records)
+            record.model_dump(mode="json") for record in self._enrich_transport(records)
         ]
 
     def add_trip_transport(
@@ -270,10 +303,40 @@ class BackendService:
         ensure_trip_detail_supported(trip)
         self._ensure_date_within_trip(payload.requested_date, trip)
         items = self._client.list_itinerary_items(trip_id)
+        accommodation_records = self._client.list_trip_accommodations(trip_id)
+        activity_records = self._client.list_trip_activities(trip_id)
+        transport_records = self._client.list_trip_transport(trip_id)
+        selection = select_cross_service_records(
+            accommodations=accommodation_records,
+            activities=activity_records,
+            transport=transport_records,
+            request=payload,
+            settings=self._settings,
+        )
+        accommodation_sources = self._accommodation_sources(selection.accommodations)
+        activity_sources = self._activity_sources(selection.activities)
+        transport_sources = self._transport_sources(selection.transport)
+        cross_service_context = prepare_cross_service_prompt_context(
+            selection=selection,
+            enriched_accommodations=self._enrich_accommodations(
+                selection.accommodations,
+                sources=accommodation_sources,
+            ),
+            accommodation_sources=accommodation_sources,
+            enriched_activities=self._enrich_activities(
+                selection.activities,
+                sources=activity_sources,
+            ),
+            enriched_transport=self._enrich_transport(
+                selection.transport,
+                sources=transport_sources,
+            ),
+        )
         response = await self._ai_suggestions.generate(
             trip_id=trip_id,
             trip=trip,
             existing_items=items,
+            cross_service_context=cross_service_context,
             request=payload,
             correlation_id=correlation_id,
         )
@@ -478,8 +541,7 @@ class BackendService:
         ai_mode = await self._ai_mode_status()
         overall_status = (
             "ok"
-            if database.status == "ok"
-            and ai_mode.status in {"ok", "not_configured"}
+            if database.status == "ok" and ai_mode.status in {"ok", "not_configured"}
             else "degraded"
         )
         return HealthResponse(

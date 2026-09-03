@@ -12,6 +12,7 @@ from .prompt_assets import validate_prompt_asset
 
 AI_MAX_ATTEMPTS_MIN = 1
 AI_MAX_ATTEMPTS_MAX = 10
+AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX = 50
 
 
 def _parse_timeout(
@@ -131,6 +132,14 @@ def _validate_ai_prompt_budget(value: int) -> int:
     return value
 
 
+def _validate_ai_context_limit(value: int, *, env_name: str) -> int:
+    if value < 1 or value > AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX:
+        raise ValueError(
+            f"{env_name} must be between 1 and {AI_CROSS_SERVICE_CONTEXT_LIMIT_MAX}."
+        )
+    return value
+
+
 @dataclass(slots=True)
 class Settings:
     database_api_base_url: str
@@ -149,10 +158,13 @@ class Settings:
     transport_api_timeout_seconds: float = 5.0
     ai_mode_base_url: str | None = None
     ai_mode_timeout_seconds: float = 15.0
-    ai_prompt_asset: str = "runtime_ai_suggestions_v1.md"
+    ai_prompt_asset: str = "runtime_ai_suggestions_v2.md"
     ai_mode_max_prompt_chars: int = AI_MODE_PROMPT_MAX_CHARS_DEFAULT
     ai_max_attempts: int = 2
     ai_max_context_items: int = 12
+    ai_max_context_accommodations: int = 6
+    ai_max_context_activities: int = 12
+    ai_max_context_transport: int = 8
 
     def __post_init__(self) -> None:
         self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
@@ -160,6 +172,18 @@ class Settings:
             self.ai_mode_max_prompt_chars
         )
         self.ai_prompt_asset = validate_prompt_asset(self.ai_prompt_asset)
+        self.ai_max_context_accommodations = _validate_ai_context_limit(
+            self.ai_max_context_accommodations,
+            env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_ACCOMMODATIONS",
+        )
+        self.ai_max_context_activities = _validate_ai_context_limit(
+            self.ai_max_context_activities,
+            env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_ACTIVITIES",
+        )
+        self.ai_max_context_transport = _validate_ai_context_limit(
+            self.ai_max_context_transport,
+            env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT",
+        )
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -242,9 +266,9 @@ class Settings:
             ),
             ai_prompt_asset=os.getenv(
                 "STUDENT1_BACKEND_AI_PROMPT_ASSET",
-                "runtime_ai_suggestions_v1.md",
+                "runtime_ai_suggestions_v2.md",
             ).strip()
-            or "runtime_ai_suggestions_v1.md",
+            or "runtime_ai_suggestions_v2.md",
             ai_mode_max_prompt_chars=_parse_int(
                 os.getenv("STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS"),
                 env_name="STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS",
@@ -259,5 +283,20 @@ class Settings:
                 os.getenv("STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS"),
                 env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_ITEMS",
                 default=12,
+            ),
+            ai_max_context_accommodations=_parse_positive_int(
+                os.getenv("STUDENT1_BACKEND_AI_MAX_CONTEXT_ACCOMMODATIONS"),
+                env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_ACCOMMODATIONS",
+                default=6,
+            ),
+            ai_max_context_activities=_parse_positive_int(
+                os.getenv("STUDENT1_BACKEND_AI_MAX_CONTEXT_ACTIVITIES"),
+                env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_ACTIVITIES",
+                default=12,
+            ),
+            ai_max_context_transport=_parse_positive_int(
+                os.getenv("STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT"),
+                env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT",
+                default=8,
             ),
         )
