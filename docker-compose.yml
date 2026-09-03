@@ -241,6 +241,14 @@ services:
       # browsing and planning must keep working when AI-Mode does not.
       ai-mode:
         condition: service_started
+      # The itinerary service holds which transport belongs to which trip, so
+      # every selection and every seat count goes through it. Declared for the
+      # same reason student-2-backend declares it: this service reads Student
+      # 1's API, and bringing it up alone would leave those routes answering
+      # 503. Started rather than healthy, so browsing and comparing still work
+      # when Student 1 is unwell.
+      student-1-backend:
+        condition: service_started
     healthcheck:
       test:
         [

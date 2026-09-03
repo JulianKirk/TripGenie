@@ -4,11 +4,11 @@
     {"label": "GET /health", "path": "${SERVICE_URL}/health", "contains": ["\"status\":\"ok\""]},
     {"label": "GET /ready", "path": "${SERVICE_URL}/ready", "contains": ["\"status\":\"ok\""]},
     {"label": "GET /api/transport-options", "path": "${SERVICE_URL}/api/transport-options", "contains": ["\"data\""], "nfr_ms": 500},
-    {"label": "GET /api/transport-bookings", "path": "${SERVICE_URL}/api/transport-options/transport_2026_qf401_mel_syd/itineraries", "contains": ["\"data\""], "nfr_ms": 500},
+    {"label": "GET /api/transport-options/{id}/itineraries", "path": "${SERVICE_URL}/api/transport-options/transport_2026_qf401_mel_syd/itineraries", "contains": ["\"data\""], "nfr_ms": 500},
     {"label": "GET /api/trip-directory", "path": "${SERVICE_URL}/api/trip-directory", "contains": ["\"available\""]},
     {"label": "GET /api/trips/{id}/transport", "path": "${SERVICE_URL}/api/trips/trip_2026_hobart_weekend_escape/transport", "contains": ["entry_count"]},
     {"label": "GET /api/transport-options/{id} (missing)", "path": "${SERVICE_URL}/api/transport-options/transport_2026_does_not_exist", "status": 404, "contains": ["NOT_FOUND"]},
-    {"label": "GET /api/transport-bookings/{id} (missing)", "path": "${SERVICE_URL}/api/transport-options/transport_2026_does_not_exist/itineraries", "status": 404, "contains": ["NOT_FOUND"]},
+    {"label": "GET /api/transport-options/{id}/itineraries (missing option)", "path": "${SERVICE_URL}/api/transport-options/transport_2026_does_not_exist/itineraries", "status": 404, "contains": ["NOT_FOUND"]},
     {"label": "GET /api/transport-options/{id} (malformed)", "path": "${SERVICE_URL}/api/transport-options/nope", "status": 422, "contains": ["VALIDATION_ERROR"]}
   ]
 }
