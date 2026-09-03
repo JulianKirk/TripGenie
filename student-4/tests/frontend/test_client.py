@@ -131,6 +131,61 @@ def test_itinerary_operations_stay_on_student_4_backend(
     ]
 
 
+def test_ai_operations_use_recommendation_routes_and_long_timeout(
+    backend_client: BackendClient,
+    backend: FakeBackend,
+) -> None:
+    backend.overrides[("POST", "/activity/recommendations/plan")] = httpx.Response(
+        200,
+        json={
+            "question": "Outdoor ideas",
+            "query": {"categories": {"codes": ["OUTDOOR"], "match": "ANY"}},
+            "summary": "outdoor activities",
+            "trip_context_available": False,
+        },
+    )
+    backend.overrides[("POST", "/activity/recommendations/evaluate")] = httpx.Response(
+        200,
+        json={
+            "status": "no_match",
+            "attempt": 2,
+            "query": {"limit": 20, "offset": 0},
+            "summary": "outdoor activities",
+            "matched_count": 0,
+            "evaluated_count": 0,
+            "recommended": [],
+            "overview": "No suitable activities were found.",
+            "considerations": [],
+            "disclaimer": "Try changing the filters.",
+            "run_id": "run-1",
+            "model": "qwen2.5:3b",
+            "provider": "ollama",
+        },
+    )
+
+    plan = run(backend_client.plan_recommendations({"question": "Outdoor ideas"}))
+    result = run(
+        backend_client.evaluate_recommendations(
+            {
+                "question": plan.question,
+                "query": plan.query.model_dump(mode="json", exclude_none=True),
+                "summary": plan.summary,
+                "attempt": 2,
+            }
+        )
+    )
+
+    assert plan.summary == "outdoor activities"
+    assert result.status == "no_match"
+    assert [request.url.path for request in backend.requests] == [
+        "/activity/recommendations/plan",
+        "/activity/recommendations/evaluate",
+    ]
+    assert all(
+        request.extensions["timeout"]["read"] == 210.0 for request in backend.requests
+    )
+
+
 def test_backend_validation_detail_is_preserved(
     backend_client: BackendClient,
     backend: FakeBackend,

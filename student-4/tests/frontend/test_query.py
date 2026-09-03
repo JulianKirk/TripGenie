@@ -2,11 +2,63 @@ from __future__ import annotations
 
 import pytest
 from starlette.datastructures import QueryParams
-from student4_frontend_service.query import QueryInputError, build_search_body
+from student4_frontend_service.query import (
+    QueryInputError,
+    build_search_body,
+    search_body_to_params,
+)
 
 
 def test_empty_form_has_only_default_paging() -> None:
     assert build_search_body(QueryParams()) == {"limit": 20, "offset": 0}
+
+
+def test_search_body_to_params_refills_every_advanced_filter() -> None:
+    params = search_body_to_params(
+        {
+            "text": "harbour",
+            "location": {"country": "australia", "city": "sydney"},
+            "categories": {"codes": ["OUTDOOR", "TOUR"], "match": "ALL"},
+            "price": {"min": "10.00", "max": "90.00"},
+            "duration_minutes": {"min": 30, "max": 180},
+            "party_size": 2,
+            "youngest_age": 8,
+            "oldest_age": 70,
+            "booking_required": False,
+            "accessibility": {"wheelchair_accessible": True},
+            "availability": {
+                "date": "2027-04-02",
+                "start_time": "09:00",
+                "end_time": "12:00",
+            },
+            "sort": "PRICE_ASC",
+            "limit": 20,
+            "offset": 0,
+        }
+    )
+
+    assert params.getlist("category") == ["OUTDOOR", "TOUR"]
+    assert dict(params) == {
+        "text": "harbour",
+        "country": "australia",
+        "city": "sydney",
+        "category": "TOUR",
+        "category_match": "ALL",
+        "price_min": "10.00",
+        "price_max": "90.00",
+        "duration_min": "30",
+        "duration_max": "180",
+        "party_size": "2",
+        "youngest_age": "8",
+        "oldest_age": "70",
+        "booking_required": "false",
+        "wheelchair_accessible": "true",
+        "date": "2027-04-02",
+        "start_time": "09:00",
+        "end_time": "12:00",
+        "sort": "PRICE_ASC",
+        "limit": "20",
+    }
 
 
 def test_complete_filter_form_builds_documented_nested_body() -> None:

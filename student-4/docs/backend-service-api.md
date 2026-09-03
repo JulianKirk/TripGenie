@@ -52,6 +52,12 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
+| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://ai-mode:8006`; when unset, only recommendations are unavailable. |
+| `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
+| `AI_PROMPT_MAX_CHARS` | `12000` | Maximum rendered planning or evaluation prompt size, aligned with AI Mode. |
+| `AI_MAX_CANDIDATES` | `20` | Maximum authoritative activity records evaluated by AI. |
+| `AI_PLAN_PROMPT_ASSET` | `activity_search_plan_v1.md` | Packaged search-planning prompt. |
+| `AI_EVALUATION_PROMPT_ASSET` | `activity_recommendations_v1.md` | Packaged grounded-evaluation prompt. |
 
 ### Publicly writable data
 
@@ -91,6 +97,55 @@ Errors use `{"detail": "..."}`.
 
 `502` and `503` are retryable. An unknown location in a well-formed search is
 an empty result, not an error.
+
+## AI-assisted activity search
+
+AI suggestions are advisory and use two explicit stages. Planning turns a
+traveller's question and optional trip into the same structured `ActivityQuery`
+accepted by `QUERY /activity`. Evaluation executes that query, loads the real
+matching activity details, and lets AI shortlist only supplied identifiers.
+Neither route writes catalogue or itinerary data.
+
+`GET /activity/trips` returns `{"available": true, "trips": [...]}` for the
+optional context picker. If Student 1 is unavailable it returns
+`{"available": false, "trips": []}` so ordinary catalogue use continues.
+
+### POST /activity/recommendations/plan
+
+```json
+{
+  "question": "Something outdoors and relaxed for our first morning",
+  "trip_id": "trip_2026_sydney_long_weekend"
+}
+```
+
+The response includes the validated `query`, a readable `summary`, and whether
+trip context was loaded. A selected trip's resolvable destination and traveller
+count are applied after model output. Paging is fixed to the first 20 active
+activities.
+
+### POST /activity/recommendations/evaluate
+
+```json
+{
+  "question": "Something outdoors and relaxed for our first morning",
+  "trip_id": "trip_2026_sydney_long_weekend",
+  "query": {"categories": {"codes": ["OUTDOOR"], "match": "ANY"}},
+  "summary": "outdoor activities in Sydney",
+  "attempt": 1
+}
+```
+
+A `complete` response includes `matched_count`, `evaluated_count`, one to three
+grounded recommendations, the query used, and model provenance. When no result
+is suitable, attempt one may return `retry` with one materially changed query
+and `revision_explanation`. Attempt two returns `no_match` instead of looping.
+Activities already present in the selected trip are excluded.
+
+The response distinguishes catalogue matches from the smaller AI shortlist.
+Unknown model-generated activity identifiers are rejected with `502`; duplicate
+identifiers are collapsed. The traveller still uses the normal itinerary
+endpoint to add a recommendation.
 
 ## Response representations
 

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from starlette.datastructures import QueryParams
+from starlette.datastructures import QueryParams
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
@@ -168,3 +166,77 @@ def build_search_body(params: QueryParams) -> dict[str, object]:
     )
     body["offset"] = _page(params.get("offset"), default=0, minimum=0, maximum=None)
     return body
+
+
+def _append_param(
+    pairs: list[tuple[str, str]], name: str, value: object | None
+) -> None:
+    if value is not None:
+        rendered = str(value).lower() if isinstance(value, bool) else str(value)
+        pairs.append((name, rendered))
+
+
+def _append_location_and_categories(
+    pairs: list[tuple[str, str]], body: dict[str, object]
+) -> None:
+    location = body.get("location")
+    if isinstance(location, dict):
+        for name in ("country", "city", "street"):
+            _append_param(pairs, name, location.get(name))
+
+    categories = body.get("categories")
+    if isinstance(categories, dict):
+        codes = categories.get("codes")
+        if isinstance(codes, list):
+            pairs.extend(("category", str(code)) for code in codes)
+        _append_param(pairs, "category_match", categories.get("match"))
+
+
+def _append_ranges_and_party(
+    pairs: list[tuple[str, str]], body: dict[str, object]
+) -> None:
+
+    for key, prefix in (("price", "price"), ("duration_minutes", "duration")):
+        bounds = body.get(key)
+        if isinstance(bounds, dict):
+            _append_param(pairs, f"{prefix}_min", bounds.get("min"))
+            _append_param(pairs, f"{prefix}_max", bounds.get("max"))
+
+    for name in ("party_size", "youngest_age", "oldest_age", "booking_required"):
+        _append_param(pairs, name, body.get(name))
+
+
+def _append_accessibility_and_availability(
+    pairs: list[tuple[str, str]], body: dict[str, object]
+) -> None:
+
+    accessibility = body.get("accessibility")
+    if isinstance(accessibility, dict):
+        for name in (
+            "wheelchair_accessible",
+            "step_free_access",
+            "accessible_toilet",
+        ):
+            if accessibility.get(name) is True:
+                _append_param(pairs, name, True)
+
+    availability = body.get("availability")
+    if isinstance(availability, dict):
+        for name in ("date", "start_time", "end_time"):
+            _append_param(pairs, name, availability.get(name))
+
+
+def search_body_to_params(body: dict[str, object]) -> QueryParams:
+    """Represent a validated backend query in the existing HTML filter form."""
+    pairs: list[tuple[str, str]] = []
+    _append_param(pairs, "text", body.get("text"))
+    _append_location_and_categories(pairs, body)
+    _append_ranges_and_party(pairs, body)
+    _append_accessibility_and_availability(pairs, body)
+
+    _append_param(pairs, "sort", body.get("sort"))
+    _append_param(pairs, "limit", body.get("limit"))
+    offset = body.get("offset")
+    if isinstance(offset, int) and offset > 0:
+        _append_param(pairs, "offset", offset)
+    return QueryParams(pairs)

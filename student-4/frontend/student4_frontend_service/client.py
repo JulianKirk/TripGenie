@@ -15,6 +15,9 @@ from .models import (
     DeleteResult,
     ItineraryPicker,
     ItinerarySelectionWrite,
+    RecommendationEvaluation,
+    RecommendationPlan,
+    TripDirectory,
 )
 
 if TYPE_CHECKING:
@@ -61,6 +64,7 @@ class BackendClient:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        self._settings = settings
         self._client = httpx.AsyncClient(
             base_url=settings.backend_url,
             timeout=settings.backend_timeout,
@@ -143,6 +147,31 @@ class BackendClient:
             {200},
         )
 
+    async def trips(self) -> TripDirectory:
+        return await self._request("GET", "/activity/trips", TripDirectory, {200})
+
+    async def plan_recommendations(self, body: dict[str, object]) -> RecommendationPlan:
+        return await self._request(
+            "POST",
+            "/activity/recommendations/plan",
+            RecommendationPlan,
+            {200},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
+    async def evaluate_recommendations(
+        self, body: dict[str, object]
+    ) -> RecommendationEvaluation:
+        return await self._request(
+            "POST",
+            "/activity/recommendations/evaluate",
+            RecommendationEvaluation,
+            {200},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
     async def _request(
         self,
         method: str,
@@ -151,9 +180,16 @@ class BackendClient:
         expected_statuses: set[int],
         *,
         json: dict[str, object] | None = None,
+        request_timeout: float | None = None,
     ) -> ModelT:
         try:
-            response = await self._client.request(method, path, json=json)
+            response = (
+                await self._client.request(method, path, json=json)
+                if request_timeout is None
+                else await self._client.request(
+                    method, path, json=json, timeout=request_timeout
+                )
+            )
         except httpx.RequestError as exc:
             raise FrontendError(
                 kind="unavailable", status_code=503, detail=UNAVAILABLE

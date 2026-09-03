@@ -288,3 +288,114 @@ class ItinerarySelection(StrictModel):
 
 class ItineraryPicker(StrictModel):
     itineraries: list[ItinerarySelection]
+
+
+class TripOption(StrictModel):
+    id: str
+    name: str
+    destination: str
+    start_date: dt.date
+    end_date: dt.date
+    traveller_count: int = Field(ge=1, strict=True)
+    status: Literal["draft", "planned", "active", "completed", "cancelled"]
+    notes: str | None = None
+
+
+class TripDirectory(StrictModel):
+    available: bool = Field(strict=True)
+    trips: list[TripOption] = Field(default_factory=list)
+
+
+class SearchLocation(StrictModel):
+    country: str | None = None
+    city: str | None = None
+    street: str | None = None
+
+
+class SearchCategories(StrictModel):
+    codes: list[CategoryCode] = Field(min_length=1)
+    match: Literal["ANY", "ALL"] = "ANY"
+
+
+class SearchMoneyRange(StrictModel):
+    min: Money | None = None
+    max: Money | None = None
+
+
+class SearchIntegerRange(StrictModel):
+    min: int | None = Field(default=None, ge=0, strict=True)
+    max: int | None = Field(default=None, ge=0, strict=True)
+
+
+class SearchAccessibility(StrictModel):
+    wheelchair_accessible: bool | None = Field(default=None, strict=True)
+    step_free_access: bool | None = Field(default=None, strict=True)
+    accessible_toilet: bool | None = Field(default=None, strict=True)
+
+
+class SearchAvailability(StrictModel):
+    date: dt.date
+    start_time: LocalTime | None = None
+    end_time: LocalTime | None = None
+
+    @field_serializer("start_time", "end_time")
+    def serialize_time(self, value: dt.time | None) -> str | None:
+        return value.strftime("%H:%M") if value else None
+
+
+class ActivityQueryPayload(StrictModel):
+    text: str | None = None
+    location: SearchLocation | None = None
+    categories: SearchCategories | None = None
+    price: SearchMoneyRange | None = None
+    duration_minutes: SearchIntegerRange | None = None
+    party_size: int | None = Field(default=None, ge=1, strict=True)
+    youngest_age: int | None = Field(default=None, ge=0, strict=True)
+    oldest_age: int | None = Field(default=None, ge=0, strict=True)
+    booking_required: bool | None = Field(default=None, strict=True)
+    accessibility: SearchAccessibility | None = None
+    availability: SearchAvailability | None = None
+    sort: Literal[
+        "NAME_ASC", "PRICE_ASC", "PRICE_DESC", "DURATION_ASC", "DURATION_DESC"
+    ] = "NAME_ASC"
+    include_inactive: bool = Field(default=False, strict=True)
+    limit: int = Field(default=20, ge=1, le=100, strict=True)
+    offset: int = Field(default=0, ge=0, strict=True)
+
+
+class RecommendationPlan(StrictModel):
+    question: str
+    trip_id: str | None = None
+    query: ActivityQueryPayload
+    summary: str
+    trip_context_available: bool = Field(strict=True)
+
+
+class RecommendationEvaluationState(StrictModel):
+    question: str
+    trip_id: str | None = None
+    query: ActivityQueryPayload
+    summary: str
+    attempt: int = Field(ge=1, le=2, strict=True)
+
+
+class RecommendedActivity(StrictModel):
+    reason: str
+    activity: ActivityDetail
+
+
+class RecommendationEvaluation(StrictModel):
+    status: Literal["complete", "retry", "no_match"]
+    attempt: int = Field(ge=1, le=2, strict=True)
+    query: ActivityQueryPayload
+    summary: str
+    matched_count: int = Field(ge=0, strict=True)
+    evaluated_count: int = Field(ge=0, strict=True)
+    recommended: list[RecommendedActivity] = Field(default_factory=list)
+    overview: str
+    considerations: list[str] = Field(default_factory=list)
+    disclaimer: str
+    revision_explanation: str | None = None
+    run_id: str
+    model: str
+    provider: str

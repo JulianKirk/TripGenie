@@ -33,6 +33,7 @@ booking or payment workflow.
 |---|---|---|
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend-service base URL. |
 | `BACKEND_TIMEOUT` | `5` | Backend request timeout in seconds. |
+| `AI_TIMEOUT` | `210` | Timeout for each AI planning or evaluation request only. |
 
 Run the frontend with:
 
@@ -64,6 +65,8 @@ These routes return pages or fragments, not a public JSON API.
 | `GET /manage/activity/{id}/delete` | Permanent-delete confirmation fragment. |
 | `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
+| `POST /suggestions/plan` | Translate a prompt and optional trip into advanced filters. |
+| `POST /suggestions/evaluate` | Run the planned search and evaluate authoritative matches. |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
 reached, matching the other frontend services.
@@ -80,6 +83,32 @@ The traveller page has four regions:
 
 The catalogue includes inactive entries and provides creation, replacement,
 deactivation and deletion without requiring a separate management page.
+
+## AI activity suggestions
+
+The catalogue's AI panel accepts a natural-language request and an optional
+trip selected from Student 1 through the Student 4 backend. It is an assisted
+version of the existing advanced search, not a separate catalogue.
+
+HTMX chains truthful stages in the live region:
+
+1. **Understanding your request** while AI produces a structured query.
+2. **Searching for ...** with a readable summary of the validated filters.
+3. **Evaluating the activities that match** while real catalogue results are
+   checked against the request and trip.
+4. Either a final count such as **12 activities matched; AI shortlisted 3**, or
+   one visible filter adjustment followed by a second and final attempt.
+
+The final structured query replaces the advanced-filter form out of band. A
+traveller can inspect and edit every chosen filter, and normal searching and
+pagination continue without another model call. Recommendation cards use
+authoritative activity records, link to the existing detail and trip-picker
+dialogs, and state that nothing has been saved.
+
+The staged interaction carries only the original question, selected trip,
+validated query, summary and attempt number. Candidate activities never make a
+browser round trip: the backend reruns the query and grounds model identifiers
+against its fresh result set.
 
 The initial `GET /` concurrently requests the backend's first activity page and
 `GET /activity/categories`. Category rows are rendered in the backend-provided
