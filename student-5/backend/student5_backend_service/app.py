@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from .accommodation_client import AccommodationApiClient
 from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
@@ -68,14 +69,18 @@ def create_app(
     database_transport: httpx.BaseTransport | None = None,
     trips_transport: httpx.BaseTransport | None = None,
     provider_transport: httpx.BaseTransport | None = None,
+    accommodation_transport: httpx.BaseTransport | None = None,
     ai_mode_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     database = DatabaseApiClient(settings, transport=database_transport)
     trips = TripsApiClient(settings, transport=trips_transport)
     transport = TransportApiClient(settings, transport=provider_transport)
+    accommodation = AccommodationApiClient(settings, transport=accommodation_transport)
     ai_mode = AiModeClient(settings, transport=ai_mode_transport)
-    service = BackendService(database, trips, transport, ai_mode, settings)
+    service = BackendService(
+        database, trips, transport, accommodation, ai_mode, settings
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -83,6 +88,7 @@ def create_app(
         database.close()
         trips.close()
         transport.close()
+        accommodation.close()
         ai_mode.close()
 
     app = FastAPI(title="TripGenie Student 5 Backend", lifespan=lifespan)

@@ -158,12 +158,33 @@ def provider_handler(_: httpx.Request) -> httpx.Response:
     )
 
 
+def accommodation_handler(request: httpx.Request) -> httpx.Response:
+    assert request.url.path == "/accommodation/trips/trip_chunk3/committed-costs"
+    return httpx.Response(
+        200,
+        json={
+            "committed_cost_total": "379.00",
+            "currency": "AUD",
+            "items": [
+                {
+                    "item_id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+                    "description": "Harbour Hotel",
+                    "status": "planned",
+                    "amount": "379.00",
+                    "currency": "AUD",
+                }
+            ],
+        },
+    )
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
         database_api_base_url="http://database.test",
         trips_api_base_url="http://trips.test",
         transport_api_base_url="http://transport.test",
+        accommodation_api_base_url="http://accommodation.test",
     )
 
 
@@ -174,6 +195,7 @@ def client(settings: Settings) -> Iterator[TestClient]:
         database_transport=httpx.MockTransport(database_handler),
         trips_transport=httpx.MockTransport(trips_handler),
         provider_transport=httpx.MockTransport(provider_handler),
+        accommodation_transport=httpx.MockTransport(accommodation_handler),
     )
     with TestClient(app) as test_client:
         yield test_client

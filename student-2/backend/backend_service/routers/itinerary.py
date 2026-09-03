@@ -9,13 +9,17 @@ trip card and a tick can never disagree with what student 1 stored.
 from __future__ import annotations
 
 import asyncio
+from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
-from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
+from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
-from backend_service.dependencies import ItineraryDep  # noqa: TC001  (runtime)
+from backend_service.dependencies import DbDep, ItineraryDep  # noqa: TC001  (runtime)
 from backend_service.schemas import (
+    AccommodationCostItem,
+    AccommodationCostResponse,
     ItinerarySelection,
     ItinerarySelectionResponse,
     StayDates,
@@ -25,6 +29,39 @@ if TYPE_CHECKING:
     from backend_service.itinerary_client import ItineraryClient
 
 router = APIRouter(prefix="/accommodation", tags=["itinerary"])
+
+
+@router.get(
+    "/trips/{itinerary_id}/committed-costs",
+    response_model=AccommodationCostResponse,
+)
+async def committed_costs(
+    itinerary_id: str, itinerary: ItineraryDep, db: DbDep
+) -> AccommodationCostResponse:
+    items: list[AccommodationCostItem] = []
+    try:
+        for stay in await itinerary.stays_in(itinerary_id):
+            check_in = date.fromisoformat(stay["date"])
+            check_out = date.fromisoformat(stay["check_out"])
+            accommodation = await db.get(UUID(stay["accommodation_id"]))
+            rate = Decimal(str(accommodation["price_per_night"]))
+            amount = rate * (check_out - check_in).days
+            items.append(
+                AccommodationCostItem(
+                    item_id=accommodation["id"],
+                    description=accommodation["name"],
+                    amount=amount,
+                )
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "incomplete accommodation stay cost data",
+        ) from exc
+    return AccommodationCostResponse(
+        committed_cost_total=sum((item.amount for item in items), Decimal("0.00")),
+        items=items,
+    )
 
 
 async def _selection(

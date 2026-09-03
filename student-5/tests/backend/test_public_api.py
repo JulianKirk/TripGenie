@@ -182,8 +182,8 @@ def test_summary_matches_hand_calculation_and_reports_partial_providers(
     assert response.status_code == 200, response.text
     summary = response.json()["data"]
     assert summary["actual_spending"] == "100.10"
-    assert summary["committed_costs"] == "200.20"
-    assert summary["remaining_budget"] == "699.70"
+    assert summary["committed_costs"] == "579.20"
+    assert summary["remaining_budget"] == "320.70"
     assert summary["providers"]["transport"]["status"] == "available"
     assert summary["providers"]["transport"]["items"] == [
         {
@@ -194,7 +194,22 @@ def test_summary_matches_hand_calculation_and_reports_partial_providers(
             "currency": "AUD",
         }
     ]
-    assert summary["providers"]["accommodation"]["status"] == "unavailable"
+    assert summary["providers"]["accommodation"] == {
+        "provider": "accommodation",
+        "status": "available",
+        "subtotal": "379.00",
+        "currency": "AUD",
+        "items": [
+            {
+                "item_id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+                "description": "Harbour Hotel",
+                "status": "planned",
+                "amount": "379.00",
+                "currency": "AUD",
+            }
+        ],
+        "detail": None,
+    }
     assert summary["committed_costs_complete"] is False
 
 

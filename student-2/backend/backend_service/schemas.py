@@ -25,6 +25,8 @@ already serialises the field as a JSON number.
 
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -247,6 +249,20 @@ class StayDates(BaseModel):
     check_in_time: str | None = None
     check_out: str | None = None
     check_out_time: str | None = None
+
+
+class AccommodationCostItem(BaseModel):
+    item_id: UUID
+    description: str
+    status: Literal["planned"] = "planned"
+    amount: Decimal = Field(ge=0, decimal_places=2)
+    currency: Literal["AUD"] = "AUD"
+
+
+class AccommodationCostResponse(BaseModel):
+    committed_cost_total: Decimal = Field(ge=0, decimal_places=2)
+    currency: Literal["AUD"] = "AUD"
+    items: list[AccommodationCostItem]
 
 
 class ItinerarySelectionResponse(BaseModel):

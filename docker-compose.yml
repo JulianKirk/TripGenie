@@ -440,6 +440,7 @@ services:
       STUDENT5_BACKEND_DB_API_BASE_URL: http://student-5-database:8007
       STUDENT5_BACKEND_TRIPS_API_BASE_URL: http://student-1-backend:8001
       STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
+      STUDENT5_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
       STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS: "100"
     expose:
@@ -450,6 +451,8 @@ services:
       student-1-backend:
         condition: service_started
       student-3-backend:
+        condition: service_started
+      student-2-backend:
         condition: service_started
       ai-mode:
         condition: service_started
