@@ -78,6 +78,9 @@ class BackendClient:
     async def health(self) -> BackendHealth:
         return await self._request("GET", "/health", BackendHealth, {200})
 
+    async def ready(self) -> BackendHealth:
+        return await self._request("GET", "/ready", BackendHealth, {200})
+
     async def categories(self) -> CategoryList:
         return await self._request("GET", "/activity/categories", CategoryList, {200})
 

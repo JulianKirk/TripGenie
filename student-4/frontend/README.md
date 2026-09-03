@@ -41,8 +41,9 @@ BACKEND_URL=http://127.0.0.1:8008 \
 
 Browse and manage entries at `http://127.0.0.1:8084/`.
 
-The temporary Compose service is published on `http://localhost:8094` while
-the legacy `student-4-service` placeholder continues to own port 8084.
+Compose publishes the frontend on the assignment port at
+`http://localhost:8084`. Start the complete owned slice with
+`docker compose up --build student-4`.
 
 ## HTML routes
 
@@ -63,6 +64,7 @@ the legacy `student-4-service` placeholder continues to own port 8084.
 | `PUT /activity/{id}/itineraries/{trip_id}` | Add or reschedule. |
 | `DELETE /activity/{id}/itineraries/{trip_id}` | Remove selection. |
 | `GET /health` | Frontend and backend status. |
+| `GET /ready` | Readiness status; returns `503` until the backend is ready. |
 | `POST /suggestions/plan` | Plan an advanced search from a prompt and optional trip. |
 | `POST /suggestions/evaluate` | Evaluate real matches and render a shortlist or one retry. |
 
@@ -78,5 +80,5 @@ allow-listed structured payloads; no arbitrary browser JSON is forwarded.
 .venv/bin/mypy --config-file student-4/pyproject.toml \
   student-4/frontend/student4_frontend_service student-4/tests/frontend
 docker build -f student-4/frontend/Dockerfile \
-  -t student-4-frontend student-4/frontend
+  -t student-4-frontend student-4
 ```

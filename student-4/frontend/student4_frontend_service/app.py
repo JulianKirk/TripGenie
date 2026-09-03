@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, cast
 from uuid import UUID  # noqa: TC003 - FastAPI resolves route annotations at runtime.
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -184,6 +184,29 @@ async def health(request: Request, client: ClientDep) -> dict[str, str]:
         "status": "ok" if status == "ok" else "degraded",
         "service": request.app.state.settings.service_name,
         "backend": status,
+    }
+
+
+@router.get("/ready")
+async def ready(
+    request: Request,
+    response: Response,
+    client: ClientDep,
+) -> dict[str, str]:
+    try:
+        backend = await client.ready()
+    except FrontendError:
+        backend_status = "unavailable"
+    else:
+        backend_status = backend.status
+
+    is_ready = backend_status in {"ok", "ready"}
+    if not is_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {
+        "status": "ready" if is_ready else "not_ready",
+        "service": request.app.state.settings.service_name,
+        "backend": "ok" if is_ready else backend_status,
     }
 
 

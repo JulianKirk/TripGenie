@@ -10,7 +10,7 @@ database or shared reference services.
 
 ```text
               browser
-                 |  :8094 host / :8084 container  HTML
+                 |  :8084 host / container  HTML
                  v
        student-4-frontend -- Jinja templates + HTMX
                  |  :8008  activity and itinerary-proxy routes
@@ -41,8 +41,8 @@ Run the frontend with:
 docker compose up student-4-frontend
 ```
 
-Then open `http://localhost:8094`. The separate port keeps the new service
-available while the legacy Student 4 placeholder still owns port 8084.
+Then open `http://localhost:8084`. Start the complete Student 4 slice with
+`docker compose up --build student-4`.
 
 ## HTML routes
 
@@ -65,11 +65,16 @@ These routes return pages or fragments, not a public JSON API.
 | `GET /manage/activity/{id}/delete` | Permanent-delete confirmation fragment. |
 | `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
+| `GET /ready` | Readiness JSON; returns `503` until the backend is ready. |
 | `POST /suggestions/plan` | Translate a prompt and optional trip into advanced filters. |
 | `POST /suggestions/evaluate` | Run the planned search and evaluate authoritative matches. |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
 reached, matching the other frontend services.
+
+`GET /ready` returns `503` until the public backend reports that its required
+database dependency is ready. Docker Compose uses this endpoint to gate the
+Student 4 grouping target.
 
 ## Page structure
 

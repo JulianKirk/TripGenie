@@ -11,8 +11,8 @@ WORKDIR /app
 
 RUN adduser --disabled-password --gecos "" --uid 10001 tripgenie
 
-COPY pyproject.toml ./pyproject.toml
-COPY student4_frontend_service ./student4_frontend_service
+COPY frontend/pyproject.toml ./pyproject.toml
+COPY frontend/student4_frontend_service ./student4_frontend_service
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install . \
@@ -21,5 +21,8 @@ RUN python -m pip install --upgrade pip \
 USER tripgenie
 
 EXPOSE 8084
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/ready', timeout=2)"]
 
 CMD ["uvicorn", "student4_frontend_service.app:app", "--host", "0.0.0.0", "--port", "8084"]

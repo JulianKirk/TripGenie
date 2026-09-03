@@ -9,8 +9,9 @@ microservice. Its callers are the Student 4 frontend and other backend services,
 including itinerary and budget services. Neither the frontend nor another
 student's service accesses the Student 4 database service directly.
 
-The target compose address is `http://student-4-backend:8008`; examples use
-`http://localhost:8008`.
+The target Compose address is `http://student-4-backend:8008`. The examples use
+`http://localhost:8008` for a backend started directly with Uvicorn or published
+with `docker run -p 8008:8008`; Compose keeps this port internal.
 
 ```text
 frontend / other students' backends
@@ -210,6 +211,17 @@ curl "http://localhost:8008/health"
 
 The top-level status is `degraded` when either dependency is unreachable, while
 the endpoint still returns `200` because the backend itself is alive.
+
+## GET /ready
+
+Reports whether the backend can accept activity traffic. The database service
+is the required readiness dependency; shared location, itinerary, and AI
+services remain runtime dependencies so their outages do not prevent the owned
+Student 4 slice from starting.
+
+The endpoint returns `200` with `status: "ready"` when the database responds,
+or `503` with `status: "not_ready"` while it is unavailable. Docker Compose
+uses this endpoint to gate the frontend startup.
 
 ## GET /activity/categories
 
