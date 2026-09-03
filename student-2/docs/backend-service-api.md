@@ -14,6 +14,7 @@
   - [PUT /accommodation/{id}](#put-accommodationid)
   - [DELETE /accommodation/{id}](#delete-accommodationid)
 - [Itinerary Endpoints](#itinerary-endpoints)
+  - [GET /accommodation/trips/{itinerary_id}/committed-costs](#get-accommodationtripsitinerary_idcommitted-costs)
   - [GET /accommodation/{id}/itineraries](#get-accommodationiditineraries)
   - [PUT /accommodation/{id}/itineraries/{itinerary_id}](#put-accommodationiditinerariesitinerary_id)
   - [DELETE /accommodation/{id}/itineraries/{itinerary_id}](#delete-accommodationiditinerariesitinerary_id)
@@ -829,6 +830,44 @@ point and the dates are a bonus.
 the caller draws as ticked or unticked. It is computed from two calls to
 student 1 (every itinerary, plus the reverse lookup of the ones holding this
 accommodation), never one call per itinerary.
+
+## GET /accommodation/trips/{itinerary_id}/committed-costs
+
+Returns the planned accommodation cost for one trip. This is the provider
+contract used by the budget service: Student 1 supplies the attached stays and
+this service supplies each nightly rate.
+
+Each item costs `price_per_night * (check_out - check_in).days`, matching the
+accommodation stay form. Prices and totals are AUD. A trip with no attached
+accommodations returns an available total of `0.00`; an attached stay without a
+check-out date, nightly rate, or valid accommodation returns `502` so an unknown
+cost is never reported as zero.
+
+### Example Response `200 OK`
+
+```json
+{
+  "committed_cost_total": "379.00",
+  "currency": "AUD",
+  "items": [
+    {
+      "item_id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+      "description": "Harbour Hotel",
+      "status": "planned",
+      "amount": "379.00",
+      "currency": "AUD"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+| Status | Description                                      |
+|--------|--------------------------------------------------|
+| 404    | Trip or accommodation not found                  |
+| 502    | Stay cost data or an upstream response is unusable |
+| 503    | Itinerary or database service unavailable        |
 
 ## GET /accommodation/{id}/itineraries
 
