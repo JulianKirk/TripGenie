@@ -110,6 +110,11 @@ class FakeBackend:
         self.itinerary_calls: list[tuple[str, str]] = []
         self.itinerary_bodies: list[dict] = []
         self.response_detail = DETAIL
+        # Every write the page made: (method, path, decoded body). One list, so
+        # a test asserts on what was sent without caring which verb sent it.
+        self.writes: list[tuple[str, str, dict]] = []
+        # Fails only the write, so the form redraw behind an error still works.
+        self.write_response: httpx.Response | None = None
         # Fails only the single-accommodation lookup, which is what a stale
         # deep link hits.
         self.detail_response: httpx.Response | None = None
@@ -128,6 +133,8 @@ class FakeBackend:
             self.body = json.loads(request.content)
         if "/itineraries" in request.url.path:
             return self._itineraries(request)
+        if request.method in {"POST", "PUT", "DELETE"}:
+            return self._write(request)
         if request.url.path.startswith("/accommodation/"):
             if self.detail_response is not None:
                 return self.detail_response
@@ -150,6 +157,19 @@ class FakeBackend:
                 "total": 1,
             },
         )
+
+    def _write(self, request: httpx.Request) -> httpx.Response:
+        """Create, edit and delete. Answers the way the real backend does:
+        201 with the id and name, 200 with the row, 204 with nothing."""
+        body = json.loads(request.content) if request.content else {}
+        self.writes.append((request.method, request.url.path, body))
+        if self.write_response is not None:
+            return self.write_response
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": LISTING["id"], "name": body["name"]})
+        return httpx.Response(200, json={**DETAIL, **body})
 
     def _itineraries(self, request: httpx.Request) -> httpx.Response:
         """The real backend answers PUT and DELETE with the whole list, so the

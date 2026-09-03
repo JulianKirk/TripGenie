@@ -67,6 +67,22 @@ BOUND_FIELDS = (
     "room_count_min",
     "bed_count_min",
 )
+# The create/edit form's own inputs. Location and room fields are the filter
+# form's maps above -- one accommodation message, so one pairing of form name to
+# message name however the form is being used.
+WRITE_FIELDS = {
+    "name": "name",
+    "type": "type",
+    "description": "description",
+    "price_per_night": "price_per_night",
+    "availability_status": "availability_status",
+    "rating": "rating",
+}
+# Refreshes the results list after a write. The filter form listens for it, so
+# the list comes back through the filters the user is actually looking at --
+# which a fragment rendered here could not know.
+CHANGED = "accommodations-changed"
+
 # The stay fields the form posts, in the order the backend documents them.
 STAY_FIELDS = ("check_in", "check_in_time", "check_out", "check_out_time")
 PAGE_SIZES = (10, 20, 50, 100)
@@ -119,6 +135,33 @@ def query_body(params: QueryParams) -> dict[str, Any]:
     # and the pager arithmetic below needs real integers either way.
     body["limit"] = _page_number(params.get("limit"), DEFAULT_LIMIT, 1, max(PAGE_SIZES))
     body["offset"] = _page_number(params.get("offset"), 0, 0, None)
+    return body
+
+
+def accommodation_body(form: Any) -> dict[str, Any]:
+    """The create/edit form, as the accommodation message the backend documents.
+
+    Numbers stay strings: the backend's schema coerces them, and doing it here
+    would mean deciding what a half-typed "12." is twice.
+
+    `form` is anything with `.get`/`.getlist` -- the posted `FormData` on a save,
+    and the same shape read back when a rejected form has to be redrawn.
+    """
+    body: dict[str, Any] = _picked(form, WRITE_FIELDS)
+    amenities = [value for value in form.getlist("amenities") if value.strip()]
+    if amenities:
+        body["amenities"] = amenities
+
+    location = _picked(form, LOCATION_FIELDS)
+    if location:
+        body["location_details"] = location
+
+    room = _picked(form, ROOM_FIELDS)
+    bed_types = [value for value in form.getlist("bed_types") if value.strip()]
+    if bed_types:
+        room["bed_types"] = bed_types
+    if room:
+        body["room_details"] = room
     return body
 
 
@@ -184,7 +227,9 @@ async def call(request: Request, method: str, path: str, **kwargs: Any) -> Any:
     except httpx.RequestError as exc:
         raise BackendError(UNREACHABLE) from exc
     if response.is_success:
-        return response.json()
+        # A DELETE answers 204 with nothing to decode. Every other success has
+        # a body, so "no content" is the only empty case.
+        return response.json() if response.content else None
     try:
         detail = response.json().get("detail")
     except ValueError:
@@ -326,6 +371,86 @@ async def detail(request: Request, accommodation_id: UUID):
     except BackendError as exc:
         return render(request, "partials/error.html", {"error": str(exc)})
     return render(request, "partials/modal.html", {"accommodation": accommodation})
+
+
+@router.get(f"{PATH}/new")
+async def new_accommodation(request: Request):
+    """An empty create form, as its own modal."""
+    return _form(request, {})
+
+
+@router.get(f"{PATH}/{{accommodation_id:uuid}}/edit")
+async def edit_accommodation(request: Request, accommodation_id: UUID):
+    """The same form, filled in with what is stored."""
+    try:
+        accommodation = await call(request, "GET", f"{PATH}/{accommodation_id}")
+    except BackendError as exc:
+        return render(request, "partials/error.html", {"error": str(exc)})
+    return _form(request, accommodation, accommodation_id)
+
+
+@router.post(PATH)
+async def create_accommodation(request: Request):
+    """Save a new accommodation, or come straight back with what went wrong and
+    everything that was typed."""
+    body = accommodation_body(await request.form())
+    try:
+        await call(request, "POST", PATH, json=body)
+    except BackendError as exc:
+        return _form(request, body, error=str(exc))
+    return _saved(request, f"Added {body.get('name', 'the accommodation')}.")
+
+
+@router.put(f"{PATH}/{{accommodation_id:uuid}}")
+async def update_accommodation(request: Request, accommodation_id: UUID):
+    """Save an edit. The backend's PUT is a merge, so the form only has to send
+    what it has -- a blank input leaves the stored value alone."""
+    body = accommodation_body(await request.form())
+    try:
+        await call(request, "PUT", f"{PATH}/{accommodation_id}", json=body)
+    except BackendError as exc:
+        return _form(request, body, accommodation_id, error=str(exc))
+    return _saved(request, f"Saved {body.get('name', 'the accommodation')}.")
+
+
+@router.delete(f"{PATH}/{{accommodation_id:uuid}}")
+async def delete_accommodation(request: Request, accommodation_id: UUID):
+    """Remove an accommodation. The button asks first (hx-confirm), so there is
+    no confirmation step of ours to render."""
+    try:
+        await call(request, "DELETE", f"{PATH}/{accommodation_id}")
+    except BackendError as exc:
+        return render(request, "partials/error.html", {"error": str(exc)})
+    return _saved(request, "Accommodation deleted.")
+
+
+def _form(
+    request: Request,
+    accommodation: dict[str, Any],
+    accommodation_id: UUID | None = None,
+    error: str = "",
+):
+    """The create/edit form. `accommodation` is the message shape either way --
+    what the backend returned for an edit, and what the form itself produced
+    when a save was rejected -- so the template reads one thing."""
+    return render(
+        request,
+        "partials/form_modal.html",
+        {
+            "accommodation": accommodation,
+            "accommodation_id": accommodation_id,
+            "error": error,
+        },
+    )
+
+
+def _saved(request: Request, message: str):
+    """A write landed. The empty main swap removes the form dialog, the partial
+    clears the details one behind it out of band, and the trigger header tells
+    the filter form to fetch the list again."""
+    response = render(request, "partials/saved.html", {"message": message})
+    response.headers["HX-Trigger"] = CHANGED
+    return response
 
 
 @router.get(f"{PATH}/{{accommodation_id:uuid}}/stay")
