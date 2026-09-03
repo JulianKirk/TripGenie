@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
@@ -8,15 +8,15 @@ from .location_client import LocationClient
 
 
 def get_db(request: Request) -> DatabaseClient:
-    return request.app.state.db
+    return cast("DatabaseClient", request.app.state.db)
 
 
 def get_location(request: Request) -> LocationClient:
-    return request.app.state.location
+    return cast("LocationClient", request.app.state.location)
 
 
 def get_itinerary(request: Request) -> ItineraryClient:
-    return request.app.state.itinerary
+    return cast("ItineraryClient", request.app.state.itinerary)
 
 
 DbDep = Annotated[DatabaseClient, Depends(get_db)]

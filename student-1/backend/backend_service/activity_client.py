@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -30,9 +31,14 @@ class ActivityClient:
         self._client.close()
 
     def details(self, activity_ids: list[str]) -> dict[str, ActivityDetails]:
+        unique_ids = list(dict.fromkeys(activity_ids))
+        if not unique_ids:
+            return {}
+        worker_count = min(len(unique_ids), 8)
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            records = executor.map(self._one, unique_ids)
         found: dict[str, ActivityDetails] = {}
-        for activity_id in dict.fromkeys(activity_ids):
-            record = self._one(activity_id)
+        for activity_id, record in zip(unique_ids, records, strict=True):
             if record is not None:
                 found[activity_id] = record
         return found

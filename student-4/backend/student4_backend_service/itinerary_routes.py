@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from uuid import UUID  # noqa: TC003 (FastAPI reads this at runtime)
 
 from fastapi import APIRouter
@@ -11,6 +10,7 @@ from .schemas import (
     ActivitySchedule,
     ItinerarySelection,
     ItinerarySelectionResponse,
+    TripActivityWire,
 )
 
 router = APIRouter(prefix="/activity", tags=["itinerary"])
@@ -20,37 +20,33 @@ async def selection(
     activity_id: UUID, itinerary: ItineraryDep
 ) -> ItinerarySelectionResponse:
     all_trips, holding_trips = await asyncio.gather(
-        itinerary.list(), itinerary.with_activity(activity_id)
+        itinerary.list_itineraries(), itinerary.with_activity(activity_id)
     )
-    holding = {trip["id"] for trip in holding_trips}
+    holding = {trip.id for trip in holding_trips}
     selected_ids = sorted(holding)
     rows = await asyncio.gather(
         *(itinerary.activities_in(trip_id) for trip_id in selected_ids)
     )
-    schedules: dict[str, dict[str, Any]] = {}
+    schedules: dict[str, TripActivityWire | None] = {}
     for trip_id, trip_rows in zip(selected_ids, rows, strict=True):
         schedules[trip_id] = next(
-            (
-                row
-                for row in trip_rows
-                if str(row.get("activity_id")) == str(activity_id)
-            ),
-            {},
+            (row for row in trip_rows if row.activity_id == str(activity_id)), None
         )
-    return ItinerarySelectionResponse(
-        itineraries=[
+    selections: list[ItinerarySelection] = []
+    for trip in all_trips:
+        schedule = schedules.get(trip.id)
+        selections.append(
             ItinerarySelection(
-                itinerary_id=trip["id"],
-                name=trip["name"],
-                selected=trip["id"] in holding,
-                start_date=trip["start_date"],
-                end_date=trip["end_date"],
-                date=schedules.get(trip["id"], {}).get("date"),
-                start_time=schedules.get(trip["id"], {}).get("start_time"),
+                itinerary_id=trip.id,
+                name=trip.name,
+                selected=trip.id in holding,
+                start_date=trip.start_date,
+                end_date=trip.end_date,
+                date=schedule.date if schedule else None,
+                start_time=schedule.start_time if schedule else None,
             )
-            for trip in all_trips
-        ]
-    )
+        )
+    return ItinerarySelectionResponse(itineraries=selections)
 
 
 @router.get("/{activity_id}/itineraries", response_model=ItinerarySelectionResponse)

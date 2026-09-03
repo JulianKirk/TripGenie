@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable  # noqa: TC003 (runtime client API)
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from .client import request
+from .client import parse, request
 from .config import Settings  # noqa: TC001 (runtime constructor contract)
+from .schemas import CityPage, CityRecord, CountryPage, CountryRecord, DependencyHealth
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 PAGE = 100
 
@@ -33,8 +36,12 @@ class LocationClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def health(self) -> dict[str, Any]:
-        return await self._request("GET", "/health")
+    async def health(self) -> DependencyHealth:
+        return parse(
+            DependencyHealth,
+            await self._request("GET", "/health"),
+            "bad response from location service",
+        )
 
     async def ids(
         self, country: str, city: str | None
@@ -65,29 +72,41 @@ class LocationClient:
         return (country_id, city_id) if city_id is not None else None
 
     async def _load(self) -> None:
-        countries = await self._all("/location/country", "countries")
-        cities = await self._all("/location/city", "cities")
-        self._names = {UUID(row["id"]): row["name"] for row in countries} | {
-            UUID(row["id"]): row["name"] for row in cities
+        countries = await self._all_countries()
+        cities = await self._all_cities()
+        self._names = {row.id: row.name for row in countries} | {
+            row.id: row.name for row in cities
         }
-        self._country_ids = {
-            normalise(row["name"]): UUID(row["id"]) for row in countries
-        }
+        self._country_ids = {normalise(row.name): row.id for row in countries}
         self._city_ids = {
-            (UUID(row["country_id"]), normalise(row["name"])): UUID(row["id"])
-            for row in cities
+            (row.country_id, normalise(row.name)): row.id for row in cities
         }
         self._loaded = True
 
-    async def _all(self, path: str, key: str) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
+    async def _all_countries(self) -> list[CountryRecord]:
+        rows: list[CountryRecord] = []
         while True:
             body = await self._request(
-                "GET", path, params={"limit": PAGE, "offset": len(rows)}
+                "GET",
+                "/location/country",
+                params={"limit": PAGE, "offset": len(rows)},
             )
-            page = body[key]
-            rows.extend(page)
-            if len(rows) >= body["total"] or not page:
+            page = parse(CountryPage, body, "bad response from location service")
+            rows.extend(page.countries)
+            if len(rows) >= page.total or not page.countries:
+                return rows
+
+    async def _all_cities(self) -> list[CityRecord]:
+        rows: list[CityRecord] = []
+        while True:
+            body = await self._request(
+                "GET",
+                "/location/city",
+                params={"limit": PAGE, "offset": len(rows)},
+            )
+            page = parse(CityPage, body, "bad response from location service")
+            rows.extend(page.cities)
+            if len(rows) >= page.total or not page.cities:
                 return rows
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:

@@ -40,8 +40,11 @@ jobs:
       - name: Type check
         run: |
           mypy --config-file student-4/pyproject.toml \
+            student-4/backend/student4_backend_service \
             student-4/database/student4_database_service \
-            student-4/tests/database
+            student-4/tests/backend \
+            student-4/tests/database \
+            student-4/tests/e2e
       - name: Run database tests
         run: pytest student-4/tests -q
       - name: Build backend image
@@ -67,6 +70,18 @@ jobs:
             sleep 2
           done
           docker logs student-4-database
+          exit 1
+      - name: Smoke test the backend image
+        run: |
+          docker run -d --name student-4-backend -p 8008:8008 student-4-backend
+          for _ in $(seq 1 10); do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:8008/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs student-4-backend
           exit 1
       - name: Validate Compose configuration
         run: docker compose config --quiet

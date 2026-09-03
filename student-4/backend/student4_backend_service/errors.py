@@ -11,9 +11,9 @@ if TYPE_CHECKING:
     from fastapi import FastAPI, Request
 
 
-async def validation_error_handler(
-    _request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, RequestValidationError):
+        raise exc
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": jsonable_encoder(exc.errors())},

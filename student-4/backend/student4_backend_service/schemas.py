@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from collections.abc import Sequence
 from decimal import Decimal
-from typing import Annotated, Literal, Self
+from typing import Annotated, Generic, Literal, Self, TypeVar
 from uuid import UUID
 
 from pydantic import (
@@ -12,6 +13,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_validator,
@@ -36,6 +38,11 @@ Money = Annotated[
 
 
 def _local_time(value: object) -> dt.time:
+    if isinstance(value, dt.time):
+        if value.second == 0 and value.microsecond == 0 and value.tzinfo is None:
+            return value
+        message = "must use local HH:MM format"
+        raise ValueError(message)
     if not isinstance(value, str) or TIME_PATTERN.fullmatch(value) is None:
         message = "must use local HH:MM format"
         raise ValueError(message)
@@ -44,6 +51,18 @@ def _local_time(value: object) -> dt.time:
 
 LocalTime = Annotated[dt.time, BeforeValidator(_local_time)]
 PricingBasis = Literal["PER_PERSON", "FLAT_ADMISSION"]
+CategoryCode = Literal[
+    "ADVENTURE",
+    "CULTURE",
+    "FAMILY",
+    "FOOD_DRINK",
+    "NIGHTLIFE",
+    "OUTDOOR",
+    "SHOPPING",
+    "TOUR",
+    "WELLNESS",
+    "WILDLIFE",
+]
 DayOfWeek = Literal[
     "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
 ]
@@ -102,6 +121,22 @@ class Schedule(StrictModel):
             raise ValueError(message)
         return self
 
+    def identity(
+        self,
+    ) -> tuple[bool, DayOfWeek | None, dt.date | None, dt.time, dt.time]:
+        return (
+            self.recurring_weekly,
+            self.day_of_week,
+            self.date,
+            self.start_time,
+            self.end_time,
+        )
+
+    def interval_minutes(self) -> int:
+        start = self.start_time.hour * 60 + self.start_time.minute
+        end = self.end_time.hour * 60 + self.end_time.minute
+        return end - start
+
 
 class ScheduleRecord(Schedule):
     id: UUID
@@ -124,8 +159,8 @@ class ActivityFields(StrictModel):
     accessible_toilet: bool | None = Field(default=None, strict=True)
     accessibility_notes: str | None = None
     is_active: bool = Field(default=True, strict=True)
-    categories: list[str] = Field(min_length=1)
-    availability_schedules: list[Schedule]
+    categories: list[CategoryCode] = Field(min_length=1)
+    availability_schedules: Sequence[Schedule]
 
     @field_validator("name", "description")
     @classmethod
@@ -134,6 +169,55 @@ class ActivityFields(StrictModel):
             message = "must not be blank"
             raise ValueError(message)
         return value.strip()
+
+    @field_validator("maximum_age")
+    @classmethod
+    def ordered_ages(cls, value: int | None, info: ValidationInfo) -> int | None:
+        minimum = info.data.get("minimum_age")
+        if minimum is not None and value is not None and minimum > value:
+            message = "maximum_age must be at least minimum_age"
+            raise ValueError(message)
+        return value
+
+    @field_validator("maximum_participants")
+    @classmethod
+    def ordered_participants(
+        cls, value: int | None, info: ValidationInfo
+    ) -> int | None:
+        minimum = info.data.get("minimum_participants")
+        if minimum is not None and value is not None and minimum > value:
+            message = "maximum_participants must be at least minimum_participants"
+            raise ValueError(message)
+        return value
+
+    @field_validator("categories")
+    @classmethod
+    def unique_categories(cls, value: list[CategoryCode]) -> list[CategoryCode]:
+        if len(value) != len(set(value)):
+            message = "categories must be unique"
+            raise ValueError(message)
+        return value
+
+    @field_validator("availability_schedules")
+    @classmethod
+    def valid_schedules(
+        cls, value: Sequence[Schedule], info: ValidationInfo
+    ) -> Sequence[Schedule]:
+        if info.data.get("is_active") and not value:
+            message = "active activities require availability_schedules"
+            raise ValueError(message)
+        identities = [schedule.identity() for schedule in value]
+        if len(identities) != len(set(identities)):
+            message = "availability_schedules contain a duplicate"
+            raise ValueError(message)
+        duration = info.data.get("duration_minutes")
+        if any(
+            duration is not None and schedule.interval_minutes() < duration
+            for schedule in value
+        ):
+            message = "each schedule interval must fit the activity duration"
+            raise ValueError(message)
+        return value
 
 
 class ActivityWrite(ActivityFields):
@@ -150,33 +234,73 @@ class InternalActivity(InternalActivityWrite):
     availability_schedules: list[ScheduleRecord]
 
 
-class Activity(ActivityWrite):
+class Activity(ActivityFields):
     id: UUID
     location_details: PublicLocation
     availability_schedules: list[ScheduleRecord]
 
 
-class InternalSummary(StrictModel):
-    id: UUID
-    name: str
-    description: str
+class SummaryFields(StrictModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
     price: Money
     pricing_basis: PricingBasis
-    duration_minutes: int
-    minimum_age: int | None = None
-    maximum_age: int | None = None
-    minimum_participants: int
-    maximum_participants: int | None = None
-    booking_required: bool
-    wheelchair_accessible: bool | None = None
-    step_free_access: bool | None = None
-    accessible_toilet: bool | None = None
-    is_active: bool
+    duration_minutes: int = Field(gt=0, strict=True)
+    minimum_age: int | None = Field(default=None, ge=0, strict=True)
+    maximum_age: int | None = Field(default=None, ge=0, strict=True)
+    minimum_participants: int = Field(ge=1, strict=True)
+    maximum_participants: int | None = Field(default=None, ge=1, strict=True)
+    booking_required: bool = Field(strict=True)
+    wheelchair_accessible: bool | None = Field(default=None, strict=True)
+    step_free_access: bool | None = Field(default=None, strict=True)
+    accessible_toilet: bool | None = Field(default=None, strict=True)
+    is_active: bool = Field(strict=True)
+    categories: list[CategoryCode] = Field(min_length=1)
+
+    @field_validator("name", "description")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            message = "must not be blank"
+            raise ValueError(message)
+        return value.strip()
+
+    @field_validator("maximum_age")
+    @classmethod
+    def ordered_ages(cls, value: int | None, info: ValidationInfo) -> int | None:
+        minimum = info.data.get("minimum_age")
+        if minimum is not None and value is not None and minimum > value:
+            message = "maximum_age must be at least minimum_age"
+            raise ValueError(message)
+        return value
+
+    @field_validator("maximum_participants")
+    @classmethod
+    def ordered_participants(
+        cls, value: int | None, info: ValidationInfo
+    ) -> int | None:
+        minimum = info.data.get("minimum_participants")
+        if minimum is not None and value is not None and minimum > value:
+            message = "maximum_participants must be at least minimum_participants"
+            raise ValueError(message)
+        return value
+
+    @field_validator("categories")
+    @classmethod
+    def unique_categories(cls, value: list[CategoryCode]) -> list[CategoryCode]:
+        if len(value) != len(set(value)):
+            message = "categories must be unique"
+            raise ValueError(message)
+        return value
+
+
+class InternalSummary(SummaryFields):
+    id: UUID
     location_details: InternalLocation
-    categories: list[str]
 
 
-class ActivitySummary(InternalSummary):
+class ActivitySummary(SummaryFields):
+    id: UUID
     location_details: PublicLocation
 
 
@@ -194,12 +318,12 @@ class LocationFilter(StrictModel):
 
 
 class CategoryFilter(StrictModel):
-    codes: list[str] = Field(min_length=1)
+    codes: list[CategoryCode] = Field(min_length=1)
     match: Literal["ANY", "ALL"] = "ANY"
 
     @field_validator("codes")
     @classmethod
-    def unique_codes(cls, value: list[str]) -> list[str]:
+    def unique_codes(cls, value: list[CategoryCode]) -> list[CategoryCode]:
         if len(value) != len(set(value)):
             message = "category codes must be unique"
             raise ValueError(message)
@@ -289,25 +413,32 @@ class ActivityQuery(StrictModel):
 
 class InternalQueryResponse(StrictModel):
     activities: list[InternalSummary]
-    total: int
-    limit: int
-    offset: int
+    total: int = Field(ge=0, strict=True)
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
 
 
 class QueryResponse(StrictModel):
     activities: list[ActivitySummary]
-    total: int
-    limit: int
-    offset: int
+    total: int = Field(ge=0, strict=True)
+    limit: int = Field(ge=1, le=100, strict=True)
+    offset: int = Field(ge=0, strict=True)
+
+
+class CategoryRecord(StrictModel):
+    code: CategoryCode
+    label: str
+    description: str | None = None
+    display_order: int = Field(ge=0, strict=True)
 
 
 class CategoryList(StrictModel):
-    categories: list[dict]
+    categories: list[CategoryRecord]
 
 
 class DeleteResponse(StrictModel):
     id: UUID
-    deleted: bool
+    deleted: bool = Field(strict=True)
 
 
 class HealthResponse(StrictModel):
@@ -342,3 +473,90 @@ class ItinerarySelection(StrictModel):
 
 class ItinerarySelectionResponse(StrictModel):
     itineraries: list[ItinerarySelection]
+
+
+T = TypeVar("T")
+
+
+class DataEnvelope(StrictModel, Generic[T]):
+    data: T
+
+
+class StudentErrorDetail(StrictModel):
+    field: str = Field(min_length=1)
+    issue: str = Field(min_length=1)
+
+    @field_validator("field", "issue")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            message = "must not be blank"
+            raise ValueError(message)
+        return value.strip()
+
+
+class StudentErrorBody(StrictModel):
+    code: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    details: list[StudentErrorDetail]
+
+    @field_validator("code", "message")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            message = "must not be blank"
+            raise ValueError(message)
+        return value.strip()
+
+
+class StudentErrorEnvelope(StrictModel):
+    error: StudentErrorBody
+
+
+class ItineraryTrip(StrictModel):
+    id: str
+    name: str
+    destination: str
+    start_date: dt.date
+    end_date: dt.date
+    traveller_count: int = Field(ge=1, strict=True)
+    status: Literal["draft", "planned", "active", "completed", "cancelled"]
+    notes: str | None = None
+
+
+class TripActivityWire(StrictModel):
+    trip_id: str
+    activity_id: str
+    date: dt.date
+    start_time: LocalTime | None = None
+
+
+class StudentDeleteResponse(StrictModel):
+    id: str
+    deleted: bool = Field(strict=True)
+
+
+class DependencyHealth(StrictModel):
+    status: str
+    service: str | None = None
+
+
+class CountryRecord(StrictModel):
+    id: UUID
+    name: str
+
+
+class CityRecord(StrictModel):
+    id: UUID
+    name: str
+    country_id: UUID
+
+
+class CountryPage(StrictModel):
+    countries: list[CountryRecord]
+    total: int = Field(ge=0, strict=True)
+
+
+class CityPage(StrictModel):
+    cities: list[CityRecord]
+    total: int = Field(ge=0, strict=True)

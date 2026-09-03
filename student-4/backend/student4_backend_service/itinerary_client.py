@@ -5,8 +5,20 @@ from uuid import UUID  # noqa: TC003 (runtime client API)
 
 import httpx
 
-from .client import request
+from .client import parse, request
 from .config import Settings  # noqa: TC001 (runtime constructor contract)
+from .schemas import (
+    DataEnvelope,
+    ItineraryTrip,
+    StudentDeleteResponse,
+    StudentErrorEnvelope,
+    TripActivityWire,
+)
+
+
+def _error_detail(body: Any) -> str:
+    envelope = parse(StudentErrorEnvelope, body, "bad response from itinerary service")
+    return envelope.error.message
 
 
 class ItineraryClient:
@@ -23,14 +35,29 @@ class ItineraryClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def list(self) -> list[dict[str, Any]]:
-        return await self._data("GET", "/trips")
+    async def list_itineraries(self) -> list[ItineraryTrip]:
+        body = await self._request("GET", "/trips")
+        return parse(
+            DataEnvelope[list[ItineraryTrip]],
+            body,
+            "bad response from itinerary service",
+        ).data
 
-    async def with_activity(self, activity_id: UUID) -> list[dict[str, Any]]:
-        return await self._data("GET", f"/activities/{activity_id}/trips")
+    async def with_activity(self, activity_id: UUID) -> list[ItineraryTrip]:
+        body = await self._request("GET", f"/activities/{activity_id}/trips")
+        return parse(
+            DataEnvelope[list[ItineraryTrip]],
+            body,
+            "bad response from itinerary service",
+        ).data
 
-    async def activities_in(self, itinerary_id: str) -> list[dict[str, Any]]:
-        return await self._data("GET", f"/trips/{itinerary_id}/activities")
+    async def activities_in(self, itinerary_id: str) -> list[TripActivityWire]:
+        body = await self._request("GET", f"/trips/{itinerary_id}/activities")
+        return parse(
+            DataEnvelope[list[TripActivityWire]],
+            body,
+            "bad response from itinerary service",
+        ).data
 
     async def add(
         self,
@@ -38,30 +65,40 @@ class ItineraryClient:
         itinerary_id: str,
         date: str | None,
         start_time: str | None,
-    ) -> dict[str, Any]:
+    ) -> TripActivityWire:
         body = {
             key: value
             for key, value in {"date": date, "start_time": start_time}.items()
             if value is not None
         }
-        return await self._data(
-            "PUT",
-            f"/trips/{itinerary_id}/activities/{activity_id}",
-            json=body,
+        response = await self._request(
+            "PUT", f"/trips/{itinerary_id}/activities/{activity_id}", json=body
         )
+        return parse(
+            DataEnvelope[TripActivityWire],
+            response,
+            "bad response from itinerary service",
+        ).data
 
-    async def remove(self, activity_id: UUID, itinerary_id: str) -> dict[str, Any]:
-        return await self._data(
+    async def remove(
+        self, activity_id: UUID, itinerary_id: str
+    ) -> StudentDeleteResponse:
+        response = await self._request(
             "DELETE", f"/trips/{itinerary_id}/activities/{activity_id}"
         )
+        return parse(
+            DataEnvelope[StudentDeleteResponse],
+            response,
+            "bad response from itinerary service",
+        ).data
 
-    async def _data(self, method: str, path: str, **kwargs: Any) -> Any:
-        body = await request(
+    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        return await request(
             self._client,
             method,
             f"{self._prefix}{path}",
             unavailable="itinerary service unavailable",
             bad_response="bad response from itinerary service",
+            client_error_detail=_error_detail,
             **kwargs,
         )
-        return body["data"] if isinstance(body, dict) and "data" in body else body

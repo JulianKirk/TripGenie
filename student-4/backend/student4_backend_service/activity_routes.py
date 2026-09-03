@@ -105,23 +105,24 @@ async def _query(
     if not include_inactive:
         body["is_active"] = True
     place = body.pop("location", None)
-    if place and place.get("country"):
-        ids = await location.ids(place["country"], place.get("city"))
-        if ids is None:
-            return QueryResponse(
-                activities=[], total=0, limit=query.limit, offset=query.offset
-            )
-        country_id, city_id = ids
+    if place:
         body["location_details"] = {
-            "country_id": str(country_id),
             **{
                 key: value
                 for key, value in place.items()
                 if key not in {"country", "city"}
             },
         }
-        if city_id is not None:
-            body["location_details"]["city_id"] = str(city_id)
+        if place.get("country"):
+            ids = await location.ids(place["country"], place.get("city"))
+            if ids is None:
+                return QueryResponse(
+                    activities=[], total=0, limit=query.limit, offset=query.offset
+                )
+            country_id, city_id = ids
+            body["location_details"]["country_id"] = str(country_id)
+            if city_id is not None:
+                body["location_details"]["city_id"] = str(city_id)
     result = await db.query(body)
     return QueryResponse(
         activities=await _public_summaries(result.activities, location),

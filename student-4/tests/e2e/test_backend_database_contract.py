@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import httpx
 from fastapi.testclient import TestClient
 from student4_backend_service.app import create_app as create_backend
@@ -9,8 +11,11 @@ from student4_database_service.config import Settings as DatabaseSettings
 
 from tests.backend.test_activity_api import location_handler, public_payload
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def test_public_crud_round_trip_uses_real_database_service(tmp_path) -> None:
+
+def test_public_crud_round_trip_uses_real_database_service(tmp_path: Path) -> None:
     database = create_database(
         DatabaseSettings(
             database_url=f"sqlite:///{tmp_path / 'activities.db'}", seed=True

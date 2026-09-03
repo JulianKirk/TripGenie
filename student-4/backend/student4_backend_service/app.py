@@ -17,7 +17,9 @@ from .location_client import LocationClient
 from .schemas import HealthResponse
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
+
+    from .schemas import DependencyHealth
 
 
 def create_app(
@@ -43,9 +45,9 @@ def create_app(
     app = FastAPI(title="Activities and Attractions Backend Service", lifespan=lifespan)
     errors.register(app)
 
-    async def state(call) -> str:
+    async def state(call: Callable[[], Awaitable[DependencyHealth]]) -> str:
         try:
-            return (await call()).get("status", "unreachable")
+            return (await call()).status
         except HTTPException:
             return "unreachable"
 

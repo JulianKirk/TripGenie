@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID  # noqa: TC003 (runtime client API)
 
 import httpx
@@ -11,9 +11,13 @@ from .config import Settings  # noqa: TC001 (runtime constructor contract)
 from .schemas import (
     CategoryList,
     DeleteResponse,
+    DependencyHealth,
     InternalActivity,
     InternalQueryResponse,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 PATH = "/internal/activity"
@@ -26,6 +30,7 @@ async def request(
     *,
     unavailable: str,
     bad_response: str,
+    client_error_detail: Callable[[Any], Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     try:
@@ -39,12 +44,29 @@ async def request(
     except ValueError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, bad_response) from exc
     if response.is_client_error:
-        detail = body.get("detail", body) if isinstance(body, dict) else body
+        detail = (
+            client_error_detail(body)
+            if client_error_detail is not None
+            else _error_detail(body)
+        )
         raise HTTPException(response.status_code, detail)
     return body
 
 
-def parse(model: Any, body: Any, message: str = "bad response from database service"):
+def _error_detail(body: Any) -> Any:
+    if not isinstance(body, dict):
+        return body
+    error = body.get("error")
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        return error["message"]
+    return body.get("detail", body)
+
+
+def parse(
+    model: type[T],
+    body: Any,
+    message: str = "bad response from database service",
+) -> T:
     try:
         return TypeAdapter(model).validate_python(body)
     except ValidationError as exc:
@@ -64,8 +86,8 @@ class DatabaseClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def health(self) -> dict[str, Any]:
-        return await self._raw("GET", "/internal/health")
+    async def health(self) -> DependencyHealth:
+        return parse(DependencyHealth, await self._raw("GET", "/internal/health"))
 
     async def categories(self) -> CategoryList:
         return parse(CategoryList, await self._raw("GET", f"{PATH}/categories"))
