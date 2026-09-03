@@ -127,7 +127,7 @@ class ExpenseFields(StrictModel):
     payment_method: RequiredText | None = None
     notes: OptionalText | None = None
 
-    @field_validator("payment_method", "notes")
+    @field_validator("payment_method", "notes", mode="before")
     @classmethod
     def blank_optional_text_becomes_none(cls, value: str | None) -> str | None:
         return value or None
@@ -146,6 +146,11 @@ class ExpenseUpdate(StrictModel):
     date: Date | None = None
     payment_method: RequiredText | None = None
     notes: OptionalText | None = None
+
+    @field_validator("payment_method", "notes", mode="before")
+    @classmethod
+    def blank_optional_text_becomes_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class ExpenseRecord(ExpenseFields):

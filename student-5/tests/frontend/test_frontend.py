@@ -126,6 +126,8 @@ def test_budget_form_uses_live_student_1_trip_directory() -> None:
 
     assert '<option value="trip-7"' in page.text
     assert "Sydney Long Weekend &middot; Sydney" in page.text
+    assert 'name="currency" type="text"' in page.text
+    assert 'pattern="[A-Z]{3}" maxlength="3"' in page.text
 
 
 def test_budget_card_css_contains_long_trip_ids() -> None:
