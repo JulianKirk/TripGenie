@@ -12,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -159,6 +160,10 @@ class ProviderCostItem(StrictModel):
     amount: Money
     currency: CurrencyCode
 
+    @field_serializer("amount")
+    def serialize_amount(self, value: Decimal) -> str:
+        return f"{value:.2f}"
+
 
 class ProviderCost(StrictModel):
     provider: str
@@ -167,6 +172,10 @@ class ProviderCost(StrictModel):
     currency: CurrencyCode | None = None
     detail: str | None = None
     items: list[ProviderCostItem] = Field(default_factory=list)
+
+    @field_serializer("subtotal")
+    def serialize_subtotal(self, value: Decimal | None) -> str | None:
+        return None if value is None else f"{value:.2f}"
 
 
 class BudgetSummary(StrictModel):

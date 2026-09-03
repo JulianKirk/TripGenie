@@ -5,6 +5,10 @@
 #   docker compose -f docker-compose.yml \
 #     -f ai-services/agentic-loop/docker-compose.agentic.yml up -d --build
 services:
+  student-1-backend:
+    ports:
+      - "8001:8001"
+
   student-3-backend:
     ports:
       - "8003:8003"

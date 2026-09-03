@@ -10,9 +10,8 @@ ACTIVE_TRANSPORT_STATUSES = {"pending", "confirmed", "completed"}
 
 
 class TransportPlanEntryResponse(BaseModel):
-    id: str
-    booking_status: str
-    estimated_cost: Money
+    transport_id: str
+    plan_status: str
 
 
 class TransportOptionResponse(BaseModel):
@@ -24,6 +23,7 @@ class TransportOptionResponse(BaseModel):
 class PlannedTransportResponse(BaseModel):
     entry: TransportPlanEntryResponse
     option: TransportOptionResponse
+    estimated_cost: Money
 
 
 class TransportCostResponse(BaseModel):
@@ -86,17 +86,17 @@ class TransportApiClient:
             )
         items = [
             ProviderCostItem(
-                item_id=item.entry.id,
+                item_id=item.entry.transport_id,
                 description=(
                     f"{item.option.provider}: {item.option.origin} to "
                     f"{item.option.destination}"
                 ),
-                status=item.entry.booking_status,
-                amount=item.entry.estimated_cost,
+                status=item.entry.plan_status,
+                amount=item.estimated_cost,
                 currency=payload.currency,
             )
             for item in payload.planned
-            if item.entry.booking_status in ACTIVE_TRANSPORT_STATUSES
+            if item.entry.plan_status in ACTIVE_TRANSPORT_STATUSES
         ]
         return ProviderCost(
             provider="transport",

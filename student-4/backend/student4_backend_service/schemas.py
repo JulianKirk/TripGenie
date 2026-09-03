@@ -531,6 +531,20 @@ class TripActivityWire(StrictModel):
     start_time: LocalTime | None = None
 
 
+class ActivityCostItem(StrictModel):
+    item_id: UUID
+    description: str = Field(min_length=1)
+    status: Literal["planned"] = "planned"
+    amount: Money
+    currency: Literal["AUD"] = "AUD"
+
+
+class ActivityCostResponse(StrictModel):
+    committed_cost_total: Money
+    currency: Literal["AUD"] = "AUD"
+    items: list[ActivityCostItem]
+
+
 class StudentDeleteResponse(StrictModel):
     id: str
     deleted: bool = Field(strict=True)
