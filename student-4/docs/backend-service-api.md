@@ -159,28 +159,72 @@ curl "http://localhost:8008/activity/categories"
 {
   "categories": [
     {
+      "code": "ADVENTURE",
+      "label": "Adventure",
+      "description": "High-energy and adventurous experiences",
+      "display_order": 10
+    },
+    {
       "code": "CULTURE",
       "label": "Culture",
       "description": "Museums, galleries and cultural sites",
-      "display_order": 10
+      "display_order": 20
+    },
+    {
+      "code": "FAMILY",
+      "label": "Family",
+      "description": "Experiences suitable for families and children",
+      "display_order": 30
+    },
+    {
+      "code": "FOOD_DRINK",
+      "label": "Food and drink",
+      "description": "Dining, tastings and culinary experiences",
+      "display_order": 40
+    },
+    {
+      "code": "NIGHTLIFE",
+      "label": "Nightlife",
+      "description": "Evening entertainment and social experiences",
+      "display_order": 50
     },
     {
       "code": "OUTDOOR",
       "label": "Outdoor",
       "description": "Activities primarily undertaken outdoors",
-      "display_order": 20
+      "display_order": 60
+    },
+    {
+      "code": "SHOPPING",
+      "label": "Shopping",
+      "description": "Markets, local makers and shopping experiences",
+      "display_order": 70
     },
     {
       "code": "TOUR",
       "label": "Tour",
       "description": "Guided or self-guided tours",
-      "display_order": 30
+      "display_order": 80
+    },
+    {
+      "code": "WELLNESS",
+      "label": "Wellness",
+      "description": "Relaxation, fitness and wellbeing experiences",
+      "display_order": 90
+    },
+    {
+      "code": "WILDLIFE",
+      "label": "Wildlife",
+      "description": "Animal encounters and nature observation",
+      "display_order": 100
     }
   ]
 }
 ```
 
 Categories are not paginated because they are a small, fixed reference list.
+The ten categories also ensure the assignment database contains at least ten
+rows in every table.
 
 | Status | Meaning |
 |---|---|

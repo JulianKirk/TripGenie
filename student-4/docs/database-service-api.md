@@ -29,7 +29,7 @@ responses.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///student-4/database/activities.db` | SQLAlchemy SQLite URL. |
-| `SEED_DATA` | `1` | Seed an empty catalogue on startup; set to `0` in tests. |
+| `SEED_DATA` | `1` | Seed ten categories and ten activities into an empty catalogue; set to `0` in isolated tests. |
 
 The eventual container path and volume may override `DATABASE_URL` without
 changing this API contract.
@@ -39,8 +39,9 @@ changing this API contract.
 Money is represented by Python `Decimal`, limited to two fractional digits,
 and stored in SQLite as canonical text such as `"45.00"`. API requests and
 responses also use canonical decimal strings. Application arithmetic never
-uses binary floating point. Numeric price filtering and sorting cast the stored
-text to SQLite numeric values.
+uses binary floating point. Price filtering and sorting compare integer-part
+length and then canonical lexical value, preserving exact order without a
+floating-point conversion.
 
 Activity writes are aggregate operations. The activity, location, category
 associations and schedules are validated together and committed in one
@@ -199,7 +200,7 @@ curl "http://localhost:8009/internal/activity/categories"
       "code": "OUTDOOR",
       "label": "Outdoor",
       "description": "Activities primarily undertaken outdoors",
-      "display_order": 20
+      "display_order": 60
     }
   ]
 }
@@ -207,6 +208,11 @@ curl "http://localhost:8009/internal/activity/categories"
 
 The categories route is registered before the UUID detail route so the literal
 word `categories` cannot be interpreted as an activity identifier.
+
+The repository includes a populated development database at
+`student-4/database/activities.db`. It contains at least ten rows in each
+Student 4 table for assignment inspection. Runtime seeding is idempotent and
+does not replace an activity catalogue after it contains data.
 
 ## GET /internal/activity/{id}
 

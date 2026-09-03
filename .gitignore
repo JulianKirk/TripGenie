@@ -15,6 +15,7 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+!student-4/database/activities.db
 
 # Operating System
 .DS_Store
@@ -31,6 +32,9 @@ desktop.ini
 .env
 .env.local
 *.log
+
+# Personal Superpowers planning artifacts
+/docs/superpowers/
 
 # Graphify portable outputs are tracked (graph.json, graph.html, and
 # GRAPH_REPORT.md). Runtime state is local because it contains caches and
