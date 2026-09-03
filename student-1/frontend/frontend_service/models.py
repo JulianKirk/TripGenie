@@ -36,6 +36,14 @@ AccommodationIdentifier = Annotated[
     str,
     StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
 ]
+ActivityIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
+TransportIdentifier = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+]
 IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 IsoTime = Annotated[str, StringConstraints(pattern=r"^\d{2}:\d{2}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -184,6 +192,64 @@ class TripAccommodationDetail(TripAccommodationRecord):
     total_price: float | None = None
 
 
+class TripActivityRecord(StrictModel):
+    trip_id: TripIdentifier
+    activity_id: ActivityIdentifier
+    date: IsoDate
+    start_time: IsoTime | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_activity_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_activity_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+
+class TripActivityDetail(TripActivityRecord):
+    name: str | None = None
+    price: Annotated[str, StringConstraints(pattern=r"^\d+\.\d{2}$")] | None = None
+    pricing_basis: str | None = None
+    duration_minutes: int | None = Field(default=None, gt=0)
+
+
+class TripTransportStatus(str, Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class TripTransportRecord(StrictModel):
+    trip_id: TripIdentifier
+    transport_id: TransportIdentifier
+    traveller_count: int = Field(ge=1, le=1000)
+    plan_status: TripTransportStatus = TripTransportStatus.PENDING
+    added_on: IsoDate
+    notes: LongText | None = None
+
+    @field_validator("added_on")
+    @classmethod
+    def validate_added_on(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+
+class TripTransportDetail(TripTransportRecord):
+    origin: str | None = None
+    destination: str | None = None
+    provider: str | None = None
+    type: str | None = None
+    departure_time: str | None = None
+    arrival_time: str | None = None
+    duration_minutes: int | None = Field(default=None, gt=0)
+    price: float | None = Field(default=None, ge=0)
+    pricing_basis: str | None = None
+    estimated_cost: float | None = Field(default=None, ge=0)
+
+
 class TripRecord(TripFields):
     id: TripIdentifier
 
@@ -229,9 +295,9 @@ class TripDay(StrictModel):
 
 class TripDetail(TripRecord):
     days: list[TripDay] = Field(default_factory=list)
-    accommodations: list[TripAccommodationDetail] = Field(
-        default_factory=list
-    )
+    accommodations: list[TripAccommodationDetail] = Field(default_factory=list)
+    activities: list[TripActivityDetail] = Field(default_factory=list)
+    transport: list[TripTransportDetail] = Field(default_factory=list)
 
 
 class DeleteResponse(StrictModel):

@@ -178,6 +178,40 @@
     {% endif %}
   </section>
 
+  <section class="panel panel--nested" aria-labelledby="activities-heading">
+    <div class="panel__header">
+      <div>
+        <h3 id="activities-heading">Selected activities</h3>
+        <p class="muted-copy">Activities saved to this trip from the activities service.</p>
+      </div>
+    </div>
+
+    {% if trip.activities %}
+      <ul class="item-list">
+        {% for activity in trip.activities %}
+          <li class="item-card">
+            <div class="item-card__content">
+              <h4>{{ activity.name or activity.activity_id }}</h4>
+              <p class="item-card__meta">
+                {{ activity.date }}{% if activity.start_time %} at {{ activity.start_time }}{% else %} · Time not recorded{% endif %}
+              </p>
+              {% if activity.price is not none %}
+                <p>
+                  <strong>Price:</strong> ${{ activity.price }}{% if activity.pricing_basis == 'PER_PERSON' %} per person{% elif activity.pricing_basis == 'FLAT_ADMISSION' %} flat admission{% elif activity.pricing_basis %} {{ activity.pricing_basis.replace('_', ' ').lower() }}{% endif %}
+                </p>
+              {% endif %}
+              {% if activity.duration_minutes is not none %}
+                <p><strong>Duration:</strong> {{ activity.duration_minutes }} minutes</p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-copy">No activities selected for this trip yet.</p>
+    {% endif %}
+  </section>
+
   <section class="panel panel--nested" aria-labelledby="accommodation-heading">
     <div class="panel__header">
       <div>

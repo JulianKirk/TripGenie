@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
     BackendHealthPayload,
@@ -16,6 +15,9 @@ from .models import (
     TripDetail,
     TripRecord,
 )
+
+if TYPE_CHECKING:
+    from .config import Settings
 
 T = TypeVar("T")
 HANDLED_ERROR_STATUSES = {400, 404, 409, 422, 502, 503, 504}
@@ -190,7 +192,7 @@ class BackendApiClient:
         *,
         json: dict[str, object] | None = None,
         expected_statuses: set[int],
-        response_type: Any,
+        response_type: type[T],
         malformed_message: str,
     ) -> T:
         response = await self._send(method, path, json=json)
