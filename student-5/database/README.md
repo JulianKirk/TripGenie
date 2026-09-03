@@ -57,5 +57,21 @@ Schema creation uses idempotent `CREATE TABLE IF NOT EXISTS` statements for a fr
 persistent volume. Ten stable UUIDv5 budgets and ten expenses are inserted with
 `INSERT OR IGNORE`, making demo seeding repeatable across container restarts.
 
+Student 5 seeds only its owned `Budget` and `Expense` records. Their `trip_id`
+values reference Student 1's canonical demo trips; trip names, destinations, and
+dates are not copied into this database. The Student 5 backend retrieves those
+details from Student 1's public API at runtime.
+
+Because `INSERT OR IGNORE` preserves an existing named volume, changing seed data
+does not rewrite previously inserted rows. Reset all local demo databases before a
+recording that needs the canonical integrated dataset:
+
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
+This is destructive and should be used only when local demo data can be discarded.
+
 Set `STUDENT5_SEED_DATA=false` to disable demo seeding and
 `STUDENT5_SQLITE_PATH` to choose the database file.

@@ -9,7 +9,7 @@
         {% if budgets %}
           <ul class="budget-nav">
           {% for item in budgets %}
-            <li><a href="/budgets/{{ item.budget_id }}"><strong>{{ item.trip_id }}</strong><span>{{ item.currency }} {{ item.total_budget }}</span></a></li>
+            <li><a href="/budgets/{{ item.budget_id }}"><strong>{{ item.trip.name if item.trip else item.trip_id }}</strong><span>{{ item.currency }} {{ item.total_budget }}</span></a></li>
           {% endfor %}
           </ul>
         {% else %}<p class="muted">No budgets yet.</p>{% endif %}

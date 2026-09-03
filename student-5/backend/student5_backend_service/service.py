@@ -21,6 +21,7 @@ from .models import (
     ExpenseRecord,
     ExpenseUpdate,
     ProviderCost,
+    TripRecord,
 )
 from .transport_client import TransportApiClient
 from .trips_client import TripsApiClient
@@ -43,6 +44,9 @@ class BackendService:
 
     def ready(self) -> bool:
         return self.database.ready()
+
+    def list_trips(self) -> list[TripRecord]:
+        return self.trips.list_trips()
 
     def _validate_trip(self, trip_id: str, expense_date: date | None = None) -> None:
         trip = self.trips.get_trip(trip_id)

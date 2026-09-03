@@ -1,10 +1,18 @@
 <div class="panel">
   <div class="panel-heading"><div><p class="eyebrow">Budget</p><h2>{{ heading }}</h2></div></div>
   {% if form_error %}<div class="banner banner--error" role="alert">{{ form_error }}</div>{% endif %}
+  {% if trip_error %}<div class="banner banner--warning">The trip directory is unavailable. You can still use a known Trip ID.</div>{% endif %}
   <form method="post" action="{{ action }}">
     <div class="form-grid">
+      <label class="field"><span>Trip</span>
+        {% if trips %}<select name="trip_id" required>
+          <option value="">Select a trip</option>
+          {% for trip in trips %}<option value="{{ trip.id }}" {% if form.get('trip_id') == trip.id %}selected{% endif %}>{{ trip.name or trip.id }} &middot; {{ trip.destination or 'Unknown destination' }}</option>{% endfor %}
+        </select>{% else %}<input name="trip_id" type="text" value="{{ form.get('trip_id', '') }}" required maxlength="100">{% endif %}
+        {% for issue in errors.get('trip_id', []) %}<span class="field-error">{{ issue }}</span>{% endfor %}
+      </label>
       {% for name, label, input_type in [
-        ('trip_id', 'Trip ID', 'text'), ('currency', 'Currency', 'text'),
+        ('currency', 'Currency', 'text'),
         ('total_budget', 'Total budget', 'number'), ('accommodation_budget', 'Accommodation allocation', 'number'),
         ('transport_budget', 'Transport allocation', 'number'), ('activities_budget', 'Activities allocation', 'number'),
         ('food_budget', 'Food allocation', 'number'), ('other_budget', 'Other allocation', 'number')

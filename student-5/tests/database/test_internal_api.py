@@ -9,9 +9,22 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from student5_database_service.app import create_app
 from student5_database_service.config import Settings
+from student5_database_service.seed_data import SEED_BUDGETS, SEED_EXPENSES
 
 BUDGETS = "/internal/budgets"
 EXPENSES = "/internal/expenses"
+TRIP_WINDOWS = {
+    "trip_2026_sydney_long_weekend": ("2026-10-02", "2026-10-05"),
+    "trip_2026_melbourne_food_trail": ("2026-11-12", "2026-11-16"),
+    "trip_2027_tokyo_spring_visit": ("2027-03-28", "2027-04-04"),
+    "trip_2026_gold_coast_family_break": ("2026-12-20", "2026-12-27"),
+    "trip_2027_queenstown_ski_escape": ("2027-07-10", "2027-07-16"),
+    "trip_2026_singapore_stopover": ("2026-09-01", "2026-09-03"),
+    "trip_2026_perth_workcation": ("2026-08-18", "2026-08-24"),
+    "trip_2026_hobart_weekend_escape": ("2026-06-11", "2026-06-14"),
+    "trip_2027_brisbane_city_break": ("2027-01-21", "2027-01-24"),
+    "trip_2027_adelaide_festival_week": ("2027-02-26", "2027-03-03"),
+}
 
 NEW_BUDGET: dict[str, Any] = {
     "trip_id": "trip_chunk2",
@@ -154,6 +167,14 @@ def test_seed_data_is_deterministic_and_idempotent(database_path: Path) -> None:
         with TestClient(create_app(settings)) as client:
             assert len(_data(client.get(BUDGETS))) == 10
             assert len(_data(client.get(EXPENSES))) == 10
+
+
+def test_seed_data_references_canonical_student_1_trips() -> None:
+    assert {budget["trip_id"] for budget in SEED_BUDGETS} == set(TRIP_WINDOWS)
+    assert {expense["trip_id"] for expense in SEED_EXPENSES} == set(TRIP_WINDOWS)
+    for expense in SEED_EXPENSES:
+        start_date, end_date = TRIP_WINDOWS[expense["trip_id"]]
+        assert start_date <= expense["date"] <= end_date
 
 
 def test_money_is_stored_as_exact_text(client: TestClient, database_path: Path) -> None:

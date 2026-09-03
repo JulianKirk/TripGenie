@@ -99,6 +99,22 @@ def database_handler(request: httpx.Request) -> httpx.Response:
 
 
 def trips_handler(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/api/trips":
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "trip_chunk3",
+                        "name": "Integration Trip",
+                        "destination": "Sydney",
+                        "start_date": "2026-09-01",
+                        "end_date": "2026-09-10",
+                        "status": "planned",
+                    }
+                ]
+            },
+        )
     trip_id = request.url.path.rsplit("/", 1)[-1]
     if trip_id == "trip_missing":
         return httpx.Response(404)
