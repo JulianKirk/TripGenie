@@ -1,6 +1,6 @@
 [
   {"service": "shared",    "ci": "shared-ci.yml",    "compose": "shared-backend",    "port": 9100, "health": "/health", "ready": "\"status\":\"ok\""},
-  {"service": "student-1", "ci": "student-1-ci.yml", "compose": "student-1-backend", "port": 8001, "health": "/health", "ready": "\"status\":\"ok\""},
+  {"service": "student-1", "ci": "student-1-ci.yml", "compose": "student-1-backend", "port": 8001, "health": "/ready", "ready": "\"status\":\"ok\""},
   {"service": "student-2", "ci": "student-2-ci.yml", "compose": "student-2-backend", "port": 9000, "health": "/health", "ready": "\"status\":\"ok\""},
   {"service": "student-3", "ci": "student-3-ci.yml", "compose": "student-3-backend", "port": 8003, "health": "/health", "ready": "\"status\":\"ok\""},
   {"service": "student-4", "ci": "student-4-ci.yml", "compose": "student-4-service", "port": 8084, "health": "/",       "ready": ""},

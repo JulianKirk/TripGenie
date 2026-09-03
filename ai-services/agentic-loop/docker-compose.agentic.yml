@@ -1,6 +1,7 @@
-# CI-only overlay for the agentic loop. Student 3's backend is internal-only in
-# the main compose file, by design -- the loop runs on the host, so it needs a
-# published port for the duration of the run and nowhere else.
+# CI-only overlay for the agentic loop. Student 1 and Student 3 backends are
+# internal-only in the main compose file, by design -- the loop runs on the
+# host, so it needs published ports for the duration of the run and nowhere
+# else.
 #
 #   docker compose -f docker-compose.yml \
 #     -f ai-services/agentic-loop/docker-compose.agentic.yml up -d --build
