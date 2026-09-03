@@ -49,13 +49,14 @@ These routes return pages or fragments, not a public JSON API.
 
 | Route | Returns |
 |---|---|
-| `GET /` | Full page with filters, category options and first result page. |
+| `GET /` | Unified catalogue and CRUD page, including inactive entries. |
 | `GET /activity` | Results-and-pagination HTML fragment. |
 | `GET /activity/{id}` | Full activity-detail dialog fragment. |
+| `GET /activity/{id}/itineraries/dialog` | Direct trip-picker dialog fragment. |
 | `GET /activity/{id}/itineraries` | Itinerary picker fragment from the Student 4 proxy. |
 | `PUT /activity/{id}/itineraries/{trip_id}` | Add or reschedule an itinerary selection. |
 | `DELETE /activity/{id}/itineraries/{trip_id}` | Remove an itinerary selection. |
-| `GET /manage` | Catalogue management page, including inactive entries. |
+| `GET /manage` | Legacy catalogue management page. |
 | `GET /manage/activity/new` | Create-activity form fragment. |
 | `POST /manage/activity` | Create a complete activity aggregate. |
 | `GET /manage/activity/{id}/edit` | Prefilled edit form fragment. |
@@ -73,11 +74,12 @@ The traveller page has four regions:
 
 1. A heading explaining that attractions and activities share one catalogue.
 2. One search-and-filter form.
-3. An `aria-live` results region containing cards, count and pager.
+3. An `aria-live` results region containing create and per-card edit controls,
+   cards, count and pager.
 4. A dialog target populated when a user opens an activity.
 
-The separate `/manage` page provides catalogue creation, replacement,
-deactivation and deletion controls.
+The catalogue includes inactive entries and provides creation, replacement,
+deactivation and deletion without requiring a separate management page.
 
 The initial `GET /` concurrently requests the backend's first activity page and
 `GET /activity/categories`. Category rows are rendered in the backend-provided
@@ -216,17 +218,18 @@ Recurring schedules are grouped by weekday for readability. One-off schedules
 show their ISO date. Times remain in local `HH:MM` form. The page does not invent
 bookable time slots from a flexible interval.
 
-Each card opens the detail dialog, where an **Add to trip** or **Manage trip**
-button loads `GET /activity/{id}/itineraries` from the Student 4
-backend. Each trip has add/update and remove actions plus optional date and
-start-time controls. Those actions send `PUT` or `DELETE` to that same Student
-4 backend. Dates are bounded by each row's returned `start_date` and
-`end_date`. The frontend never calls Student 1 directly.
+Each active card has a compact **Add to trip** shortcut that opens the picker
+directly, while the detail dialog retains its **Add to trip** or **Manage trip**
+action. Each trip has add/update and remove actions plus optional date and
+start-time controls. Those actions send `PUT` or `DELETE` to the Student 4
+backend. Dates are bounded by each row's returned `start_date` and `end_date`.
+The frontend never calls Student 1 directly.
 
 ## Catalogue CRUD
 
-The page includes a clearly separated management mode. It uses the public
-Student 4 backend only:
+The catalogue page includes a coloured **Add new activity** control and an
+accessible pen-icon edit action on every card and detail dialog. It uses the
+public Student 4 backend only:
 
 | User action | Backend request |
 |---|---|
@@ -254,23 +257,24 @@ date and local start time. The browser never calls Student 1 directly; Student
 
 ## Catalogue management
 
-`GET /manage` uses the same backend query with `include_inactive: true` so an
-administrator can see and reactivate hidden records. The management list is
-paginated using the backend's total, limit, and offset metadata. Create and edit
-forms cover the complete activity aggregate: description, exact price and
-pricing basis, duration, participant and age limits, location, categories,
-booking and accessibility details, activation state, and weekly or one-off
-schedules.
+`GET /` and its results fragment use the backend query with
+`include_inactive: true` so an administrator can see and reactivate hidden
+records. The catalogue is paginated using the backend's total, limit, and
+offset metadata. Create and edit forms cover the complete activity aggregate:
+description, exact price and pricing basis, duration, participant and age
+limits, location, categories, booking and accessibility details, activation
+state, and weekly or one-off schedules.
 
 Writes are allow-listed and validated into the frontend's strict schema before
 being sent to Student 4. The backend remains authoritative for cross-field and
 reference-data validation. Edit uses full replacement because the backend API
 defines `PUT /activity/{id}`, not a partial patch.
 
-Permanent deletion requires a separate confirmation fragment that names the
-activity and warns that the action cannot be undone. Deactivation is available
-through edit and is the normal choice when an activity should merely disappear
-from traveller search.
+Permanent deletion is reached from the bottom of the edit dialog and requires
+a separate confirmation fragment that names the activity and warns that the
+action cannot be undone. Deactivation is available through edit; the entry
+remains visible and marked inactive in this unified catalogue, but cannot be
+newly added to a trip.
 
 ## Pagination
 

@@ -89,7 +89,7 @@ def _validation_errors(exc: ValidationError) -> dict[str, list[str]]:
 
 def _redirect(activity_id: UUID | None = None) -> RedirectResponse:
     suffix = f"#activity-{activity_id}" if activity_id else ""
-    return RedirectResponse(f"/manage{suffix}", status_code=303)
+    return RedirectResponse(f"/{suffix}", status_code=303)
 
 
 async def _form_response(
@@ -128,7 +128,7 @@ async def _form_response(
     if request.headers.get("HX-Request", "").lower() == "true":
         return Response(
             status_code=204,
-            headers={"HX-Redirect": f"/manage#activity-{activity.id}"},
+            headers={"HX-Redirect": f"/#activity-{activity.id}"},
         )
     return _redirect(activity.id)
 
@@ -189,6 +189,7 @@ async def index(request: Request, client: ClientDep) -> Any:
         query_error: str | None = str(exc)
     else:
         query_error = None
+    body["include_inactive"] = True
     categories, page = await asyncio.gather(
         client.categories(), client.search(body), return_exceptions=True
     )
@@ -226,6 +227,7 @@ async def results(request: Request, client: ClientDep) -> Any:
             error=_error(exc, str(exc)),
         )
     else:
+        body["include_inactive"] = True
         categories, page = await asyncio.gather(
             client.categories(), client.search(body), return_exceptions=True
         )
@@ -304,6 +306,41 @@ async def itinerary_picker(
         activity_id=activity_id,
         is_active=activity.is_active,
         picker=picker,
+    )
+
+
+@router.get("/activity/{activity_id}/itineraries/dialog")
+async def itinerary_dialog(
+    request: Request,
+    activity_id: UUID,
+    client: ClientDep,
+) -> Any:
+    try:
+        activity, picker = await asyncio.gather(
+            client.activity(activity_id), client.itineraries(activity_id)
+        )
+    except FrontendError as exc:
+        return TEMPLATES.TemplateResponse(
+            request,
+            "partials/itinerary_dialog.html",
+            {
+                "activity_id": activity_id,
+                "activity_name": "activity",
+                "is_active": True,
+                "picker": None,
+                "error": exc.detail,
+            },
+        )
+    return TEMPLATES.TemplateResponse(
+        request,
+        "partials/itinerary_dialog.html",
+        {
+            "activity_id": activity_id,
+            "activity_name": activity.name,
+            "is_active": activity.is_active,
+            "picker": picker,
+            "error": None,
+        },
     )
 
 
@@ -503,7 +540,7 @@ async def delete_activity(
             {"error": exc.detail, "dialog": True},
         )
     if request.headers.get("HX-Request", "").lower() == "true":
-        return Response(status_code=204, headers={"HX-Redirect": "/manage"})
+        return Response(status_code=204, headers={"HX-Redirect": "/"})
     return _redirect()
 
 

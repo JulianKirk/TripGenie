@@ -1,6 +1,6 @@
 <dialog class="activity-dialog" aria-labelledby="activity-dialog-title">
   <div class="dialog-content">
-    <div class="panel-heading"><div><p class="eyebrow">Activity details</p><h2 id="activity-dialog-title">{{ activity.name }}</h2></div><button class="button" type="button" data-close-dialog>Close</button></div>
+    <div class="panel-heading"><div><p class="eyebrow">Activity details</p><h2 id="activity-dialog-title">{{ activity.name }}</h2></div><button class="button icon-button" type="button" aria-label="Edit {{ activity.name }}" title="Edit activity" hx-get="/manage/activity/{{ activity.id }}/edit" hx-target="#activity-dialog">✎</button></div>
     <p>{{ activity.description }}</p>
     <dl class="facts facts--detail">
       <div><dt>Price</dt><dd>{{ activity.price|money }} · {{ 'per person' if activity.pricing_basis == 'PER_PERSON' else 'flat admission' }}</dd></div>
@@ -24,5 +24,6 @@
       {% if not activity.is_active %}<p class="banner banner--warning">This activity is inactive and cannot be newly added to an itinerary. Existing selections remain available to update or remove.</p>{% endif %}
       <div id="itinerary-picker"></div>
     </section>
+    <div class="actions dialog-actions"><button class="button" type="button" data-close-dialog>Close</button></div>
   </div>
 </dialog>

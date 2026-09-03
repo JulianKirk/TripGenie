@@ -25,6 +25,6 @@
     <fieldset><legend>Availability schedules</legend><div id="schedule-rows">{% for schedule in values.get('availability_schedules', []) %}{{ schedule_row(schedule, loop.index0) }}{% endfor %}</div><template id="schedule-row-template">{{ schedule_row({'recurring_weekly': 'true', 'day_of_week': 'MONDAY'}, '__INDEX__') }}</template><button class="button" type="button" data-add-schedule>Add schedule</button></fieldset>
     <label><input type="checkbox" name="is_active" {% if values.get('is_active', true) in [true, 'on', 'true'] %}checked{% endif %}> Active and visible to travellers</label>
     {% if errors %}<div class="banner banner--error" role="alert">{% for field, messages in errors.items() if field != 'general' %}{% for message in messages %}<p><strong>{{ field }}</strong>: {{ message }}</p>{% endfor %}{% endfor %}</div>{% endif %}
-    <div class="actions form-actions"><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button button--primary">{{ 'Save changes' if activity_id else 'Create activity' }}</button></div>
+    <div class="actions form-actions">{% if activity_id %}<button type="button" class="button button--danger" hx-get="/manage/activity/{{ activity_id }}/delete" hx-target="#activity-dialog">Delete activity</button>{% endif %}<button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button button--primary">{{ 'Save changes' if activity_id else 'Create activity' }}</button></div>
   </form>
 </div></dialog>

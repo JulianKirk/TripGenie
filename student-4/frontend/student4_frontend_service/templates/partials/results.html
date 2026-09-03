@@ -1,15 +1,15 @@
+<div class="panel-heading"><div><p class="eyebrow">Catalogue</p>{% if page %}<h2>{{ page.total }} result{% if page.total != 1 %}s{% endif %}</h2>{% endif %}</div><button class="button button--primary" type="button" hx-get="/manage/activity/new" hx-target="#activity-dialog">Add new activity</button></div>
 {% if error %}
   {% include "partials/error_state.html" %}
 {% elif not page.activities %}
   <div class="empty-state"><h2>No activities match these filters</h2><p>Try clearing one or more filters.</p></div>
 {% else %}
-  <div class="panel-heading"><div><p class="eyebrow">Catalogue</p><h2>{{ page.total }} result{% if page.total != 1 %}s{% endif %}</h2></div></div>
   <div class="activity-grid">
   {% for activity in page.activities %}
-    <article class="activity-card">
+    <article class="activity-card" id="activity-{{ activity.id }}">
       <div class="activity-card__heading">
         <button type="button" class="activity-title" hx-get="/activity/{{ activity.id }}" hx-target="#activity-dialog" hx-swap="innerHTML">{{ activity.name }}</button>
-        {% if not activity.is_active %}<span class="pill pill--muted">Inactive</span>{% endif %}
+        <div class="card-controls">{% if not activity.is_active %}<span class="pill pill--muted">Inactive</span>{% endif %}<button class="button icon-button" type="button" aria-label="Edit {{ activity.name }}" title="Edit activity" hx-get="/manage/activity/{{ activity.id }}/edit" hx-target="#activity-dialog">✎</button></div>
       </div>
       <p>{{ activity.description }}</p>
       <dl class="facts">
@@ -28,6 +28,7 @@
         {% if activity.step_free_access %}<li>Step-free access</li>{% endif %}
         {% if activity.accessible_toilet %}<li>Accessible toilet</li>{% endif %}
       </ul>
+      {% if activity.is_active %}<div class="actions card-actions"><button class="button button--compact" type="button" aria-label="Add {{ activity.name }} to trip" hx-get="/activity/{{ activity.id }}/itineraries/dialog" hx-target="#activity-dialog">Add to trip</button></div>{% endif %}
     </article>
   {% endfor %}
   </div>

@@ -21,19 +21,43 @@ def frontend(backend: FakeBackend) -> TestClient:
     )
 
 
-def test_management_lists_inactive_rows_through_backend_query(
+def test_catalogue_lists_inactive_rows_with_creation_and_edit_controls(
     backend: FakeBackend,
 ) -> None:
+    inactive = deepcopy(SUMMARY)
+    inactive["is_active"] = False
+    backend.overrides[("QUERY", "/activity")] = httpx.Response(
+        200,
+        json={"activities": [inactive], "total": 1, "limit": 20, "offset": 0},
+    )
     client = frontend(backend)
 
-    response = client.get("/manage")
+    response = client.get("/")
 
     query = next(request for request in backend.requests if request.method == "QUERY")
     assert json.loads(query.content)["include_inactive"] is True
     assert response.status_code == 200
-    assert "Manage catalogue" in response.text
-    assert "Edit" in response.text
-    assert "Delete" in response.text
+    assert "Add new activity" in response.text
+    assert f'aria-label="Edit {SUMMARY["name"]}"' in response.text
+    assert "Inactive" in response.text
+    assert f'aria-label="Add {SUMMARY["name"]} to trip"' not in response.text
+    assert 'href="/manage"' not in response.text
+
+
+def test_catalogue_card_offers_direct_trip_picker(backend: FakeBackend) -> None:
+    response = frontend(backend).get("/")
+
+    assert f'hx-get="/activity/{ACTIVITY_ID}/itineraries/dialog"' in response.text
+    assert 'aria-label="Add Sydney Harbour guided walk to trip"' in response.text
+
+
+def test_direct_trip_picker_opens_as_a_dialog(backend: FakeBackend) -> None:
+    response = frontend(backend).get(f"/activity/{ACTIVITY_ID}/itineraries/dialog")
+
+    assert response.status_code == 200
+    assert '<dialog class="activity-dialog"' in response.text
+    assert "Add Sydney Harbour guided walk to trip" in response.text
+    assert "Sydney Getaway" in response.text
 
 
 def test_management_paginates_all_catalogue_entries(backend: FakeBackend) -> None:
@@ -96,6 +120,7 @@ def test_edit_form_prefills_complete_activity(backend: FakeBackend) -> None:
     assert 'value="45.00"' in response.text
     assert 'value="OUTDOOR" checked' in response.text
     assert 'value="09:00"' in response.text
+    assert "Delete activity" in response.text
 
 
 def test_inactive_activity_without_schedules_can_add_one_when_editing(
@@ -127,7 +152,7 @@ def test_create_posts_complete_payload_and_redirects(backend: FakeBackend) -> No
 
     request = next(item for item in backend.requests if item.method == "POST")
     assert response.status_code == 303
-    assert response.headers["location"] == f"/manage#activity-{ACTIVITY_ID}"
+    assert response.headers["location"] == f"/#activity-{ACTIVITY_ID}"
     assert json.loads(request.content)["price"] == "89.50"
     assert json.loads(request.content)["categories"] == ["ADVENTURE", "OUTDOOR"]
 

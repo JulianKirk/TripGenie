@@ -66,6 +66,7 @@ def test_filter_form_is_translated_to_backend_query(backend: FakeBackend) -> Non
         "text": "harbour",
         "categories": {"codes": ["OUTDOOR", "TOUR"], "match": "ANY"},
         "price": {"max": "100.00"},
+        "include_inactive": True,
         "limit": 20,
         "offset": 0,
     }
@@ -106,7 +107,10 @@ def test_empty_results_have_an_explicit_state(backend: FakeBackend) -> None:
     )
     client = frontend(backend)
 
-    assert "No activities match these filters" in client.get("/activity").text
+    text = client.get("/activity").text
+
+    assert "No activities match these filters" in text
+    assert "Add new activity" in text
 
 
 def test_pager_uses_backend_page_metadata(backend: FakeBackend) -> None:
@@ -146,6 +150,10 @@ def test_detail_dialog_renders_full_activity(backend: FakeBackend) -> None:
     assert "Tour" in response.text
     assert "Add to trip" in response.text
     assert "Unknown" not in response.text
+    assert f'aria-label="Edit {SUMMARY["name"]}"' in response.text
+    assert response.text.rfind("data-close-dialog") > response.text.find(
+        'class="itinerary-section"'
+    )
 
 
 def test_backend_errors_render_safe_results_state(backend: FakeBackend) -> None:

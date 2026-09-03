@@ -9,8 +9,8 @@ call the database, shared location service, or itinerary service directly.
 - Live text, location, category, price, duration, party, age, accessibility,
   booking, date, time, sorting, and paging filters.
 - Server-rendered activity cards and full detail dialogs.
-- A management view with complete create/edit forms, activation state, and
-  explicit permanent-delete confirmation.
+- One catalogue view with create and edit controls, activation state, and
+  explicit permanent-delete confirmation in the edit flow.
 - Add activities to a trip, reschedule them, and remove selections through
   Student 4's itinerary proxy.
 - Progressive enhancement: the initial page and explicit search submission
@@ -36,8 +36,7 @@ BACKEND_URL=http://127.0.0.1:8008 \
   --host 127.0.0.1 --port 8084
 ```
 
-Browse `http://127.0.0.1:8084/` or manage entries at
-`http://127.0.0.1:8084/manage`.
+Browse and manage entries at `http://127.0.0.1:8084/`.
 
 The temporary Compose service is published on `http://localhost:8094` while
 the legacy `student-4-service` placeholder continues to own port 8084.
@@ -46,10 +45,11 @@ the legacy `student-4-service` placeholder continues to own port 8084.
 
 | Route | Purpose |
 |---|---|
-| `GET /` | Full traveller catalogue page. |
+| `GET /` | Unified catalogue and management page, including inactive entries. |
 | `GET /activity` | Search results and pagination fragment. |
 | `GET /activity/{id}` | Full activity detail dialog. |
-| `GET /manage` | Active and inactive catalogue management. |
+| `GET /activity/{id}/itineraries/dialog` | Direct trip-picker dialog. |
+| `GET /manage` | Legacy catalogue management page. |
 | `GET /manage/activity/new` | Create form fragment. |
 | `POST /manage/activity` | Create an aggregate through Student 4. |
 | `GET /manage/activity/{id}/edit` | Prefilled edit form. |
