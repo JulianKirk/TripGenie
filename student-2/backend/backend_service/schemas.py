@@ -107,6 +107,50 @@ class AccommodationQueryResponse(BaseModel):
     total: int
 
 
+class AiSearchRequest(BaseModel):
+    """A question in English, plus the same paging every search takes.
+
+    `limit` and `offset` are the caller's, never the model's -- the pager on the
+    page has to keep working after an AI search, and it knows nothing about how
+    the filters were arrived at.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class AiSearchAnswer(AccommodationQueryRequest):
+    """What the model is asked for: the filters, plus a sentence for the reader.
+
+    One call, one answer. `reply` is the model saying back what it took the
+    question to mean, in the traveller's own terms -- the filters underneath say
+    the same thing in field names, which is precise and unfriendly.
+
+    ponytail: written before any row is fetched, so it can restate the question
+    but cannot describe the results ("the cheapest is $80"). A second call with
+    the rows in the prompt would buy that, at the cost of doubling the wait on a
+    local model. Do that when someone asks for it.
+    """
+
+    reply: str = Field(min_length=1, max_length=300)
+
+
+class AiSearchResponse(AccommodationQueryResponse):
+    """The rows, and the search that produced them.
+
+    `query_used` is the whole point of returning more than a result list: it is
+    a plain `AccommodationQueryRequest`, so a caller can show what the question
+    was understood to mean, and re-run or edit it as an ordinary QUERY without
+    going near the model again.
+    """
+
+    query_used: AccommodationQueryRequest
+    reply: str
+
+
 class ItinerarySelection(BaseModel):
     """One of student 1's itineraries, and whether this accommodation is on it.
 
@@ -130,3 +174,6 @@ class HealthResponse(BaseModel):
     service: str
     database: str
     location: str
+    # "not_configured" when the ask box is switched off, which is a healthy
+    # answer -- see routers/health.py.
+    ai_mode: str

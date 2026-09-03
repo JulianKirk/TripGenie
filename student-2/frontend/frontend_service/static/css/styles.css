@@ -32,6 +32,29 @@ body {
 
 .layout { padding: 1.5rem clamp(1rem, 5vw, 3rem); }
 
+/* The ask box. Deliberately the same card as the filter form below it -- one
+   is a shortcut to the other, not a separate mode. */
+.ask {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.ask label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+.ask__row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ask__row input { flex: 1 1 24rem; }
+.ai-answer > :last-child { margin-bottom: 1rem; }
+.ai-reply {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+.ai-notice {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .filters {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -82,6 +105,7 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
   display: inline-block;
 }
 .button:disabled { color: var(--muted); cursor: not-allowed; }
+.button--primary { background: var(--primary); border-color: var(--primary); color: var(--surface); }
 .link {
   font: inherit;
   border: 0;
@@ -214,6 +238,35 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 /* htmx toggles this class on for the duration of a request. */
 .htmx-indicator { visibility: hidden; color: var(--muted); font-size: 0.9rem; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { visibility: visible; }
+
+/* The wait on the model. Indeterminate on purpose: a generation reports no
+   progress, so a bar that pretended to know would be lying. */
+.asking { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.asking__track {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.asking__bar {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  animation: asking-slide 1.2s ease-in-out infinite;
+}
+@keyframes asking-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+/* Someone who has asked not to be shown motion gets a bar that sits still and
+   full rather than one that slides. */
+@media (prefers-reduced-motion: reduce) {
+  .asking__bar { width: 100%; animation: none; }
+}
 
 .visually-hidden {
   position: absolute;

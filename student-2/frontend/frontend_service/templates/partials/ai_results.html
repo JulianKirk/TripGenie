@@ -1,0 +1,10 @@
+{#
+  What the ask box swaps into #results: the ordinary result list. The answer
+  itself and the filter form come back in the same response, out of band -- the
+  answer above the filters, under the ask box, and the form filled in with the
+  filters that ran -- so the pager, the modal and every manual filter carry on
+  from where the question left off.
+#}
+{% include "partials/results.html" %}
+{% with oob = true %}{% include "partials/ai_answer.html" %}{% endwith %}
+{% with oob = true %}{% include "partials/filters.html" %}{% endwith %}

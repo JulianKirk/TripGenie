@@ -21,118 +21,34 @@
   </header>
 
   <main class="layout">
-    <form id="filters" class="filters"
-          hx-get="{{ request.url_for('results') }}"
-          hx-trigger="input changed delay:300ms, change"
+    {# The ask box. It fills the filter form below out of band, so what it does
+       is visible and editable rather than a second, hidden search. #}
+    <form class="ask"
+          hx-post="{{ request.url_for('ai_search') }}"
           hx-target="#results"
           hx-swap="innerHTML"
-          hx-indicator="#loading">
-      {# No offset field: changing any filter drops you back to page one,
-         because only the pager links carry an offset. #}
-      <div class="filters__search">
-        <label for="f-name">Search by name</label>
-        <input id="f-name" name="name" type="search" autocomplete="off"
-               placeholder="Start typing…" value="{{ params.get('name', '') }}">
+          hx-indicator="#asking">
+      <label for="ask-query">AI Assisted Search</label>
+      <div class="ask__row">
+        <input id="ask-query" name="query" type="search" autocomplete="off"
+               maxlength="500"
+               placeholder="good accommodation around japan under 100 a night">
+        <button class="button button--primary" type="submit">Ask</button>
       </div>
-
-      <details class="filters__more" {% if params and params|length > 1 %}open{% endif %}>
-        <summary>Filters</summary>
-        <div class="filters__grid">
-          <label>Type
-            <select name="type">
-              <option value="">Any</option>
-              {% for value in ["hotel", "hostel", "apartment", "resort", "guesthouse", "camping"] %}
-                <option value="{{ value }}" {% if params.get('type') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
-              {% endfor %}
-            </select>
-          </label>
-
-          <label>Availability
-            <select name="availability_status">
-              <option value="">Any</option>
-              {% for value in ["available", "unavailable", "sold_out"] %}
-                <option value="{{ value }}" {% if params.get('availability_status') == value %}selected{% endif %}>{{ value|replace("_", " ")|title }}</option>
-              {% endfor %}
-            </select>
-          </label>
-
-          <label>Description contains
-            <input name="description" type="search" autocomplete="off" value="{{ params.get('description', '') }}">
-          </label>
-
-          <label>Country
-            <input id="f-country" name="country" type="search" autocomplete="off" value="{{ params.get('country', '') }}">
-          </label>
-
-          <label>City
-            {# The backend rejects a city without a country, so the input stays
-               disabled until there is one -- the 400 is unreachable from here. #}
-            <input name="city" type="search" autocomplete="off"
-                   value="{{ params.get('city', '') }}"
-                   {% if not params.get('country') %}disabled{% endif %}
-                   data-needs="country">
-          </label>
-
-          <label>Street
-            <input name="street" type="search" autocomplete="off" value="{{ params.get('street', '') }}">
-          </label>
-
-          <label>Street number
-            <input name="street_number" type="number" min="0" value="{{ params.get('street_number', '') }}">
-          </label>
-
-          <label>Price from
-            <input name="price_min" type="number" min="0" step="1" value="{{ params.get('price_min', '') }}">
-          </label>
-
-          <label>Price to
-            <input name="price_max" type="number" min="0" step="1" value="{{ params.get('price_max', '') }}">
-          </label>
-
-          <label>Rating from
-            <input name="rating_min" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_min', '') }}">
-          </label>
-
-          <label>Rating to
-            <input name="rating_max" type="number" min="0" max="5" step="0.1" value="{{ params.get('rating_max', '') }}">
-          </label>
-
-          <label>Rooms (at least)
-            <input name="room_count_min" type="number" min="0" value="{{ params.get('room_count_min', '') }}">
-          </label>
-
-          <label>Rooms (exactly)
-            <input name="room_count" type="number" min="0" value="{{ params.get('room_count', '') }}">
-          </label>
-
-          <label>Beds (at least)
-            <input name="bed_count_min" type="number" min="0" value="{{ params.get('bed_count_min', '') }}">
-          </label>
-
-          <label>Beds (exactly)
-            <input name="bed_count" type="number" min="0" value="{{ params.get('bed_count', '') }}">
-          </label>
-
-          <label>Room description contains
-            <input name="room_description" type="search" autocomplete="off" value="{{ params.get('room_description', '') }}">
-          </label>
-        </div>
-
-        <fieldset class="filters__amenities">
-          <legend>Amenities (all of them must be present)</legend>
-          {% for amenity in ["wifi", "pool", "gym", "spa", "breakfast", "parking", "kitchen", "laundry", "air_conditioning"] %}
-            <label class="checkbox">
-              <input type="checkbox" name="amenities" value="{{ amenity }}"
-                     {% if amenity in params.getlist('amenities') %}checked{% endif %}>
-              {{ amenity|replace("_", " ")|title }}
-            </label>
-          {% endfor %}
-        </fieldset>
-
-        <a class="button" href="{{ request.url_for('index') }}">Clear all filters</a>
-      </details>
-      <span id="loading" class="htmx-indicator" role="status">Searching…</span>
+      {# htmx makes this visible for the duration of the request. The bar
+         does not track progress -- a model gives no progress to track -- it
+         says the wait is a wait and not a hang. #}
+      <div id="asking" class="htmx-indicator asking" role="status">
+        <span class="asking__label">Thinking…</span>
+        <span class="asking__track"><span class="asking__bar"></span></span>
+      </div>
     </form>
+
+    {# The answer to the question, filled in out of band by the ask box and
+       blanked by an ordinary search. #}
+    {% include "partials/ai_answer.html" %}
+
+    {% include "partials/filters.html" %}
 
     <section id="results" class="results" aria-live="polite">
       {% if error %}

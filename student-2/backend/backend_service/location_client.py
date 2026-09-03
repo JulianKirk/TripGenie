@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from backend_service.config import Settings
 
 UNAVAILABLE = "location service unavailable"
+BAD_RESPONSE = "bad response from location service"
 # The shared service caps a page at 100, so this is the fewest requests a full
 # list can take.
 PAGE = 100
@@ -90,6 +91,37 @@ class LocationClient:
             found = self._lookup(country, city)
         return found
 
+    async def countries(self) -> list[str]:
+        """Every country the shared service knows, sorted.
+
+        The ask box's prompt needs the vocabulary of real place names, and this
+        client is already holding it. No extra call in the warm case.
+        """
+        if not self._loaded:
+            await self._load()
+        return sorted(self._country_ids)
+
+    async def cities(self) -> list[str]:
+        """Every city the shared service knows, sorted. Same reason as
+        `countries`: the ask box constrains the model to real place names."""
+        if not self._loaded:
+            await self._load()
+        return sorted({city for _, city in self._city_ids})
+
+    def country_of(self, city: str) -> str | None:
+        """The country a city is in, when exactly one country has a city by
+        that name.
+
+        `None` for a city nobody has, and also for an ambiguous one -- "sydney"
+        is in two countries, and picking one of them for a traveller who did not
+        say is worse than not filtering on the place at all.
+
+        Sync, and reads the cache without refilling it: the only caller has just
+        been handed a name out of that same cache.
+        """
+        found = [country for country, name in self._city_ids if name == normalise(city)]
+        return self._names[found[0]] if len(found) == 1 else None
+
     async def names(self, ids: Iterable[UUID]) -> dict[UUID, str]:
         """The name for each id, for the ids that have one.
 
@@ -152,5 +184,10 @@ class LocationClient:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await request(
-            self._client, method, path, unavailable=UNAVAILABLE, **kwargs
+            self._client,
+            method,
+            path,
+            unavailable=UNAVAILABLE,
+            bad_response=BAD_RESPONSE,
+            **kwargs,
         )

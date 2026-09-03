@@ -16,11 +16,12 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 
 from backend_service import errors
+from backend_service.ai_client import AiClient
 from backend_service.client import DatabaseClient
 from backend_service.config import Settings
 from backend_service.itinerary_client import ItineraryClient
 from backend_service.location_client import LocationClient
-from backend_service.routers import accommodation, health, itinerary
+from backend_service.routers import accommodation, ai, health, itinerary
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -32,12 +33,13 @@ def create_app(
     transport: Any = None,
     itinerary_transport: Any = None,
     location_transport: Any = None,
+    ai_transport: Any = None,
 ) -> FastAPI:
     """One seam per upstream: `transport` for the database service,
     `itinerary_transport` for student 1's, `location_transport` for the shared
-    reference service. They are separate because they are separate services --
-    pointing two at one fake would make every call to the other a 404 against
-    the wrong app."""
+    reference service, `ai_transport` for the shared AI-Mode service. They are
+    separate because they are separate services -- pointing two at one fake
+    would make every call to the other a 404 against the wrong app."""
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -45,18 +47,21 @@ def create_app(
         db = DatabaseClient(settings, transport=transport)
         itinerary_client = ItineraryClient(settings, transport=itinerary_transport)
         location_client = LocationClient(settings, transport=location_transport)
+        ai_client = AiClient(settings, transport=ai_transport)
         app.state.settings = settings
         app.state.db = db
         app.state.itinerary = itinerary_client
         app.state.location = location_client
+        app.state.ai = ai_client
         yield
         await db.aclose()
         await itinerary_client.aclose()
         await location_client.aclose()
+        await ai_client.aclose()
 
     app = FastAPI(title="Accommodation Backend Service", lifespan=lifespan)
     errors.register(app)
-    for router in (health, accommodation, itinerary):
+    for router in (health, accommodation, ai, itinerary):
         app.include_router(router.router)
     return app
 

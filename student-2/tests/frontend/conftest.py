@@ -51,12 +51,27 @@ ITINERARIES = [
 ]
 
 
+# What the backend's POST /accommodation/ai-search answers with: the rows, and
+# the search the model produced for the question.
+AI_QUERY_USED = {
+    "accommodation": {"location_details": {"country": "japan"}},
+    "price_max": 100.0,
+    "rating_min": 4.0,
+    "limit": 20,
+    "offset": 0,
+}
+AI_REPLY = "Looking for well-rated places in Japan under 100 a night."
+
+
 class FakeBackend:
     """Records the last QUERY body so a test can assert on what was sent, and
     answers with whatever `response` is set to."""
 
     def __init__(self):
         self.body = None
+        self.ai_question: str | None = None
+        self.ai_timeout: float | None = None
+        self.ai_response: httpx.Response | None = None
         self.itineraries = [dict(itinerary) for itinerary in ITINERARIES]
         self.itinerary_calls: list[tuple[str, str]] = []
         self.itinerary_response: httpx.Response | None = None
@@ -65,6 +80,8 @@ class FakeBackend:
         )
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/ai-search"):
+            return self._ai_search(request)
         if request.method == "QUERY":
             self.body = json.loads(request.content)
         if "/itineraries" in request.url.path:
@@ -74,6 +91,21 @@ class FakeBackend:
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok"})
         return self.response
+
+    def _ai_search(self, request: httpx.Request) -> httpx.Response:
+        self.ai_question = json.loads(request.content)["query"]
+        self.ai_timeout = request.extensions["timeout"]["read"]
+        if self.ai_response is not None:
+            return self.ai_response
+        return httpx.Response(
+            200,
+            json={
+                "query_used": AI_QUERY_USED,
+                "reply": AI_REPLY,
+                "accommodations": [LISTING],
+                "total": 1,
+            },
+        )
 
     def _itineraries(self, request: httpx.Request) -> httpx.Response:
         """The real backend answers PUT and DELETE with the whole list, so the

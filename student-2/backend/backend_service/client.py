@@ -61,6 +61,7 @@ async def request(
     path: str,
     *,
     unavailable: str = UNAVAILABLE,
+    bad_response: str = BAD_RESPONSE,
     **kwargs: Any,
 ) -> Any:
     """The decoded response body, or the documented 502/503.
@@ -72,7 +73,8 @@ async def request(
 
     Module-level so every upstream this service calls -- the database service
     and student 1's itinerary API -- fails the same documented way. There is
-    only ever one copy of this mapping.
+    only ever one copy of this mapping. Both messages are the caller's, so a
+    reader of the 502 learns which upstream misbehaved.
     """
     try:
         response = await client.request(method, path, **kwargs)
@@ -80,12 +82,12 @@ async def request(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, unavailable) from exc
 
     if response.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, bad_response)
 
     try:
         body = response.json()
     except ValueError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE) from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, bad_response) from exc
 
     if response.is_client_error:
         # `detail` is what every documented error body carries; falling back to

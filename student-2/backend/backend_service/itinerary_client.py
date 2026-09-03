@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from backend_service.config import Settings
 
 UNAVAILABLE = "itinerary service unavailable"
+BAD_RESPONSE = "bad response from itinerary service"
 
 
 class ItineraryClient:
@@ -64,6 +65,7 @@ class ItineraryClient:
             method,
             f"{self._prefix}{path}",
             unavailable=UNAVAILABLE,
+            bad_response=BAD_RESPONSE,
             **kwargs,
         )
         return body["data"] if isinstance(body, dict) and "data" in body else body

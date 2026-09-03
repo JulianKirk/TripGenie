@@ -29,6 +29,16 @@ build-backend = "setuptools.build_meta"
 where = ["database", "backend", "frontend"]
 include = ["database_service*", "backend_service*", "frontend_service*"]
 
+[tool.setuptools.package-data]
+# Mirrors each service's own pyproject.toml, so an editable install of this
+# aggregate finds the prompt asset and the templates too.
+backend_service = ["prompts/*.md"]
+frontend_service = [
+    "templates/*.html",
+    "templates/partials/*.html",
+    "static/css/*.css",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

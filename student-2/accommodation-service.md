@@ -34,6 +34,7 @@ Either end of the chain works if you want less than all three:
 | Command | Starts |
 | --- | --- |
 | `docker compose up --build student-2` | all three |
+| `docker compose exec ollama ollama pull llama3.1:8b` | the model the ask box needs, once |
 | `docker compose up --build student-2-backend` | backend + database |
 | `docker compose up --build student-2-database` | database only |
 | `docker compose logs -f student-2-frontend` | follow one service's logs |
@@ -52,7 +53,14 @@ student-2 && docker run --rm -p 9003:9003 -p 9000:9000 student-2`.
 
 This service is the main entry point for queries coming in from the frontend. 
 This is responsible for managing data models in the accommodation database via the database service.
-This service is integrated with Artificial Intelligence in order to provide accommodation suggestions from user queries.
+It is also where this micro-service is integrated with Artificial Intelligence,
+in order to answer a question in English with real accommodations:
+[`POST /accommodation/ai-search`](./docs/backend-service-api.md#post-accommodationai-search).
+The model produces *filters*, never listings -- they are validated as the
+service's own search message and then run through the ordinary search -- and the
+model itself lives in neither this service nor this micro-service, but behind the
+[shared AI-Mode service](../ai-services/ai-mode/README.md) that every student's
+backend calls.
 
 It is also where this micro-service reaches the two services outside it: student
 1's itinerary API, and the [shared reference service](../shared/shared-service.md)
@@ -80,9 +88,11 @@ compose network but not published to the host. Start it with
 
 ## Frontend Service
 
-The webpage: a list of accommodations with live search, a filter for every
-property that can be filtered on, a details modal per row, and a pager with a
-configurable page size. It calls the backend service and nothing else.
+The webpage: an ask box, a list of accommodations with live search, a filter for
+every property that can be filtered on, a details modal per row, and a pager
+with a configurable page size. Asking a question fills the filter form in, so
+the AI is a shortcut to the controls that were already there rather than a
+second, separate way to search. It calls the backend service and nothing else.
 
 It runs as the `student-2-frontend` container on port `9003`, published to the
 host, and is what `shared/frontend/index.html` links to for Student 2.

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
+from backend_service.ai_client import NOT_CONFIGURED
 from backend_service.dependencies import (  # noqa: TC001  (runtime)
+    AiDep,
     DbDep,
     LocationDep,
 )
@@ -28,15 +30,22 @@ async def _status(health) -> str:
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health(request: Request, db: DbDep, location: LocationDep) -> HealthResponse:
+async def health(
+    request: Request, db: DbDep, location: LocationDep, ai: AiDep
+) -> HealthResponse:
     database = await _status(db.health)
     # Reported separately: without its data this service serves nothing, and
     # without the shared service it serves rows that cannot say where they are.
     # Two different kinds of broken deserve two different answers.
     shared = await _status(location.health)
+    # A third kind: the ask box is an extra, so an AI-Mode nobody configured is
+    # not a fault. One that was configured and cannot be reached is.
+    ai_mode = await ai.status()
+    healthy = database == "ok" == shared and ai_mode in {"ok", NOT_CONFIGURED}
     return HealthResponse(
-        status="ok" if database == "ok" == shared else "degraded",
+        status="ok" if healthy else "degraded",
         service=request.app.state.settings.service_name,
         database=database,
         location=shared,
+        ai_mode=ai_mode,
     )
