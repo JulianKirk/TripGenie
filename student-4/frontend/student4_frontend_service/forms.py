@@ -14,6 +14,37 @@ if TYPE_CHECKING:
 SCHEDULE_KEY = re.compile(r"^schedules\.(\d+)\.")
 
 
+def new_activity_form_values() -> dict[str, object]:
+    """Return a valid demo activity for fast catalogue creation."""
+    return {
+        "name": "Example activity",
+        "description": "A sample Sydney activity for demonstrating TripGenie.",
+        "price": "25.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+        "minimum_participants": 1,
+        "maximum_participants": 10,
+        "country": "Australia",
+        "city": "Sydney",
+        "street": "George Street",
+        "street_number": 500,
+        "categories": ["OUTDOOR", "TOUR"],
+        "booking_required": False,
+        "wheelchair_accessible": None,
+        "step_free_access": None,
+        "accessible_toilet": None,
+        "availability_schedules": [
+            {
+                "recurring_weekly": True,
+                "day_of_week": "FRIDAY",
+                "start_time": "09:00",
+                "end_time": "11:00",
+            }
+        ],
+        "is_active": True,
+    }
+
+
 def _text(form: FormData, name: str) -> str | None:
     value = str(form.get(name, "")).strip()
     return value or None

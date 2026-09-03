@@ -17,7 +17,12 @@ from starlette.responses import RedirectResponse, Response
 from .client import BackendClient
 from .config import Settings
 from .errors import FrontendError
-from .forms import activity_form_values, parse_activity_form, submitted_form_values
+from .forms import (
+    activity_form_values,
+    new_activity_form_values,
+    parse_activity_form,
+    submitted_form_values,
+)
 from .models import (
     ActivityQueryPayload,
     ItinerarySelectionWrite,
@@ -630,7 +635,11 @@ async def manage(request: Request, client: ClientDep) -> Any:
 @router.get("/manage/activity/new")
 async def new_activity(request: Request, client: ClientDep) -> Any:
     return await _render_activity_form(
-        request, client, activity_id=None, values={}, errors={}
+        request,
+        client,
+        activity_id=None,
+        values=new_activity_form_values(),
+        errors={},
     )
 
 

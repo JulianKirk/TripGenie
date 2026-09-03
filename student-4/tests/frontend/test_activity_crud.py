@@ -111,6 +111,24 @@ def test_new_form_has_complete_aggregate_controls(backend: FakeBackend) -> None:
         "schedules.0.start_time",
     ):
         assert f'name="{name}"' in response.text
+    assert 'value="Example activity"' in response.text
+    assert 'value="25.00"' in response.text
+    assert (
+        'name="duration_minutes" type="number" min="1" required value="120"'
+        in response.text
+    )
+    assert (
+        'name="maximum_participants" type="number" min="1" value="10"' in response.text
+    )
+    assert 'name="country" required value="Australia"' in response.text
+    assert 'name="city" required value="Sydney"' in response.text
+    assert 'name="street" value="George Street"' in response.text
+    assert 'name="street_number" type="number" min="0" value="500"' in response.text
+    assert 'value="OUTDOOR" checked' in response.text
+    assert 'value="TOUR" checked' in response.text
+    assert 'value="FRIDAY" selected' in response.text
+    assert 'value="09:00"' in response.text
+    assert 'value="11:00"' in response.text
 
 
 def test_edit_form_prefills_complete_activity(backend: FakeBackend) -> None:
