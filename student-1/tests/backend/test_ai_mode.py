@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import pytest
@@ -291,6 +292,231 @@ def test_ai_prompt_contains_selected_cross_service_context(
     assert "must not be forwarded" not in prompt
     assert all(method == "GET" for method, _ in database_api.requests)
     assert response.json()["data"]["persisted"] is False
+
+
+def test_ai_suggestions_retry_selected_activity_and_transport_conflicts(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+    transport_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    activity_id = "11111111-1111-1111-1111-111111111111"
+    transport_id = "transport_harbour_ferry"
+    database_api.trip_activities[(trip_id, activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "start_time": "13:30",
+    }
+    database_api.trip_transport[(trip_id, transport_id)] = {
+        "trip_id": trip_id,
+        "transport_id": transport_id,
+        "traveller_count": 2,
+        "plan_status": "confirmed",
+        "added_on": "2027-04-01",
+    }
+    activity_api.records[activity_id] = {
+        "id": activity_id,
+        "name": "Harbour Kayak",
+        "price": "89.50",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 120,
+    }
+    transport_api.records[transport_id] = {
+        "id": transport_id,
+        "type": "ferry",
+        "provider": "Harbour Transit",
+        "origin": "Circular Quay",
+        "destination": "Manly Wharf",
+        "departure_time": "2027-04-02T10:45:00",
+        "arrival_time": "2027-04-02T11:15:00",
+        "duration_minutes": 30,
+        "price": 12.5,
+        "pricing_basis": "per_traveller",
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"13:45",
+          "end_time":"14:15",
+          "title":"Clashing Activity",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the selected activity."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"10:50",
+          "end_time":"11:00",
+          "title":"Clashing Transport",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the selected transport."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(ai_max_attempts=3),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Fit suggestions around selected plans.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 3
+    assert len(ai_mode_api.requests) == 3
+    assert f"conflicts with selected activity '{activity_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+    assert f"conflicts with selected transport '{transport_id}'" in str(
+        ai_mode_api.requests[2]["prompt"]
+    )
+
+
+def test_ai_validation_keeps_activity_timing_when_prompt_budget_omits_record(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    target_activity_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    for index in range(11):
+        activity_id = f"00000000-0000-0000-0000-{index + 1:012d}"
+        database_api.trip_activities[(trip_id, activity_id)] = {
+            "trip_id": trip_id,
+            "activity_id": activity_id,
+            "date": "2027-04-02",
+            "start_time": f"{index + 1:02d}:00",
+        }
+        activity_api.records[activity_id] = {
+            "id": activity_id,
+            "name": f"Earlier activity {index} " + ("x" * 150),
+            "price": "20.00",
+            "pricing_basis": "PER_PERSON",
+            "duration_minutes": 30,
+        }
+    database_api.trip_activities[(trip_id, target_activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": target_activity_id,
+        "date": "2027-04-02",
+        "start_time": "23:00",
+    }
+    activity_api.records[target_activity_id] = {
+        "id": target_activity_id,
+        "name": "Budget-omitted late activity " + ("z" * 150),
+        "price": "50.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+    }
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"23:15",
+          "end_time":"23:45",
+          "title":"Late Clashing Suggestion",
+          "category":"activity",
+          "rationale":"This intentionally overlaps the omitted selected activity."
+        }]}
+        """
+    )
+    ai_mode_api.queue_json_body('{"suggestions":[]}')
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(
+            ai_max_attempts=2,
+            ai_max_context_activities=12,
+            ai_mode_max_prompt_chars=5000,
+        ),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Find a late activity without overlapping selected plans.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 2
+    initial_context = prompt_context(ai_mode_api, 0)
+    visible_activity_ids = {
+        activity["activity_id"]
+        for activity in initial_context.get("selected_activities", [])
+    }
+    assert target_activity_id not in visible_activity_ids
+    assert initial_context["omitted_selected_activities"] >= 1
+    assert initial_context["budget_adjustments"]["dropped_activities"] >= 1
+    assert f"conflicts with selected activity '{target_activity_id}'" in str(
+        ai_mode_api.requests[1]["prompt"]
+    )
+
+
+def test_ai_validation_does_not_invent_activity_end_time_when_duration_is_unknown(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    activity_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    activity_id = "11111111-1111-1111-1111-111111111111"
+    database_api.trip_activities[(trip_id, activity_id)] = {
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "start_time": "13:30",
+    }
+    activity_api.unavailable = True
+    ai_mode_api.queue_json_body(
+        """
+        {"suggestions":[{
+          "date":"2027-04-02",
+          "start_time":"13:45",
+          "end_time":"14:15",
+          "title":"Suggestion With Unknown Activity Duration",
+          "category":"activity",
+          "rationale":"No authoritative activity end time is available."
+        }]}
+        """
+    )
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            f"/api/trips/{trip_id}/ai-suggestions",
+            json={
+                "requested_date": "2027-04-02",
+                "goal": "Do not infer unavailable timing.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["attempt_count"] == 1
+    assert prompt_context(ai_mode_api)["selected_activities"][0] == {
+        "activity_id": activity_id,
+        "date": "2027-04-02",
+        "source_status": "unavailable",
+        "start_time": "13:30",
+    }
 
 
 def test_ai_prompt_keeps_local_cross_service_facts_when_enrichment_is_unavailable(
@@ -987,6 +1213,57 @@ def test_health_is_degraded_when_ai_mode_is_unavailable_but_crud_still_works(
     assert ready_response.json()["data"]["status"] == "ok"
     assert trips_response.status_code == 200
     assert trips_response.json()["data"][0]["id"] == "trip_2027_sydney_getaway"
+
+
+def test_ai_snapshot_enrichment_does_not_block_readiness_or_crud(
+    client_factory,
+    database_api,
+    ai_mode_api,
+    accommodation_api,
+) -> None:
+    trip_id = "trip_2027_sydney_getaway"
+    accommodation_id = "acc_blocking"
+    database_api.trip_accommodations[(trip_id, accommodation_id)] = {
+        "trip_id": trip_id,
+        "accommodation_id": accommodation_id,
+        "date": "2027-04-01",
+        "check_out": "2027-04-03",
+    }
+    accommodation_api.records[accommodation_id] = {
+        "id": accommodation_id,
+        "name": "Slow Hotel",
+        "price_per_night": 100.0,
+        "location_details": {"city": "Sydney", "country": "Australia"},
+    }
+    accommodation_api.block_requests = True
+
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            ai_request = executor.submit(
+                client.post,
+                f"/api/trips/{trip_id}/ai-suggestions",
+                json={
+                    "requested_date": "2027-04-02",
+                    "goal": "Plan around the accommodation.",
+                },
+            )
+            assert accommodation_api.request_started.wait(timeout=2)
+            ready_request = executor.submit(client.get, "/ready")
+            trips_request = executor.submit(client.get, "/api/trips")
+            try:
+                ready_response = ready_request.result(timeout=2)
+                trips_response = trips_request.result(timeout=2)
+            finally:
+                accommodation_api.release_requests.set()
+            ai_response = ai_request.result(timeout=5)
+
+    assert ready_response.status_code == 200
+    assert trips_response.status_code == 200
+    assert ai_response.status_code == 200
 
 
 def test_ready_skips_live_ai_mode_probe_and_reports_non_authoritative_status(

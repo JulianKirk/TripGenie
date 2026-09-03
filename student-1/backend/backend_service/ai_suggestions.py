@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -324,6 +324,14 @@ class _SelectedCrossServiceRecords:
     transport: list[TripTransportRecord]
 
 
+@dataclass(frozen=True, slots=True)
+class _AuthoritativeTimeBlock:
+    source_type: Literal["activity", "transport"]
+    source_id: str
+    start: datetime
+    end: datetime
+
+
 def select_cross_service_records(
     *,
     accommodations: list[TripAccommodationRecord],
@@ -496,6 +504,70 @@ def prepare_cross_service_prompt_context(
     )
 
 
+def build_cross_service_time_blocks(
+    *,
+    selection: _SelectedCrossServiceRecords,
+    enriched_activities: list[TripActivityDetail],
+    enriched_transport: list[TripTransportDetail],
+) -> list[_AuthoritativeTimeBlock]:
+    blocks: list[_AuthoritativeTimeBlock] = []
+    activities_by_id = {item.activity_id: item for item in enriched_activities}
+    for pin in selection.activities:
+        enriched = activities_by_id[pin.activity_id]
+        if pin.start_time is None or enriched.duration_minutes is None:
+            continue
+        try:
+            start = datetime.fromisoformat(f"{pin.date}T{pin.start_time}")
+        except ValueError:
+            continue
+        end = start + timedelta(minutes=enriched.duration_minutes)
+        if end <= start:
+            continue
+        blocks.append(
+            _AuthoritativeTimeBlock(
+                source_type="activity",
+                source_id=pin.activity_id,
+                start=start,
+                end=end,
+            )
+        )
+
+    transport_by_id = {item.transport_id: item for item in enriched_transport}
+    for pin in selection.transport:
+        enriched = transport_by_id[pin.transport_id]
+        if (
+            pin.plan_status.value == "cancelled"
+            or enriched.departure_time is None
+            or enriched.arrival_time is None
+        ):
+            continue
+        try:
+            start = datetime.fromisoformat(enriched.departure_time)
+            end = datetime.fromisoformat(enriched.arrival_time)
+        except ValueError:
+            continue
+        if end <= start:
+            continue
+        blocks.append(
+            _AuthoritativeTimeBlock(
+                source_type="transport",
+                source_id=pin.transport_id,
+                start=start,
+                end=end,
+            )
+        )
+
+    return sorted(
+        blocks,
+        key=lambda block: (
+            block.start,
+            block.end,
+            block.source_type,
+            block.source_id,
+        ),
+    )
+
+
 def build_prompt_context(
     trip: TripRecord,
     existing_items: list[ItineraryItemRecord],
@@ -581,6 +653,7 @@ class AiSuggestionService:
         existing_items: list[ItineraryItemRecord],
         request: AiSuggestionRequest,
         cross_service_context: _CrossServicePromptContext | None = None,
+        authoritative_time_blocks: list[_AuthoritativeTimeBlock] | None = None,
         correlation_id: str | None = None,
     ) -> AiSuggestionsResponse:
         run_id = f"ai_{uuid4().hex[:12]}"
@@ -592,6 +665,7 @@ class AiSuggestionService:
             self._settings,
             cross_service_context,
         )
+        resolved_time_blocks = authoritative_time_blocks or []
         prompt_schema = AiModeSuggestionEnvelope.model_json_schema()
         prompt_asset = self._settings.ai_prompt_asset
 
@@ -656,6 +730,7 @@ class AiSuggestionService:
                     trip=trip,
                     requested_date=request.requested_date,
                     existing_items=existing_items,
+                    authoritative_time_blocks=resolved_time_blocks,
                     payload_text=generation.response,
                 )
             except RetryableAiFailure as exc:
@@ -730,6 +805,7 @@ def normalise_suggestions(
     trip: TripRecord,
     requested_date: str,
     existing_items: list[ItineraryItemRecord],
+    authoritative_time_blocks: list[_AuthoritativeTimeBlock],
     payload_text: str,
 ) -> list[AiSuggestionDraft]:
     try:
@@ -831,6 +907,22 @@ def normalise_suggestions(
                     "issue": (
                         "conflicts with the existing itinerary item "
                         f"'{conflict_existing.title}'"
+                    ),
+                },
+            )
+
+        authoritative_conflict = _find_authoritative_time_conflict(
+            draft_item,
+            authoritative_time_blocks,
+        )
+        if authoritative_conflict is not None:
+            validation_errors.append(
+                {
+                    "field": field_prefix,
+                    "issue": (
+                        "conflicts with selected "
+                        f"{authoritative_conflict.source_type} "
+                        f"'{authoritative_conflict.source_id}'"
                     ),
                 },
             )
@@ -1176,6 +1268,27 @@ def _find_time_conflict(
             existing_range[1],
         ):
             return item
+    return None
+
+
+def _find_authoritative_time_conflict(
+    candidate: AiSuggestionDraft,
+    authoritative_time_blocks: list[_AuthoritativeTimeBlock],
+) -> _AuthoritativeTimeBlock | None:
+    candidate_range = _time_range(candidate.start_time, candidate.end_time)
+    if candidate_range is None:
+        return None
+    candidate_start = datetime.combine(
+        date.fromisoformat(candidate.date),
+        candidate_range[0],
+    )
+    candidate_end = datetime.combine(
+        date.fromisoformat(candidate.date),
+        candidate_range[1],
+    )
+    for block in authoritative_time_blocks:
+        if candidate_start < block.end and block.start < candidate_end:
+            return block
     return None
 
 
