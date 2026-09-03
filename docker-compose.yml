@@ -60,15 +60,28 @@ services:
       context: ./student-1
       dockerfile: backend/Dockerfile
     environment:
+      STUDENT1_BACKEND_DB_API_BASE_URL: http://student-1-database:8002
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT1_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
       STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
       STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     depends_on:
-      - student-1-database
-      - ai-mode
+      student-1-database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # The trip and itinerary webpage.
   student-1-frontend:
@@ -76,13 +89,27 @@ services:
       context: ./student-1
       dockerfile: frontend/Dockerfile
     environment:
+      STUDENT1_FRONTEND_BACKEND_BASE_URL: http://student-1-backend:8001
       # A browser address, not a compose one: the trip page links out to
       # student 2's webpage, and that link is followed on the user's machine.
       STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
     ports:
       - "8081:8081"
     depends_on:
-      - student-1-backend
+      student-1-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Internal only -- the backend service is the sole caller and reaches it as
   # http://student-1-database:8002 on the compose network.
@@ -94,6 +121,18 @@ services:
       - "8002"
     volumes:
       - student-1-db:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/internal/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Student 2: Accommodation Management
   # Not a service -- the name you type to bring the whole accommodation
@@ -464,7 +503,7 @@ services:
       - "8006"
     environment:
       # Ollama is installed and run on the host for Release 0. The host-gateway
-      # alias below makes it reachable from this container on every platform.
+      # alias resolves the host; native Linux Ollama must listen beyond loopback.
       AI_MODE_OLLAMA_BASE_URL: http://host.docker.internal:11434
       # The image's own default is qwen2.5:0.5b, which is too small for the
       # accommodation ask box: it reads "under 100 a night" as a number of beds,
@@ -485,7 +524,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health', timeout=3)",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/ready', timeout=3)",
         ]
       interval: 15s
       timeout: 5s

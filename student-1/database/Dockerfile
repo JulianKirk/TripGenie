@@ -10,7 +10,8 @@ WORKDIR /app
 
 RUN addgroup --system tripgenie \
     && adduser --system --ingroup tripgenie --home /nonexistent tripgenie \
-    && mkdir -p /data/student-1
+    && mkdir -p /data/student-1 \
+    && touch /data/student-1/.volume-init
 
 COPY database/pyproject.toml ./pyproject.toml
 COPY database/database_service ./database_service
