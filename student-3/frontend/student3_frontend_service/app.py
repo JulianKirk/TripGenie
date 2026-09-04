@@ -878,7 +878,6 @@ def create_app(
         options, list_error = await safe_list_options(client)
         try:
             option = await client.get_transport_option(transport_id)
-            entries = await client.list_entries_for_option(transport_id)
         except ApiError as exc:
             return render_error(
                 request,
@@ -888,6 +887,17 @@ def create_app(
                 options=options,
                 option_list_error=list_error,
             )
+
+        # Which trips still hold it comes from the itinerary service now. Only
+        # a warning: the backend refuses the delete either way, and a page that
+        # cannot reach the itinerary should still let someone delete an option
+        # nothing references.
+        selections, _ = await safe_selections(client, transport_id)
+        holding = (
+            [row for row in selections.itineraries if row.selected]
+            if selections is not None
+            else []
+        )
 
         return render(
             request,
@@ -903,9 +913,10 @@ def create_app(
                 f"{option.origin} to {option.destination}."
             ),
             blocked_reason=(
-                f"{len(entries)} trip(s) still plan this transport. Remove those "
-                "entries first."
-                if entries
+                f"{len(holding)} trip(s) still hold this transport "
+                f"({', '.join(row.name for row in holding[:3])}). "
+                "Remove it from them first."
+                if holding
                 else None
             ),
             form_action=path_for(request, "delete_option", transport_id=option.id),

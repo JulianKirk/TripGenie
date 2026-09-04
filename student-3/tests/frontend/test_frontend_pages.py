@@ -862,3 +862,52 @@ def test_the_option_page_survives_an_itinerary_outage(
     assert "Melbourne" in flat
     assert "cannot be reached right now" in flat
     assert "Add to this trip" not in flat
+
+
+# ------------------------------------------------- deleting from the catalogue
+
+
+def test_the_delete_confirmation_renders(client: TestClient) -> None:
+    """Pinned because this page had no coverage and quietly broke.
+
+    Its two original tests were dropped with the plan-entry feature they
+    described, and the route kept calling a client method that went with it --
+    a 500 that nothing caught until someone clicked Remove.
+    """
+    response = client.get(f"/options/{FLIGHT_ID}/delete")
+
+    assert response.status_code == 200
+    assert "Remove this transport option?" in response.text
+
+
+def test_the_confirmation_warns_when_a_trip_still_holds_it(
+    client: TestClient,
+    itinerary: Any,
+) -> None:
+    itinerary.pin(SYDNEY_TRIP, FLIGHT_ID, travellers=2)
+
+    response = client.get(f"/options/{FLIGHT_ID}/delete")
+    flat = " ".join(response.text.split())
+
+    assert "1 trip(s) still hold this transport" in flat
+    assert "Sydney Long Weekend" in flat
+
+
+def test_an_unheld_option_can_be_deleted(client: TestClient) -> None:
+    response = _post(client, f"/options/{SHUTTLE_ID}/delete", {})
+
+    assert response.status_code in {200, 303}
+    assert SHUTTLE_ID not in client.get("/").text
+
+
+def test_deleting_a_held_option_replays_the_conflict(
+    client: TestClient,
+    itinerary: Any,
+) -> None:
+    itinerary.pin(SYDNEY_TRIP, FLIGHT_ID, travellers=2)
+
+    response = _post(client, f"/options/{FLIGHT_ID}/delete", {})
+    flat = " ".join(response.text.split())
+
+    assert "CONFLICT" in flat
+    assert "still hold it" in flat
