@@ -410,6 +410,31 @@ class DatabaseService:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
         self._migrate_pricing_basis(connection)
+        self._drop_retired_selections_table(connection)
+
+    @staticmethod
+    def _drop_retired_selections_table(connection: sqlite3.Connection) -> None:
+        """Remove `transport_bookings`, left behind by an older database file.
+
+        Transport selections belong to the itinerary service now, and no code
+        here has read this table since. Leaving it in place looked harmless and
+        was not: the table still declares
+
+            transport_id TEXT NOT NULL REFERENCES transport_options(id)
+
+        so SQLite refused to delete any option an old row referenced, and the
+        catalogue's delete broke for exactly the options the demo data had used.
+        A fresh database never creates it; only a volume that predates the move
+        has one.
+        """
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("transport_bookings",),
+        ).fetchone()
+        if exists is None:
+            return
+
+        connection.execute("DROP TABLE transport_bookings")
 
     @staticmethod
     def _migrate_pricing_basis(connection: sqlite3.Connection) -> None:
