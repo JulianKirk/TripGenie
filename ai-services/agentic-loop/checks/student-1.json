@@ -9,5 +9,25 @@
     {"label": "GET /api/trips/{id} (malformed)", "path": "${SERVICE_URL}/api/trips/nope", "status": 422, "contains": ["VALIDATION_ERROR"]},
     {"label": "GET /api/trips?unknown=1 (rejected)", "path": "${SERVICE_URL}/api/trips?unknown=1", "status": 400},
     {"label": "GET /api/itinerary-items/{id} (malformed)", "path": "${SERVICE_URL}/api/itinerary-items/nope", "status": 422, "contains": ["VALIDATION_ERROR"]}
+  ],
+  "rules": [
+    "Trip identifiers are opaque strings that already exist; the loop never creates or deletes trips.",
+    "Itinerary items belong to exactly one trip, and a trip's items must all carry that trip's id.",
+    "Accommodations, activities and transport on a trip are many-to-many links owned by this service, not columns on the trip."
+  ],
+  "flows": [
+    {
+      "name": "Trip drill-down",
+      "steps": [
+        {"label": "GET /api/trips (pick one)", "path": "${SERVICE_URL}/api/trips", "contains": ["\"data\""], "save": {"TRIP_ID": "data.0.id", "TRIP_STATUS": "data.0.status"}},
+        {"label": "GET /api/trips/{that trip}", "path": "${SERVICE_URL}/api/trips/${TRIP_ID}", "contains": ["${TRIP_ID}", "\"days\"", "\"accommodations\""], "save": {"DAYS": "data.days"}},
+        {"label": "GET /api/trips?status={that trip's status} (must still list it)", "path": "${SERVICE_URL}/api/trips?status=${TRIP_STATUS}", "contains": ["${TRIP_ID}"]},
+        {"label": "GET /api/trips/{that trip}/itinerary-items", "path": "${SERVICE_URL}/api/trips/${TRIP_ID}/itinerary-items", "contains": ["\"data\""]},
+        {"label": "GET /api/trips/{that trip}/accommodations", "path": "${SERVICE_URL}/api/trips/${TRIP_ID}/accommodations", "contains": ["\"data\""]}
+      ],
+      "invariants": [
+        {"label": "the trip expands to between 1 and 366 inclusive days", "expr": "1 <= len(DAYS) <= 366"}
+      ]
+    }
   ]
 }

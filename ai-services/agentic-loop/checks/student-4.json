@@ -8,5 +8,23 @@
     {"label": "GET backend /health", "path": "${BACKEND_URL}/health", "contains": ["\"status\":\"degraded\"", "\"database\":\"ok\"", "\"location\":\"unreachable\""]},
     {"label": "GET backend /ready", "path": "${BACKEND_URL}/ready", "contains": ["\"status\":\"ready\"", "\"database\":\"ok\""]},
     {"label": "GET /activity/categories", "path": "${BACKEND_URL}/activity/categories", "contains": ["ADVENTURE", "CULTURE", "WILDLIFE"], "nfr_ms": 500}
+  ],
+  "rules": [
+    "Category codes are a fixed catalogue; an activity carries one or more of them and a code is shared by many activities.",
+    "Location names are resolved through the shared location service, which is deliberately absent from this CI slice, so health may be degraded while readiness is fine.",
+    "All checks here are read-only; do not recommend create, update or delete operations."
+  ],
+  "flows": [
+    {
+      "name": "Category search to activity detail",
+      "steps": [
+        {"label": "GET /activity/categories (pick OUTDOOR)", "path": "${BACKEND_URL}/activity/categories", "contains": ["OUTDOOR"]},
+        {"label": "QUERY /activity (categories OUTDOOR)", "method": "QUERY", "path": "${BACKEND_URL}/activity", "json": {"categories": {"codes": ["OUTDOOR"]}, "limit": 5}, "contains": ["\"activities\""], "save": {"ACTIVITY_ID": "activities.0.id", "ACTIVITY_NAME": "activities.0.name", "MATCHED": "total"}},
+        {"label": "GET /activity/{first result} (must carry the filtered category)", "path": "${BACKEND_URL}/activity/${ACTIVITY_ID}", "contains": ["${ACTIVITY_ID}", "OUTDOOR"]}
+      ],
+      "invariants": [
+        {"label": "the OUTDOOR filter matched at least one activity", "expr": "MATCHED >= 1"}
+      ]
+    }
   ]
 }

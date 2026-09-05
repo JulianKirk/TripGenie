@@ -14,5 +14,25 @@
     {"label": "GET seeded budget summary", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/summary", "contains": ["actual_spending", "committed_costs", "remaining_budget", "providers"], "nfr_ms": 500},
     {"label": "GET malformed budget id", "path": "${BACKEND_URL}/api/v1/budgets/not-a-uuid", "status": 422, "contains": ["VALIDATION_ERROR"]},
     {"label": "POST seeded budget AI analysis", "method": "POST", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/ai-analysis", "json": {"question": "Where can this trip save money?"}, "status": [200, 503, 504], "contains_any": ["\"analysis\"", "MODEL_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"]}
+  ],
+  "rules": [
+    "One budget belongs to one trip; trip_id is not unique across expenses, since a trip has many expenses.",
+    "remaining_budget is derived (total_budget - actual_spending - committed_costs) and is never stored or edited directly.",
+    "Committed costs come from other services (accommodation, activity, transport); when one is unreachable the summary is marked incomplete rather than wrong."
+  ],
+  "flows": [
+    {
+      "name": "Budget to expenses arithmetic",
+      "steps": [
+        {"label": "GET /api/v1/budgets (pick one)", "path": "${BACKEND_URL}/api/v1/budgets", "contains": ["\"data\""], "save": {"BUDGET_ID": "data.0.budget_id", "TRIP_ID": "data.0.trip_id", "CURRENCY": "data.0.currency"}},
+        {"label": "GET /api/v1/budgets/{that budget}/summary", "path": "${BACKEND_URL}/api/v1/budgets/${BUDGET_ID}/summary", "contains": ["${TRIP_ID}", "${CURRENCY}"], "save": {"TOTAL": "data.total_budget", "SPENT": "data.actual_spending", "COMMITTED": "data.committed_costs", "REMAINING": "data.remaining_budget", "COMPLETE": "data.remaining_budget_complete"}},
+        {"label": "GET /api/v1/expenses?trip_id={that trip}", "path": "${BACKEND_URL}/api/v1/expenses?trip_id=${TRIP_ID}", "contains": ["${TRIP_ID}"]},
+        {"label": "GET /api/v1/budgets?trip_id={that trip} (must still list it)", "path": "${BACKEND_URL}/api/v1/budgets?trip_id=${TRIP_ID}", "contains": ["${BUDGET_ID}"]}
+      ],
+      "invariants": [
+        {"label": "remaining_budget = total_budget - actual_spending - committed_costs", "expr": "abs(float(REMAINING) - (float(TOTAL) - float(SPENT) - float(COMMITTED))) < 0.01"},
+        {"label": "spending and commitments are never negative", "expr": "float(SPENT) >= 0 and float(COMMITTED) >= 0"}
+      ]
+    }
   ]
 }

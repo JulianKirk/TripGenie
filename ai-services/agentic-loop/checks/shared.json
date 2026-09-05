@@ -9,5 +9,21 @@
     {"label": "GET /currency/country?name=australia", "path": "${SERVICE_URL}/currency/country?name=australia", "contains": ["AUD"]},
     {"label": "GET /currency/country (unknown)", "path": "${SERVICE_URL}/currency/country?name=nowhere", "status": 404},
     {"label": "GET /location/country/{id} (unknown)", "path": "${SERVICE_URL}/location/country/00000000-0000-0000-0000-000000000000", "status": 404}
+  ],
+  "rules": [
+    "City names are not unique: the same name may exist in more than one country, so a city is only identified with its country_id.",
+    "Currency is held per country, never per city. A city's currency is reached through its country.",
+    "This service is read-only reference data for every other service; do not recommend create, update or delete operations."
+  ],
+  "flows": [
+    {
+      "name": "City to country to currency",
+      "steps": [
+        {"label": "QUERY /location/city (sydney)", "method": "QUERY", "path": "${SERVICE_URL}/location/city", "json": {"city": {"name": "sydney"}}, "contains": ["sydney"], "save": {"COUNTRY_ID": "cities.0.country_id", "CITY_ID": "cities.0.id"}},
+        {"label": "GET /location/country/{country_id of sydney}", "path": "${SERVICE_URL}/location/country/${COUNTRY_ID}", "contains": ["australia", "${COUNTRY_ID}"], "save": {"COUNTRY_NAME": "name"}},
+        {"label": "GET /currency/country?name={that country}", "path": "${SERVICE_URL}/currency/country?name=${COUNTRY_NAME}", "contains": ["AUD"]},
+        {"label": "QUERY /location/city (by that country_id)", "method": "QUERY", "path": "${SERVICE_URL}/location/city", "json": {"city": {"name": "sydney", "country_id": "${COUNTRY_ID}"}}, "contains": ["${CITY_ID}"]}
+      ]
+    }
   ]
 }

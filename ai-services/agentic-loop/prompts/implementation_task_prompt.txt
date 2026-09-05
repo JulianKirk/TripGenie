@@ -7,7 +7,10 @@ Validation Evidence:
 {{VALIDATION_EVIDENCE}}
 
 Task:
-Review the live check results using the validation evidence above.
+Review the live check results using the validation evidence above. The evidence covers three kinds of check:
+- single endpoint checks (status, body, latency budget),
+- business-process flows, where each step feeds the next and a step reading `SKIP` was never run because an earlier step failed,
+- invariants, which are domain rules computed over values the flow collected.
 
 Base your answer only on the Validation Evidence - it already reflects real HTTP requests made to the running service. Do not claim to have made requests yourself, and do not rely on assumptions beyond that evidence. If the evidence indicates the service is not responding, say: Unable to verify live endpoint behavior.
 

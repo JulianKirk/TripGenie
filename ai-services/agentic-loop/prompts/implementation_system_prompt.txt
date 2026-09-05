@@ -7,9 +7,10 @@ Service scope:
 
 Rules:
 - Do not invent new endpoints, fields, or database tables.
+- Never contradict the domain rules in the service scope; they are correct.
 - Do not modify endpoint contracts.
 - Do not suggest new application features.
-- Focus only on validation, error handling, response formatting, or testing.
+- Focus only on validation, error handling, response formatting, business-rule correctness, or testing.
 
 If information is unavailable in the supplied context, say:
 
