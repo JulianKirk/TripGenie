@@ -1,8 +1,10 @@
 # Student 4 Conceptual Data Design
 
-The conceptual model shows the business concepts without database-specific
-attributes. An activity occurs at one location, belongs to one or more
-categories, and may have multiple recurring or one-off availability schedules.
+`Activity` is the single catalogue concept for both activities and attractions.
+For example, museum admission and a guided tour of that museum are separate
+activities when their price, duration or availability differs. Location and
+schedule data belong to that catalogue entry, while seeded categories provide
+a controlled way to classify and filter it.
 
 ```mermaid
 flowchart LR
@@ -18,6 +20,7 @@ flowchart LR
     LOCATION -.->|references by UUID| PLACE
 ```
 
-An inactive draft may have no schedule. An active activity must have at least
-one schedule. The dotted connection represents a cross-service reference, not
-a local database relationship.
+An inactive draft may have no schedule, but an active activity must have at
+least one. Country and city remain authoritative in the shared reference
+service, so the dotted connection is a UUID reference across service boundaries
+rather than a relationship between tables in one database.

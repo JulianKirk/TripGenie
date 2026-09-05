@@ -1,8 +1,10 @@
 # Student 4 Logical Data Design
 
-The logical model is independent of SQLite storage types. It includes the
-complete business data and identifies optional values, keys, and controlled
-enumerations used by the service contract.
+The fields support catalogue search and the planning information consumed by
+the itinerary and budget services. Prices are exact AUD values and
+`pricing_basis` determines whether a party cost is per person or a single flat
+admission charge. Nullable accessibility flags deliberately distinguish an
+unknown value from a confirmed `false` value.
 
 ```mermaid
 erDiagram

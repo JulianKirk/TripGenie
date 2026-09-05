@@ -1,9 +1,11 @@
 # Student 4 Physical Data Design
 
-The physical model reflects the SQLAlchemy-generated SQLite schema. UUIDs are
-stored as 32-character values, money is canonical decimal text, booleans use
-SQLite boolean affinity with checks, and foreign-key cascading is enabled for
-owned rows.
+The database service is the only component that reads this SQLite database.
+SQLAlchemy stores UUIDs as 32-character values and stores prices as canonical
+decimal text so filtering and API serialization never introduce binary
+floating-point errors. Owned locations, schedules and category links cascade
+when an activity is deleted; the alias table exists only to resolve legacy seed
+identifiers and intentionally has no database foreign key.
 
 ```mermaid
 erDiagram

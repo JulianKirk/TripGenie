@@ -13,5 +13,7 @@ The Release 0 data design is documented at four levels:
 - [Logical data design](logical.md)
 - [Physical data design](physical.md)
 
-The diagrams reflect the implementation in `student-4/database` while leaving
-the existing working documentation under `student-4/docs` unchanged.
+This release models catalogue and planning data only. Booking transactions,
+ticket inventory and images are outside Student 4's persistence scope;
+`booking_required` and `booking_notes` provide planning guidance rather than
+representing a reservation made through TripGenie.
