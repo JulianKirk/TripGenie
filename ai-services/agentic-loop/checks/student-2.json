@@ -6,5 +6,20 @@
     {"label": "QUERY /accommodation (by type)", "method": "QUERY", "path": "${SERVICE_URL}/accommodation", "json": {"accommodation": {"type": "guesthouse"}}, "contains": ["guesthouse"]},
     {"label": "GET /accommodation/{id} (missing)", "path": "${SERVICE_URL}/accommodation/00000000-0000-0000-0000-000000000000", "status": 404},
     {"label": "GET /accommodation/{id} (malformed, no route match)", "path": "${SERVICE_URL}/accommodation/nope", "status": 404}
+  ],
+  "rules": [
+    "Accommodation type is not unique: many accommodations share a type, so a filtered search returns a list.",
+    "Country and city names come from the shared location service; this service stores identifiers, not its own place list.",
+    "A search that matches nothing is an empty result, not a 404."
+  ],
+  "flows": [
+    {
+      "name": "Search then open",
+      "steps": [
+        {"label": "QUERY /accommodation (guesthouse)", "method": "QUERY", "path": "${SERVICE_URL}/accommodation", "json": {"accommodation": {"type": "guesthouse"}}, "contains": ["guesthouse"], "save": {"ACCOMMODATION_ID": "accommodations.0.id", "ACCOMMODATION_NAME": "accommodations.0.name"}},
+        {"label": "GET /accommodation/{first result}", "path": "${SERVICE_URL}/accommodation/${ACCOMMODATION_ID}", "contains": ["${ACCOMMODATION_ID}", "guesthouse"]},
+        {"label": "QUERY /accommodation (unmatchable type is empty, not 404)", "method": "QUERY", "path": "${SERVICE_URL}/accommodation", "json": {"accommodation": {"name": "no such accommodation exists"}}, "contains": ["\"total\":0"]}
+      ]
+    }
   ]
 }

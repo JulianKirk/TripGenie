@@ -1,8 +1,10 @@
 """PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT, for any TripGenie service.
 
-The deterministic half is a JSON checks file (see `checks/`): a goal and a list
-of HTTP checks. The agent half is two Claude calls that read the evidence and
-comment on it -- advisory only, they never decide the exit code.
+The deterministic half is a JSON checks file (see `checks/`): a goal, a list of
+HTTP checks, the business-process `flows` those endpoints have to add up to, and
+the domain `rules` the agents must not contradict. The agent half is two Claude
+calls that read the evidence and comment on it -- advisory only, they never
+decide the exit code.
 
 Run it against your own service by pointing CHECKS_FILE at your own file:
 
@@ -28,6 +30,7 @@ IMPLEMENTATION_MODEL = os.getenv("IMPLEMENTATION_MODEL", "claude-sonnet-5")
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", "claude-opus-5")
 NFR_SAMPLES = int(os.getenv("NFR_SAMPLES", "20"))
 NFR_PASS_RATIO = 0.95
+OUTCOME_ICONS = {"OK": "✅", "FAIL": "❌", "SKIP": "⏭️"}
 
 
 def load_prompt(name, **fields):
@@ -43,6 +46,15 @@ def scope():
     # The labels, not the paths: a path still holds its ${VAR} and the literal
     # probe values (a bogus uuid, a malformed id), which read as real endpoints.
     lines += [f"- {c['label']}" for c in PLAN["checks"]]
+    for flow in PLAN.get("flows", []):
+        lines += ["", f"Business process under test -- {flow['name']}:"]
+        lines += [f"- {step['label']}" for step in flow["steps"]]
+        lines += [
+            f"- invariant: {rule['label']}" for rule in flow.get("invariants", [])
+        ]
+    if PLAN.get("rules"):
+        lines += ["", "Domain rules (these are correct; never contradict them):"]
+        lines += [f"- {rule}" for rule in PLAN["rules"]]
     return "\n".join(lines)
 
 
@@ -62,34 +74,102 @@ def measure(check):
     return response, (time.perf_counter() - started) * 1000
 
 
+def run_check(check):
+    """One check. Returns its outcome line and the response it came from."""
+    expected = check.get("status", 200)
+    try:
+        response, elapsed = measure(check)
+    except Exception as exc:  # noqa: BLE001 - a broken check is evidence, not a crash
+        return f"FAIL: {exc}", None
+
+    missing = [t for t in check.get("contains", []) if t not in response.text]
+    alternatives = check.get("contains_any", [])
+    expected_statuses = expected if isinstance(expected, list) else [expected]
+    if response.status_code not in expected_statuses:
+        outcome = f"FAIL: HTTP {response.status_code}, expected {expected_statuses}"
+    elif not response.text.strip():
+        outcome = "FAIL: empty body"
+    elif missing:
+        outcome = f"FAIL: body missing {missing}"
+    elif alternatives and not any(t in response.text for t in alternatives):
+        outcome = f"FAIL: body missing any of {alternatives}"
+    else:
+        outcome = f"OK: HTTP {response.status_code} in {elapsed:.0f}ms"
+    return outcome, response
+
+
 def observe():
     results = []
     for check in PLAN["checks"]:
-        expected = check.get("status", 200)
-        try:
-            response, elapsed = measure(check)
-            missing = [t for t in check.get("contains", []) if t not in response.text]
-            alternatives = check.get("contains_any", [])
-            expected_statuses = expected if isinstance(expected, list) else [expected]
-            if response.status_code not in expected_statuses:
-                outcome = (
-                    f"FAIL: HTTP {response.status_code}, expected "
-                    f"{expected_statuses}"
-                )
-            elif not response.text.strip():
-                outcome = "FAIL: empty body"
-            elif missing:
-                outcome = f"FAIL: body missing {missing}"
-            elif alternatives and not any(t in response.text for t in alternatives):
-                outcome = f"FAIL: body missing any of {alternatives}"
-            else:
-                outcome = f"OK: HTTP {response.status_code} in {elapsed:.0f}ms"
-        except Exception as exc:  # noqa: BLE001 - a broken check is evidence, not a crash
-            outcome = f"FAIL: {exc}"
+        outcome, _ = run_check(check)
         results.append((check["label"], outcome))
 
         if check.get("nfr_ms") and outcome.startswith("OK"):
             results.append(observe_nfr(check))
+    return results + observe_flows()
+
+
+def read_path(payload, path):
+    """`data.0.budget_id` out of a decoded body. A digit indexes a list."""
+    for part in path.split("."):
+        payload = payload[int(part)] if part.isdigit() else payload[part]
+    return payload
+
+
+def resolve(step, values):
+    """Substitute what earlier steps saved into this one, wherever it appears --
+    path, query string, JSON body, expected substrings."""
+    text = json.dumps(step)
+    for name, value in values.items():
+        text = text.replace("${" + name + "}", str(value))
+    return json.loads(text)
+
+
+def check_invariant(rule, values):
+    """A business rule the saved values must hold to, e.g. remaining = total - spent."""
+    try:
+        # ponytail: eval, over an expression from this repo's own checks file and
+        # values from the service under test. No caller input reaches it.
+        held = eval(
+            rule["expr"],
+            {"__builtins__": {"float": float, "abs": abs, "len": len}},
+            values,
+        )
+    except Exception as exc:  # noqa: BLE001 - a broken rule is evidence, not a crash
+        return f"FAIL: {exc}"
+    return "OK: holds" if held else f"FAIL: {rule['expr']} is false for {values}"
+
+
+def observe_flows():
+    """The business processes: several requests in order, each able to feed the
+    next, then the invariants the collected values have to satisfy."""
+    results = []
+    for flow in PLAN.get("flows", []):
+        values = {}
+        stopped = None
+        for step in flow["steps"]:
+            label = f"{flow['name']} / {step['label']}"
+            if stopped:
+                results.append((label, f"SKIP: after {stopped}"))
+                continue
+            outcome, response = run_check(resolve(step, values))
+            if outcome.startswith("OK") and step.get("save"):
+                try:
+                    body = response.json()
+                    values.update(
+                        {n: read_path(body, p) for n, p in step["save"].items()}
+                    )
+                except Exception as exc:  # noqa: BLE001 - nothing to save is a failure
+                    outcome = f"FAIL: cannot save {list(step['save'])} ({exc})"
+            if not outcome.startswith("OK"):
+                stopped = step["label"]
+            results.append((label, outcome))
+        for rule in flow.get("invariants", []):
+            label = f"{flow['name']} / {rule['label']}"
+            outcome = (
+                f"SKIP: after {stopped}" if stopped else check_invariant(rule, values)
+            )
+            results.append((label, outcome))
     return results
 
 
@@ -168,7 +248,7 @@ def write_summary(results, recommendation, review, failures):
         "| --- | --- |",
     ]
     lines += [
-        f"| {label} | {'❌' if outcome.startswith('FAIL') else '✅'} {outcome} |"
+        f"| {label} | {OUTCOME_ICONS.get(outcome.split(':')[0], '✅')} {outcome} |"
         for label, outcome in results
     ]
     lines += [

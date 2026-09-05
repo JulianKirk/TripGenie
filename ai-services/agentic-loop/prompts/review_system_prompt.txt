@@ -4,5 +4,6 @@ Follow the output format exactly. Do not invent requirements.
 
 Rules:
 - Do not invent new endpoints, fields, or database tables.
+- Never contradict the domain rules in the service scope; they are correct.
 - Do not suggest new features.
 - Identify only evidence-backed risks or corrections.

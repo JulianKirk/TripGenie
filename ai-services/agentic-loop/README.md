@@ -20,6 +20,48 @@ can also span services), `method`, `status` (default 200), `form`/`json` body,
 `contains` (substrings the body must have), `nfr_ms` (latency budget, 95% of 20
 samples must be under it), `timeout`.
 
+### Business processes
+
+A single endpoint answering `200` is not the same as the service getting the
+job done. `flows` are the second half: ordered steps that feed each other, and
+`invariants` -- the domain rules -- computed over what they collected.
+
+```json
+"flows": [
+  {
+    "name": "Budget to expenses arithmetic",
+    "steps": [
+      {"label": "GET /budgets (pick one)", "path": "${BACKEND_URL}/api/v1/budgets",
+       "save": {"BUDGET_ID": "data.0.budget_id", "TRIP_ID": "data.0.trip_id"}},
+      {"label": "GET that budget's summary", "path": "${BACKEND_URL}/api/v1/budgets/${BUDGET_ID}/summary",
+       "contains": ["${TRIP_ID}"], "save": {"TOTAL": "data.total_budget"}}
+    ],
+    "invariants": [
+      {"label": "remaining = total - spent - committed",
+       "expr": "abs(float(REMAINING) - (float(TOTAL) - float(SPENT) - float(COMMITTED))) < 0.01"}
+    ]
+  }
+]
+```
+
+A step is an ordinary check plus `save`: `{NAME: "dotted.path.into.the.body"}`,
+where a digit indexes a list. `${NAME}` then expands anywhere in a later step --
+path, query string, JSON body, `contains` -- so a flow asserts things one
+request cannot: that a search returns a record the detail endpoint agrees with,
+that filtering by a record's own field still returns it, that a derived total is
+actually derived. The first failing step stops the flow; the rest report `SKIP`
+and so do the invariants, because their inputs were never collected.
+
+`invariants` are `{"label", "expr"}`, evaluated over the saved values with
+`float`, `abs` and `len` available and nothing else. A false expression is a
+failed check like any other.
+
+`rules` is the third addition, and it is for the agents rather than the checks:
+the domain facts they must not contradict ("subject_code is not unique", "this
+service is read-only"). They go into the scope both prompts receive, next to
+the endpoint and flow labels, which is what stops a reviewer recommending a
+unique constraint on a column that must not have one.
+
 Student 4's loop starts its database, backend, and frontend with `--no-deps`.
 Its shared-location, itinerary, and AI integrations are optional for the
 read-only checks, so `/health` is expected to be degraded while `/ready` proves

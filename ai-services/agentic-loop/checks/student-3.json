@@ -10,5 +10,25 @@
     {"label": "GET /api/transport-options/{id} (missing)", "path": "${SERVICE_URL}/api/transport-options/transport_2026_does_not_exist", "status": 404, "contains": ["NOT_FOUND"]},
     {"label": "GET /api/transport-options/{id}/itineraries (missing option)", "path": "${SERVICE_URL}/api/transport-options/transport_2026_does_not_exist/itineraries", "status": 404, "contains": ["NOT_FOUND"]},
     {"label": "GET /api/transport-options/{id} (malformed)", "path": "${SERVICE_URL}/api/transport-options/nope", "status": 422, "contains": ["VALIDATION_ERROR"]}
+  ],
+  "rules": [
+    "A transport option may sit on many trips and a trip may hold many options; the link is its own record, never a column on the option.",
+    "Provider is not unique: several options share a provider, so filtering by one returns a list.",
+    "estimated_cost_total on a trip's transport counts active entries only (pending, confirmed, completed), in whole cents."
+  ],
+  "flows": [
+    {
+      "name": "Option to trip composition",
+      "steps": [
+        {"label": "GET /api/transport-options (pick one)", "path": "${SERVICE_URL}/api/transport-options", "contains": ["\"data\""], "save": {"TRANSPORT_ID": "data.0.id", "PROVIDER": "data.0.provider"}},
+        {"label": "GET /api/transport-options/{that option}", "path": "${SERVICE_URL}/api/transport-options/${TRANSPORT_ID}", "contains": ["${TRANSPORT_ID}", "${PROVIDER}"]},
+        {"label": "GET /api/transport-options?provider={its own provider} (must still list it)", "path": "${SERVICE_URL}/api/transport-options?provider=${PROVIDER}", "contains": ["${TRANSPORT_ID}"]},
+        {"label": "GET /api/transport-options/{that option}/itineraries", "path": "${SERVICE_URL}/api/transport-options/${TRANSPORT_ID}/itineraries", "contains": ["\"data\""]},
+        {"label": "GET /api/trips/{seeded trip}/transport (composed view)", "path": "${SERVICE_URL}/api/trips/trip_2026_hobart_weekend_escape/transport", "contains": ["entry_count", "active_entry_count", "estimated_cost_total", "currency"], "save": {"ENTRIES": "data.entry_count", "ACTIVE": "data.active_entry_count"}}
+      ],
+      "invariants": [
+        {"label": "active entries never exceed total entries", "expr": "0 <= ACTIVE <= ENTRIES"}
+      ]
+    }
   ]
 }
