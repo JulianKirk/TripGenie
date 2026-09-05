@@ -9,7 +9,7 @@ unknown value from a confirmed `false` value.
 ```mermaid
 erDiagram
     ACTIVITY ||--|| LOCATION_DETAILS : "has"
-    ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "has"
+    ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "inactive zero-or-more; active one-or-more"
     ACTIVITY ||--|{ ACTIVITY_CATEGORY : "has"
     CATEGORY ||--o{ ACTIVITY_CATEGORY : "is assigned by"
 
@@ -30,7 +30,7 @@ erDiagram
         boolean step_free_access "optional; unknown allowed"
         boolean accessible_toilet "optional; unknown allowed"
         string accessibility_notes "optional"
-        boolean is_active
+        boolean is_active "controls schedule minimum"
     }
 
     LOCATION_DETAILS {
@@ -65,7 +65,8 @@ erDiagram
     }
 ```
 
-The principal logical rules are: duration must be positive; age and party
-bounds must be ordered; every category assignment must reference a seeded
-category; end time must follow start time; and each schedule must provide
-either a weekday or a date according to `recurring_weekly`, never both.
+The principal logical rules are: every activity has at least one category;
+every active activity has at least one schedule; duration must be positive; age
+and party bounds must be ordered; end time must follow start time; and each
+schedule must provide either a weekday or a date according to
+`recurring_weekly`, never both.

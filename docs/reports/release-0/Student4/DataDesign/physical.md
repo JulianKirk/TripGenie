@@ -9,11 +9,11 @@ identifiers and intentionally has no database foreign key.
 
 ```mermaid
 erDiagram
-    ACTIVITIES ||--|| LOCATION_DETAILS : "FK cascade"
-    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "FK cascade"
-    ACTIVITIES ||--|{ ACTIVITY_CATEGORIES : "FK cascade"
+    ACTIVITIES ||--o| LOCATION_DETAILS : "DB zero-or-one; API exactly one"
+    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "DB zero-or-more; active API one-or-more"
+    ACTIVITIES ||--o{ ACTIVITY_CATEGORIES : "DB zero-or-more; API one-or-more"
     CATEGORIES ||--o{ ACTIVITY_CATEGORIES : "FK"
-    ACTIVITIES ||--o{ ACTIVITY_ID_ALIASES : "service lookup; no FK"
+    ACTIVITIES ||..o{ ACTIVITY_ID_ALIASES : "service lookup only; no FK"
 
     ACTIVITIES {
         CHAR32 id PK "CHAR(32)"
@@ -72,14 +72,19 @@ erDiagram
     }
 ```
 
+SQLite foreign keys enforce child-to-parent references and cascade deletion,
+but they cannot require a parent activity to have child rows. The API validation
+therefore requires one location, at least one category, and at least one
+schedule whenever `is_active` is true. The database still permits an inactive
+catalogue entry to have no schedules.
+
 The physical indexes support country/city filtering, category-first lookup,
 schedule lookup by activity, and activity lookup from a legacy alias. Two
 partial unique indexes prevent duplicate weekly and one-off schedule rows.
 SQLite `CHECK` constraints enforce enum values, canonical prices, valid
 booleans, ordered bounds, non-negative values, valid local date/time text, and
-the weekly-versus-one-off schedule discriminator. The service layer additionally
-enforces aggregate rules that require parent-row context, including schedule
-duration and the active-activity requirements.
+the weekly-versus-one-off schedule discriminator. The service additionally
+checks that each schedule interval can contain the activity's full duration.
 
 ## Implementation sources
 

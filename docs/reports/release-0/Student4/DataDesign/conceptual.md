@@ -16,11 +16,11 @@ flowchart LR
 
     ACTIVITY -->|takes place at exactly one| LOCATION
     ACTIVITY <-->|classified by one or more| CATEGORY
-    ACTIVITY -->|has zero or more| SCHEDULE
+    ACTIVITY -->|"inactive: zero or more; active: one or more"| SCHEDULE
     LOCATION -.->|references by UUID| PLACE
 ```
 
-An inactive draft may have no schedule, but an active activity must have at
-least one. Country and city remain authoritative in the shared reference
-service, so the dotted connection is a UUID reference across service boundaries
-rather than a relationship between tables in one database.
+An inactive catalogue entry may have no schedule, but an active activity must
+have at least one. Country and city remain authoritative in the shared
+reference service, so the dotted connection is a UUID reference across service
+boundaries rather than a relationship between tables in one database.

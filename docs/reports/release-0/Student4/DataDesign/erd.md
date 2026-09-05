@@ -1,15 +1,16 @@
 # Student 4 Entity-Relationship Diagram
 
-Each activity owns exactly one `LOCATION_DETAILS` row and can own several
-weekly or one-off schedules. `ACTIVITY_CATEGORY` allows the same activity to be
-found under several controlled categories without duplicating catalogue data.
-Country and city are recorded as external UUIDs on the location and therefore
-do not appear as locally owned entities.
+Each activity owns exactly one `LOCATION_DETAILS` row and at least one category
+assignment. Schedule cardinality depends on catalogue state: an inactive entry
+may have none, while an active activity requires one or more weekly or one-off
+schedules. `ACTIVITY_CATEGORY` supports classification under several categories
+without duplicating catalogue data. Country and city are external UUIDs and do
+not appear as locally owned entities.
 
 ```mermaid
 erDiagram
     ACTIVITY ||--|| LOCATION_DETAILS : "owns"
-    ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "offers"
+    ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "inactive zero-or-more; active one-or-more"
     ACTIVITY ||--|{ ACTIVITY_CATEGORY : "is classified through"
     CATEGORY ||--o{ ACTIVITY_CATEGORY : "classifies through"
 
@@ -19,7 +20,7 @@ erDiagram
         decimal price
         string pricing_basis
         int duration_minutes
-        boolean is_active
+        boolean is_active "controls schedule minimum"
     }
 
     LOCATION_DETAILS {
