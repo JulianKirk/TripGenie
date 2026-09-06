@@ -17,7 +17,7 @@ The planned features are:
 - Create, list, view, update, deactivate, and delete activities and attractions.
 - Categorise, search, and filter activities by location, price, availability,
   suitability, accessibility, and booking requirements.
-- Manage weekly and one-off availability schedules.
+- Store a variety of activities with different weekly and one-off schedules.
 - Support per-person and flat admission pricing with decimal-safe arithmetic.
 - Add, reschedule, and remove activities from trips, and calculate committed
   activity costs.
