@@ -88,3 +88,68 @@ def test_http_probe_requires_success_status_and_expected_body() -> None:
         server.shutdown()
         thread.join()
         server.server_close()
+
+
+def test_wait_retries_real_http_failures_until_service_is_ready() -> None:
+    class Handler(BaseHTTPRequestHandler):
+        request_count = 0
+
+        def do_GET(self) -> None:
+            type(self).request_count += 1
+            if self.request_count < 4:
+                self.send_response(503)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"status":"ready"}')
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/health"
+
+    try:
+        wait_for_http = load_probe_module()
+        passed = wait_for_http.wait_until_ready(
+            url,
+            "eventually ready service",
+            '"status":"ready"',
+            sleep=lambda _seconds: None,
+            clock=iter([10.0, 10.1]).__next__,
+            output=lambda _message: None,
+        )
+
+        assert passed is True
+        assert Handler.request_count == 4
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
+def test_http_probe_limits_each_request_to_two_seconds(monkeypatch) -> None:
+    wait_for_http = load_probe_module()
+    seen: list[tuple[str, float]] = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"ready"
+
+    def urlopen(url: str, timeout: float):
+        seen.append((url, timeout))
+        return Response()
+
+    monkeypatch.setattr(wait_for_http.urllib.request, "urlopen", urlopen)
+
+    assert wait_for_http.http_probe("http://service.test/health", "ready") is True
+    assert seen == [("http://service.test/health", 2.0)]
