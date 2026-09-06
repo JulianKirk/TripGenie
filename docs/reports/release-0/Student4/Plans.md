@@ -2,29 +2,30 @@
 
 ## Feature Plan
 
-### Budget and Expense Management
+### Activities and Attractions Management
 
-This is an individual, forward-looking planning exercise recorded for Student
-4. It neither reassigns the project's currently implemented Budget and Expense
-Management service nor describes the Student 4 Activities and Attractions
-service documented in the adjacent architecture and data-design folders.
-
-This feature lets a traveller create a trip budget, record and categorise
-expenses, and see the total budget, committed provider costs, actual spending,
-and remaining budget in one place. It also includes advisory AI budget analysis
-through the shared AI Mode service. AI output is read-only and requires human
-review; it never persists a change directly.
+This feature lets a traveller browse, search, and filter activities and
+attractions, inspect their prices and availability, and add suitable activities
+to a trip. It also lets catalogue managers maintain activity details,
+categories, locations, accessibility information, booking guidance, and
+schedules. Advisory AI recommendations are provided through the shared AI Mode
+service. AI output is read-only and requires human review; it never persists a
+change directly.
 
 The planned features are:
 
-- Create, list, view, update, and delete trip budgets, with one budget per trip.
-- Create, list, filter, view, update, and delete expenses.
-- Categorise expenses as accommodation, transport, activities, food, shopping,
-  or other, and filter them by trip, category, and date.
-- Show total budget, committed costs, actual spending, and remaining budget
-  using decimal-safe arithmetic.
-- Combine committed costs from the transport, accommodation, and activities
-  services.
-- Keep budget and expense information current when the associated trip is
-  updated.
-- Provide advisory AI budget analysis grounded in the current summary.
+- Create, list, view, update, deactivate, and delete activity and attraction
+  catalogue entries.
+- Classify catalogue entries under one or more controlled categories and filter
+  them by text, location, category, price, duration, party suitability, age,
+  accessibility, booking requirements, and date with an optional time-window.
+- Record recurring weekly and one-off availability schedules, with validation
+  that the complete activity duration fits within each available interval.
+- Represent prices as exact AUD decimal values and distinguish per-person prices
+  from flat admission charges.
+- Resolve authoritative country and city information through the shared
+  location service without joining across service databases.
+- Add, reschedule, and remove activities from trips through the itinerary
+  service, and expose committed activity costs for budget calculations.
+- Provide advisory AI search planning and recommendations grounded in the
+  current trip context and authoritative catalogue results.
