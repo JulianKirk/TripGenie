@@ -15,18 +15,18 @@ this document.
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#0f172a","primaryBorderColor":"#ea580c","lineColor":"#475569","tertiaryColor":"#fffbeb"}}}%%
 erDiagram
-    ACTIVITIES ||--o| LOCATION_DETAILS : "DB zero-or-one; API exactly one"
-    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "DB zero-or-more; active API one-or-more"
-    ACTIVITIES ||--o{ ACTIVITY_CATEGORIES : "DB zero-or-more; API one-or-more"
+    ACTIVITIES ||--o| LOCATION_DETAILS : "unique FK"
+    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "FK; cascade delete"
+    ACTIVITIES ||--o{ ACTIVITY_CATEGORIES : "FK; cascade delete"
     CATEGORIES ||--o{ ACTIVITY_CATEGORIES : "FK"
     ACTIVITIES ||..o{ ACTIVITY_ID_ALIASES : "service lookup only; no FK"
 
     ACTIVITIES {
-        CHAR32 id PK "CHAR(32)"
+        CHAR(32) id PK
         VARCHAR name "NOT NULL"
         VARCHAR description "NOT NULL"
-        VARCHAR price "canonical decimal text"
-        VARCHAR14 pricing_basis "checked enum"
+        VARCHAR price "NOT NULL; canonical decimal text"
+        VARCHAR(14) pricing_basis "NOT NULL; checked enum"
         INTEGER duration_minutes "NOT NULL"
         INTEGER minimum_age "NULL"
         INTEGER maximum_age "NULL"
@@ -42,51 +42,58 @@ erDiagram
     }
 
     LOCATION_DETAILS {
-        CHAR32 id PK "CHAR(32)"
-        CHAR32 activity_id FK,UK "ON DELETE CASCADE"
-        CHAR32 country_id "external UUID"
-        CHAR32 city_id "external UUID"
+        CHAR(32) id PK
+        CHAR(32) activity_id FK,UK "NOT NULL; ON DELETE CASCADE"
+        CHAR(32) country_id "NOT NULL; external UUID"
+        CHAR(32) city_id "NOT NULL; external UUID"
         VARCHAR street "NULL"
         INTEGER street_number "NULL"
     }
 
     CATEGORIES {
-        VARCHAR10 code PK "checked enum"
+        VARCHAR(10) code PK "checked enum"
         VARCHAR label "NOT NULL"
         VARCHAR description "NULL"
         INTEGER display_order "NOT NULL"
     }
 
     ACTIVITY_CATEGORIES {
-        CHAR32 activity_id PK,FK "ON DELETE CASCADE"
-        VARCHAR10 category_code PK,FK
+        CHAR(32) activity_id PK,FK "ON DELETE CASCADE"
+        VARCHAR(10) category_code PK,FK
     }
 
     ACTIVITY_AVAILABILITY_SCHEDULES {
-        CHAR32 id PK "CHAR(32)"
-        CHAR32 activity_id FK "ON DELETE CASCADE"
+        CHAR(32) id PK
+        CHAR(32) activity_id FK "NOT NULL; ON DELETE CASCADE"
         BOOLEAN recurring_weekly "NOT NULL"
-        VARCHAR9 day_of_week "NULL; checked enum"
+        VARCHAR(9) day_of_week "NULL; checked enum"
         DATE date "NULL"
         TIME start_time "NOT NULL"
         TIME end_time "NOT NULL"
     }
 
     ACTIVITY_ID_ALIASES {
-        CHAR32 alias_id PK "legacy seed UUID"
-        CHAR32 activity_id "indexed; no database FK"
+        CHAR(32) alias_id PK "legacy seed UUID"
+        CHAR(32) activity_id "NOT NULL; indexed; no database FK"
     }
 ```
 
 SQLite foreign keys enforce child-to-parent references and cascade deletion,
-but they cannot require a parent activity to have child rows. The API validation
-therefore requires one location, at least one category, and at least one
-schedule whenever `is_active` is true. The database still permits an inactive
-catalogue entry to have no schedules.
+but they cannot require a parent activity to have child rows. API validation
+requires one location and at least one category for every activity. It requires
+at least one schedule only when `is_active` is true; an inactive activity may
+have none.
 
 The physical indexes support country/city filtering, category-first lookup,
-schedule lookup by activity, and activity lookup from a legacy alias. Two
-partial unique indexes prevent duplicate weekly and one-off schedule rows.
+schedule lookup by activity, and activity lookup from a legacy alias. The two
+deployed partial unique indexes are:
+
+- `uq_schedule_weekly_identity (activity_id, day_of_week, start_time, end_time)
+  WHERE recurring_weekly = 1`
+- `uq_schedule_one_off_identity (activity_id, date, start_time, end_time)
+  WHERE recurring_weekly = 0`
+
+Together they prevent duplicate weekly and one-off schedule rows.
 SQLite `CHECK` constraints enforce enum values, canonical prices, valid
 booleans, ordered bounds, non-negative values, valid local date/time text, and
 the weekly-versus-one-off schedule discriminator. The service additionally
