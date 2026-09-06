@@ -12,6 +12,7 @@ on:
       - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   pull_request:
     paths:
       - 'student-1/**'
@@ -23,6 +24,7 @@ on:
       - '.github/workflows/ai-mode-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
 
 jobs:
@@ -113,3 +115,29 @@ jobs:
         run: python -m pytest tests/frontend
       - name: Build Student 1 frontend image
         run: docker build -f student-1/frontend/Dockerfile student-1
+
+  compose:
+    name: Validate Student 1 Compose Readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the shared Compose configuration
+        run: docker compose config --quiet
+      - name: Start the Student 1 slice
+        run: |
+          docker compose up -d --build --no-deps \
+            student-1-database student-1-backend student-1-frontend
+      - name: Apply the shared readiness baseline
+        run: |
+          python scripts/ci/wait_for_http.py \
+            --label "student 1 compose frontend" \
+            --contains '"status":"ok"' \
+            http://127.0.0.1:8081/ready
+      - name: Compose logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color \
+            student-1-database student-1-backend student-1-frontend
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

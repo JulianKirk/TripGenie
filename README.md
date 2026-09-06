@@ -23,6 +23,21 @@ TripGenie is an AI Smart Travel Companion microservices application built with D
 
 ---
 
+### Deterministic CI readiness baseline
+
+Every ordinary service CI workflow uses `scripts/ci/wait_for_http.py` for its
+final HTTP health or readiness probe. The policy is intentionally small and
+fixed: at most eight attempts, a two-second interval between failed attempts,
+and a two-second timeout for each HTTP request. The probe prints every attempt
+and the elapsed time when the service responds, giving each workflow a
+consistent, non-agent startup/readiness check and an auditable Actions log.
+
+The Agentic Loop keeps its separate retry and endpoint-latency policy. Its
+deterministic checks remain additional coverage rather than the definition of
+this minimum baseline.
+
+---
+
 ## 3. Project Repository Structure
 
 ```text

@@ -8,6 +8,7 @@ on:
       - 'shared/configuration/**'
       - 'shared/frontend/index.html'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
   pull_request:
     paths:
       - 'student-3/**'
@@ -15,6 +16,7 @@ on:
       - 'shared/configuration/**'
       - 'shared/frontend/index.html'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
 
 jobs:
@@ -123,11 +125,15 @@ jobs:
       # with AI-Mode absent, so a run without it is the more useful check.
       - name: Bring the Student 3 slice up and wait for health
         run: |
-          docker compose up -d --build --wait --no-deps             student-3-database student-3-backend student-3-frontend
+          docker compose up -d --build --no-deps \
+            student-3-database student-3-backend student-3-frontend
       - name: Check the frontend answers on its published port
         run: |
           port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
-          curl --fail --silent --show-error "http://127.0.0.1:${port}/ready"
+          python scripts/ci/wait_for_http.py \
+            --label "student 3 compose frontend" \
+            --contains '"status":"ok"' \
+            "http://127.0.0.1:${port}/ready"
           curl --fail --silent --show-error "http://127.0.0.1:${port}/" > /dev/null
           echo "Student 3 frontend answered on published port ${port}."
       - name: Check the shared home page links that same port

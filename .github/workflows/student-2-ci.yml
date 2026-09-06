@@ -12,6 +12,7 @@ on:
       - 'ai-services/ai-mode/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
       - '.github/workflows/student-2-ci.yml'
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - 'ai-services/ai-mode/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
       - '.github/workflows/student-2-ci.yml'
   workflow_dispatch:
 
@@ -54,16 +56,12 @@ jobs:
       - name: Health check database service
         run: |
           docker run -d --name student-2-database -p 9001:9001 student-2-database
-          for _ in $(seq 1 8); do
-            if curl -fsS http://localhost:9001/health; then
-              echo "database service healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "service did not become healthy after 8 attempts"
-          docker logs student-2-database
-          exit 1
+          if ! python scripts/ci/wait_for_http.py \
+            --label "student 2 database" \
+            http://localhost:9001/health; then
+            docker logs student-2-database
+            exit 1
+          fi
       - name: Build backend service image
         run: docker build -f student-2/backend/Dockerfile -t student-2-backend student-2
       - name: Health check backend service
@@ -72,16 +70,12 @@ jobs:
         # here: the service itself starts and serves.
         run: |
           docker run -d --name student-2-backend -p 9000:9000 student-2-backend
-          for _ in $(seq 1 8); do
-            if curl -fsS http://localhost:9000/health; then
-              echo "backend service healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "service did not become healthy after 8 attempts"
-          docker logs student-2-backend
-          exit 1
+          if ! python scripts/ci/wait_for_http.py \
+            --label "student 2 backend" \
+            http://localhost:9000/health; then
+            docker logs student-2-backend
+            exit 1
+          fi
       - name: Build frontend service image
         run: docker build -f student-2/frontend/Dockerfile -t student-2-frontend student-2
       - name: Health check frontend service
@@ -90,13 +84,9 @@ jobs:
         # service starts and serves.
         run: |
           docker run -d --name student-2-frontend -p 9003:9003 student-2-frontend
-          for _ in $(seq 1 8); do
-            if curl -fsS http://localhost:9003/health; then
-              echo "frontend service healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "service did not become healthy after 8 attempts"
-          docker logs student-2-frontend
-          exit 1
+          if ! python scripts/ci/wait_for_http.py \
+            --label "student 2 frontend" \
+            http://localhost:9003/health; then
+            docker logs student-2-frontend
+            exit 1
+          fi

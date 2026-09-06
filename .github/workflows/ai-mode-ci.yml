@@ -8,6 +8,7 @@ on:
       - 'docker-compose.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   pull_request:
     paths:
       - 'ai-services/ai-mode/**'
@@ -15,6 +16,7 @@ on:
       - 'docker-compose.yml'
       - 'shared/configuration/**'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
 
 jobs:
@@ -45,4 +47,15 @@ jobs:
         working-directory: ai-services/ai-mode
         run: python -m pytest tests
       - name: Build shared AI-Mode image
-        run: docker build -f ai-services/ai-mode/Dockerfile ai-services/ai-mode
+        run: docker build -f ai-services/ai-mode/Dockerfile -t tripgenie-ai-mode ai-services/ai-mode
+      - name: Apply the shared readiness baseline
+        run: |
+          docker run -d --name tripgenie-ai-mode -p 8006:8006 \
+            -e AI_MODE_TIMEOUT_SECONDS=0.25 \
+            tripgenie-ai-mode
+          python scripts/ci/wait_for_http.py \
+            --label "shared AI-Mode" \
+            http://127.0.0.1:8006/health
+      - name: AI-Mode logs on failure
+        if: failure()
+        run: docker logs tripgenie-ai-mode
