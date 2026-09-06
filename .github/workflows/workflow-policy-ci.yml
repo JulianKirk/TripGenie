@@ -1,0 +1,28 @@
+name: Workflow Policy CI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/workflows/workflow-policy-ci.yml'
+      - '.github/tests/test_workflow_self_triggers.py'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/workflows/workflow-policy-ci.yml'
+      - '.github/tests/test_workflow_self_triggers.py'
+  workflow_dispatch:
+
+jobs:
+  self-trigger-policy:
+    name: Validate workflow self-triggers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+      - name: Check workflow trigger policy
+        run: pytest -q .github/tests/test_workflow_self_triggers.py
