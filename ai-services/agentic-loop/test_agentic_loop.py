@@ -33,6 +33,23 @@ def test_registered_compose_services_exist():
     )
 
 
+def test_student_4_functional_flow_starts_location_dependencies():
+    directory = Path(__file__).parent
+    registered_services = json.loads((directory / "services.json").read_text())
+    student_4 = next(
+        service for service in registered_services if service["service"] == "student-4"
+    )
+
+    assert student_4["compose"] == "student-4"
+    assert not student_4.get("no_deps", False)
+
+    checks = json.loads((directory / "checks/student-4.json").read_text())["checks"]
+    outcomes = {check["label"]: check.get("contains", []) for check in checks}
+    assert '"status":"ok"' in outcomes["GET frontend /health"]
+    assert '"status":"ok"' in outcomes["GET backend /health"]
+    assert '"location":"ok"' in outcomes["GET backend /health"]
+
+
 def test_prompt_substitution():
     text = loop.load_prompt(
         "review_task_prompt.txt",

@@ -62,10 +62,12 @@ service is read-only"). They go into the scope both prompts receive, next to
 the endpoint and flow labels, which is what stops a reviewer recommending a
 unique constraint on a column that must not have one.
 
-Student 4's loop starts its database, backend, and frontend with `--no-deps`.
-Its shared-location, itinerary, and AI integrations are optional for the
-read-only checks, so `/health` is expected to be degraded while `/ready` proves
-the owned database path is available.
+Student 4's loop starts the normal `student-4` Compose grouping target with its
+transitive dependencies. This lets its public catalogue flows resolve shared
+locations and reach the same service graph used by the integrated application,
+rather than reviewing an intentionally degraded three-container slice. Ollama
+remains host-managed; AI checks must accept its documented unavailable state
+when no model runtime is configured on the runner.
 
 ## Run it
 
