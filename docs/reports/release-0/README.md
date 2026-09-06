@@ -8,6 +8,12 @@ The authoritative course sources reviewed for this organisation were the
 Foundations, Microservices & DevOps**. Those course artefacts are not duplicated
 in this repository.
 
+## Integrated architecture
+
+| Document | Purpose |
+| --- | --- |
+| [Integrated architecture diagram](integrated-architecture.md) | Deployed feature, shared-service, API, and database ownership boundaries. |
+
 ## Student 1
 
 | Document | Purpose |
