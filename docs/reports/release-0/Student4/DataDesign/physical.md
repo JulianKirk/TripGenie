@@ -15,9 +15,9 @@ this document.
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#0f172a","primaryBorderColor":"#ea580c","lineColor":"#475569","tertiaryColor":"#fffbeb"}}}%%
 erDiagram
-    ACTIVITIES ||--o| LOCATION_DETAILS : "DB zero-or-one; API exactly one"
-    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "DB zero-or-more; active API one-or-more"
-    ACTIVITIES ||--o{ ACTIVITY_CATEGORIES : "DB zero-or-more; API one-or-more"
+    ACTIVITIES ||--o| LOCATION_DETAILS : "unique FK"
+    ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "FK; cascade delete"
+    ACTIVITIES ||--o{ ACTIVITY_CATEGORIES : "FK; cascade delete"
     CATEGORIES ||--o{ ACTIVITY_CATEGORIES : "FK"
     ACTIVITIES ||..o{ ACTIVITY_ID_ALIASES : "service lookup only; no FK"
 
@@ -25,8 +25,8 @@ erDiagram
         CHAR32 id PK "CHAR(32)"
         VARCHAR name "NOT NULL"
         VARCHAR description "NOT NULL"
-        VARCHAR price "canonical decimal text"
-        VARCHAR14 pricing_basis "checked enum"
+        VARCHAR price "NOT NULL; canonical decimal text"
+        VARCHAR14 pricing_basis "NOT NULL; checked enum"
         INTEGER duration_minutes "NOT NULL"
         INTEGER minimum_age "NULL"
         INTEGER maximum_age "NULL"
@@ -43,9 +43,9 @@ erDiagram
 
     LOCATION_DETAILS {
         CHAR32 id PK "CHAR(32)"
-        CHAR32 activity_id FK,UK "ON DELETE CASCADE"
-        CHAR32 country_id "external UUID"
-        CHAR32 city_id "external UUID"
+        CHAR32 activity_id FK,UK "NOT NULL; ON DELETE CASCADE"
+        CHAR32 country_id "NOT NULL; external UUID"
+        CHAR32 city_id "NOT NULL; external UUID"
         VARCHAR street "NULL"
         INTEGER street_number "NULL"
     }
@@ -64,7 +64,7 @@ erDiagram
 
     ACTIVITY_AVAILABILITY_SCHEDULES {
         CHAR32 id PK "CHAR(32)"
-        CHAR32 activity_id FK "ON DELETE CASCADE"
+        CHAR32 activity_id FK "NOT NULL; ON DELETE CASCADE"
         BOOLEAN recurring_weekly "NOT NULL"
         VARCHAR9 day_of_week "NULL; checked enum"
         DATE date "NULL"
@@ -74,7 +74,7 @@ erDiagram
 
     ACTIVITY_ID_ALIASES {
         CHAR32 alias_id PK "legacy seed UUID"
-        CHAR32 activity_id "indexed; no database FK"
+        CHAR32 activity_id "NOT NULL; indexed; no database FK"
     }
 ```
 

@@ -26,7 +26,7 @@ flowchart LR
     end
 
     ACTIVITY -->|takes place at exactly one| LOCATION
-    ACTIVITY <-->|classified by one or more| CATEGORY
+    ACTIVITY ---|"per Activity: 1..* categories; per Category: 0..* activities"| CATEGORY
     ACTIVITY -->|"inactive: zero or more; active: one or more"| SCHEDULE
     LOCATION -.->|references by UUID| PLACE
 
