@@ -1,0 +1,28 @@
+name: Non-Functional CI Support
+
+on:
+  push:
+    paths:
+      - 'scripts/ci/wait_for_http.py'
+      - 'tests/ci/**'
+      - '.github/workflows/non-functional-ci.yml'
+  pull_request:
+    paths:
+      - 'scripts/ci/wait_for_http.py'
+      - 'tests/ci/**'
+      - '.github/workflows/non-functional-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  readiness-probe:
+    name: Verify the shared readiness baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependency
+        run: python -m pip install 'pytest>=8,<9'
+      - name: Test eight-attempt, two-second readiness policy
+        run: python -m pytest tests/ci/test_wait_for_http.py -q

@@ -7,12 +7,14 @@ on:
       - '.github/workflows/student-5-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   pull_request:
     paths:
       - 'student-5/**'
       - '.github/workflows/student-5-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
+      - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
 
 jobs:
@@ -52,10 +54,13 @@ jobs:
       - name: Validate the shared Compose configuration
         run: docker compose config --quiet
       - name: Smoke test the Student 5 slice
-        run: docker compose up -d --build --wait --no-deps student-5-database student-5-backend student-5-frontend
+        run: docker compose up -d --build --no-deps student-5-database student-5-backend student-5-frontend
       - name: Check the Student 5 frontend
         run: |
-          curl --fail --silent --show-error http://127.0.0.1:8085/ready
+          python scripts/ci/wait_for_http.py \
+            --label "student 5 compose frontend" \
+            --contains '"status":"ready"' \
+            http://127.0.0.1:8085/ready
           curl --fail --silent --show-error http://127.0.0.1:8085/ > /dev/null
       - name: Compose logs on failure
         if: failure()

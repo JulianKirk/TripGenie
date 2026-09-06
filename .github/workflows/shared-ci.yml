@@ -6,12 +6,14 @@ on:
       - 'shared/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
       - '.github/workflows/shared-ci.yml'
   pull_request:
     paths:
       - 'shared/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
+      - 'scripts/ci/wait_for_http.py'
       - '.github/workflows/shared-ci.yml'
   workflow_dispatch:
 
@@ -40,16 +42,12 @@ jobs:
       - name: Health check database service
         run: |
           docker run -d --name shared-database -p 9101:9101 shared-database
-          for _ in $(seq 1 8); do
-            if curl -fsS http://localhost:9101/health; then
-              echo "database service healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "service did not become healthy after 8 attempts"
-          docker logs shared-database
-          exit 1
+          if ! python scripts/ci/wait_for_http.py \
+            --label "shared database" \
+            http://localhost:9101/health; then
+            docker logs shared-database
+            exit 1
+          fi
       - name: Build backend service image
         run: docker build -f shared/backend/Dockerfile -t shared-backend shared
       - name: Health check backend service
@@ -58,13 +56,9 @@ jobs:
         # here: the service itself starts and serves.
         run: |
           docker run -d --name shared-backend -p 9100:9100 shared-backend
-          for _ in $(seq 1 8); do
-            if curl -fsS http://localhost:9100/health; then
-              echo "backend service healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "service did not become healthy after 8 attempts"
-          docker logs shared-backend
-          exit 1
+          if ! python scripts/ci/wait_for_http.py \
+            --label "shared backend" \
+            http://localhost:9100/health; then
+            docker logs shared-backend
+            exit 1
+          fi
