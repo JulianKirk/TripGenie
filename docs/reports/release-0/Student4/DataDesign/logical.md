@@ -1,4 +1,4 @@
-# Student 4 Logical Data Design
+# Student 4 Logical Data Model (ERD)
 
 The fields support catalogue search and the planning information consumed by
 the itinerary and budget services. Prices are exact AUD values and
@@ -6,7 +6,13 @@ the itinerary and budget services. Prices are exact AUD values and
 admission charge. Nullable accessibility flags deliberately distinguish an
 unknown value from a confirmed `false` value.
 
+This implementation-neutral ERD shows every business attribute, logical data
+type, key and relationship, but not SQLite storage details, indexes or
+implementation-only compatibility tables. A high-resolution
+[PNG export](logical.png) is included alongside this document.
+
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","primaryColor":"#eff6ff","primaryTextColor":"#0f172a","primaryBorderColor":"#2563eb","lineColor":"#475569","tertiaryColor":"#f8fafc"}}}%%
 erDiagram
     ACTIVITY ||--|| LOCATION_DETAILS : "has"
     ACTIVITY ||--o{ ACTIVITY_AVAILABILITY_SCHEDULE : "inactive zero-or-more; active one-or-more"

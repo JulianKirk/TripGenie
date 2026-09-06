@@ -1,4 +1,4 @@
-# Student 4 Physical Data Design
+# Student 4 Physical Database Model (ERD)
 
 The database service is the only component that reads this SQLite database.
 SQLAlchemy stores UUIDs as 32-character values and stores prices as canonical
@@ -7,7 +7,13 @@ floating-point errors. Owned locations, schedules and category links cascade
 when an activity is deleted; the alias table exists only to resolve legacy seed
 identifiers and intentionally has no database foreign key.
 
+This implementation-specific ERD mirrors the deployed SQLite schema: exact
+table and column names, storage types, nullability, foreign keys and cascade
+behaviour. A high-resolution [PNG export](physical.png) is included alongside
+this document.
+
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#0f172a","primaryBorderColor":"#ea580c","lineColor":"#475569","tertiaryColor":"#fffbeb"}}}%%
 erDiagram
     ACTIVITIES ||--o| LOCATION_DETAILS : "DB zero-or-one; API exactly one"
     ACTIVITIES ||--o{ ACTIVITY_AVAILABILITY_SCHEDULES : "DB zero-or-more; active API one-or-more"
