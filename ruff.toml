@@ -1,5 +1,5 @@
-# Lint config for the TripGenie repo. Rule selection follows the sample in
-# SharedSamples/pyproject.toml, minus that service's project-specific bits.
+# Shared lint configuration for TripGenie services. Service-specific
+# pyproject.toml files may extend it with narrowly scoped overrides.
 target-version = "py310"
 line-length = 88
 # Import roots -- lets isort tell each service's own packages (student-2's
