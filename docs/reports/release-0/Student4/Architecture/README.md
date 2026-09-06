@@ -7,6 +7,7 @@ service that exclusively owns the Student 4 SQLite database.
 
 The service-level architecture diagrams are documented separately:
 
+- [Whole-feature architecture](overview.md)
 - [Frontend architecture](frontend.md)
 - [Backend/API architecture](backend-api.md)
 - [Database architecture](database.md)
