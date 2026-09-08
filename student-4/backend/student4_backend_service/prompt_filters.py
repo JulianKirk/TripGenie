@@ -25,7 +25,17 @@ LOWER_BOUND = (
 )
 
 CATEGORY_TERMS = {
-    "ADVENTURE": ("adventure", "adventurous"),
+    "ADVENTURE": (
+        "adventure",
+        "adventurous",
+        "water",
+        "water activity",
+        "water activities",
+        "kayak",
+        "kayaking",
+        "paddle",
+        "paddling",
+    ),
     "CULTURE": ("culture", "cultural", "museum", "museums", "gallery", "galleries"),
     "FAMILY": ("family", "families", "kid", "kids", "child", "children"),
     "FOOD_DRINK": ("food", "drink", "dining", "culinary", "tasting"),
@@ -234,6 +244,8 @@ def _apply_ranges_and_categories(
             "codes": categories,
             "match": "ALL" if _requires_all_categories(question, categories) else "ANY",
         }
+    else:
+        result.pop("categories", None)
 
     recovered = bool(categories)
     for field, value in (
@@ -243,6 +255,8 @@ def _apply_ranges_and_categories(
         if value:
             result[field] = value
             recovered = True
+        else:
+            result.pop(field, None)
     return categories, recovered
 
 
@@ -314,7 +328,12 @@ def _clean_model_extras(
             )
 
     text = result.get("text")
-    if not isinstance(text, str) or not (recovered or had_structured_filters):
+    if not isinstance(text, str):
+        return
+    if text.casefold() not in question.casefold():
+        result.pop("text", None)
+        return
+    if not (recovered or had_structured_filters):
         return
     cleaned_text = _clean_text(text, result, categories)
     if cleaned_text:
