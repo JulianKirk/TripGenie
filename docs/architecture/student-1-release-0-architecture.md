@@ -3,6 +3,7 @@
 Related planning document: [Student 1 Release 0 scope, assessed workflow, and evidence plan](../reports/release-0/student-1-release-0-plan.md)
 Related ADRs: [ADR-0001](./decisions/0001-student-1-service-mapping.md), [ADR-0002](./decisions/0002-student-1-internal-api-and-observability.md)
 Runtime AI-mode notes: [Student 1 runtime AI-mode contract and implementation notes](./student-1-runtime-ai-mode.md)
+Data design: [Student 1 conceptual, logical, and physical data models](./student-1-data-models.md)
 
 ## 1. Architecture stance
 

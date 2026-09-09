@@ -20,6 +20,7 @@ in this repository.
 | --- | --- |
 | [Release 0 plan](student-1-release-0-plan.md) | Scope, assessed workflow, and architecture traceability. |
 | [Report contribution](student-1-report-contribution.md) | Report-ready requirements, data design, architecture, implementation, risks, and limitations. |
+| [Data models](../../architecture/student-1-data-models.md) | Conceptual model, logical ERD, physical SQLite model, data dictionaries, and assignment traceability. |
 | [Evidence register](student-1-evidence-register.md) | Verified source/run links and an explicit register of evidence still requiring manual capture. |
 | [Demo runbook](student-1-demo-runbook.md) | A maximum 90-second Student 1 segment for the group demonstration. |
 | [Manual evidence directory](evidence/student-1/README.md) | File naming, capture order, and acceptance rules for screenshots and logs. |
