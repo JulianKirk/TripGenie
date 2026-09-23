@@ -206,3 +206,14 @@ This does not remove Ollama or models installed on the host. If AI-Mode cannot
 reach Ollama, verify the host binding and firewall access to port `11434`. On
 native Linux, confirm that the service is not listening on loopback only.
 Compose never installs Ollama or downloads models.
+
+## Release 1 planning
+
+Release 1 keeps the student feature microservices in Docker Compose while
+AI-Mode, MCP, RAG, Ollama, and the shared agentic loop run directly on the
+local host. The implementation plan and contracts are documented here:
+
+- [Integrated Release 1 architecture](docs/architecture/release-1-integrated-architecture.md)
+- [MCP and RAG contracts](docs/architecture/release-1-mcp-rag-flow.md)
+- [Student 1 Release 1 architecture](docs/architecture/student-1-release-1-architecture.md)
+- [Release 1 report and evidence index](docs/reports/release-1/README.md)
