@@ -216,3 +216,4 @@ documented here:
 - [Shared RAG architecture](docs/architecture/release-1-shared-rag-architecture.md)
 - [Shared RAG contract](docs/architecture/release-1-rag-contract.md)
 - [Shared RAG plan and evidence index](docs/reports/release-1/README.md)
+- [Shared RAG setup and operation](ai-services/rag-server/README.md)
