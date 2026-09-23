@@ -12,6 +12,8 @@ from .config import Settings
 from .errors import ApiError
 from .models import (
     DataEnvelope,
+    EmbedRequest,
+    EmbedResponsePayload,
     ErrorBody,
     ErrorDetail,
     ErrorEnvelope,
@@ -75,8 +77,8 @@ def create_app(
             await provider.close()
 
     app = FastAPI(
-        title="TripGenie Release 0 AI-Mode Service",
-        version="0.1.0",
+        title="TripGenie AI-Mode Service",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -131,6 +133,13 @@ def create_app(
         service: Annotated[AiModeService, Depends(get_service)],
     ) -> dict[str, object]:
         return envelope((await service.generate(payload)).model_dump(mode="json"))
+
+    @app.post("/embed", response_model=DataEnvelope[EmbedResponsePayload])
+    async def embed(
+        payload: EmbedRequest,
+        service: Annotated[AiModeService, Depends(get_service)],
+    ) -> dict[str, object]:
+        return envelope((await service.embed(payload)).model_dump(mode="json"))
 
     return app
 

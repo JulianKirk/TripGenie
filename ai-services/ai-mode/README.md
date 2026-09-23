@@ -1,11 +1,13 @@
 # TripGenie shared AI-Mode service
 
-This service provides the shared Release 0 runtime boundary between TripGenie student backends and a host-managed Ollama runtime.
+This service provides the shared runtime boundary between TripGenie services
+and a host-managed Ollama runtime.
 
 - Runtime: FastAPI on Python 3.11
 - Official provider dependency: `ollama==0.6.2`
-- Scope: single-shot bounded generation only
-- Out of scope: streaming, chat sessions, memory, tools, MCP, RAG, multi-agent orchestration
+- Scope: single-shot bounded generation and embeddings
+- Out of scope: streaming, chat sessions, memory, tools, retrieval/indexing,
+  and multi-agent orchestration
 
 Student backends must render their own prompts, own domain retries/validation, and keep human approval/persistence rules outside this service.
 
@@ -17,23 +19,30 @@ Student backends must render their own prompts, own domain retries/validation, a
 | `AI_MODE_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Host Ollama base URL used only by this shared service. Container deployments must override this to `http://host.docker.internal:11434`. |
 | `AI_MODE_DEFAULT_MODEL` | `qwen2.5:0.5b` | Default approved model used when callers do not request an override. |
 | `AI_MODE_ALLOWED_MODELS` | `qwen2.5:0.5b,llama3.1:8b` | Allowlist of approved runtime models. Arbitrary provider model names are rejected. |
-| `AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Ollama list/generate calls. |
+| `AI_MODE_DEFAULT_EMBEDDING_MODEL` | `nomic-embed-text` | Default approved embedding model. |
+| `AI_MODE_ALLOWED_EMBEDDING_MODELS` | `nomic-embed-text` | Separate allowlist for embedding models. |
+| `AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Ollama list, generate, and embed calls. |
 | `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max accepted rendered prompt length. Student backends should pre-budget prompts to this same contract. |
 | `AI_MODE_MAX_SCHEMA_CHARS` | `8000` | Max accepted JSON-schema serialized length. |
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
+| `AI_MODE_MAX_EMBED_INPUTS` | `32` | Maximum texts accepted by one embedding request. |
+| `AI_MODE_MAX_EMBED_INPUT_CHARS` | `12000` | Maximum characters in each embedding input. |
+| `AI_MODE_MAX_EMBED_DIMENSIONS` | `4096` | Maximum accepted provider vector dimension. |
 
 ## Host Ollama prerequisite
 
-Release 0 assumes Ollama is installed and managed on the **host machine**, not inside Docker.
+TripGenie assumes Ollama is installed and managed on the **host machine**, not
+inside Docker.
 
 1. Install Ollama on the host OS using the official installer/package for that platform.
 2. Start Ollama so the shared AI-Mode service can reach its HTTP API.
    - Native `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
    - Containerized `ai-mode` runs receive `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434` from Compose.
-3. Pull the approved Release 0 model on the host:
+3. Pull the approved chat and embedding models on the host:
 
    ```bash
    ollama pull qwen2.5:0.5b
+   ollama pull nomic-embed-text
    ```
 
 4. Verify the host runtime before exercising the shared service:
@@ -54,7 +63,8 @@ Platform notes:
 
 - Returns `200`
 - Reports overall service status plus Ollama dependency status
-- `status=degraded` when Ollama is unavailable, invalid, or missing the configured model
+- `status=degraded` when Ollama is unavailable, invalid, or missing either
+  configured default model
 
 Example:
 
@@ -67,7 +77,7 @@ Example:
       "ollama": {
         "status": "ok",
         "service": "ollama",
-        "detail": "Ollama responded successfully and the configured model is available.",
+        "detail": "Ollama responded successfully and the configured models are available.",
         "code": null
       }
     }
@@ -77,8 +87,9 @@ Example:
 
 ### `GET /ready`
 
-- Returns `200` when the shared service can generate with its configured/default model
-- Returns `503` when the provider is unavailable or the configured model is missing
+- Returns `200` when the configured/default chat and embedding models are
+  available
+- Returns `503` when the provider is unavailable or either model is missing
 
 ### `POST /generate`
 
@@ -126,6 +137,46 @@ Response:
 ```
 
 The shared response envelope keeps the approved requested model authoritative. If provider success metadata reports a blank, invalid, or unexpected model name, that provider field is not passed through to consumers.
+
+### `POST /embed`
+
+Creates bounded embeddings for the shared RAG service. Chat and embedding
+model allowlists are independent.
+
+Request:
+
+```json
+{
+  "inputs": [
+    "First bounded source chunk",
+    "Second bounded source chunk"
+  ],
+  "model": "nomic-embed-text",
+  "correlation_id": "rag-ingest-01",
+  "metadata": {
+    "feature": "shared-rag"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "run_id": "aimode_1234abcd5678",
+    "correlation_id": "rag-ingest-01",
+    "model": "nomic-embed-text",
+    "provider": "ollama",
+    "dimension": 768,
+    "embeddings": [[0.1, 0.2], [0.3, 0.4]]
+  }
+}
+```
+
+AI-Mode rejects mismatched vector counts, inconsistent or excessive
+dimensions, non-finite values, unavailable models, provider timeouts, and
+malformed responses.
 
 ## Stable errors
 
@@ -272,11 +323,25 @@ The service logs safe metadata only:
 It must not log full prompts, raw user context, or raw provider output.
 Correlation IDs and other logged fields are sanitized defensively to stay single-line.
 
-## Docker and Compose expectation
+## Runtime expectation
 
-The Docker image is built from [`Dockerfile`](./Dockerfile) and exposes port `8006`.
+The existing Docker image supports the Release 0 Compose stack. Release 1 RAG
+uses AI-Mode as a host process and does not add AI-Mode, RAG, or Ollama to
+Compose.
 
-The Compose runtime contract is:
+Host start:
+
+```bash
+uv sync --extra dev
+uv run uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
+```
+
+For a Docker consumer, bind deliberately to a host interface reachable through
+`host.docker.internal`, for example `--host 0.0.0.0`, and keep port `8006`
+blocked from untrusted networks. Native-only use should retain the loopback
+binding.
+
+The Release 0 Compose runtime contract remains:
 
 - service name: `ai-mode`
 - backend-to-service URL:
