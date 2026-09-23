@@ -1,14 +1,14 @@
-# Release 1 Report and Evidence Index
+# Release 1 Shared RAG Plan and Evidence Index
 
-Release 1 extends the containerized Release 0 application with non-containerized
-local AI-Mode, MCP, RAG, and agentic-loop validation modes.
+Student 1's Release 1 responsibility in this plan is the initial shared,
+non-containerized RAG server. Other Release 1 services are owned and planned
+separately.
 
 ## Planning and architecture
 
-- [Integrated Release 1 architecture](../../architecture/release-1-integrated-architecture.md)
-- [MCP and RAG contracts](../../architecture/release-1-mcp-rag-flow.md)
-- [Student 1 Release 1 architecture](../../architecture/student-1-release-1-architecture.md)
-- [Student 1 plan, risks, validation, and rubric traceability](./student-1-release-1-plan.md)
+- [Shared RAG architecture](../../architecture/release-1-shared-rag-architecture.md)
+- [Shared RAG contract](../../architecture/release-1-rag-contract.md)
+- [Student 1 RAG delivery plan](./student-1-release-1-plan.md)
 - [Student 1 data models retained from Release 0](../../architecture/student-1-data-models.md)
 
 ## Evidence rules

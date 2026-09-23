@@ -1,101 +1,122 @@
-# Student 1 Release 1 Plan
+# Student 1 Shared RAG Delivery Plan
 
 Owner: Aaditya Rai
 
-Feature: Trip and Itinerary Management
+Feature: Initial shared non-containerized RAG server
 
 Tracking issue: [#133](https://github.com/JulianKirk/TripGenie/issues/133)
 
 Contract issue: [#121](https://github.com/JulianKirk/TripGenie/issues/121)
 
-## 1. Objectives
+## 1. Scope
 
-Student 1 will:
+Student 1 will deliver:
 
-- preserve Release 0 Trip and Itinerary CRUD and advisory AI suggestions;
-- establish the initial shared non-containerized RAG server;
-- access the shared host MCP and RAG services through the Student 1 backend;
-- use read-only tools from Accommodation, Transport, Activities, and
-  Budget/Expenses when planning a coherent itinerary;
-- return grounded answers with citations, confidence, and explicit
-  insufficient-context handling; and
-- keep every generated itinerary item as a reviewable draft until explicit
-  user approval and normal CRUD validation.
+- the bounded AI-Mode embedding operation required by RAG;
+- a host-run FastAPI RAG service outside Docker Compose;
+- allowlisted source ingestion and a local SQLite vector index;
+- feature-scoped retrieval and grounded generation;
+- citations resolved from indexed metadata;
+- server-calculated confidence and explicit insufficient-context behavior;
+- deterministic tests using fake transports and vectors; and
+- setup, contribution, operation, and evidence documentation.
 
-## 2. Delivery sequence
+This plan does not specify or implement the separately owned tool server,
+tool catalogue, or tool-backed itinerary planner.
 
-| Wave | Issues | Deliverable |
+## 2. One-PR delivery
+
+Issues [#122](https://github.com/JulianKirk/TripGenie/issues/122),
+[#123](https://github.com/JulianKirk/TripGenie/issues/123),
+[#124](https://github.com/JulianKirk/TripGenie/issues/124), and
+[#125](https://github.com/JulianKirk/TripGenie/issues/125) will be delivered in
+one Shared RAG pull request.
+
+| Order | Issue | Deliverable |
 | ---: | --- | --- |
-| 1 | [#121](https://github.com/JulianKirk/TripGenie/issues/121) | Documentation-only contract gate and implementation plan. |
-| 2 | [#122](https://github.com/JulianKirk/TripGenie/issues/122), [#123](https://github.com/JulianKirk/TripGenie/issues/123), [#124](https://github.com/JulianKirk/TripGenie/issues/124), [#125](https://github.com/JulianKirk/TripGenie/issues/125) | **One Shared RAG PR** containing the host AI-Mode embedding boundary, RAG server, ingestion/index, grounded query, tests, and service documentation. |
-| 2 | [#126](https://github.com/JulianKirk/TripGenie/issues/126) | Shared host MCP server and normalized read-only tools; team owner to confirm. |
-| 3 | [#127](https://github.com/JulianKirk/TripGenie/issues/127) | Student 1 MCP/RAG clients and bounded itinerary planner. |
-| 4 | [#128](https://github.com/JulianKirk/TripGenie/issues/128) | Student 1 accessible MCP and RAG frontend flows. |
-| 5 | [#129](https://github.com/JulianKirk/TripGenie/issues/129), [#130](https://github.com/JulianKirk/TripGenie/issues/130), [#131](https://github.com/JulianKirk/TripGenie/issues/131) | Host connectivity, CI disabled modes, and agentic-loop validation. |
-| 6 | [#132](https://github.com/JulianKirk/TripGenie/issues/132) | Integrated validation, report evidence, showcase, and Q&A preparation. |
+| 1 | #122 | AI-Mode `/embed` contract, embedding allowlist, limits, provider validation, and tests. |
+| 2 | #123 | Host RAG package, settings, lifecycle, health/readiness, stable errors, and CLI. |
+| 3 | #124 | Manifest validation, safe source loading, heading-aware chunks, embeddings, atomic SQLite rebuild, reuse, and stale-source removal. |
+| 4 | #125 | Feature/shared retrieval, grounded query, citation validation, confidence, insufficient context, and API tests. |
+| 5 | #122-#125 | Service README, environment examples, source-contribution guide, lint, tests, and PR evidence. |
 
-The Shared RAG PR closes #122-#125 together. It must not absorb MCP, feature
-frontend/backend integration, Compose, or evidence work.
+The PR must not add a RAG Dockerfile or Compose service.
 
-## 3. Release 1 rubric traceability
+## 3. Implementation sequence
 
-| Criterion | Planned evidence |
-| --- | --- |
-| 1. Project setup and architecture | Integrated architecture, host/container boundary, repository structure, ports, contracts, and request-flow diagrams. |
-| 2. Student feature microservices | Student 1 frontend/backend/database regression results for CRUD, API responses, persistence, and Release 0 AI-Mode. |
-| 3. MCP server integration | Registered tool catalogue, boundaries, terminal invocation, and Student 1 frontend/backend interaction using another feature's tool. |
-| 4. RAG and grounded responses | Corpus/manifest, ingestion summary, retrieval trace, valid citations/confidence, grounded frontend response, and insufficient-context case. |
-| 5. Shared agentic loop | Sanitized outputs from separate MCP and RAG validation modes. |
-| 6. DevOps and GitHub Actions | Successful `student-1-ci.yml` URL/log with live AI-Mode, MCP, and RAG explicitly disabled. |
-| 7. Docker Compose deployment | `docker compose config`, running feature containers, absence of host AI services from Compose, and successful container-to-host calls. |
-| 8. Integrated working software | End-to-end validation across Student 1 and Students 2-5 plus degraded-service regression. |
-| 9. Technical report and evidence | Requirements, architecture, design, validation, limitations, repository/video links, contribution log, and commits. |
-| 10. Demonstration and Q&A | Aaditya demonstrates Student 1 MCP/RAG and explains tool boundaries, grounding, confidence, insufficient context, and non-containerization. |
+1. Extend AI-Mode with a separate embedding model allowlist and bounded
+   `/embed` endpoint.
+2. Add the `ai-services/rag-server` Python package and host-only CLI.
+3. Define the manifest and seed it with maintained shared and Student 1
+   architecture documentation.
+4. Implement deterministic chunking, AI-Mode embedding calls, and atomic
+   SQLite index replacement.
+5. Implement feature plus shared cosine retrieval.
+6. Implement grounded JSON generation, citation resolution, confidence, and
+   insufficient-context behavior.
+7. Add tests for success, boundaries, corrupt data, dependency failures, and
+   data-safety rules.
+8. Document setup and capture only verified evidence.
 
-## 4. Validation matrix
+## 4. Acceptance criteria
+
+- The service runs locally with `python -m rag_service serve`.
+- The index builds locally with `python -m rag_service ingest --rebuild`.
+- No RAG runtime is present in Docker Compose.
+- RAG calls AI-Mode for both embeddings and generation and never calls Ollama
+  directly.
+- Only manifest-listed UTF-8 Markdown and text sources inside the repository
+  can be ingested.
+- Rebuild is atomic, unchanged embeddings are reused, and removed manifest
+  sources disappear from the next index.
+- Retrieval includes `shared` plus the requested feature and excludes other
+  feature-only sources.
+- Returned citations map to retrieved chunk IDs and indexed metadata.
+- Below-threshold retrieval skips generation and returns the fixed
+  insufficient-context response.
+- Missing or incompatible indexes and AI-Mode failures use explicit bounded
+  error contracts.
+- Logs exclude query text, source content, prompts, vectors, and answers.
+- Existing feature CRUD remains independent of RAG availability.
+
+## 5. Validation matrix
 
 | Scenario | Expected result |
 | --- | --- |
-| Release 0 Trip/Itinerary CRUD | Unchanged and operational. |
-| Release 0 AI suggestion | Draft remains advisory and review-before-save. |
-| MCP success | Student 1 frontend displays a valid structured result returned through its backend and a registered cross-service tool. |
-| MCP partial provider | Available observations remain marked partial; failure is not converted to empty success. |
-| RAG success | Answer contains only index-resolved citations and a server-calculated confidence category. |
-| RAG insufficient context | Fixed response, `insufficient_context=true`, no generation, and no citations. |
-| Host service disabled | MCP/RAG action reports disabled; CRUD remains ready. |
-| Host service unavailable/timeout | Explicit dependency error; no success-shaped fallback and no CRUD outage. |
-| Planner draft | Uses authoritative IDs, respects trip/collision/budget/capacity rules, and is not persisted. |
-| CI | All Student 1 and RAG contract tests pass without host services or model downloads. |
-| Compose | Feature containers run; AI-Mode, MCP, RAG, Ollama, and agentic loop are absent as services. |
+| Valid ingestion | Manifest sources are chunked, embedded through AI-Mode, and atomically indexed. |
+| Unchanged rebuild | Existing compatible embeddings are reused. |
+| Removed source | Stale documents and chunks are absent after rebuild. |
+| Invalid path | Absolute, traversal, secret, database, log, and unsupported paths are rejected. |
+| RAG success | The answer has only index-resolved citations and server-calculated confidence. |
+| Low relevance | Generation is skipped and insufficient context is returned without citations. |
+| Fabricated citation | Response is rejected as malformed dependency output. |
+| Missing/corrupt index | Readiness fails and query returns `INDEX_NOT_READY`. |
+| AI-Mode unavailable/timeout | Explicit retryable dependency error; no success-shaped fallback. |
+| CI | Unit and API tests run without Ollama, downloaded models, or live host services. |
 
-## 5. Risks and mitigations
+## 6. Risks and mitigations
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Specific Release 1 brief conflicts with older containerization wording | Incorrect deployment loses rubric marks. | Treat the assessment brief as controlling and document the host boundary in architecture, Compose, CI, and evidence. |
-| Other feature APIs use different methods/envelopes/types | Planner becomes coupled and brittle. | Normalize only in MCP adapters; preserve authoritative IDs, nullability, exact money, and pricing basis. |
-| Student 5 budget summary calls back to Student 1 | Synchronous cycle or exhausted workers. | Call outside write transactions with short bounded timeouts and explicit partial results. |
-| Small local model or limited GPU is slow | Demo timeout or repeated submission. | Bound candidates/context, use one approved small model, align timeout layers, warm the model, and show progress. |
-| Retrieval score is mistaken for certainty | Unsupported confident answer. | Calibrate thresholds against a versioned query set and require valid citation coverage. |
-| Prompt injection in indexed documents | Grounding rules are overridden. | Treat chunks as untrusted data, allowlist sources, validate citation IDs, and never execute retrieved instructions. |
-| AI/MCP/RAG outage blocks normal use | Release 0 regression. | Keep enable flags optional and Student 1 readiness database-only. |
-| Generated IDs or records are treated as real | Invalid itinerary associations. | Accept only identifiers returned by authoritative search/detail tools; require human review. |
-| One large RAG PR becomes hard to review | Defects hidden in an oversized diff. | Keep commits separated by AI embedding, foundation, ingestion, query, and docs/tests while retaining one integrated PR. |
-| Evidence includes secrets or unverified claims | Security/academic-integrity failure. | Store sanitized metadata and links only; never claim checks that were not executed. |
+| RAG is accidentally containerized | Violates the Release 1 assessment. | Provide host commands only and assert no RAG Dockerfile or Compose service. |
+| RAG bypasses AI-Mode | Duplicated provider policy and architecture violation. | Keep all Ollama access in AI-Mode and test the injected HTTP boundary. |
+| Broad ingestion exposes secrets or personal data | Privacy or security failure. | Use an explicit manifest, repository-contained paths, extension/segment deny rules, and no remote ingestion API. |
+| Failed rebuild destroys a usable index | Local service outage. | Build a temporary SQLite index and replace the active file only after success. |
+| Embedding model or dimensions change | Invalid similarity results. | Store model and dimension metadata and reject incompatible indexes/responses. |
+| Retrieval score is treated as certainty | Unsupported confident answer. | Calibrate thresholds and require valid citation coverage. |
+| Indexed prompt injection changes behavior | Unsafe or unsupported answer. | Delimit chunks as untrusted data, constrain output schema, and validate citation IDs. |
+| Local model is slow | Demo timeout. | Bound chunks, batches, context, and answer size; warm approved models before evidence capture. |
+| One PR is difficult to review | Defects become harder to isolate. | Keep focused commits for embedding, service/index, query, and docs/tests. |
 
-## 6. Contribution and evidence checklist
+## 7. Evidence checklist
 
-- [ ] Contract/architecture PR and issue link.
-- [ ] Shared RAG PR closing #122-#125 with focused commits.
-- [ ] Student 1 backend and frontend PRs.
-- [ ] Successful CI workflow URL.
-- [ ] Host startup commands and versions.
-- [ ] RAG ingestion summary and calibrated query set.
-- [ ] MCP terminal tool result.
-- [ ] Grounded RAG result with citations/confidence.
-- [ ] Insufficient-context RAG result.
-- [ ] Student 1 browser MCP and RAG evidence.
-- [ ] Release 0 regression and degraded-mode evidence.
-- [ ] Compose status and host-connectivity evidence.
-- [ ] Agentic-loop MCP and RAG mode outputs.
-- [ ] Known limitations, contribution log, demo segment, and Q&A notes.
+- [ ] Pull request closing #122-#125 with focused commits.
+- [ ] AI-Mode and RAG lint, format, compile, and test output.
+- [ ] Host versions and startup commands.
+- [ ] Successful index summary with source/chunk counts and model dimension.
+- [ ] Grounded query with citations and confidence.
+- [ ] Insufficient-context query showing generation was skipped.
+- [ ] Missing-index and unavailable-AI-Mode behavior.
+- [ ] Confirmation that RAG is absent from Docker Compose.
+- [ ] Sanitized screenshots or terminal output for the report and video.
+- [ ] Known limitations and individual contribution links.
