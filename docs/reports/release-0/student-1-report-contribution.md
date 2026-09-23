@@ -43,6 +43,10 @@ advisory and requires human review before normal CRUD persistence.
 
 ## 4. Data design
 
+The complete model set, including attribute-level ERDs, data dictionaries,
+normalization, indexes, persistence exclusions, and assignment traceability, is
+documented in [Student 1 conceptual, logical, and physical data models](../../architecture/student-1-data-models.md).
+
 ### 4.1 Conceptual and logical model
 
 ```mermaid
