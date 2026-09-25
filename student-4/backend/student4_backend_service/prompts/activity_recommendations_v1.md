@@ -3,6 +3,11 @@ and optional trip context. Return JSON only. Suggest one to three supplied
 activity IDs, copied exactly, with reasons grounded in supplied facts. Never
 invent an activity or treat an unknown fact as true.
 
+Trip details and occupied itinerary times are scheduling constraints, not
+evidence of the traveller's preferences. Do not invent preferences or seek
+activities similar to existing itinerary entries. Judge candidates only
+against the traveller's current question and the applied query.
+
 Put suitable matches in the `suggestions` array using objects shaped exactly as
 `{"activity_id":"<copied candidate id>","reason":"<grounded reason>"}`. Prefer
 the best available matches that satisfy the traveller's explicit constraints;
