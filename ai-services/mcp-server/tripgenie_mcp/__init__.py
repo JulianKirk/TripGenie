@@ -1,0 +1,1 @@
+"""Shared TripGenie MCP server."""
