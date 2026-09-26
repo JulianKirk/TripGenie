@@ -55,6 +55,19 @@ class FakeOllamaApi:
                 },
             },
             {
+                "name": "nomic-embed-text:latest",
+                "model": "nomic-embed-text:latest",
+                "modified_at": "2026-08-31T11:00:00Z",
+                "size": 274000000,
+                "digest": "sha256:nomic-demo",
+                "details": {
+                    "family": "nomic-bert",
+                    "families": ["nomic-bert"],
+                    "parameter_size": "137M",
+                    "quantization_level": "F16",
+                },
+            },
+            {
                 "name": "llama3.1:8b",
                 "model": "llama3.1:8b",
                 "modified_at": "2026-08-31T11:00:00Z",
@@ -70,12 +83,17 @@ class FakeOllamaApi:
         ]
         self._tag_responses: list[httpx.Response | Exception] = []
         self._generate_responses: list[httpx.Response | Exception] = []
+        self.embed_requests: list[dict[str, object]] = []
+        self._embed_responses: list[httpx.Response | Exception] = []
 
     def queue_tag_response(self, response: httpx.Response | Exception) -> None:
         self._tag_responses.append(response)
 
     def queue_generate_response(self, response: httpx.Response | Exception) -> None:
         self._generate_responses.append(response)
+
+    def queue_embed_response(self, response: httpx.Response | Exception) -> None:
+        self._embed_responses.append(response)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         method = request.method.upper()
@@ -99,6 +117,23 @@ class FakeOllamaApi:
                 return queued
             return success_generate_response()
 
+        if path == "/api/embed" and method == "POST":
+            request_json = self._request_json(request)
+            self.embed_requests.append(request_json)
+            if self._embed_responses:
+                queued = self._embed_responses.pop(0)
+                if isinstance(queued, Exception):
+                    raise queued
+                return queued
+            inputs = request_json.get("input", [])
+            return httpx.Response(
+                200,
+                json={
+                    "model": request_json.get("model", "nomic-embed-text"),
+                    "embeddings": [[1.0, 0.0, 0.5] for _ in inputs],
+                },
+            )
+
         return httpx.Response(404, json={"error": "not found"})
 
     @staticmethod
@@ -115,10 +150,15 @@ def settings() -> Settings:
         ollama_base_url="http://ollama.test",
         default_model="qwen2.5:0.5b",
         allowed_models=("qwen2.5:0.5b", "llama3.1:8b"),
+        default_embedding_model="nomic-embed-text",
+        allowed_embedding_models=("nomic-embed-text",),
         ollama_timeout_seconds=1.0,
         max_prompt_chars=80,
         max_schema_chars=180,
         max_response_bytes=120,
+        max_embed_inputs=3,
+        max_embed_input_chars=40,
+        max_embed_dimensions=8,
     )
 
 

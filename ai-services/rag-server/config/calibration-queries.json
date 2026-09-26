@@ -1,0 +1,45 @@
+{
+  "schema_version": "1",
+  "embedding_model": "nomic-embed-text",
+  "thresholds": {
+    "minimum": 0.35,
+    "medium": 0.55,
+    "high": 0.75
+  },
+  "cases": [
+    {
+      "case_id": "shared-rag-host-boundary",
+      "query": "Where does the shared RAG server run for Release 1?",
+      "feature": "shared",
+      "expected_source_ids": [
+        "release-1-shared-rag-architecture"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "shared-rag-insufficient-policy",
+      "query": "What happens when retrieved context is below the relevance threshold?",
+      "feature": "shared",
+      "expected_source_ids": [
+        "release-1-shared-rag-contract"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-data-model",
+      "query": "Which Student 1 records represent itinerary entries?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "student-1-data-models"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "unsupported-live-weather",
+      "query": "What is the live weather in Lisbon right now?",
+      "feature": "student-1",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
+    }
+  ]
+}

@@ -9,6 +9,8 @@ from pydantic import ValidationError
 from .config import Settings
 from .errors import ApiError, bad_gateway, validation_error
 from .models import (
+    EmbedRequest,
+    EmbedResponsePayload,
     GenerateRequest,
     GenerateResponsePayload,
     HealthDependencies,
@@ -110,10 +112,75 @@ class AiModeService:
         )
         return response_payload
 
+    async def embed(self, payload: EmbedRequest) -> EmbedResponsePayload:
+        self._validate_embed_bounds(payload)
+        resolved_model = self._resolve_embedding_model(payload.model)
+        run_id = f"aimode_{uuid4().hex[:12]}"
+        correlation_id = _normalise_correlation_id(payload.correlation_id, run_id)
+
+        _log_stage(
+            "embed_start",
+            run_id=run_id,
+            correlation_id=correlation_id,
+            model=resolved_model,
+            input_count=len(payload.inputs),
+            input_chars=sum(len(item) for item in payload.inputs),
+            metadata_count=len(payload.metadata),
+        )
+
+        try:
+            result = await self._provider.embed(
+                model=resolved_model,
+                inputs=payload.inputs,
+            )
+        except ApiError as exc:
+            _log_stage(
+                "embed_failure",
+                run_id=run_id,
+                correlation_id=correlation_id,
+                model=resolved_model,
+                error_code=exc.code,
+                status_code=exc.status_code,
+            )
+            raise
+
+        response_payload = EmbedResponsePayload(
+            run_id=run_id,
+            correlation_id=correlation_id,
+            model=result.model,
+            provider="ollama",
+            dimension=len(result.embeddings[0]),
+            embeddings=result.embeddings,
+        )
+        _log_stage(
+            "embed_success",
+            run_id=run_id,
+            correlation_id=correlation_id,
+            model=resolved_model,
+            input_count=len(response_payload.embeddings),
+            dimension=response_payload.dimension,
+        )
+        return response_payload
+
     def _resolve_model(self, model_override: str | None) -> str:
         model = model_override or self._settings.default_model
         if model not in self._settings.allowed_models:
             approved_models = ", ".join(self._settings.allowed_models)
+            raise validation_error(
+                VALIDATION_ERROR_MESSAGE,
+                [
+                    {
+                        "field": "model",
+                        "issue": f"must be one of: {approved_models}",
+                    },
+                ],
+            )
+        return model
+
+    def _resolve_embedding_model(self, model_override: str | None) -> str:
+        model = model_override or self._settings.default_embedding_model
+        if model not in self._settings.allowed_embedding_models:
+            approved_models = ", ".join(self._settings.allowed_embedding_models)
             raise validation_error(
                 VALIDATION_ERROR_MESSAGE,
                 [
@@ -132,8 +199,7 @@ class AiModeService:
                 {
                     "field": "prompt",
                     "issue": (
-                        "must be at most "
-                        f"{self._settings.max_prompt_chars} characters"
+                        f"must be at most {self._settings.max_prompt_chars} characters"
                     ),
                 },
             )
@@ -151,6 +217,31 @@ class AiModeService:
                     },
                 )
 
+        if details:
+            raise validation_error(VALIDATION_ERROR_MESSAGE, details)
+
+    def _validate_embed_bounds(self, payload: EmbedRequest) -> None:
+        details: list[dict[str, str]] = []
+        if len(payload.inputs) > self._settings.max_embed_inputs:
+            details.append(
+                {
+                    "field": "inputs",
+                    "issue": (
+                        f"must contain at most {self._settings.max_embed_inputs} values"
+                    ),
+                },
+            )
+        for index, value in enumerate(payload.inputs):
+            if len(value) > self._settings.max_embed_input_chars:
+                details.append(
+                    {
+                        "field": f"inputs.{index}",
+                        "issue": (
+                            "must be at most "
+                            f"{self._settings.max_embed_input_chars} characters"
+                        ),
+                    },
+                )
         if details:
             raise validation_error(VALIDATION_ERROR_MESSAGE, details)
 
