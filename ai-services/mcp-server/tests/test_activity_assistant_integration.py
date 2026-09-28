@@ -133,7 +133,7 @@ def test_frontend_backend_real_mcp_session_and_card_resolution():
     assert len(json.dumps(model_calls[0]["schema"])) <= 8000
     assert "activities_create" not in json.dumps(model_calls)
     assert [request.method for request in provider_calls] == ["QUERY", "GET"]
-    assert json.loads(provider_calls[0].content)["price"] == {"max": "50.00"}
+    assert json.loads(provider_calls[0].content)["price"] == {"max": "49.99"}
     correlation = provider_calls[0].headers["X-Request-ID"]
     assert correlation.startswith("student4-agent-")
     assert all(

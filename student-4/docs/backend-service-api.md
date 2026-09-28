@@ -125,11 +125,51 @@ The allowlist is `activities_search`, `activities_get`,
 `activities_list_categories`, `activities_committed_costs`, `trip_get_context`,
 and `trips_list_itinerary_items`. Trip-specific tools are omitted unless a trip
 is selected. The backend rejects every other tool, including MCP CRUD tools.
-Limits are six model steps/calls, one initial selected-trip read, at most six
-final card lookups, twelve output parts, 1,000 characters per text part, and a
-180-second total deadline. Existing AI prompt limits remain enforced; long
-contexts produce a visible request-to-narrow error. At most six items per tool
+Limits are six model steps/calls, one initial selected-trip read, up to six
+schedule-detail reads per search page, at most six final card lookups, twelve
+output parts, 1,000 characters per text part, and a
+180-second total deadline. Existing AI prompt limits remain enforced. If tool
+definitions crowd out successful observations, generation switches to final-only
+with the observations retained and tool definitions removed. Contexts still above
+the limit produce a visible request-to-narrow error. With at most five tool-action
+steps this permits at most 42 MCP calls, including schedule verification.
+At most six items per tool
 observation are supplied to the model, with an explicit omitted-item count.
+
+The backend retains immutable constraints parsed from explicit request values before
+calling MCP. Supported inputs include whole-number party counts (digits or words
+zero through twelve), AUD amounts with `$`, `AUD`, or `dollars`, `under`/`below` and
+inclusive `at most`/`at least` bounds, ISO local dates or date ranges joined by `to`,
+and 24-hour time windows. `under` and `over` are strict, represented at cent precision.
+Contradictions, unsupported numeric/currency/date forms, missing party size for a
+total budget, and ambiguous alternatives return an authored clarification with
+`status=complete`. Preflight clarification makes no model or MCP calls.
+
+A selected trip supplies dates and missing party size through `trip_get_context`.
+Explicit party size takes precedence; explicit dates must fit inside the selected
+trip. Search arguments cannot weaken the checked price, party, date, accessibility,
+or booking constraints. Unstated values in those fields are removed. Other semantic
+interpretation (for example location/category/topic) remains model-assisted.
+
+The price search filter remains a **listed-price** filter. After MCP retrieval,
+backend Decimal arithmetic checks total-party bounds using `PER_PERSON * party_size`
+or `FLAT_ADMISSION` once, plus participant limits and required accessibility facts.
+For date constraints it reads candidate details through MCP and requires a weekly
+or one-off catalogue schedule within the inclusive date range, with enough time
+for the activity's full duration in the requested local window. This is catalogue
+schedule matching, not a reservation or confirmation of live capacity.
+
+Only checked candidates are given to the model. The trace still records the actual
+raw MCP results and extra detail calls; model observations separately state excluded,
+unavailable and truncated counts. Final card details are checked again to catch
+changes between search and rendering. Constrained activity answers use backend-written
+verification text and exact party totals; if the model omits IDs, at most six eligible
+IDs from inspected results are used. Removed cards cannot leave stale model prose
+claiming they passed. No verified matches means only the inspected results, never an
+exhaustive catalogue claim. Prose outside verified activity results remains advisory.
+If no activity tool is requested, price-constrained recommendation claims are
+suppressed. Other no-activity-read text is preserved for factual trip answers and
+is not certified for schedule, accessibility or booking suitability.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -555,7 +595,7 @@ All fields are optional. An empty body has the same filtering semantics as
 
 | Field | Type | Description |
 |---|---|---|
-| `text` | string | Case-insensitive substring across name and description. |
+| `text` | string | Case-insensitive substring across name and description, with the single-word activity variants below. |
 | `location` | object | Country/city names and optional street substring. |
 | `categories` | object | Category codes and `ANY`/`ALL` matching. |
 | `price` | decimal range | Inclusive listed-price `min` and/or `max` in canonical AUD decimal strings. |
@@ -572,6 +612,14 @@ All fields are optional. An empty body has the same filtering semantics as
 | `offset` | integer | Rows to skip; default 0. |
 
 Unknown fields are rejected rather than silently ignored.
+
+Text queries consisting only of `kayaks` or `kayaking` use the substring
+`kayak`; `walks` or `walking` use `walk`. These conservative English variants
+apply equally to ordinary API searches and MCP activity searches. All other
+text, including multi-word name phrases, keeps literal substring semantics;
+`%`, `_`, and backslashes are not wildcard syntax. This is not fuzzy or synonym
+search. Location, price, other filters, total counts, and pagination still
+apply to the matched catalogue rows.
 
 ### Location filter
 

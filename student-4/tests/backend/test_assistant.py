@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from student4_backend_service.app import create_app
 from student4_backend_service.config import Settings
@@ -59,7 +60,16 @@ class ProtocolFake:
                     for name, schema in {
                         "activities_search": {
                             "type": "object",
-                            "properties": {"text": {"type": "string"}},
+                            "properties": {
+                                "text": {"type": "string"},
+                                "filters": {"type": "object"},
+                                "limit": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 50,
+                                },
+                                "offset": {"type": "integer", "minimum": 0},
+                            },
                             "additionalProperties": False,
                         },
                         "activities_get": {
@@ -120,6 +130,10 @@ def run(
     actions: list[dict[str, Any]],
     mcp: ProtocolFake,
     requests: list[dict[str, Any]] | None = None,
+    *,
+    question: str = "Find walks",
+    trip_id: str | None = None,
+    prompt_max_chars: int | None = None,
 ) -> dict[str, Any]:
     def ai(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -142,6 +156,8 @@ def run(
     settings = Settings(
         ai_mode_url="http://ai.test", mcp_enabled=True, mcp_url="http://mcp.test/mcp"
     )
+    if prompt_max_chars is not None:
+        settings.ai_prompt_max_chars = prompt_max_chars
     with TestClient(
         create_app(
             settings,
@@ -149,7 +165,9 @@ def run(
             mcp_transport=httpx.MockTransport(mcp.handle),
         )
     ) as client:
-        response = client.post("/activity/assistant", json={"question": "Find walks"})
+        response = client.post(
+            "/activity/assistant", json={"question": question, "trip_id": trip_id}
+        )
         assert response.status_code == 200, response.text
         return dict(response.json())
 
@@ -630,3 +648,207 @@ def test_combined_instruction_budget_rejects_before_model_call() -> None:
     assert result["status"] == "error"
     assert "too much context" in result["error"]
     assert not mcp.calls
+
+
+def test_contradictory_prices_are_clarified_without_model_or_mcp_calls() -> None:
+    mcp = ProtocolFake()
+    requests: list[dict[str, Any]] = []
+    result = run(
+        [], mcp, requests, question="Find something at least $100 and no more than $20"
+    )
+    assert result["status"] == "complete"
+    assert "minimum" in result["parts"][0]["text"].lower()
+    assert not requests and not mcp.calls
+
+
+def test_party_budget_filters_candidates_and_rechecks_model_card_references() -> None:
+    mcp = ProtocolFake()
+    requests: list[dict[str, Any]] = []
+    result = run(
+        [
+            {
+                "type": "tool",
+                "name": "activities_search",
+                "arguments": {"filters": {"price": {"max": "999.00"}, "party_size": 1}},
+            },
+            {
+                "type": "final",
+                "parts": [
+                    {"type": "text", "text": "This is within your budget"},
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        mcp,
+        requests,
+        question="For 4 adults with a total budget of 100 AUD",
+    )
+    assert result["status"] == "complete"
+    assert not result["activities"]
+    assert all(p["type"] == "text" for p in result["parts"])
+    assert "This is within your budget" not in str(result["parts"])
+    assert mcp.calls[0]["arguments"]["filters"]["party_size"] == 4
+    assert mcp.calls[0]["arguments"]["filters"]["price"] == {"max": "100.00"}
+    assert ACTIVITY not in requests[-1]["schema"].get("$defs", {}).get(
+        "ActivityPart", {}
+    ).get("properties", {}).get("activity_id", {}).get("enum", [])
+
+
+def test_final_price_change_removes_card_and_stale_model_claim() -> None:
+    class ChangedPrice(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            response = super().handle(request)
+            request_data = json.loads(request.content)
+            if (
+                request_data["method"] == "tools/call"
+                and request_data["params"]["name"] == "activities_get"
+            ):
+                body = response.json()
+                body["result"]["structuredContent"]["data"]["price"] = "200.00"
+                return httpx.Response(200, json=body)
+            return response
+
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {
+                "type": "final",
+                "parts": [
+                    {"type": "text", "text": "Costs only $45"},
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        ChangedPrice(),
+        question="For 2 people under $100 total",
+    )
+    assert result["status"] == "complete"
+    assert not result["activities"]
+    assert "Costs only $45" not in str(result["parts"])
+
+
+def test_trip_recommendations_require_matching_catalogue_schedule() -> None:
+    class TripFake(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            response = super().handle(request)
+            request_data = json.loads(request.content)
+            if (
+                request_data["method"] == "tools/call"
+                and request_data["params"]["name"] == "trip_get_context"
+            ):
+                body = response.json()
+                body["result"]["structuredContent"].update(
+                    source="student-1",
+                    data={
+                        "id": "trip_test_context",
+                        "start_date": "2026-10-05",
+                        "end_date": "2026-10-07",
+                        "traveller_count": 2,
+                    },
+                )
+                return httpx.Response(200, json=body)
+            return response
+
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        TripFake(),
+        question="Suggest an activity for my trip",
+        trip_id="trip_test_context",
+    )
+    assert result["status"] == "complete"
+    assert not result["activities"]  # Saturday schedule cannot match Mon-Wed.
+    assert [t["tool"] for t in result["tools"]].count("activities_get") >= 1
+
+
+def test_observation_preserves_previously_omitted_candidate_count() -> None:
+    from student4_backend_service.assistant import observation
+
+    result = observation(
+        {"ok": True, "data": {"items": [DETAIL], "context_items_omitted": 4}}
+    )
+    assert result["data"]["context_items_omitted"] == 4
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"filters": []},
+        {"filters": [["price", {"max": "100.00"}]]},
+        {"limit": None},
+        {"limit": "six"},
+        {"limit": 500},
+    ],
+)
+def test_invalid_raw_search_arguments_are_rejected_before_reconciliation(
+    arguments: dict[str, Any],
+) -> None:
+    mcp = ProtocolFake()
+    result = run(
+        [{"type": "tool", "name": "activities_search", "arguments": arguments}],
+        mcp,
+    )
+    assert result["status"] == "error"
+    assert mcp.calls == []
+    assert len(result["tools"]) == 1
+    assert result["tools"][0]["status"] == "rejected"
+    assert result["tools"][0]["error"] == "POLICY_REJECTED"
+    assert result["tools"][0]["arguments"] == arguments
+
+
+def test_context_overflow_uses_final_only_schema_and_fresh_cards() -> None:
+    from jsonschema import Draft202012Validator
+
+    search = {
+        "type": "tool",
+        "name": "activities_search",
+        "arguments": {"text": "walk"},
+    }
+    final = {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]}
+    baseline: list[dict[str, Any]] = []
+    run([search, final], ProtocolFake(), baseline)
+    budget = len(baseline[1]["prompt"]) + len(baseline[1]["system"]) - 1
+    assert len(baseline[0]["prompt"]) + len(baseline[0]["system"]) <= budget
+    requests: list[dict[str, Any]] = []
+    mcp = ProtocolFake()
+    result = run([search, final], mcp, requests, prompt_max_chars=budget)
+    assert result["status"] == "complete"
+    assert result["activities"][ACTIVITY]["price"] == "45.00"
+    assert [call["name"] for call in mcp.calls] == [
+        "activities_search",
+        "activities_get",
+    ]
+    validator = Draft202012Validator(requests[-1]["schema"])
+    assert validator.is_valid(final)
+    assert not validator.is_valid(search)
+    assert '"tools":[]' in requests[-1]["prompt"]
+    assert ACTIVITY in requests[-1]["prompt"]
+    assert '"count":1' in requests[-1]["prompt"]
+    assert len(requests[-1]["prompt"]) + len(requests[-1]["system"]) <= budget
+
+
+def test_context_overflow_still_errors_when_final_only_context_does_not_fit() -> None:
+    class LargeResult(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            response = super().handle(request)
+            request_data = json.loads(request.content)
+            if request_data["method"] == "tools/call":
+                payload = response.json()
+                payload["result"]["structuredContent"]["data"]["context"] = "x" * 15000
+                return httpx.Response(200, json=payload)
+            return response
+
+    requests: list[dict[str, Any]] = []
+    mcp = LargeResult()
+    result = run(
+        [{"type": "tool", "name": "activities_search", "arguments": {"text": "walk"}}],
+        mcp,
+        requests,
+    )
+    assert result["status"] == "error"
+    assert "too much context" in result["error"]
+    assert len(requests) == 1
+    assert [call["name"] for call in mcp.calls] == ["activities_search"]
+    assert result["tools"][0]["status"] == "success"

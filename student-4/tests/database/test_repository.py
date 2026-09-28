@@ -632,6 +632,41 @@ def test_search_filters(
     assert names == expected
 
 
+@pytest.mark.parametrize(
+    "term", ["kayak", "kayaks", "KAYAKING", "walk", "walks", "WALKING"]
+)
+def test_single_activity_word_variants_match_names_and_descriptions(
+    activities: ActivityRepository,
+    activity_payload: Callable[..., ActivityWrite],
+    term: str,
+) -> None:
+    activities.add(
+        activity_payload(name="Harbour kayak and walk", description="Outdoors")
+    )
+    activities.add(
+        activity_payload(name="River outing", description="Kayaking and walking")
+    )
+
+    names, total = _search_names(activities, text=term)
+
+    assert names == ["Harbour kayak and walk", "River outing"]
+    assert total == 2
+
+
+@pytest.mark.parametrize("term", ["harbour walking", "walking%", "walk_ing", "walker"])
+def test_activity_word_variants_do_not_expand_phrases_or_unknown_words(
+    activities: ActivityRepository,
+    activity_payload: Callable[..., ActivityWrite],
+    term: str,
+) -> None:
+    activities.add(activity_payload(name="Harbour walk", description="Outdoors"))
+
+    names, total = _search_names(activities, text=term)
+
+    assert names == []
+    assert total == 0
+
+
 def test_search_filters_stack(
     activities: ActivityRepository, catalogue: dict[str, object]
 ) -> None:

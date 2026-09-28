@@ -116,3 +116,15 @@ context is missing or constraints conflict, and explicitly refuses writes. Price
 filters compare listed prices; party budgets additionally require evaluating the
 returned pricing basis and party size. These are model instructions, not guarantees;
 backend read-only enforcement and activity provenance checks remain authoritative.
+
+### Deterministic eligibility checks
+
+Explicit party counts, AUD bounds and ISO dates are retained by the backend, not
+re-read from each model tool call. Ambiguous/unsupported expressions ask for
+clarification. MCP searches use safe listed-price bounds; retrieved candidates
+are checked with exact party-cost arithmetic, participant limits, accessibility
+and catalogue schedule overlap. The backend repeats checks after final MCP detail
+reads and writes the verification text itself. See the public API document for
+supported grammar, default selected-trip values, and limits. External MCP clients
+share the improved catalogue word variants, but must enforce their own budgets
+and recommendation policy.

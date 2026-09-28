@@ -188,3 +188,7 @@ model comparisons, including rejected experiments. Development checks improved
 from 4–5/10 to 8/10 in repeated runs, but unseen and selected-trip tests exposed
 remaining reasoning failures. See the report before interpreting these counts as
 answer accuracy. The final refinement verification passed 466 automated tests.
+
+The subsequent [checked-constraints follow-up](refinements/constraints/README.md)
+adds deterministic budget/schedule checks, clarifications and catalogue keyword
+variants. It retains both earlier failures and new live evidence for comparison.

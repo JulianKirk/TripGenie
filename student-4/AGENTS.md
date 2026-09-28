@@ -39,6 +39,11 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve ordinary browsing/CRUD when MCP is disabled or unavailable. Do not
   silently bypass MCP in the assistant. Legacy plan/evaluate routes are retained
   for compatibility, not used by the primary AI panel.
+- Retain request-local checked constraints independently of model tool arguments.
+  Use Decimal party totals and public MCP schedule details to filter candidates,
+  then repeat eligibility checks on final detail reads. Model prose must not
+  describe rejected cards as valid. Clarify unsupported or ambiguous constraint
+  syntax; do not silently invent numeric or date requirements.
 - Keep frontend query parsing and presentation in `query.py`, `forms.py`, and
   `presenters.py` rather than growing route handlers with duplicate logic.
 

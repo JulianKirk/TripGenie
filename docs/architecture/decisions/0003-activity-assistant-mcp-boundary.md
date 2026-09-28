@@ -34,6 +34,26 @@ refetches details through MCP, while the frontend renders authoritative records 
 existing explicit itinerary actions. This prevents invented cards; it cannot prove
 every assertion in generated prose is correct. No model HTML is rendered.
 
+The backend now retains explicit request constraints independently of generated
+tool arguments. A conservative parser accepts supported AUD bounds, party sizes,
+ISO dates and local time windows; conflicting or ambiguous forms receive an
+authored clarification. Selected-trip data supplies missing party size and dates.
+Search arguments are reconciled with these constraints, and authoritative MCP
+results are checked for exact Decimal party cost, participant limits,
+accessibility and catalogue schedule overlap. Final detail reads repeat those
+checks so a changed price or schedule cannot retain an invalid card. Schedule
+matching is not a reservation or proof of remaining capacity.
+
+For constrained activity results the backend writes the verification summary and
+party totals, replacing model prose that could still endorse excluded records.
+If the model omits card references, at most six eligible request-local IDs are
+freshly resolved. Other factual prose and semantic location/category selection
+remain model-assisted. Bounded pages cannot establish that the entire catalogue
+has no suitable activity. These checks belong to feature orchestration; external
+MCP clients still receive general catalogue contracts. Small keyword variants
+such as kayaking/kayak live in the public catalogue search implementation so all
+clients receive the same behavior.
+
 The UI's expandable Tools used section comes from backend execution records, not
 model descriptions. It shows names, arguments, statuses, durations, result IDs and
 correlation IDs, including card lookups and failures. Correlation travels in

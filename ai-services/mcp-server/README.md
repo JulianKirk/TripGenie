@@ -120,6 +120,12 @@ An oversized or malformed acknowledgement after a write requires catalogue
 inspection before retrying, since the mutation may already have completed.
 
 `activities_search` remains compatible with existing `text` and `limit` calls.
+It uses the public catalogue's text semantics: literal case-insensitive substrings,
+with conservative single-word variants `kayaks`/`kayaking` -> `kayak` and
+`walks`/`walking` -> `walk`. Multi-word phrases remain literal. This applies equally
+to external MCP clients and ordinary public API callers. Assistant-specific party
+budget and selected-trip eligibility checks live in the requesting backend; MCP's
+price filters continue to compare listed prices.
 `offset` defaults to zero; `filters` contains the public ActivityQuery fields
 except `text`, `limit` and `offset`: location, categories, price, duration_minutes,
 party_size, youngest_age, oldest_age, booking_required, accessibility,

@@ -108,16 +108,27 @@ class ToolExecutor:
             raise AgentError(message)
         return []
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        start = monotonic()
-        trace = ToolTrace(tool=name, arguments=arguments, status="error", duration_ms=0)
-        self.result.tools.append(trace)
+    def validate(self, name: str, arguments: dict[str, Any]) -> None:
+        """Reject invalid raw or reconciled arguments without executing the tool."""
         try:
             self._check(name, arguments)
         except AgentError:
-            trace.status = "rejected"
-            trace.error = "POLICY_REJECTED"
+            self.result.tools.append(
+                ToolTrace(
+                    tool=name,
+                    arguments=arguments,
+                    status="rejected",
+                    duration_ms=0,
+                    error="POLICY_REJECTED",
+                )
+            )
             raise
+
+    async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        start = monotonic()
+        self.validate(name, arguments)
+        trace = ToolTrace(tool=name, arguments=arguments, status="error", duration_ms=0)
+        self.result.tools.append(trace)
         try:
             response = await self.session.call_tool(
                 name, arguments, meta={"request_id": self.result.request_id}

@@ -107,6 +107,12 @@ not generated model text. Errors retain the trace, and no silent direct-API
 fallback occurs. A loading indicator announces work and the submit button is
 disabled while HTMX waits. See [setup and demonstration](mcp-assistant.md).
 
+For constrained recommendations the backend supplies an authored “Checked” summary
+and calculated party totals alongside eligible cards. A missing or ambiguous value
+may produce a clarification; submit a new self-contained request with the requested
+value. Catalogue schedule checks do not reserve capacity. The existing tool trace
+includes the extra MCP detail reads used for verification.
+
 ## Legacy AI activity suggestions
 
 The following describes retained plan/evaluate compatibility routes. The main

@@ -34,7 +34,8 @@ CATALOGUE = {
     "student-4": {
         "activities_search": (
             "Search activities by structured filters. Optional text matches literal "
-            "words in names/descriptions only; omit it for location, price, "
+            "words in names/descriptions (single-word kayaking/kayaks and "
+            "walking/walks also match kayak/walk); omit it for location, price, "
             "accessibility and category-only searches."
         ),
         "activities_create": "Create an activity (trusted local clients only).",

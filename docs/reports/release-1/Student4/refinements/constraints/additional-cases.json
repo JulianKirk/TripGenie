@@ -1,0 +1,38 @@
+[
+  {
+    "case": "sunday_budget",
+    "request": {
+      "question": "Find an activity in Sydney for 4 adults with a total budget of AUD 100 on 2026-10-11."
+    }
+  },
+  {
+    "case": "sunday_window",
+    "request": {
+      "question": "Find an activity in Sydney on 2026-10-11 from 10:00 to 10:30."
+    }
+  },
+  {
+    "case": "inclusive_minimum",
+    "request": {
+      "question": "Find activities in Sydney for no less than AUD 30."
+    }
+  },
+  {
+    "case": "negated_bound",
+    "request": {
+      "question": "Find activities in Sydney not over AUD 100."
+    }
+  },
+  {
+    "case": "missing_party",
+    "request": {
+      "question": "Find activities in Sydney for AUD 100 total."
+    }
+  },
+  {
+    "case": "malformed_amount",
+    "request": {
+      "question": "Find activities in Sydney under AUD 1,000."
+    }
+  }
+]
