@@ -14,9 +14,12 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
   the shared gateway. Never log secrets or unbounded user/model content.
 - `agentic-loop/` is a CI harness, not a runtime dependency. Its deterministic
   checks remain authoritative when the optional review model is unavailable.
-- `mcp-server/`, `rag-server/`, and `multi-agent-server/` do not yet contain an
-  implemented service. Define their contract and integration boundary before
-  adding runtime code or Compose dependencies.
+- `rag-server/` is a Release 1 host process. It calls AI-Mode for embeddings
+  and generation, owns its local SQLite index, and must not be added to Docker
+  Compose or call Ollama directly.
+- `mcp-server/` and `multi-agent-server/` do not yet contain an implemented
+  service. Define their contract and integration boundary before adding
+  runtime code or Compose dependencies.
 
 ## AI-Mode checks
 
@@ -38,6 +41,22 @@ docker compose config --quiet
 
 Use injected `httpx` transports to test provider responses and failure modes.
 Do not require a live Ollama instance for unit tests.
+
+## RAG checks
+
+Run from `ai-services/rag-server/`:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m compileall rag_service tests
+python -m ruff check rag_service tests
+python -m ruff format --check rag_service tests
+python -m pytest tests
+```
+
+Use fake AI-Mode transports and deterministic vectors. Tests and CI must not
+require Ollama, downloaded models, or an existing local index. Do not add a
+RAG Dockerfile or Compose service.
 
 ## Agentic-loop checks
 

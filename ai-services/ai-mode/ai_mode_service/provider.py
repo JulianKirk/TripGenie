@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,6 +24,12 @@ from .models import DependencyStatus
 class ProviderGenerateResult:
     model: str
     response: str
+
+
+@dataclass(slots=True)
+class ProviderEmbedResult:
+    model: str
+    embeddings: list[list[float]]
 
 
 class OllamaProviderAdapter:
@@ -93,13 +100,26 @@ class OllamaProviderAdapter:
             )
 
         available_models = {model.model for model in payload.models if model.model}
-        if self._settings.default_model not in available_models:
+        required_models = tuple(
+            dict.fromkeys(
+                (
+                    self._settings.default_model,
+                    self._settings.default_embedding_model,
+                )
+            )
+        )
+        missing_models = [
+            model
+            for model in required_models
+            if not _model_is_available(model, available_models)
+        ]
+        if missing_models:
             return DependencyStatus(
                 status="degraded",
                 service="ollama",
                 detail=(
-                    "Ollama responded, but the configured model "
-                    f"'{self._settings.default_model}' is not available."
+                    "Ollama responded, but configured models are unavailable: "
+                    f"{', '.join(missing_models)}."
                 ),
                 code="MODEL_UNAVAILABLE",
             )
@@ -108,8 +128,7 @@ class OllamaProviderAdapter:
             status="ok",
             service="ollama",
             detail=(
-                "Ollama responded successfully and the configured model is "
-                "available."
+                "Ollama responded successfully and the configured models are available."
             ),
         )
 
@@ -221,6 +240,110 @@ class OllamaProviderAdapter:
             model=model,
             response=response_text,
         )
+
+    async def embed(
+        self,
+        *,
+        model: str,
+        inputs: list[str],
+    ) -> ProviderEmbedResult:
+        try:
+            payload = await self._client.embed(model=model, input=inputs)
+        except httpx.TimeoutException as exc:
+            raise dependency_timeout(
+                "The AI provider did not respond before the configured timeout.",
+                [{"field": "ai_mode", "issue": "provider request timed out"}],
+            ) from exc
+        except httpx.ProtocolError as exc:
+            raise bad_gateway(
+                "The AI provider returned an invalid HTTP response.",
+                [{"field": "ai_mode", "issue": "provider returned invalid HTTP"}],
+            ) from exc
+        except (ConnectionError, httpx.NetworkError) as exc:
+            raise dependency_unavailable(
+                "The AI provider is unavailable.",
+                [{"field": "ai_mode", "issue": "provider connection failed"}],
+            ) from exc
+        except httpx.RequestError as exc:
+            raise dependency_unavailable(
+                "The AI provider request failed.",
+                [{"field": "ai_mode", "issue": "provider request failed"}],
+            ) from exc
+        except ResponseError as exc:
+            if _is_model_unavailable(exc):
+                raise model_unavailable(
+                    "Requested embedding model is not available.",
+                    [
+                        {
+                            "field": "model",
+                            "issue": f"model '{model}' is not available in Ollama",
+                        },
+                    ],
+                ) from exc
+            raise dependency_unavailable(
+                "The AI provider could not create embeddings.",
+                [
+                    {
+                        "field": "ai_mode",
+                        "issue": (
+                            f"provider returned HTTP {exc.status_code}"
+                            if exc.status_code > 0
+                            else "provider rejected the embed request"
+                        ),
+                    },
+                ],
+            ) from exc
+        except (ValidationError, ValueError) as exc:
+            raise bad_gateway(
+                "The AI provider returned a malformed embedding response.",
+                [{"field": "ai_mode", "issue": "provider response body was malformed"}],
+            ) from exc
+
+        embeddings = [list(vector) for vector in payload.embeddings]
+        if len(embeddings) != len(inputs) or not embeddings:
+            raise bad_gateway(
+                "The AI provider returned a malformed embedding response.",
+                [
+                    {
+                        "field": "ai_mode",
+                        "issue": "provider returned an unexpected embedding count",
+                    },
+                ],
+            )
+
+        dimension = len(embeddings[0])
+        if dimension < 1 or dimension > self._settings.max_embed_dimensions:
+            raise bad_gateway(
+                "The AI provider returned a malformed embedding response.",
+                [
+                    {
+                        "field": "ai_mode",
+                        "issue": "provider returned an unsupported vector dimension",
+                    },
+                ],
+            )
+        if any(
+            len(vector) != dimension
+            or any(not math.isfinite(value) for value in vector)
+            for vector in embeddings
+        ):
+            raise bad_gateway(
+                "The AI provider returned a malformed embedding response.",
+                [
+                    {
+                        "field": "ai_mode",
+                        "issue": "provider returned inconsistent or non-finite vectors",
+                    },
+                ],
+            )
+
+        return ProviderEmbedResult(model=model, embeddings=embeddings)
+
+
+def _model_is_available(required: str, available: set[str]) -> bool:
+    return required in available or (
+        ":" not in required and f"{required}:latest" in available
+    )
 
 
 def _is_model_unavailable(exc: ResponseError) -> bool:

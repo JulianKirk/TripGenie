@@ -8,6 +8,9 @@ MAX_APPROVED_MODELS = 10
 MAX_PROMPT_CHARS_HARD_LIMIT = 20000
 MAX_SCHEMA_CHARS_HARD_LIMIT = 12000
 MAX_RESPONSE_BYTES_HARD_LIMIT = 65536
+MAX_EMBED_INPUTS_HARD_LIMIT = 64
+MAX_EMBED_INPUT_CHARS_HARD_LIMIT = 20000
+MAX_EMBED_DIMENSIONS_HARD_LIMIT = 8192
 MAX_METADATA_ITEMS = 8
 MAX_METADATA_VALUE_CHARS = 160
 MAX_CORRELATION_ID_CHARS = 64
@@ -69,24 +72,23 @@ def _normalise_base_url(
     return candidate
 
 
-def _parse_approved_models(value: str | None) -> tuple[str, ...]:
-    raw_models = [
-        part.strip()
-        for part in (value or "qwen2.5:0.5b,llama3.1:8b").split(",")
-    ]
-    models = tuple(
-        dict.fromkeys(part for part in raw_models if part)
-    )
+def _parse_approved_models(
+    value: str | None,
+    *,
+    env_name: str,
+    default: str,
+) -> tuple[str, ...]:
+    raw_models = [part.strip() for part in (value or default).split(",")]
+    models = tuple(dict.fromkeys(part for part in raw_models if part))
     if not models:
-        raise ValueError("AI_MODE_ALLOWED_MODELS must contain at least one model.")
+        raise ValueError(f"{env_name} must contain at least one model.")
     if len(models) > MAX_APPROVED_MODELS:
         raise ValueError(
-            "AI_MODE_ALLOWED_MODELS must contain at most "
-            f"{MAX_APPROVED_MODELS} models."
+            f"{env_name} must contain at most {MAX_APPROVED_MODELS} models."
         )
     if any(len(model) > MAX_MODEL_NAME_CHARS for model in models):
         raise ValueError(
-            "AI_MODE_ALLOWED_MODELS contains a model name that exceeds "
+            f"{env_name} contains a model name that exceeds "
             f"{MAX_MODEL_NAME_CHARS} characters."
         )
 
@@ -111,10 +113,15 @@ class Settings:
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     default_model: str = "qwen2.5:0.5b"
     allowed_models: tuple[str, ...] = ("qwen2.5:0.5b", "llama3.1:8b")
+    default_embedding_model: str = "nomic-embed-text"
+    allowed_embedding_models: tuple[str, ...] = ("nomic-embed-text",)
     ollama_timeout_seconds: float = 15.0
     max_prompt_chars: int = 12000
     max_schema_chars: int = 8000
     max_response_bytes: int = 16384
+    max_embed_inputs: int = 32
+    max_embed_input_chars: int = 12000
+    max_embed_dimensions: int = 4096
 
     def __post_init__(self) -> None:
         self.max_prompt_chars = _validate_limit(
@@ -132,17 +139,49 @@ class Settings:
             env_name="AI_MODE_MAX_RESPONSE_BYTES",
             hard_limit=MAX_RESPONSE_BYTES_HARD_LIMIT,
         )
+        self.max_embed_inputs = _validate_limit(
+            self.max_embed_inputs,
+            env_name="AI_MODE_MAX_EMBED_INPUTS",
+            hard_limit=MAX_EMBED_INPUTS_HARD_LIMIT,
+        )
+        self.max_embed_input_chars = _validate_limit(
+            self.max_embed_input_chars,
+            env_name="AI_MODE_MAX_EMBED_INPUT_CHARS",
+            hard_limit=MAX_EMBED_INPUT_CHARS_HARD_LIMIT,
+        )
+        self.max_embed_dimensions = _validate_limit(
+            self.max_embed_dimensions,
+            env_name="AI_MODE_MAX_EMBED_DIMENSIONS",
+            hard_limit=MAX_EMBED_DIMENSIONS_HARD_LIMIT,
+        )
         if self.default_model not in self.allowed_models:
             raise ValueError(
                 "AI_MODE_DEFAULT_MODEL must also appear in AI_MODE_ALLOWED_MODELS."
             )
+        if self.default_embedding_model not in self.allowed_embedding_models:
+            raise ValueError(
+                "AI_MODE_DEFAULT_EMBEDDING_MODEL must also appear in "
+                "AI_MODE_ALLOWED_EMBEDDING_MODELS."
+            )
 
     @classmethod
     def from_env(cls) -> "Settings":
-        allowed_models = _parse_approved_models(os.getenv("AI_MODE_ALLOWED_MODELS"))
+        allowed_models = _parse_approved_models(
+            os.getenv("AI_MODE_ALLOWED_MODELS"),
+            env_name="AI_MODE_ALLOWED_MODELS",
+            default="qwen2.5:0.5b,llama3.1:8b",
+        )
+        allowed_embedding_models = _parse_approved_models(
+            os.getenv("AI_MODE_ALLOWED_EMBEDDING_MODELS"),
+            env_name="AI_MODE_ALLOWED_EMBEDDING_MODELS",
+            default="nomic-embed-text",
+        )
         default_model = (
-            os.getenv("AI_MODE_DEFAULT_MODEL", "qwen2.5:0.5b").strip()
-            or "qwen2.5:0.5b"
+            os.getenv("AI_MODE_DEFAULT_MODEL", "qwen2.5:0.5b").strip() or "qwen2.5:0.5b"
+        )
+        default_embedding_model = (
+            os.getenv("AI_MODE_DEFAULT_EMBEDDING_MODEL", "nomic-embed-text").strip()
+            or "nomic-embed-text"
         )
         return cls(
             service_name=os.getenv("AI_MODE_SERVICE_NAME", "ai-mode").strip()
@@ -154,6 +193,8 @@ class Settings:
             ),
             default_model=default_model,
             allowed_models=allowed_models,
+            default_embedding_model=default_embedding_model,
+            allowed_embedding_models=allowed_embedding_models,
             ollama_timeout_seconds=_parse_timeout(
                 os.getenv("AI_MODE_TIMEOUT_SECONDS"),
                 env_name="AI_MODE_TIMEOUT_SECONDS",
@@ -173,5 +214,20 @@ class Settings:
                 os.getenv("AI_MODE_MAX_RESPONSE_BYTES"),
                 env_name="AI_MODE_MAX_RESPONSE_BYTES",
                 default=16384,
+            ),
+            max_embed_inputs=_parse_positive_int(
+                os.getenv("AI_MODE_MAX_EMBED_INPUTS"),
+                env_name="AI_MODE_MAX_EMBED_INPUTS",
+                default=32,
+            ),
+            max_embed_input_chars=_parse_positive_int(
+                os.getenv("AI_MODE_MAX_EMBED_INPUT_CHARS"),
+                env_name="AI_MODE_MAX_EMBED_INPUT_CHARS",
+                default=12000,
+            ),
+            max_embed_dimensions=_parse_positive_int(
+                os.getenv("AI_MODE_MAX_EMBED_DIMENSIONS"),
+                env_name="AI_MODE_MAX_EMBED_DIMENSIONS",
+                default=4096,
             ),
         )

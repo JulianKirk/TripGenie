@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "sources": [
+    {
+      "source_id": "release-1-shared-rag-architecture",
+      "path": "docs/architecture/release-1-shared-rag-architecture.md",
+      "title": "Release 1 Shared RAG Architecture",
+      "feature": "shared"
+    },
+    {
+      "source_id": "release-1-shared-rag-contract",
+      "path": "docs/architecture/release-1-rag-contract.md",
+      "title": "Release 1 Shared RAG Contract",
+      "feature": "shared"
+    },
+    {
+      "source_id": "student-1-data-models",
+      "path": "docs/architecture/student-1-data-models.md",
+      "title": "Student 1 Data Models",
+      "feature": "student-1"
+    }
+  ]
+}

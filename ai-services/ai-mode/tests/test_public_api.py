@@ -50,7 +50,7 @@ def test_health_reports_ok_with_current_ollama_metadata(
                     "status": "ok",
                     "service": "ollama",
                     "detail": (
-                        "Ollama responded successfully and the configured model is "
+                        "Ollama responded successfully and the configured models are "
                         "available."
                     ),
                     "code": None,
@@ -107,8 +107,8 @@ def test_ready_returns_model_unavailable_for_valid_empty_model_list(
                     "status": "degraded",
                     "service": "ollama",
                     "detail": (
-                        "Ollama responded, but the configured model "
-                        "'qwen2.5:0.5b' is not available."
+                        "Ollama responded, but configured models are unavailable: "
+                        "qwen2.5:0.5b, nomic-embed-text."
                     ),
                     "code": "MODEL_UNAVAILABLE",
                 }
@@ -156,6 +156,120 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
     assert ollama_request["stream"] is False
     assert ollama_request["options"] == {"temperature": 0}
     assert ollama_request["format"]["type"] == "object"
+
+
+def test_embed_uses_approved_model_and_returns_dimension(
+    client_factory,
+    ollama_api,
+) -> None:
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/embed",
+            json={
+                "inputs": ["first source", "second source"],
+                "correlation_id": "rag-ingest-01",
+                "metadata": {"feature": "shared-rag"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "run_id": response.json()["data"]["run_id"],
+        "correlation_id": "rag-ingest-01",
+        "model": "nomic-embed-text",
+        "provider": "ollama",
+        "dimension": 3,
+        "embeddings": [[1.0, 0.0, 0.5], [1.0, 0.0, 0.5]],
+    }
+    assert ollama_api.embed_requests == [
+        {
+            "model": "nomic-embed-text",
+            "input": ["first source", "second source"],
+        }
+    ]
+
+
+def test_embed_rejects_unapproved_model_and_configured_bounds(
+    client_factory,
+    ollama_api,
+) -> None:
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        model_response = client.post(
+            "/embed",
+            json={"inputs": ["source"], "model": "other-embed"},
+        )
+        count_response = client.post(
+            "/embed",
+            json={"inputs": ["one", "two", "three", "four"]},
+        )
+        length_response = client.post(
+            "/embed",
+            json={"inputs": ["x" * 41]},
+        )
+
+    assert model_response.status_code == 422
+    assert model_response.json()["error"]["details"] == [
+        {"field": "model", "issue": "must be one of: nomic-embed-text"}
+    ]
+    assert count_response.status_code == 422
+    assert count_response.json()["error"]["details"] == [
+        {"field": "inputs", "issue": "must contain at most 3 values"}
+    ]
+    assert length_response.status_code == 422
+    assert length_response.json()["error"]["details"] == [
+        {"field": "inputs.0", "issue": "must be at most 40 characters"}
+    ]
+    assert ollama_api.embed_requests == []
+
+
+@pytest.mark.parametrize(
+    ("queued_response", "status_code", "error_code"),
+    [
+        (
+            httpx.ReadTimeout(
+                "slow",
+                request=httpx.Request("POST", "http://ollama.test/api/embed"),
+            ),
+            504,
+            "DEPENDENCY_TIMEOUT",
+        ),
+        (
+            httpx.Response(404, json={"error": "model 'nomic-embed-text' not found"}),
+            503,
+            "MODEL_UNAVAILABLE",
+        ),
+        (
+            httpx.Response(200, json={"model": "nomic-embed-text", "embeddings": []}),
+            502,
+            "BAD_GATEWAY",
+        ),
+        (
+            httpx.Response(
+                200,
+                json={
+                    "model": "nomic-embed-text",
+                    "embeddings": [[1.0, 0.0], [1.0]],
+                },
+            ),
+            502,
+            "BAD_GATEWAY",
+        ),
+    ],
+)
+def test_embed_surfaces_stable_provider_failures(
+    client_factory,
+    ollama_api,
+    queued_response: httpx.Response | Exception,
+    status_code: int,
+    error_code: str,
+) -> None:
+    ollama_api.queue_embed_response(queued_response)
+
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post("/embed", json={"inputs": ["one", "two"]})
+
+    assert response.status_code == status_code
+    assert response.json()["error"]["code"] == error_code
 
 
 def test_generate_accepts_max_length_correlation_id(client_factory, ollama_api) -> None:
@@ -435,6 +549,5 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
 
 def test_log_sanitiser_replaces_control_characters() -> None:
     assert (
-        _sanitise_log_value("safe\nvalue\twith\rcontrols")
-        == "safe?value?with?controls"
+        _sanitise_log_value("safe\nvalue\twith\rcontrols") == "safe?value?with?controls"
     )

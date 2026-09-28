@@ -192,8 +192,10 @@ Insufficient-context response:
 - An unknown citation ID makes the model output invalid.
 - Confidence is calculated server-side from retrieval scores; model-provided
   confidence is ignored.
-- Thresholds are calibrated against a small versioned query set for the chosen
-  embedding model. Changing that model invalidates the calibration and index.
+- Thresholds are boundary-tested and evaluated against
+  [`config/calibration-queries.json`](../../ai-services/rag-server/config/calibration-queries.json)
+  for the chosen embedding model. Changing that model invalidates the
+  calibration evidence and index.
 - Retrieval below the configured minimum skips generation and returns the
   fixed insufficient-context response.
 

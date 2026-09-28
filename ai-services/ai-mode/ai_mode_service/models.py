@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from .config import (
     MAX_CORRELATION_ID_CHARS,
+    MAX_EMBED_INPUT_CHARS_HARD_LIMIT,
+    MAX_EMBED_INPUTS_HARD_LIMIT,
     MAX_METADATA_ITEMS,
     MAX_METADATA_VALUE_CHARS,
     MAX_MODEL_NAME_CHARS,
@@ -47,6 +49,10 @@ MetadataValue = Annotated[
 PromptText = Annotated[
     str,
     StringConstraints(min_length=1, max_length=MAX_PROMPT_CHARS_HARD_LIMIT),
+]
+EmbedText = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=MAX_EMBED_INPUT_CHARS_HARD_LIMIT),
 ]
 CorrelationId = Annotated[
     str,
@@ -152,3 +158,36 @@ class GenerateResponsePayload(StrictModel):
     provider: ShortText = "ollama"
     response: str
     done: bool = True
+
+
+class EmbedRequest(StrictModel):
+    inputs: list[EmbedText] = Field(
+        min_length=1,
+        max_length=MAX_EMBED_INPUTS_HARD_LIMIT,
+    )
+    model: ModelName | None = None
+    correlation_id: CorrelationId | None = None
+    metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict)
+
+    @field_validator("inputs")
+    @classmethod
+    def validate_inputs(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("must not contain blank values")
+        return [item.strip() for item in value]
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > MAX_METADATA_ITEMS:
+            raise ValueError(f"must contain at most {MAX_METADATA_ITEMS} entries")
+        return value
+
+
+class EmbedResponsePayload(StrictModel):
+    run_id: ShortText
+    correlation_id: CorrelationId
+    model: ModelName
+    provider: ShortText = "ollama"
+    dimension: int = Field(gt=0)
+    embeddings: list[list[float]]
