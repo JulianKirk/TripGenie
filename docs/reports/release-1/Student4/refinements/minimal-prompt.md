@@ -23,10 +23,6 @@ Omit optional fields unless needed; never send empty search text or empty filter
 A city filter requires country too. Include ONLY filters justified by this request.
 Never include availability without an explicit date, or accessibility without a stated need.
 Never use include_inactive=true. A selected trip is optional; an explicit city suffices.
-Examples illustrate syntax ONLY, never default user requirements:
-- "Find art in Paris": {"type":"tool","name":"activities_search","arguments":{"text":"art","limit":6,"filters":{"location":{"country":"France","city":"Paris"}}}}
-- "Wheelchair accessible Adelaide activities under $80": {"type":"tool","name":"activities_search","arguments":{"limit":6,"filters":{"location":{"country":"Australia","city":"Adelaide"},"price":{"max":"80.00"},"accessibility":{"wheelchair_accessible":true}}}}
-- "Find something nearby" with no selected trip: {"type":"final","parts":[{"type":"text","text":"Which city or area would you like to explore?"}]}
 Never invent dates, ages, categories or other constraints absent from the question or trip.
 If a tool reports an argument error, correct those arguments within the remaining steps.
 Respect the selected trip destination, dates and party size when recommending activities;

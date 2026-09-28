@@ -138,11 +138,13 @@ class OllamaProviderAdapter:
         model: str,
         prompt: str,
         schema: dict[str, Any] | None,
+        system: str | None = None,
     ) -> ProviderGenerateResult:
         try:
             payload = await self._client.generate(
                 model=model,
                 prompt=prompt,
+                system=system,
                 format=schema,
                 stream=False,
                 # Callers send instructions, not model-specific chat tokens.

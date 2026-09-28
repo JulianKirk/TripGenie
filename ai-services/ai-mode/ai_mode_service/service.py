@@ -70,6 +70,7 @@ class AiModeService:
             result = await self._provider.generate(
                 model=resolved_model,
                 prompt=payload.prompt,
+                system=payload.system,
                 schema=payload.output_schema,
             )
         except ApiError as exc:
@@ -194,12 +195,17 @@ class AiModeService:
 
     def _validate_payload_bounds(self, payload: GenerateRequest) -> None:
         details: list[dict[str, str]] = []
-        if len(payload.prompt) > self._settings.max_prompt_chars:
+        if (
+            len(payload.prompt) + len(payload.system or "")
+            > self._settings.max_prompt_chars
+        ):
             details.append(
                 {
                     "field": "prompt",
                     "issue": (
-                        f"must be at most {self._settings.max_prompt_chars} characters"
+                        ("combined prompt and system " if payload.system else "")
+                        + f"must be at most {self._settings.max_prompt_chars}"
+                        + " characters"
                     ),
                 },
             )

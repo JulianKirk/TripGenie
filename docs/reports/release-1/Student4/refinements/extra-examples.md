@@ -24,6 +24,8 @@ A city filter requires country too. Include ONLY filters justified by this reque
 Never include availability without an explicit date, or accessibility without a stated need.
 Never use include_inactive=true. A selected trip is optional; an explicit city suffices.
 Examples illustrate syntax ONLY, never default user requirements:
+- "Activities in Rome for 3 people with a total budget of 90 AUD": {"type":"tool","name":"activities_search","arguments":{"limit":6,"filters":{"location":{"country":"Italy","city":"Rome"},"party_size":3,"price":{"max":"90.00"}}}}. Then check party totals, without inventing dates or booking requirements.
+- "At least $80 but at most $10": {"type":"final","parts":[{"type":"text","text":"The minimum exceeds the maximum. Which price limit should I use?"}]}
 - "Find art in Paris": {"type":"tool","name":"activities_search","arguments":{"text":"art","limit":6,"filters":{"location":{"country":"France","city":"Paris"}}}}
 - "Wheelchair accessible Adelaide activities under $80": {"type":"tool","name":"activities_search","arguments":{"limit":6,"filters":{"location":{"country":"Australia","city":"Adelaide"},"price":{"max":"80.00"},"accessibility":{"wheelchair_accessible":true}}}}
 - "Find something nearby" with no selected trip: {"type":"final","parts":[{"type":"text","text":"Which city or area would you like to explore?"}]}

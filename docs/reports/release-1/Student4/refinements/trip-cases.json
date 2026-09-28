@@ -1,0 +1,1 @@
+[{"case":"trip_context","request":{"question":"What are my trip dates, which activities are on my itinerary, and what is their committed activity cost?","trip_id":"trip_refinement_eval"}},{"case":"trip_recommendation","request":{"question":"Suggest an activity during my trip.","trip_id":"trip_refinement_eval"}}]

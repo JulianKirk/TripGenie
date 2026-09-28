@@ -180,3 +180,11 @@ MCP process and submit another question: the error should be explicit while
 catalogue browsing continues. Restart MCP afterwards. The same questions can be
 sent as `{"question":"...","trip_id":"..."}` to public `POST /activity/assistant`;
 omit trip_id for questions without selected-trip context.
+
+## Follow-up refinement evaluation
+
+The [refinement report](refinements/README.md) records the subsequent prompt and
+model comparisons, including rejected experiments. Development checks improved
+from 4–5/10 to 8/10 in repeated runs, but unseen and selected-trip tests exposed
+remaining reasoning failures. See the report before interpreting these counts as
+answer accuracy. The final refinement verification passed 466 automated tests.

@@ -575,3 +575,58 @@ def test_card_schema_only_contains_ids_shown_in_bounded_observations() -> None:
     assert len(ids) == 12
     assert str(UUID(int=106)) not in ids
     assert str(UUID(int=205)) in ids
+
+
+def test_assistant_keeps_policy_separate_from_untrusted_request() -> None:
+    requests: list[dict[str, Any]] = []
+    result = run(
+        [
+            {
+                "type": "final",
+                "parts": [{"type": "text", "text": "Please specify a city."}],
+            }
+        ],
+        ProtocolFake(),
+        requests,
+    )
+    assert result["status"] == "complete"
+    assert "read-only activities assistant" in requests[0]["system"]
+    assert "Find walks" not in requests[0]["system"]
+    assert "Find walks" in requests[0]["prompt"]
+    assert "read-only activities assistant" not in requests[0]["prompt"]
+
+
+def test_combined_instruction_budget_rejects_before_model_call() -> None:
+    requests: list[dict[str, Any]] = []
+    run(
+        [{"type": "final", "parts": [{"type": "text", "text": "Ready"}]}],
+        ProtocolFake(),
+        requests,
+    )
+    # Each field fits alone; only the combined content exceeds this allowance.
+    budget = max(len(requests[0]["prompt"]), len(requests[0]["system"]))
+
+    def unexpected(request: httpx.Request) -> httpx.Response:
+        message = "Over-budget input must not reach AI-Mode"
+        raise AssertionError(message)
+
+    settings = Settings(
+        ai_mode_url="http://ai.test",
+        mcp_enabled=True,
+        mcp_url="http://mcp.test/mcp",
+        ai_prompt_max_chars=budget,
+    )
+    mcp = ProtocolFake()
+    with TestClient(
+        create_app(
+            settings,
+            ai_mode_transport=httpx.MockTransport(unexpected),
+            mcp_transport=httpx.MockTransport(mcp.handle),
+        )
+    ) as client:
+        result = client.post(
+            "/activity/assistant", json={"question": "Find walks"}
+        ).json()
+    assert result["status"] == "error"
+    assert "too much context" in result["error"]
+    assert not mcp.calls

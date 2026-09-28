@@ -1,0 +1,252 @@
+[
+  {
+    "case": "trip_context",
+    "question": "What are my trip dates, which activities are on my itinerary, and what is their committed activity cost?",
+    "trip_id": "trip_refinement_eval",
+    "seconds": 3.8,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-8a35743bc97e4474",
+      "parts": [
+        {
+          "type": "text",
+          "text": "The trip dates are from 2026-10-05 to 2026-10-07."
+        },
+        {
+          "type": "text",
+          "text": "There are no activities on your itinerary."
+        },
+        {
+          "type": "text",
+          "text": "The committed activity cost is $0.00."
+        }
+      ],
+      "activities": {},
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "trip_get_context",
+          "arguments": {
+            "trip_id": "trip_refinement_eval"
+          },
+          "status": "success",
+          "duration_ms": 34,
+          "correlation_id": "student4-agent-8a35743bc97e4474",
+          "result_count": null,
+          "activity_ids": [],
+          "error": null
+        },
+        {
+          "tool": "trips_list_itinerary_items",
+          "arguments": {
+            "trip_id": "trip_refinement_eval",
+            "limit": 6
+          },
+          "status": "success",
+          "duration_ms": 16,
+          "correlation_id": "student4-agent-8a35743bc97e4474",
+          "result_count": null,
+          "activity_ids": [],
+          "error": null
+        },
+        {
+          "tool": "activities_committed_costs",
+          "arguments": {
+            "trip_id": "trip_refinement_eval"
+          },
+          "status": "success",
+          "duration_ms": 30,
+          "correlation_id": "student4-agent-8a35743bc97e4474",
+          "result_count": null,
+          "activity_ids": [],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "trip_recommendation",
+    "question": "Suggest an activity during my trip.",
+    "trip_id": "trip_refinement_eval",
+    "seconds": 4.36,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-d362586fd6c14d40",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Based on the selected trip, the following accessible activities in Sydney are available:"
+        },
+        {
+          "type": "activity",
+          "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+        },
+        {
+          "type": "text",
+          "text": " and "
+        },
+        {
+          "type": "activity",
+          "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+        }
+      ],
+      "activities": {
+        "7357f374-25e2-5905-aebd-8097345b7465": {
+          "name": "Museum of Contemporary Art highlights tour",
+          "description": "An accessible guided introduction to contemporary Australian art.",
+          "price": "30.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 15,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Lift access and accessible toilets are available.",
+          "is_active": true,
+          "categories": [
+            "CULTURE",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "FRIDAY",
+              "date": null,
+              "start_time": "10:00",
+              "end_time": "16:00",
+              "id": "5e18b4fa-9aff-41ee-b58d-7f3b89805fe0"
+            }
+          ],
+          "id": "7357f374-25e2-5905-aebd-8097345b7465",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "George Street",
+            "street_number": 140
+          }
+        },
+        "99c4c261-6a7b-5071-a62a-850664ba30b3": {
+          "name": "Royal Botanic Garden accessible stroll",
+          "description": "A relaxed, step-free guided stroll through the harbour-side gardens.",
+          "price": "22.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Step-free route with accessible toilets nearby.",
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR",
+            "WELLNESS"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "dd029985-6802-49eb-b157-e666e91bf770"
+            }
+          ],
+          "id": "99c4c261-6a7b-5071-a62a-850664ba30b3",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Mrs Macquaries Road",
+            "street_number": 1
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "trip_get_context",
+          "arguments": {
+            "trip_id": "trip_refinement_eval"
+          },
+          "status": "success",
+          "duration_ms": 24,
+          "correlation_id": "student4-agent-d362586fd6c14d40",
+          "result_count": null,
+          "activity_ids": [],
+          "error": null
+        },
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              },
+              "price": {
+                "max": "80.00"
+              },
+              "accessibility": {
+                "wheelchair_accessible": true
+              }
+            }
+          },
+          "status": "success",
+          "duration_ms": 16,
+          "correlation_id": "student4-agent-d362586fd6c14d40",
+          "result_count": 2,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465",
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-d362586fd6c14d40",
+          "result_count": 1,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-d362586fd6c14d40",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  }
+]

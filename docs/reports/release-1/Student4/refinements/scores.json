@@ -1,0 +1,246 @@
+{
+  "baseline-repeat": {
+    "passed": 4,
+    "scored": 10,
+    "median_seconds": 4.7,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": false,
+      "unknown": false,
+      "categories": true,
+      "write": false,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "baseline": {
+    "passed": 5,
+    "scored": 10,
+    "median_seconds": 3.74,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": false,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "concise-prompt": {
+    "passed": 2,
+    "scored": 10,
+    "median_seconds": 6.26,
+    "cases": {
+      "accessible": false,
+      "paraphrase": false,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": false,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": false,
+      "budget": false
+    }
+  },
+  "contrasting-examples": {
+    "passed": 8,
+    "scored": 10,
+    "median_seconds": 2.26,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": true,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": true,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "expanded-prompt": {
+    "passed": 5,
+    "scored": 10,
+    "median_seconds": 3.31,
+    "cases": {
+      "accessible": false,
+      "paraphrase": true,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "extra-examples": {
+    "passed": 7,
+    "scored": 10,
+    "median_seconds": 1.51,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": true,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "final-http": {
+    "passed": 8,
+    "scored": 10,
+    "median_seconds": 2.5,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": true,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": true,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "held-out": {
+    "passed": 0,
+    "scored": 0,
+    "median_seconds": 1.72,
+    "cases": {
+      "step_free": null,
+      "brisbane_budget": null,
+      "category_paraphrase": null,
+      "booking": null,
+      "missing_place": null,
+      "kayak": null,
+      "zero_budget": null
+    }
+  },
+  "minimal-prompt": {
+    "passed": 4,
+    "scored": 10,
+    "median_seconds": 3.89,
+    "cases": {
+      "accessible": false,
+      "paraphrase": false,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "qwen-baseline": {
+    "passed": 7,
+    "scored": 10,
+    "median_seconds": 3.33,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": true,
+      "unknown": true,
+      "categories": true,
+      "write": true,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "qwen-refined": {
+    "passed": 7,
+    "scored": 10,
+    "median_seconds": 2.5,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": true,
+      "unknown": false,
+      "categories": true,
+      "write": true,
+      "ambiguous": true,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "recency": {
+    "passed": 1,
+    "scored": 10,
+    "median_seconds": 6.69,
+    "cases": {
+      "accessible": false,
+      "paraphrase": false,
+      "melbourne": false,
+      "unknown": false,
+      "categories": true,
+      "write": false,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": false,
+      "budget": false
+    }
+  },
+  "simplified-schema": {
+    "passed": 3,
+    "scored": 10,
+    "median_seconds": 1.5,
+    "cases": {
+      "accessible": false,
+      "paraphrase": false,
+      "melbourne": false,
+      "unknown": false,
+      "categories": true,
+      "write": true,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "system-only": {
+    "passed": 5,
+    "scored": 10,
+    "median_seconds": 3.29,
+    "cases": {
+      "accessible": true,
+      "paraphrase": true,
+      "melbourne": false,
+      "unknown": true,
+      "categories": true,
+      "write": false,
+      "ambiguous": false,
+      "conflicting": false,
+      "injection": true,
+      "budget": false
+    }
+  },
+  "trip": {
+    "passed": 0,
+    "scored": 0,
+    "median_seconds": 4.08,
+    "cases": {
+      "trip_context": null,
+      "trip_recommendation": null
+    }
+  }
+}

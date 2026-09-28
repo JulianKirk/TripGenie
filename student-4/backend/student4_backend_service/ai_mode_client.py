@@ -68,6 +68,7 @@ class AiModeClient:
         schema: dict[str, Any],
         correlation_id: str,
         metadata: dict[str, str],
+        system: str | None = None,
     ) -> GeneratedAnswer:
         if self._client is None:
             raise HTTPException(
@@ -79,6 +80,7 @@ class AiModeClient:
                 "/generate",
                 json={
                     "prompt": prompt,
+                    **({"system": system} if system is not None else {}),
                     "schema": schema,
                     "correlation_id": correlation_id,
                     "metadata": metadata,

@@ -20,8 +20,13 @@ them to allowed tools, constrains AI-Mode output using those schemas, then valid
 and checks policy again before execution. Trip tools are scoped to the selected
 trip. Six model steps, bounded tool calls, result/context limits and a total deadline
 prevent unbounded execution. Each request starts with empty state. AI-Mode remains
-the sole Ollama adapter; its existing schema-constrained generation contract is
-sufficient, so no native tool-call API is added to the shared gateway.
+the sole Ollama adapter. Its schema-constrained generation contract gains an optional
+`system` field for trusted policy, separate from user/tool context in `prompt`.
+Both fields share the existing input character budget. Existing clients can omit
+`system`; no native tool-call API or retained chat history is added. The assistant
+places the current question after tool context and uses contrasting syntax examples
+to reduce accidental copying of example filters. Model quality still varies; measured
+results and rejected experiments live in the Student 4 Release 1 refinement report.
 
 Final model output contains plain text and typed activity references. Only IDs
 returned by successful activity tools in that request can become cards. The backend

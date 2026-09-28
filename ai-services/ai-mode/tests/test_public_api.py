@@ -532,6 +532,7 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
             "/generate",
             json={
                 "prompt": "SENSITIVE_PROMPT_SHOULD_NOT_BE_LOGGED",
+                "system": "SENSITIVE_SYSTEM_SHOULD_NOT_BE_LOGGED",
                 "correlation_id": "student1-run-02",
                 "metadata": {
                     "feature": "student-1-trip-suggestions",
@@ -544,6 +545,7 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
     assert "ai_mode stage=start" in caplog.text
     assert "ai_mode stage=success" in caplog.text
     assert "SENSITIVE_PROMPT_SHOULD_NOT_BE_LOGGED" not in caplog.text
+    assert "SENSITIVE_SYSTEM_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "SENSITIVE_OUTPUT_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "trip_2027_sydney_getaway" not in caplog.text
 
@@ -552,3 +554,40 @@ def test_log_sanitiser_replaces_control_characters() -> None:
     assert (
         _sanitise_log_value("safe\nvalue\twith\rcontrols") == "safe?value?with?controls"
     )
+
+
+def test_generate_separates_system_instructions_from_request(
+    client_factory, ollama_api
+):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={"prompt": "untrusted request", "system": "trusted policy"},
+        )
+    assert response.status_code == 200
+    assert ollama_api.generate_requests[0]["system"] == "trusted policy"
+    assert ollama_api.generate_requests[0]["prompt"] == "untrusted request"
+
+
+@pytest.mark.parametrize("system", [" ", "s" * 80])
+def test_generate_bounds_system_and_prompt_together(client_factory, ollama_api, system):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post("/generate", json={"prompt": "x", "system": system})
+    assert response.status_code == 422
+    assert not ollama_api.generate_requests
+
+
+def test_generate_accepts_exact_combined_budget(client_factory, ollama_api):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate", json={"prompt": "p" * 40, "system": "s" * 40}
+        )
+    assert response.status_code == 200
+    assert len(ollama_api.generate_requests) == 1
+
+
+def test_generate_null_system_preserves_existing_callers(client_factory, ollama_api):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post("/generate", json={"prompt": "hello", "system": None})
+    assert response.status_code == 200
+    assert ollama_api.generate_requests[0].get("system") is None

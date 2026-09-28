@@ -22,7 +22,7 @@ Student backends must render their own prompts, own domain retries/validation, a
 | `AI_MODE_DEFAULT_EMBEDDING_MODEL` | `nomic-embed-text` | Default approved embedding model. |
 | `AI_MODE_ALLOWED_EMBEDDING_MODELS` | `nomic-embed-text` | Separate allowlist for embedding models. |
 | `AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Ollama list, generate, and embed calls. |
-| `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max accepted rendered prompt length. Student backends should pre-budget prompts to this same contract. |
+| `AI_MODE_MAX_PROMPT_CHARS` | `12000` | Max combined `prompt` + optional `system` length. Student backends should pre-budget prompts to this same contract. |
 | `AI_MODE_MAX_SCHEMA_CHARS` | `8000` | Max accepted JSON-schema serialized length. |
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
 | `AI_MODE_MAX_EMBED_INPUTS` | `32` | Maximum texts accepted by one embedding request. |
@@ -94,6 +94,15 @@ Example:
 ### `POST /generate`
 
 Single-shot non-stream generation only.
+
+An optional `system` string carries trusted application instructions separately from
+`prompt` (user request and other untrusted context). AI-Mode forwards it through the
+provider's system instruction field with model templating enabled. Existing callers
+can omit it. A supplied string must be nonblank; `null` behaves like omission. The
+combined character count of both fields must fit `AI_MODE_MAX_PROMPT_CHARS`; splitting
+input does not increase the allowance. Role separation improves instruction clarity,
+but application authorization and output validation remain mandatory. Never put raw
+user input or tool observations into `system`.
 
 `correlation_id` must be a safe single-line value that starts with a letter or digit, uses only letters, digits, `.`, `_`, `:`, or `-`, and stays within 64 characters.
 

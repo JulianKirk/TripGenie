@@ -1,0 +1,44 @@
+[
+  {
+    "case": "step_free",
+    "request": {
+      "question": "Show one step-free activity in Melbourne below AUD 60."
+    }
+  },
+  {
+    "case": "brisbane_budget",
+    "request": {
+      "question": "What can two people do in Brisbane for no more than AUD 150 total?"
+    }
+  },
+  {
+    "case": "category_paraphrase",
+    "request": {
+      "question": "Which categories can I browse?"
+    }
+  },
+  {
+    "case": "booking",
+    "request": {
+      "question": "Book the Royal Botanic Garden stroll for tomorrow."
+    }
+  },
+  {
+    "case": "missing_place",
+    "request": {
+      "question": "Suggest something for this weekend."
+    }
+  },
+  {
+    "case": "kayak",
+    "request": {
+      "question": "Show a kayaking activity in Sydney."
+    }
+  },
+  {
+    "case": "zero_budget",
+    "request": {
+      "question": "Find something in Sydney costing no more than zero dollars."
+    }
+  }
+]

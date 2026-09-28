@@ -105,3 +105,14 @@ docker compose config --quiet
 Student 4 CI explicitly disables runtime MCP and RAG modes. The separate MCP
 contract job tests real SDK protocol sessions using fake provider/model transports,
 including the full frontend/backend/MCP/card flow, without requiring host services.
+
+### Instruction separation and request quality
+
+The assistant sends its trusted prompt asset in AI-Mode's optional `system` field.
+The question, registered tool descriptions/schemas and observations stay in `prompt`;
+both fields share the existing character budget. This remains a one-shot workflow,
+with no retained conversation. The prompt asks for clarification when essential
+context is missing or constraints conflict, and explicitly refuses writes. Price
+filters compare listed prices; party budgets additionally require evaluating the
+returned pricing basis and party size. These are model instructions, not guarantees;
+backend read-only enforcement and activity provenance checks remain authoritative.

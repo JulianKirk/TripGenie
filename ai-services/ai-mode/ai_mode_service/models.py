@@ -112,14 +112,17 @@ class GenerateRequest(StrictModel):
     )
 
     prompt: PromptText
+    system: PromptText | None = None
     model: ModelName | None = None
     output_schema: dict[str, Any] | None = Field(default=None, alias="schema")
     correlation_id: str | None = None
     metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict)
 
-    @field_validator("prompt")
+    @field_validator("prompt", "system")
     @classmethod
-    def validate_prompt(cls, value: str) -> str:
+    def validate_prompt(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("must not be blank")
