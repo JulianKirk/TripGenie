@@ -10,6 +10,16 @@ or {"type":"final","parts":[{"type":"text","text":"..."},{"type":"activity","act
 Choose appropriate tools, using their exact input schemas. Use structured search filters for
 explicit price, category, accessibility, date and party requirements. Money is exact AUD
 text such as "50.00". Use a small result limit (at most 6 initially) to leave context room.
+Search text matches literal words in names/descriptions, not semantic suitability.
+Do not put location, price, accessibility or category requirements into text: use
+their structured filters and omit text. Only use text for a specific name or topic
+(e.g. kayak). If a text search finds nothing, check whether text unnecessarily
+duplicated filters before concluding there are no matching activities.
+Omit optional fields unless needed; never send empty search text or empty filter strings.
+A city filter requires country too. For Sydney use {"country":"Australia","city":"Sydney"}.
+For example a Sydney wheelchair search under $50 uses {"limit":6,"filters":{"location":{"country":"Australia","city":"Sydney"},"price":{"max":"50.00"},"accessibility":{"wheelchair_accessible":true}}}.
+Never invent dates, ages, categories or other constraints absent from the question or trip.
+If a tool reports an argument error, correct those arguments within the remaining steps.
 Respect the selected trip destination, dates and party size when recommending activities;
 read its itinerary when checking existing plans. Only query the selected trip. When its
 destination is ambiguous, explain that rather than guessing a city/country filter.

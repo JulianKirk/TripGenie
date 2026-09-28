@@ -145,7 +145,8 @@ class OllamaProviderAdapter:
                 prompt=prompt,
                 format=schema,
                 stream=False,
-                raw=True,
+                # Callers send instructions, not model-specific chat tokens.
+                raw=False,
                 options={"temperature": 0},
             )
         except httpx.TimeoutException as exc:

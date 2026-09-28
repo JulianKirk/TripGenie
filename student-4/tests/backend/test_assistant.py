@@ -116,10 +116,16 @@ class ProtocolFake:
         )
 
 
-def run(actions: list[dict[str, Any]], mcp: ProtocolFake) -> dict[str, Any]:
+def run(
+    actions: list[dict[str, Any]],
+    mcp: ProtocolFake,
+    requests: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     def ai(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         assert "activities_delete" not in body["prompt"]
+        if requests is not None:
+            requests.append(body)
         return httpx.Response(
             200,
             json={
@@ -426,3 +432,146 @@ def test_duplicate_activity_parts_cannot_exceed_card_limit() -> None:
     assert result["status"] == "error"
     assert result["parts"] == []
     assert len(mcp.calls) == 1
+
+
+def test_standard_mcp_tool_error_is_recoverable() -> None:
+    class ToolErrorFake(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            response = super().handle(request)
+            body = json.loads(request.content)
+            if body["method"] == "tools/call" and len(self.calls) == 1:
+                payload = response.json()
+                payload["result"] = {
+                    "isError": True,
+                    "content": [{"type": "text", "text": "city requires country"}],
+                }
+                return httpx.Response(200, json=payload)
+            return response
+
+    mcp = ToolErrorFake()
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        mcp,
+    )
+    assert result["status"] == "complete"
+    assert result["tools"][0]["error"] == "TOOL_ERROR"
+    assert result["tools"][1]["status"] == "success"
+    assert ACTIVITY in result["activities"]
+
+
+def test_repeated_successful_call_switches_to_final_answer_without_reexecution() -> (
+    None
+):
+    from jsonschema import Draft202012Validator
+
+    mcp = ProtocolFake()
+    requests: list[dict[str, Any]] = []
+    tool = {"type": "tool", "name": "activities_search", "arguments": {}}
+    result = run(
+        [
+            tool,
+            tool,
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        mcp,
+        requests,
+    )
+    assert result["status"] == "complete"
+    assert [call["name"] for call in mcp.calls] == [
+        "activities_search",
+        "activities_get",
+    ]
+    assert not Draft202012Validator(requests[-1]["schema"]).is_valid(tool)
+    assert '"input_schema"' in requests[0]["prompt"]
+
+
+def test_last_step_requires_final_answer_schema() -> None:
+    from jsonschema import Draft202012Validator
+    from student4_backend_service.assistant import MAX_STEPS
+
+    requests: list[dict[str, Any]] = []
+    actions = [
+        {"type": "tool", "name": "activities_search", "arguments": {"text": str(step)}}
+        for step in range(MAX_STEPS - 1)
+    ]
+    result = run(
+        [*actions, {"type": "final", "parts": [{"type": "text", "text": "Done"}]}],
+        ProtocolFake(),
+        requests,
+    )
+    assert result["status"] == "complete"
+    assert not Draft202012Validator(requests[-1]["schema"]).is_valid(actions[0])
+
+
+def test_final_schema_only_permits_ids_discovered_in_this_request() -> None:
+    from jsonschema import Draft202012Validator
+    from student4_backend_service.assistant_schema import action_schema
+
+    card = {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]}
+    text = {"type": "final", "parts": [{"type": "text", "text": "No matches"}]}
+    empty = Draft202012Validator(action_schema([], activity_ids=[]))
+    assert not empty.is_valid(card)
+    assert empty.is_valid(text)
+    grounded = Draft202012Validator(action_schema([], activity_ids=[ACTIVITY]))
+    assert grounded.is_valid(card)
+    assert not grounded.is_valid(
+        {
+            "type": "final",
+            "parts": [
+                {
+                    "type": "activity",
+                    "activity_id": "44444444-4444-4444-4444-444444444444",
+                }
+            ],
+        }
+    )
+
+
+def test_card_schema_only_contains_ids_shown_in_bounded_observations() -> None:
+    from uuid import UUID
+
+    class PagedFake(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            response = super().handle(request)
+            body = json.loads(request.content)
+            if (
+                body["method"] == "tools/call"
+                and body["params"]["name"] == "activities_search"
+            ):
+                payload = response.json()
+                payload["result"]["structuredContent"]["data"]["items"] = [
+                    {**DETAIL, "id": str(UUID(int=len(self.calls) * 100 + index))}
+                    for index in range(50)
+                ]
+                return httpx.Response(200, json=payload)
+            return response
+
+    requests: list[dict[str, Any]] = []
+    result = run(
+        [
+            {
+                "type": "tool",
+                "name": "activities_search",
+                "arguments": {"text": "first page"},
+            },
+            {
+                "type": "tool",
+                "name": "activities_search",
+                "arguments": {"text": "second page"},
+            },
+            {"type": "final", "parts": [{"type": "text", "text": "Results inspected"}]},
+        ],
+        PagedFake(),
+        requests,
+    )
+    assert result["status"] == "complete"
+    ids = requests[-1]["schema"]["$defs"]["ActivityPart"]["properties"]["activity_id"][
+        "enum"
+    ]
+    assert len(ids) == 12
+    assert str(UUID(int=106)) not in ids
+    assert str(UUID(int=205)) in ids

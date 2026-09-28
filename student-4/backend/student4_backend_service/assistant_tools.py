@@ -122,6 +122,14 @@ class ToolExecutor:
             response = await self.session.call_tool(
                 name, arguments, meta={"request_id": self.result.request_id}
             )
+            # SDK argument validation errors legitimately have text content only.
+            # They carry no factual provenance and cannot authorize activity IDs.
+            if response.isError and response.structuredContent is None:
+                trace.error = "TOOL_ERROR"
+                detail = " ".join(
+                    item.text[:1000] for item in response.content if item.type == "text"
+                )[:1000]
+                return {"ok": False, "error": trace.error, "detail": detail}
             envelope = response.structuredContent
             if not isinstance(envelope, dict) or len(json.dumps(envelope)) > 32768:
                 message = "MCP returned an invalid or oversized tool result."
@@ -142,7 +150,12 @@ class ToolExecutor:
                     if isinstance(error, dict)
                     else "TOOL_ERROR"
                 )
-                return {"ok": False, "error": trace.error}
+                detail = (
+                    str(error.get("message", ""))[:1000]
+                    if isinstance(error, dict)
+                    else ""
+                )
+                return {"ok": False, "error": trace.error, "detail": detail}
             data = envelope.get("data")
             if envelope.get("ok") is not True or not isinstance(data, dict):
                 message = "MCP returned a malformed successful result."

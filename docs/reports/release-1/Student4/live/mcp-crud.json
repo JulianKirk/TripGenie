@@ -1,0 +1,405 @@
+[
+  {
+    "tool": "activities_list_categories",
+    "arguments": {},
+    "result": {
+      "ok": true,
+      "data": {
+        "categories": [
+          {
+            "code": "ADVENTURE",
+            "label": "Adventure",
+            "description": "High-energy and adventurous experiences",
+            "display_order": 10
+          },
+          {
+            "code": "CULTURE",
+            "label": "Culture",
+            "description": "Museums, galleries and cultural sites",
+            "display_order": 20
+          },
+          {
+            "code": "FAMILY",
+            "label": "Family",
+            "description": "Experiences suitable for families and children",
+            "display_order": 30
+          },
+          {
+            "code": "FOOD_DRINK",
+            "label": "Food and drink",
+            "description": "Dining, tastings and culinary experiences",
+            "display_order": 40
+          },
+          {
+            "code": "NIGHTLIFE",
+            "label": "Nightlife",
+            "description": "Evening entertainment and social experiences",
+            "display_order": 50
+          },
+          {
+            "code": "OUTDOOR",
+            "label": "Outdoor",
+            "description": "Activities primarily undertaken outdoors",
+            "display_order": 60
+          },
+          {
+            "code": "SHOPPING",
+            "label": "Shopping",
+            "description": "Markets, local makers and shopping experiences",
+            "display_order": 70
+          },
+          {
+            "code": "TOUR",
+            "label": "Tour",
+            "description": "Guided or self-guided tours",
+            "display_order": 80
+          },
+          {
+            "code": "WELLNESS",
+            "label": "Wellness",
+            "description": "Relaxation, fitness and wellbeing experiences",
+            "display_order": 90
+          },
+          {
+            "code": "WILDLIFE",
+            "label": "Wildlife",
+            "description": "Animal encounters and nature observation",
+            "display_order": 100
+          }
+        ]
+      },
+      "correlation_id": "mcp-a9091a763a57",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_create",
+    "arguments": {
+      "activity": {
+        "name": "MCP functional test museum",
+        "description": "Temporary live verification record",
+        "price": "15.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+        "minimum_participants": 1,
+        "categories": [
+          "CULTURE"
+        ],
+        "location_details": {
+          "country": "Australia",
+          "city": "Sydney"
+        },
+        "wheelchair_accessible": true,
+        "availability_schedules": [
+          {
+            "recurring_weekly": true,
+            "day_of_week": "MONDAY",
+            "start_time": "09:00",
+            "end_time": "17:00"
+          }
+        ]
+      }
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "name": "MCP functional test museum",
+        "description": "Temporary live verification record",
+        "price": "12.50",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+        "minimum_age": null,
+        "maximum_age": null,
+        "minimum_participants": 1,
+        "maximum_participants": null,
+        "booking_required": false,
+        "booking_notes": null,
+        "wheelchair_accessible": true,
+        "step_free_access": null,
+        "accessible_toilet": null,
+        "accessibility_notes": null,
+        "is_active": true,
+        "categories": [
+          "CULTURE"
+        ],
+        "availability_schedules": [
+          {
+            "recurring_weekly": true,
+            "day_of_week": "MONDAY",
+            "date": null,
+            "start_time": "09:00",
+            "end_time": "17:00",
+            "id": "9f06921f-8ebc-4050-bda3-ab1d97422dad"
+          }
+        ],
+        "id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+        "location_details": {
+          "country": "australia",
+          "city": "sydney",
+          "street": null,
+          "street_number": null
+        }
+      },
+      "correlation_id": "mcp-3027f34400c2",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_get",
+    "arguments": {
+      "activity_id": "bdddac4f-2851-465d-a59b-008f7fc1d719"
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "name": "MCP functional test museum",
+        "description": "Temporary live verification record",
+        "price": "12.50",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+        "minimum_participants": 1,
+        "booking_required": false,
+        "wheelchair_accessible": true,
+        "is_active": true,
+        "categories": [
+          "CULTURE"
+        ],
+        "availability_schedules": [
+          {
+            "recurring_weekly": true,
+            "day_of_week": "MONDAY",
+            "start_time": "09:00",
+            "end_time": "17:00",
+            "id": "9f06921f-8ebc-4050-bda3-ab1d97422dad"
+          }
+        ],
+        "id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+        "location_details": {
+          "country": "australia",
+          "city": "sydney"
+        }
+      },
+      "correlation_id": "mcp-ff9a7ed1dbe7",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_search",
+    "arguments": {
+      "text": "MCP functional test",
+      "filters": {
+        "price": {
+          "max": "20.00"
+        },
+        "accessibility": {
+          "wheelchair_accessible": true
+        }
+      }
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "items": [
+          {
+            "name": "MCP functional test museum",
+            "description": "Temporary live verification record",
+            "price": "12.50",
+            "pricing_basis": "PER_PERSON",
+            "duration_minutes": 60,
+            "minimum_participants": 1,
+            "booking_required": false,
+            "wheelchair_accessible": true,
+            "is_active": true,
+            "categories": [
+              "CULTURE"
+            ],
+            "id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+            "location_details": {
+              "country": "australia",
+              "city": "sydney"
+            }
+          }
+        ],
+        "count": 1,
+        "truncated": false
+      },
+      "correlation_id": "mcp-0161af0039b9",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_update",
+    "arguments": {
+      "activity_id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+      "activity": {
+        "name": "MCP functional test museum",
+        "description": "Temporary live verification record",
+        "price": "15.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+        "minimum_participants": 1,
+        "categories": [
+          "CULTURE"
+        ],
+        "location_details": {
+          "country": "Australia",
+          "city": "Sydney"
+        },
+        "wheelchair_accessible": true,
+        "availability_schedules": [
+          {
+            "recurring_weekly": true,
+            "day_of_week": "MONDAY",
+            "start_time": "09:00",
+            "end_time": "17:00"
+          }
+        ]
+      }
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "name": "MCP functional test museum",
+        "description": "Temporary live verification record",
+        "price": "15.00",
+        "pricing_basis": "PER_PERSON",
+        "duration_minutes": 60,
+        "minimum_age": null,
+        "maximum_age": null,
+        "minimum_participants": 1,
+        "maximum_participants": null,
+        "booking_required": false,
+        "booking_notes": null,
+        "wheelchair_accessible": true,
+        "step_free_access": null,
+        "accessible_toilet": null,
+        "accessibility_notes": null,
+        "is_active": true,
+        "categories": [
+          "CULTURE"
+        ],
+        "availability_schedules": [
+          {
+            "recurring_weekly": true,
+            "day_of_week": "MONDAY",
+            "date": null,
+            "start_time": "09:00",
+            "end_time": "17:00",
+            "id": "1827e620-1529-4da9-9756-5091a6b3690e"
+          }
+        ],
+        "id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+        "location_details": {
+          "country": "australia",
+          "city": "sydney",
+          "street": null,
+          "street_number": null
+        }
+      },
+      "correlation_id": "mcp-3f0596c5370b",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_delete",
+    "arguments": {
+      "activity_id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+      "confirm": true
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "id": "bdddac4f-2851-465d-a59b-008f7fc1d719",
+        "deleted": true
+      },
+      "correlation_id": "mcp-b9e1e56915bf",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "activities_get",
+    "arguments": {
+      "activity_id": "bdddac4f-2851-465d-a59b-008f7fc1d719"
+    },
+    "result": {
+      "ok": false,
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Resource not found",
+        "retryable": false
+      },
+      "correlation_id": "mcp-789752a49084",
+      "source": "student-4"
+    }
+  },
+  {
+    "tool": "trip_get_context",
+    "arguments": {
+      "trip_id": "trip_mcp_live_test"
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "name": "MCP live test",
+        "destination": "Sydney",
+        "start_date": "2026-10-05",
+        "end_date": "2026-10-07",
+        "traveller_count": 2,
+        "status": "planned",
+        "notes": null,
+        "id": "trip_mcp_live_test",
+        "days": [
+          {
+            "date": "2026-10-05",
+            "items": []
+          },
+          {
+            "date": "2026-10-06",
+            "items": []
+          },
+          {
+            "date": "2026-10-07",
+            "items": []
+          }
+        ],
+        "accommodations": [],
+        "activities": [],
+        "transport": []
+      },
+      "correlation_id": "mcp-c2c122f0a87e",
+      "source": "student-1"
+    }
+  },
+  {
+    "tool": "trips_list_itinerary_items",
+    "arguments": {
+      "trip_id": "trip_mcp_live_test"
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "items": [],
+        "count": 0,
+        "truncated": false
+      },
+      "correlation_id": "mcp-29e3b05a8ed5",
+      "source": "student-1"
+    }
+  },
+  {
+    "tool": "activities_committed_costs",
+    "arguments": {
+      "trip_id": "trip_mcp_live_test"
+    },
+    "result": {
+      "ok": true,
+      "data": {
+        "committed_cost_total": "0.00",
+        "currency": "AUD",
+        "items": []
+      },
+      "correlation_id": "mcp-fb1001bf6330",
+      "source": "student-4"
+    }
+  }
+]

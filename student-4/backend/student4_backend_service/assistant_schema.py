@@ -26,9 +26,21 @@ def compact_schema(value: Any, prefix: str = "") -> Any:
     return value
 
 
-def action_schema(tools: list[Tool]) -> dict[str, Any]:
+def action_schema(
+    tools: list[Tool], *, activity_ids: list[str] | None = None
+) -> dict[str, Any]:
     definitions = compact_schema(ACTION.json_schema())["$defs"]
     definitions.pop("ToolAction", None)
+    if activity_ids is not None:
+        if activity_ids:
+            definitions["ActivityPart"]["properties"]["activity_id"]["enum"] = (
+                activity_ids
+            )
+        else:
+            definitions["FinalAction"]["properties"]["parts"]["items"] = {
+                "$ref": "#/$defs/TextPart"
+            }
+            definitions.pop("ActivityPart")
     variants: list[dict[str, Any]] = [{"$ref": "#/$defs/FinalAction"}]
     for tool in tools:
         prefix = tool.name + "__"

@@ -152,7 +152,8 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
     ollama_request = ollama_api.generate_requests[0]
     assert ollama_request["model"] == "qwen2.5:0.5b"
     assert ollama_request["prompt"] == "Return JSON only."
-    assert ollama_request["raw"] is True
+    # Feature prompts are instructions, not preformatted model token templates.
+    assert ollama_request["raw"] is False
     assert ollama_request["stream"] is False
     assert ollama_request["options"] == {"temperature": 0}
     assert ollama_request["format"]["type"] == "object"

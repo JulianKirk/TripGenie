@@ -94,3 +94,81 @@ Final Docker image rebuild after review fixes: exit 0
  Image student4mcpverify-student-4-backend Built
  Image student4mcpverify-student-4-frontend Built
  Image student4mcpverify-student-4-database Built
+
+
+Live functional follow-up: final verification
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 64%]
+........................................................................ [ 86%]
+..............................................                           [100%]
+334 passed in 11.84s
+........................................................................ [ 80%]
+..................                                                       [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+90 passed, 1 warning in 6.02s
+...................................                                      [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+35 passed, 1 warning in 1.03s
+
+Ruff lint: passed
+Ruff formatting: 107 files already formatted
+Strict mypy: no issues found in 71 source files
+Compose configuration: exit 0
+Student 4 backend rebuilt and readiness passed after live-test fixes.
+AI-Mode image build: exit 0 (host service used for live testing).
+No-JavaScript form submission and full-page category answer PASS
+Assistant could not complete this request
+
+The MCP activity assistant is unavailable. Ordinary activity browsing is still available.
+
+Tools used · 0 calls
+
+Recorded by the backend from MCP execution. Rejected calls were not sent to MCP.
+
+No MCP tool calls were made.
+
+Request: student4-agent-8ecf560a6b64401f
+
+Advisory only. Nothing has been saved.
+
+Final grammar/filter correction verification
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 64%]
+........................................................................ [ 86%]
+..............................................                           [100%]
+334 passed in 11.53s
+........................................................................ [ 80%]
+..................                                                       [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+90 passed, 1 warning in 3.57s
+...................................                                      [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+35 passed, 1 warning in 0.29s
+
+All six live assistant scenarios returned complete; Sydney returned two cards and Melbourne one.
+Browser details/add/remove/mobile assertions passed against the final backend image.
+Temporary trip removed; 14 original catalogue records remain.
+AI-Mode health: ok, configured generation and embedding models available.
+Lint/format/mypy/Compose: passed.

@@ -4,7 +4,10 @@ Each question is a separate request. The frontend calls its backend; the backend
 uses AI-Mode to choose from allowed MCP tools and compose text/activity references.
 MCP tools call public APIs. The backend resolves the references through MCP and
 returns authoritative cards plus an execution trace. Only the user can add an
-activity to a trip using the existing button. No conversation history is retained.
+activity to a trip using the existing button. No conversation history is retained. Tool schemas are included in the model context.
+Repeated successful calls move the request to a final-answer step, and the last
+step is always reserved for a final answer. Its schema permits only activity IDs
+already discovered in this request (or text only when none are known).
 
 The shared MCP server supports external-client activity create/read/update/delete.
 The frontend agent cannot execute those writes: the backend hides their schemas
@@ -20,8 +23,9 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install -e './student-4[dev]' -e './ai-services/mcp-server[dev]' -e './ai-services/ai-mode[dev]'
 ```
 
-Ollama runs on the host. Install a suitable allowed model, such as `llama3.1:8b`,
-and configure AI-Mode with `AI_MODE_DEFAULT_MODEL=llama3.1:8b` and an allowlist
+Ollama runs on the host. Install `llama3.1:8b` for generation and
+`nomic-embed-text` for the gateway's default embedding readiness check,
+then configure AI-Mode with `AI_MODE_DEFAULT_MODEL=llama3.1:8b` and an allowlist
 containing that model. Do not assume the example environment file is loaded.
 AI-Mode's default prompt/schema limits are sufficient for the six allowed tools.
 

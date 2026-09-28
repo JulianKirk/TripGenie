@@ -350,3 +350,11 @@ The Release 1 runtime contract is:
   the host service must listen on that reachable interface, not only loopback.
 
 Ollama remains a host prerequisite; Compose and CI do not install, start, or download Ollama or its models.
+
+### Instruction formatting
+
+Feature prompts are ordinary instructions, not preformatted model chat tokens.
+Generation uses Ollama's model instruction template (`raw=false`) while retaining
+the JSON schema constraint and deterministic temperature. Bypassing that template
+caused the activity agent to repeat searches or invent unnecessary filters in live
+`llama3.1:8b` testing.

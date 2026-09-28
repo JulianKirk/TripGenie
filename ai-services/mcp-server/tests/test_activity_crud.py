@@ -413,3 +413,21 @@ def test_oversized_write_acknowledgement_requires_reconciliation():
     assert result["error"]["code"] == "WRITE_OUTCOME_UNKNOWN"
     assert result["error"]["retryable"] is False
     assert "inspect the catalogue before retrying" in result["error"]["message"]
+
+
+def test_search_schema_rejects_blank_text_and_accepts_omission():
+    from jsonschema import Draft202012Validator
+
+    server, _ = server_for({})
+    tool = next(
+        t for t in asyncio.run(server.list_tools()) if t.name == "activities_search"
+    )
+    validator = Draft202012Validator(tool.inputSchema)
+    assert not validator.is_valid({"text": ""})
+    # Keep whitespace semantics at runtime: a wildcard regex can break Ollama
+    # grammar generation by consuming JSON delimiters.
+    assert (
+        call(server, "activities_search", {"text": "  "})["error"]["code"]
+        == "VALIDATION_ERROR"
+    )
+    assert validator.is_valid({"filters": {"price": {"max": "50.00"}}})

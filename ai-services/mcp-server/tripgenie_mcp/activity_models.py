@@ -22,8 +22,8 @@ from pydantic import (
     model_validator,
 )
 
-MONEY_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.\d{2}$")
-TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+MONEY_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)\.[0-9]{2}$")
+TIME_PATTERN = re.compile(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 def _money(value: object) -> Decimal:
@@ -36,7 +36,7 @@ def _money(value: object) -> Decimal:
 Money = Annotated[
     Decimal,
     BeforeValidator(_money),
-    WithJsonSchema({"type": "string", "pattern": r"^(?:0|[1-9]\d*)\.\d{2}$"}),
+    WithJsonSchema({"type": "string", "pattern": r"^(?:0|[1-9][0-9]*)\.[0-9]{2}$"}),
     PlainSerializer(lambda value: f"{value:.2f}", return_type=str),
 ]
 
@@ -56,7 +56,7 @@ def _local_time(value: object) -> dt.time:
 LocalTime = Annotated[
     dt.time,
     BeforeValidator(_local_time),
-    WithJsonSchema({"type": "string", "pattern": r"^(?:[01]\d|2[0-3]):[0-5]\d$"}),
+    WithJsonSchema({"type": "string", "pattern": r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"}),
 ]
 PricingBasis = Literal["PER_PERSON", "FLAT_ADMISSION"]
 CategoryCode = Literal[

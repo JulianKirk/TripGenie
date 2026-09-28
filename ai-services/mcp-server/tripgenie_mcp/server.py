@@ -32,7 +32,11 @@ CATALOGUE = {
         "transport_trip_costs": "Read a trip's priced transport selections.",
     },
     "student-4": {
-        "activities_search": "Search activities by text and advanced filters.",
+        "activities_search": (
+            "Search activities by structured filters. Optional text matches literal "
+            "words in names/descriptions only; omit it for location, price, "
+            "accessibility and category-only searches."
+        ),
         "activities_create": "Create an activity (trusted local clients only).",
         "activities_update": "Replace a complete activity, including its schedules.",
         "activities_delete": "Hard delete an activity; requires confirm=true.",

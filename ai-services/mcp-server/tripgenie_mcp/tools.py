@@ -300,7 +300,7 @@ class DomainTools:
 
     def activities_search(
         self,
-        text: str | None = None,
+        text: Annotated[str, Field(min_length=1, max_length=255)] | None = None,
         limit: Annotated[int, Field(ge=1, le=50, strict=True)] = 20,
         offset: Annotated[int, Field(ge=0, strict=True)] = 0,
         filters: ActivityFilters | None = None,
