@@ -19,7 +19,9 @@ AI gateway backed by a host-managed Ollama runtime.
 | `student-5/` | Budgets, expenses, and cross-service cost summaries |
 | `shared/` | Country, city, and currency reference data plus the landing page |
 | `ai-services/ai-mode/` | The only application service that communicates with Ollama |
-| `ai-services/agentic-loop/` | CI-oriented service smoke and review harness |
+| `ai-services/mcp-server/` | Shared host-run MCP tools over public feature APIs |
+| `ai-services/rag-server/` | Shared host-run retrieval and grounded responses |
+| `ai-services/agentic-loop/` | Local validation harness, including MCP and RAG modes |
 | `docs/` | Architecture decisions and release evidence |
 
 Read the nearest service documentation before changing a contract. In
@@ -51,6 +53,58 @@ they exist; use `docs/architecture/` for cross-service decisions.
   environment-variable names as contracts. Update producers, consumers,
   contract tests, documentation, and Compose together when they change.
 
+## Release 1 AI, MCP, and RAG integration
+
+These are the target requirements for every student feature. Do not assume
+that an existing implementation already satisfies them; identify gaps when
+working on the relevant slice.
+
+- Preserve each feature's existing functionality and AI-Mode integration.
+  The frontend UI accesses AI-Mode, MCP, and RAG through its own backend/API;
+  neither the browser nor the frontend service connects to these shared
+  services directly. Keep AI workflow orchestration in the feature backend.
+- Use the shared MCP server's registered tools for application-data reads in
+  the feature's MCP-enabled AI workflow. For a guided recommendation flow,
+  the backend uses AI-Mode to plan filters, calls MCP to retrieve authoritative
+  candidates, and uses AI-Mode to evaluate those results before returning
+  them to the frontend. MCP supplies tools and data; AI-Mode supplies model
+  inference. Autonomous model-selected tool calls are not required.
+- MCP tools call the owning service's documented public data APIs, never its
+  database or AI orchestration endpoints. A tool may call the requesting
+  feature's ordinary public API, but must not call back into the workflow
+  that invoked it. Existing CRUD and ordinary browsing retain their normal
+  API paths.
+- Keep tool names, inputs, outputs, and access boundaries explicit and
+  validated. The shared MCP server may expose documented CRUD tools for
+  external clients; feature AI workflows must enforce their own allowed tool
+  set on the backend before execution. Student 4's frontend agent is strictly
+  read-only, even when write tools are advertised by MCP. Do not add arbitrary
+  HTTP execution or implicit writes. Recommendations must not save or change
+  itinerary selections without an explicit user action.
+- Every feature must expose a successful MCP interaction through its UI and
+  backend/API and display the returned tool data. An AI narrative alone is
+  not evidence that an MCP tool executed successfully. Surface tool failures
+  clearly and keep ordinary feature functionality usable when MCP is disabled
+  or unavailable.
+- Every feature must also expose RAG queries through its UI and backend/API
+  to the shared RAG server. Display grounded answers with source citations
+  and a confidence category. When relevant context is unavailable, display
+  an insufficient-context response instead of an unsupported answer.
+- AI-Mode, MCP, RAG, and the shared agentic loop must run locally outside
+  containers and must not be defined as Compose services. Retain the
+  containerised frontend, backend/API, and database services, and configure
+  backend connections to host-run services in Compose. Container localhost
+  is not the host; use the documented host connection configuration.
+- Retain MCP and RAG integration but disable both modes during each student's
+  CI/CD execution. Test their contracts and failure handling with injected
+  transports or protocol fakes without requiring live host services.
+- Capture local evidence of a valid MCP tool result and a grounded RAG answer
+  through every feature's UI and backend/API, plus insufficient-context
+  behavior. Capture shared agentic-loop outputs for its separate MCP and RAG
+  validation modes. This validation harness is distinct from runtime AI
+  workflow orchestration. Store evidence and contribution logs under the
+  existing Release 1 report structure, and never claim unexecuted checks.
+
 ## Repository navigation
 
 - Start with the scoped `AGENTS.md`, service README, API documentation, and
@@ -81,8 +135,9 @@ Other editable installs follow the same pattern (`./shared[dev]`,
 `./shared[dev]`. The AI-Mode and agentic-loop subtrees have their own setup
 commands in `ai-services/AGENTS.md`.
 
-For an integrated run, Ollama is managed on the host, not by Compose. Follow
-`README.md` and `shared/configuration/.env.example`, then run:
+For a Release 1 integrated run, start the host-managed Ollama, AI-Mode, MCP,
+and RAG services using their service READMEs. Follow `README.md` and
+`shared/configuration/.env.example` for the containerised application, then run:
 
 ```bash
 docker compose --env-file shared/configuration/.env.example config --quiet

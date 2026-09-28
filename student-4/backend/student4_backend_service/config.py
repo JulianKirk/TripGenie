@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 
@@ -15,6 +16,7 @@ DEFAULT_AI_PROMPT_MAX_CHARS = 12_000
 DEFAULT_AI_MAX_CANDIDATES = 20
 DEFAULT_AI_PLAN_PROMPT_ASSET = "activity_search_plan_v1.md"
 DEFAULT_AI_EVALUATION_PROMPT_ASSET = "activity_recommendations_v1.md"
+DEFAULT_AI_ASSISTANT_PROMPT_ASSET = "activity_assistant_v1.md"
 
 
 @dataclass(slots=True)
@@ -32,9 +34,18 @@ class Settings:
     ai_max_candidates: int = DEFAULT_AI_MAX_CANDIDATES
     ai_plan_prompt_asset: str = DEFAULT_AI_PLAN_PROMPT_ASSET
     ai_evaluation_prompt_asset: str = DEFAULT_AI_EVALUATION_PROMPT_ASSET
+    ai_assistant_prompt_asset: str = DEFAULT_AI_ASSISTANT_PROMPT_ASSET
+    mcp_enabled: bool = False
+    mcp_url: str = "http://host.docker.internal:8012/mcp"
+    mcp_timeout: float = 15.0
+    agent_timeout: float = 180.0
     service_name: str = "student-4-backend"
 
     def __post_init__(self) -> None:
+        for name in ("mcp_timeout", "agent_timeout"):
+            if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
+                message = f"{name} must be positive and finite"
+                raise ValueError(message)
         if self.ai_mode_url is not None:
             self.ai_mode_url = self.ai_mode_url.strip().rstrip("/") or None
         for name in ("ai_mode_timeout", "ai_prompt_max_chars", "ai_max_candidates"):
@@ -44,7 +55,18 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
+        enabled = os.environ.get("MCP_ENABLED", "false").lower()
+        if enabled not in {"true", "false", "1", "0"}:
+            message = "MCP_ENABLED must be true or false"
+            raise ValueError(message)
         return cls(
+            ai_assistant_prompt_asset=os.environ.get(
+                "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
+            ),
+            mcp_enabled=enabled in {"true", "1"},
+            mcp_url=os.environ.get("MCP_URL", "http://host.docker.internal:8012/mcp"),
+            mcp_timeout=float(os.environ.get("MCP_TIMEOUT", "15")),
+            agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "180")),
             database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             db_timeout=float(os.environ.get("DB_TIMEOUT", DEFAULT_DB_TIMEOUT)),
             location_url=os.environ.get("LOCATION_URL", DEFAULT_LOCATION_URL),

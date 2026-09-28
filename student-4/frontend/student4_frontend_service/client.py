@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from .assistant_models import AssistantResponse
 from .errors import FrontendError
 from .models import (
     ActivityDetail,
@@ -152,6 +153,16 @@ class BackendClient:
 
     async def trips(self) -> TripDirectory:
         return await self._request("GET", "/activity/trips", TripDirectory, {200})
+
+    async def ask_assistant(self, body: dict[str, object]) -> AssistantResponse:
+        return await self._request(
+            "POST",
+            "/activity/assistant",
+            AssistantResponse,
+            {200},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
 
     async def plan_recommendations(self, body: dict[str, object]) -> RecommendationPlan:
         return await self._request(

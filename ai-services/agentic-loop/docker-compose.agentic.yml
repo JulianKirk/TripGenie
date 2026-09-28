@@ -13,9 +13,7 @@ services:
     ports:
       - "8003:8003"
 
-  student-4-backend:
-    ports:
-      - "18008:8008"
+  # Student 4 already publishes its loopback API port for host MCP.
 
   student-5-backend:
     ports:

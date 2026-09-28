@@ -53,7 +53,7 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
-| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://ai-mode:8006`; when unset, only recommendations are unavailable. |
+| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, only recommendations are unavailable. |
 | `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
 | `AI_PROMPT_MAX_CHARS` | `12000` | Maximum rendered planning or evaluation prompt size, aligned with AI Mode. |
 | `AI_MAX_CANDIDATES` | `20` | Maximum authoritative activity records evaluated by AI. |
@@ -99,7 +99,52 @@ Errors use `{"detail": "..."}`.
 `502` and `503` are retryable. An unknown location in a well-formed search is
 an empty result, not an error.
 
-## AI-assisted activity search
+## MCP activity assistant
+
+`POST /activity/assistant` accepts `{"question":"Find outdoor activities","trip_id":null}`.
+The question is 1–500 nonblank characters; an optional trip ID scopes all trip
+tools to that trip. Each request has independent ephemeral state and a generated
+request ID. The backend uses AI-Mode's schema-constrained `/generate` endpoint
+and executes real MCP tools through the pinned MCP SDK.
+
+The response has `status` (`complete` or `error`), `request_id`, ordered `parts`
+(`text` or `activity` with UUID), authoritative `activities` keyed by UUID,
+`unavailable_activity_ids`, `tools`, `error`, `model`, and `provider`.
+Activity references must come from this request's successful tool results.
+Final details are re-fetched through MCP; model-authored activity fields are
+never used for cards. Failed/deleted final lookups are marked unavailable.
+
+Each `tools` entry contains the actual tool name, validated arguments, status
+(`success`, `error`, `rejected`), duration in milliseconds, MCP correlation ID,
+activity IDs/count when applicable, and an error code. Rejected calls never
+reach MCP. Execution failures return HTTP 200 with `status=error` so the UI can
+retain the trace; malformed caller input still returns HTTP 422. No raw
+provider exceptions are exposed. There is no direct-API fallback.
+
+The allowlist is `activities_search`, `activities_get`,
+`activities_list_categories`, `activities_committed_costs`, `trip_get_context`,
+and `trips_list_itinerary_items`. Trip-specific tools are omitted unless a trip
+is selected. The backend rejects every other tool, including MCP CRUD tools.
+Limits are six model steps/calls, one initial selected-trip read, at most six
+final card lookups, twelve output parts, 1,000 characters per text part, and a
+180-second total deadline. Existing AI prompt limits remain enforced; long
+contexts produce a visible request-to-narrow error. At most six items per tool
+observation are supplied to the model, with an explicit omitted-item count.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Packaged assistant instructions; markdown filename only. |
+| `MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant's MCP workflow. CI explicitly disables it. |
+| `MCP_URL` | `http://host.docker.internal:8012/mcp` | Fixed shared MCP endpoint; never model-controlled. |
+| `MCP_TIMEOUT` | `15` | Positive finite MCP request timeout in seconds. |
+| `AGENT_TIMEOUT` | `180` | Positive finite total deadline, including tool/card calls. |
+
+See [MCP setup and evidence](mcp-assistant.md). No persistence contract changes.
+
+## Legacy AI-assisted activity search
+
+The following plan/evaluate endpoints remain compatible but are no longer
+called by the primary frontend AI panel. They do not demonstrate MCP execution.
 
 AI suggestions are advisory and use two explicit stages. Planning turns a
 traveller's question and optional trip into the same structured `ActivityQuery`

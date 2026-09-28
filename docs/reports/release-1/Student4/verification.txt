@@ -1,0 +1,96 @@
+$ .venv/bin/ruff check student-4 ai-services/mcp-server
+All checks passed!
+
+$ .venv/bin/ruff format --check student-4 ai-services/mcp-server
+95 files already formatted
+
+$ Student 4 strict mypy (full command in README)
+Success: no issues found in 71 source files
+
+$ .venv/bin/pytest student-4/tests -o addopts= -q
+........................................................................ [ 22%]
+........................................................................ [ 44%]
+........................................................................ [ 66%]
+........................................................................ [ 88%]
+.......................................                                  [100%]
+327 passed in 10.78s
+
+$ .venv/bin/pytest ai-services/mcp-server/tests -q
+........................................................................ [ 83%]
+..............                                                           [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+86 passed, 1 warning in 3.00s
+
+$ docker compose --env-file shared/configuration/.env.example config --quiet
+Exit 0.
+
+$ STUDENT4_MCP_ENABLED=false docker compose -p student4mcpverify up -d --build --no-deps --wait student-4-database student-4-backend student-4-frontend
+#28 unpacking to docker.io/library/student4mcpverify-student-4-backend:latest
+#28 unpacking to docker.io/library/student4mcpverify-student-4-backend:latest 0.5s done
+#28 DONE 3.6s
+
+#29 [student-4-backend] resolving provenance for metadata file
+#29 DONE 0.0s
+ Image student4mcpverify-student-4-database Built
+ Image student4mcpverify-student-4-frontend Built
+ Image student4mcpverify-student-4-backend Built
+ Container student4mcpverify-student-4-frontend-1 Running
+ Container student4mcpverify-student-4-database-1 Running
+ Container student4mcpverify-student-4-backend-1 Recreate
+ Container student4mcpverify-student-4-backend-1 Recreated
+ Container student4mcpverify-student-4-database-1 Waiting
+ Container student4mcpverify-student-4-database-1 Healthy
+ Container student4mcpverify-student-4-backend-1 Starting
+ Container student4mcpverify-student-4-backend-1 Started
+ Container student4mcpverify-student-4-backend-1 Waiting
+ Container student4mcpverify-student-4-backend-1 Healthy
+ Container student4mcpverify-student-4-backend-1 Waiting
+ Container student4mcpverify-student-4-frontend-1 Waiting
+ Container student4mcpverify-student-4-database-1 Waiting
+ Container student4mcpverify-student-4-database-1 Healthy
+ Container student4mcpverify-student-4-frontend-1 Healthy
+ Container student4mcpverify-student-4-backend-1 Healthy
+
+$ docker compose -p student4mcpverify ps --format json
+{"Name": "student4mcpverify-student-4-backend-1", "Service": "student-4-backend", "State": "running", "Health": "healthy"}
+{"Name": "student4mcpverify-student-4-database-1", "Service": "student-4-database", "State": "running", "Health": "healthy"}
+{"Name": "student4mcpverify-student-4-frontend-1", "Service": "student-4-frontend", "State": "running", "Health": "healthy"}
+
+$ curl --fail http://127.0.0.1:8084/ready
+{"status":"ready","service":"student-4-frontend","backend":"ok"}
+
+
+Final independent-review regression verification (28 September 2026)
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 65%]
+........................................................................ [ 87%]
+.........................................                                [100%]
+329 passed in 11.99s
+........................................................................ [ 80%]
+.................                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47
+  /home/julian/.codex/worktrees/33a2/TripGenie/.venv/lib/python3.11/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+89 passed, 1 warning in 3.78s
+
+ruff check: All checks passed!
+ruff format --check: 95 files already formatted
+mypy: Success: no issues found in 71 source files
+Base and agentic-overlay Compose configuration: exit 0
+
+Final Docker image rebuild after review fixes: exit 0
+
+#29 [student-4-backend] resolving provenance for metadata file
+#29 DONE 0.0s
+ Image student4mcpverify-student-4-backend Built
+ Image student4mcpverify-student-4-frontend Built
+ Image student4mcpverify-student-4-database Built

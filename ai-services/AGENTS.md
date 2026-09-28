@@ -17,9 +17,12 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
 - `rag-server/` is a Release 1 host process. It calls AI-Mode for embeddings
   and generation, owns its local SQLite index, and must not be added to Docker
   Compose or call Ollama directly.
-- `mcp-server/` and `multi-agent-server/` do not yet contain an implemented
-  service. Define their contract and integration boundary before adding
-  runtime code or Compose dependencies.
+- `mcp-server/` is the shared host-run tool server over public backend APIs.
+  It exposes Student 4 activity CRUD for trusted local external clients.
+  Feature agents enforce their own read-only tool allowlists before execution;
+  MCP annotations and model instructions alone are not authorization.
+- `multi-agent-server/` is not implemented. Define its contract before adding
+  runtime code. AI-Mode, MCP, RAG, and the validation loop stay outside Compose.
 
 ## AI-Mode checks
 
@@ -32,7 +35,8 @@ python -m ruff check ai_mode_service tests examples
 python -m pytest tests
 ```
 
-Build from the repository root:
+The AI-Mode Dockerfile is retained for standalone package checks, but the
+Release 1 application runs AI-Mode on the host. Validate from the repository root:
 
 ```bash
 docker build -f ai-services/ai-mode/Dockerfile ai-services/ai-mode
@@ -71,3 +75,12 @@ When adding a service check, update `services.json`, add or amend the matching
 `checks/*.json`, and preserve the PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN ->
 ADAPT reporting sequence. Keep CI summaries useful even when an optional API
 key is absent or a target service fails to start.
+
+## MCP checks
+
+From the repository root, install `./ai-services/mcp-server[dev]` and
+`./student-4[dev]` to include activity contract and frontend integration tests.
+Run `pytest ai-services/mcp-server/tests -q`, `ruff check ai-services/mcp-server`,
+and `ruff format --check ai-services/mcp-server`. Tests use fake provider/model
+transports and actual MCP sessions; no live LLM or mutation of user data is
+required. Never automatically retry writes whose outcome is unknown.

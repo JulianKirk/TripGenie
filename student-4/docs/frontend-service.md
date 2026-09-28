@@ -91,7 +91,26 @@ The traveller page has four regions:
 The catalogue includes inactive entries and provides creation, replacement,
 deactivation and deletion without requiring a separate management page.
 
-## AI activity suggestions
+## MCP activity assistant
+
+The primary AI panel submits one prompt and an optional selected trip through
+`POST /suggestions/ask` to backend `/activity/assistant`. There is no retained
+chat history. It renders ordered escaped text and authoritative read-only
+activity cards. Active cards offer **Add to itinerary** using the existing
+explicit review flow; edit/delete controls are absent. The request form supports
+HTMX fragments and a full-page ordinary POST fallback.
+
+An expandable **Tools used** section displays backend-recorded calls, arguments,
+status, elapsed milliseconds, returned activity IDs/count, correlation IDs,
+and errors. Final card-detail calls appear too. This trace is execution data,
+not generated model text. Errors retain the trace, and no silent direct-API
+fallback occurs. A loading indicator announces work and the submit button is
+disabled while HTMX waits. See [setup and demonstration](mcp-assistant.md).
+
+## Legacy AI activity suggestions
+
+The following describes retained plan/evaluate compatibility routes. The main
+AI panel now uses the MCP assistant above.
 
 The catalogue's AI panel accepts a natural-language request and an optional
 trip selected from Student 1 through the Student 4 backend. It is an assisted

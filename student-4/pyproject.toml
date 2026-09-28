@@ -4,17 +4,21 @@ version = "0.1.0"
 description = "Student 4 activities and attractions services for TripGenie."
 requires-python = ">=3.11"
 dependencies = [
+    "mcp==1.26.0",
+    "jsonschema>=4.20,<5",
     "fastapi>=0.115,<1.0",
     "httpx>=0.27,<1.0",
     "jinja2>=3.1,<4.0",
     "pydantic>=2.8,<3.0",
     "python-multipart>=0.0.9,<1.0",
-    "sqlalchemy>=2.0,<3.0",
+    # Repository Select typing targets the SQLAlchemy 2.0 API.
+    "sqlalchemy>=2.0,<2.1",
     "uvicorn[standard]>=0.30,<1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "types-jsonschema>=4.20",
     "httpx>=0.27,<1.0",
     "mypy>=1.11,<2.0",
     "pytest>=8.3,<9.0",

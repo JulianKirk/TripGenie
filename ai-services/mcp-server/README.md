@@ -1,6 +1,6 @@
 # Shared MCP server (Release 1)
 
-One read-only, host-run MCP server for TripGenie's five public student backends.
+One host-run MCP server for TripGenie's five public student backends.
 The server never reads a database or calls Ollama, and is not a Compose service.
 It uses the pinned Python MCP SDK `1.26.0` with Streamable HTTP at `/mcp`.
 
@@ -30,11 +30,14 @@ downstream services (Student 2 has no `/ready`). A disconnected provider returns
 a structured error when its tool is called. The `call` command prints the MCP
 `structuredContent` alongside protocol metadata.
 
-The server binds to loopback only. Docker Desktop backends reach it at
+The server binds to loopback by default. Docker Desktop backends reach it at
 `http://host.docker.internal:8012/mcp` when configured by their owners. Never
 bind it to a public interface without adding authentication. Host-side backend
-ports must be published on loopback first (Compose host-connectivity issue
-#129); this server does not change Compose or other students' services.
+ports must be reachable from the host. Compose now publishes Student 1 at
+127.0.0.1:18001 and Student 4 at 127.0.0.1:18008. On native Linux, see
+[the host-binding guide](../../student-4/docs/mcp-assistant.md) for restricted
+Docker-bridge binding and CLI `--url`; loopback-only listeners cannot be
+reached through the container host gateway.
 
 | Environment variable | Default public backend URL |
 | --- | --- |
@@ -46,13 +49,15 @@ ports must be published on loopback first (Compose host-connectivity issue
 
 `MCP_HOST` (default `127.0.0.1`) and `MCP_PORT` (default `8012`) set the
 server binding. Set each URL to the **public backend root**, without an API
-prefix. The defaults follow the proposed loopback scheme; Student 2 already
-publishes port 9000. If #129 chooses other ports, override the relevant URLs.
+prefix. Student 1 and 4 defaults match Compose loopback ports; Student 2
+publishes port 9000. Other provider ports must be published by their owners;
+override the relevant URLs if they use different bindings.
 The Student 5 backend serves `/api/v1` in Compose; Student 1 and 3 serve `/api`.
 
 ## Tool contract
 
-All tools are reads. IDs come only from provider responses; callers discover
+Activity catalogue CRUD is available to trusted external local clients; other
+tools are reads. IDs come only from provider responses; callers discover
 IDs using search/list tools. `limit` defaults to 20, accepts 1-50, and caps
 returned rows; provider list bodies are capped at 64 KiB and tool data at
 32 KiB. Empty lists are successful. Read-only Student 2 and 4 `QUERY` filters
@@ -70,7 +75,10 @@ cannot select a URL, method, raw body, or provider API route.
 | Student 3 | `transport_get` | `transport_id` (`transport_*`) | Public detail with pricing basis and nullable seats. |
 | Student 3 | `transport_compare` | `ids` (1-4 unique `transport_*` IDs) | Compared items; response IDs must match the requested set. |
 | Student 3 | `transport_trip_costs` | `trip_id` | Public trip summary with exact-string total, planned costs and option prices; pricing basis and nullable seats are preserved. |
-| Student 4 | `activities_search` | `text?`, `limit?` | Activity `items`, `count`, `truncated`; exact AUD `price`, `pricing_basis` (`PER_PERSON`/`FLAT_ADMISSION`) and unknown nullable facts preserved. |
+| Student 4 | `activities_search` | `text?`, `limit?`, `offset?`, `filters?` | Activity `items`, `count`, `truncated`; exact AUD `price`, `pricing_basis` (`PER_PERSON`/`FLAT_ADMISSION`) and unknown nullable facts preserved. |
+| Student 4 | `activities_create` | `activity` typed ActivityWrite | POST /activity; full created representation, status 201. |
+| Student 4 | `activities_update` | `activity_id` UUID, `activity` typed ActivityWrite | PUT /activity/{id}; replaces all fields, categories and schedules, status 200. |
+| Student 4 | `activities_delete` | `activity_id` UUID, `confirm: true` | DELETE /activity/{id}; hard delete acknowledgement with matching ID, status 200. |
 | Student 4 | `activities_get` | `activity_id` UUID | Public detail, including exact price and pricing basis. |
 | Student 4 | `activities_list_categories` | none | Public category codes and labels. |
 | Student 4 | `activities_committed_costs` | `trip_id` | Public committed total, currency, and items. |
@@ -86,9 +94,9 @@ Each tool returns a structured envelope:
 
 Failures use `{"ok":false,"error":{"code":"PROVIDER_UNAVAILABLE","message":"Provider unreachable","retryable":true},"correlation_id":"mcp-...","source":"student-1"}` with MCP `isError: true`.
 Codes are `VALIDATION_ERROR`, `NOT_FOUND`, `PROVIDER_UNAVAILABLE`,
-`PROVIDER_TIMEOUT`, and `INVALID_RESPONSE`. Missing or unregistered tool names
+`PROVIDER_TIMEOUT`, `INVALID_RESPONSE`, `CONFLICT`, and `WRITE_OUTCOME_UNKNOWN`. Missing or unregistered tool names
 are rejected by MCP itself. Provider error bodies are never forwarded. No tool
-performs a write or holds a Student 1 transaction. Avoid calling the Student 5
+holds a Student 1 transaction. Avoid calling the Student 5
 fan-out summary inside a Student 1 write transaction.
 
 ## Checks
@@ -102,4 +110,48 @@ python -m pytest -q
 
 Tests use injected `httpx.MockTransport`; no live backends or host model are
 needed. A live invocation of each domain requires the five public backends to
-be running and their loopback host ports to be published by #129.
+be running and their configured host ports to be reachable.
+
+## Activity advanced search and writes
+
+Create/update requests must fit the 32 KiB result budget including generated
+record and schedule IDs. Oversized writes are rejected before provider execution.
+An oversized or malformed acknowledgement after a write requires catalogue
+inspection before retrying, since the mutation may already have completed.
+
+`activities_search` remains compatible with existing `text` and `limit` calls.
+`offset` defaults to zero; `filters` contains the public ActivityQuery fields
+except `text`, `limit` and `offset`: location, categories, price, duration_minutes,
+party_size, youngest_age, oldest_age, booking_required, accessibility,
+availability, sort and include_inactive. The MCP limit remains 1–50. For example:
+
+```json
+{"text":"museum","limit":5,"offset":0,"filters":{"price":{"max":"25.00"},"accessibility":{"wheelchair_accessible":true}}}
+```
+
+The nested input schemas advertised by `tools/list` reject unknown fields and
+validate category enums, ranges, local schedule times, recurrence, age and party
+bounds. Full write schemas mirror the public
+[Student 4 contract](../../student-4/docs/backend-service-api.md).
+Money is canonical two-decimal text; nullable accessibility and participant
+facts retain their unknown meaning. Update is a full replacement, not a patch.
+Read tools advertise `readOnlyHint`; update and delete advertise destructive
+behavior. These annotations describe behavior and are not access controls.
+
+There is no MCP authentication or per-client authorization in this local server.
+Loopback and DNS-rebinding checks are the existing trusted-client boundary;
+any client able to reach it can call the catalogue write tools. Do not expose it
+on a network without adding authentication and authorization. The Student 4
+frontend agent must enforce its own read-only allowlist before every execution,
+regardless of the write tools advertised here. No tool changes itinerary choices.
+
+Writes make exactly one provider request. A timeout, transport failure, 5xx,
+unexpected status or malformed acknowledgement returns `WRITE_OUTCOME_UNKNOWN`
+with `retryable: false`; a write may already have happened. Inspect the catalogue
+before deciding to retry. Known 404/422/409 rejections are reported separately.
+A valid incoming HTTP `X-Request-ID` (1–80 letters, digits, `_` or `-`) is reused
+in the tool envelope and downstream header. Otherwise the server generates one.
+
+Protocol tests exercise initialization, tools/list and tools/call through the
+Streamable HTTP ASGI endpoint with an injected provider transport; these are
+not evidence of a running local catalogue or a browser workflow.

@@ -45,7 +45,7 @@ def test_index_offers_prompt_trip_context_and_immediate_progress(
 
     text = frontend(backend).get("/").text
 
-    assert "AI activity suggestions" in text
+    assert "AI activity assistant" in text
     assert 'name="question"' in text
     assert 'name="trip_id"' in text
     assert "Sydney Getaway" in text

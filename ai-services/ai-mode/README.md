@@ -37,7 +37,7 @@ inside Docker.
 1. Install Ollama on the host OS using the official installer/package for that platform.
 2. Start Ollama so the shared AI-Mode service can reach its HTTP API.
    - Native `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
-   - Containerized `ai-mode` runs receive `AI_MODE_OLLAMA_BASE_URL=http://host.docker.internal:11434` from Compose.
+   - Release 1 Compose backends call host AI-Mode at `http://host.docker.internal:8006`; AI-Mode is not a Compose service.
 3. Pull the approved chat and embedding models on the host:
 
    ```bash
@@ -54,7 +54,7 @@ inside Docker.
 Platform notes:
 
 - Windows/macOS native runs can use the loopback default above.
-- When `ai-mode` itself runs in Docker, Compose must bridge the container to the host Ollama runtime with `host.docker.internal`; the application code does not bootstrap that alias.
+- On native Linux, bind host AI-Mode to a restricted Docker-bridge interface for container access. See [host setup](../../student-4/docs/mcp-assistant.md). Ollama can remain on host loopback.
 - Tests and CI in this repository use mocked provider transports only. They do **not** install, start, or download Ollama/models.
 
 ## Public API
@@ -325,9 +325,9 @@ Correlation IDs and other logged fields are sanitized defensively to stay single
 
 ## Runtime expectation
 
-The existing Docker image supports the Release 0 Compose stack. Release 1 RAG
-uses AI-Mode as a host process and does not add AI-Mode, RAG, or Ollama to
-Compose.
+AI-Mode runs as a host process in Release 1. The existing Dockerfile is retained
+for standalone packaging checks, but AI-Mode, MCP, RAG, Ollama, and the shared
+validation loop are not defined as Compose services.
 
 Host start:
 
@@ -341,14 +341,12 @@ For a Docker consumer, bind deliberately to a host interface reachable through
 blocked from untrusted networks. Native-only use should retain the loopback
 binding.
 
-The Release 0 Compose runtime contract remains:
+The Release 1 runtime contract is:
 
-- service name: `ai-mode`
-- backend-to-service URL:
-  - native runs: leave `STUDENT1_BACKEND_AI_MODE_BASE_URL` unset unless you are pointing at a manually started reachable `ai-mode` endpoint
-  - Compose/container deployment: `http://ai-mode:8006`
-- service-to-provider URL:
-  - native `ai-mode`: `http://127.0.0.1:11434`
-  - containerized `ai-mode`: `http://host.docker.internal:11434`
+- Backend-to-AI-Mode URL in Compose: `http://host.docker.internal:8006`.
+- Native consumers may use `http://127.0.0.1:8006` when AI-Mode binds to loopback.
+- AI-Mode-to-Ollama default: `http://127.0.0.1:11434` (both run on the host).
+- Compose supplies `host.docker.internal:host-gateway` for native Linux backends;
+  the host service must listen on that reachable interface, not only loopback.
 
 Ollama remains a host prerequisite; Compose and CI do not install, start, or download Ollama or its models.

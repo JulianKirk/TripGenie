@@ -1,4 +1,4 @@
-"""Shared host-run MCP server for read-only student tools."""
+"""Shared host-run MCP server for bounded public student tools."""
 
 import json
 from functools import wraps
@@ -7,7 +7,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
@@ -32,7 +32,10 @@ CATALOGUE = {
         "transport_trip_costs": "Read a trip's priced transport selections.",
     },
     "student-4": {
-        "activities_search": "Discover activities using optional text search.",
+        "activities_search": "Search activities by text and advanced filters.",
+        "activities_create": "Create an activity (trusted local clients only).",
+        "activities_update": "Replace a complete activity, including its schedules.",
+        "activities_delete": "Hard delete an activity; requires confirm=true.",
         "activities_get": "Read an activity with exact price and pricing basis.",
         "activities_list_categories": "Read public activity category codes.",
         "activities_committed_costs": "Read committed activity costs for a trip.",
@@ -58,7 +61,12 @@ def create_server(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(
-            allowed_hosts=["127.0.0.1:*", "localhost:*", "host.docker.internal:*"],
+            allowed_hosts=[
+                "127.0.0.1:*",
+                "localhost:*",
+                "host.docker.internal:*",
+                f"{settings.host}:*",
+            ],
             allowed_origins=["http://127.0.0.1:*", "http://localhost:*"],
         ),
     )
@@ -66,7 +74,14 @@ def create_server(
     def wrap(action, owner):
         @wraps(action)
         def call(**kwargs):
-            result = tools.execute(owner, lambda: action(**kwargs))
+            try:
+                request = server.get_context().request_context.request
+                correlation = (
+                    request.headers.get("X-Request-ID") if request is not None else None
+                )
+            except ValueError:
+                correlation = None
+            result = tools.execute(owner, lambda: action(**kwargs), correlation)
             if not result["ok"]:
                 return CallToolResult(
                     content=[TextContent(type="text", text=json.dumps(result))],
@@ -85,6 +100,17 @@ def create_server(
                 name=name,
                 description=description,
                 structured_output=True,
+                annotations=ToolAnnotations(
+                    readOnlyHint=name
+                    not in {
+                        "activities_create",
+                        "activities_update",
+                        "activities_delete",
+                    },
+                    destructiveHint=name in {"activities_update", "activities_delete"},
+                    idempotentHint=name != "activities_create",
+                    openWorldHint=False,
+                ),
             )
             registered = server._tool_manager.get_tool(name)
             registered.fn_metadata.arg_model.model_config["extra"] = "forbid"

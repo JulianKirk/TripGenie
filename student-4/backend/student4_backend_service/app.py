@@ -4,11 +4,13 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import httpx  # noqa: TC002 (public transport test seam)
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 
 from . import errors
 from .activity_routes import router as activity_router
 from .ai_mode_client import AiModeClient
+from .assistant import answer
+from .assistant_models import AssistantRequest, AssistantResponse
 from .client import DatabaseClient
 from .config import Settings
 from .dependencies import DbDep, LocationDep  # noqa: TC001 (FastAPI runtime)
@@ -32,6 +34,7 @@ def create_app(
     location_transport: httpx.AsyncBaseTransport | None = None,
     itinerary_transport: httpx.AsyncBaseTransport | None = None,
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
+    mcp_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
 
@@ -84,6 +87,12 @@ def create_app(
             database=database,
             location="not_checked",
         )
+
+    @app.post("/activity/assistant", response_model=AssistantResponse)
+    async def assistant(
+        payload: AssistantRequest, request: Request
+    ) -> AssistantResponse:
+        return await answer(payload, settings, request.app.state.ai, mcp_transport)
 
     app.include_router(recommendation_router)
     app.include_router(trip_router)

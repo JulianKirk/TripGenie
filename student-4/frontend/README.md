@@ -13,8 +13,9 @@ call the database, shared location service, or itinerary service directly.
   explicit permanent-delete confirmation in the edit flow.
 - Add activities to a trip, reschedule them, and remove selections through
   Student 4's itinerary proxy.
-- Ask for trip-aware AI suggestions, see the advanced filters it runs and any
-  one-time revision, and review a grounded shortlist of real activities.
+- Ask a single activity question, optionally select a trip, and inspect the
+  actual read-only MCP calls, authoritative activity cards, and itinerary actions.
+  Each question starts fresh; no chat history is retained.
 - Progressive enhancement: the initial page and explicit search submission
   work without JavaScript; HTMX adds live fragment updates.
 - Degraded health and safe HTML error states when the backend is unavailable.
@@ -67,6 +68,7 @@ which previously occupied port 8084.
 | `DELETE /activity/{id}/itineraries/{trip_id}` | Remove selection. |
 | `GET /health` | Frontend and backend status. |
 | `GET /ready` | Readiness status; returns `503` until the backend is ready. |
+| `POST /suggestions/ask` | Run the one-shot MCP activity assistant and render its execution trace. |
 | `POST /suggestions/plan` | Plan an advanced search from a prompt and optional trip. |
 | `POST /suggestions/evaluate` | Evaluate real matches and render a shortlist or one retry. |
 
@@ -84,3 +86,6 @@ allow-listed structured payloads; no arbitrary browser JSON is forwarded.
 docker build -f student-4/frontend/Dockerfile \
   -t student-4-frontend student-4
 ```
+
+The primary AI panel uses `/suggestions/ask`; plan/evaluate routes are legacy
+compatibility endpoints. See [MCP assistant setup](../docs/mcp-assistant.md).

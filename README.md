@@ -150,48 +150,41 @@ their relationships can be added to the committed graph.
 
 ## Release 0 local Docker Compose
 
-Ollama is a **host-managed prerequisite**, not a Compose service. Before
-starting TripGenie, start Ollama on the host and install the model selected by
-`docker-compose.yml`:
+Ollama, AI-Mode, MCP, RAG, and the validation loop are **host processes**
+in Release 1. Compose runs the feature frontends, backends, and databases.
+Install the selected model on the host (if Ollama is already running, do not
+start a second process):
 
 ```bash
-ollama serve
 ollama pull llama3.1:8b
 curl http://localhost:11434/api/tags
 ```
 
-On native Linux, Ollama must listen on an address reachable through Docker's
-host gateway rather than loopback only:
-
-```bash
-OLLAMA_HOST=0.0.0.0:11434 ollama serve
-```
-
-Restrict port `11434` to the local Docker bridge with the host firewall; do not
-expose it to untrusted networks.
-
-If the operating system already manages Ollama as a service, do not start a
-second process; only confirm that `/api/tags` responds and lists the model.
-Then build and start the integrated application:
+Start AI-Mode and MCP using their service READMEs. See the complete
+[Student 4 MCP setup and demonstration guide](student-4/docs/mcp-assistant.md)
+for Python dependencies, host binding on Docker Desktop/native Linux, and the
+activity assistant. The [shared RAG README](ai-services/rag-server/README.md)
+describes RAG setup separately. Host services do not automatically load the
+example environment file.
 
 ```bash
 docker compose --env-file shared/configuration/.env.example up --build -d
+docker compose --env-file shared/configuration/.env.example ps
 ```
 
-The shared portal is available at `http://localhost:8080` and links to the
-Student 1 frontend at `http://localhost:8081`. Student 1 backend, database, and
-shared AI-Mode ports remain internal to Compose. The shared `ai-mode` container
-reaches host Ollama through `host.docker.internal:11434`; the Linux
-`host-gateway` mapping is included in Compose.
+The portal is at `http://localhost:8080`. Backends reach host AI-Mode at
+`http://host.docker.internal:8006`; Compose supplies the Linux host-gateway
+mapping. Student 1 and Student 4 public APIs are published on **host loopback**
+ports 18001 and 18008 for MCP. Their database APIs remain private. On native
+Linux a host service bound only to 127.0.0.1 cannot be reached via the bridge;
+follow the restricted host-binding instructions in the guide above.
 
-Trip and itinerary CRUD remains available when Ollama is stopped or its model
-is absent. AI suggestion requests report the dependency failure separately.
-
-Useful status and log commands:
+Ordinary feature workflows remain usable if host AI services are unavailable.
+AI requests report dependency failures separately. The Student 4 assistant
+never silently substitutes direct catalogue calls when MCP fails.
 
 ```bash
-docker compose --env-file shared/configuration/.env.example ps
-docker compose --env-file shared/configuration/.env.example logs -f student-1-frontend student-1-backend student-1-database ai-mode
+docker compose --env-file shared/configuration/.env.example logs -f student-1-frontend student-1-backend student-1-database
 curl http://localhost:8081/health
 curl http://localhost:8081/ready
 ```

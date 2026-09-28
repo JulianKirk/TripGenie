@@ -26,9 +26,19 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve nullable accessibility values: `null` means unknown, not false.
 - Availability is local time and distinguishes weekly schedules from one-off
   dates. Enforce the aggregate invariants documented in the object model.
-- AI search and recommendations go through AI-Mode, operate on authoritative
-  catalogue results, expose chosen filters to the user, and never save without
-  an explicit user action.
+- The primary AI panel is a one-shot assistant: no retained conversation history.
+  Its backend orchestrates schema-constrained AI-Mode steps and real MCP tool
+  calls. MCP exposes full activity CRUD for external clients, but this agent
+  uses an explicit read-only allowlist and selected-trip scope. Reject write
+  calls before execution regardless of model output or MCP annotations.
+- Render activity references only after checking this request's successful
+  tool results and resolving authoritative details through MCP. Never accept
+  model-authored card data. Show the backend-recorded MCP tool trace, including
+  errors and final detail lookups. Adding to an itinerary remains an explicit
+  user action through the existing route.
+- Preserve ordinary browsing/CRUD when MCP is disabled or unavailable. Do not
+  silently bypass MCP in the assistant. Legacy plan/evaluate routes are retained
+  for compatibility, not used by the primary AI panel.
 - Keep frontend query parsing and presentation in `query.py`, `forms.py`, and
   `presenters.py` rather than growing route handlers with duplicate logic.
 

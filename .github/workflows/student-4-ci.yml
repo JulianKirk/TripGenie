@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'student-4/**'
+      - 'ai-services/mcp-server/**'
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
@@ -12,6 +13,7 @@ on:
   pull_request:
     paths:
       - 'student-4/**'
+      - 'ai-services/mcp-server/**'
       - '.github/workflows/student-4-ci.yml'
       - 'docker-compose.yml'
       - 'ruff.toml'
@@ -19,7 +21,25 @@ on:
       - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
 
+env:
+  MCP_ENABLED: "false"
+  RAG_ENABLED: "false"
+  STUDENT4_MCP_ENABLED: "false"
+
 jobs:
+  mcp-contracts:
+    name: Validate shared MCP contracts without live services
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e "./ai-services/mcp-server[dev]" -e "./student-4[dev]"
+      - run: |
+          ruff check ai-services/mcp-server
+          ruff format --check ai-services/mcp-server
+          pytest ai-services/mcp-server/tests -q
   frontend:
     name: Build and Validate Student 4 Frontend
     runs-on: ubuntu-latest

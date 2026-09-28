@@ -307,6 +307,29 @@ def _ai_error_response(request: Request, message: str) -> Any:
     )
 
 
+@router.post("/suggestions/ask")
+async def suggestion_ask(request: Request, client: ClientDep) -> Any:
+    form = await request.form()
+    payload: dict[str, object] = {"question": str(form.get("question", "")).strip()}
+    trip_id = str(form.get("trip_id", "")).strip()
+    if trip_id:
+        payload["trip_id"] = trip_id
+    result = None
+    error = None
+    try:
+        result = await client.ask_assistant(payload)
+    except FrontendError as exc:
+        error = exc.detail
+    template = (
+        "partials/assistant_results.html"
+        if request.headers.get("HX-Request") == "true"
+        else "assistant_page.html"
+    )
+    return TEMPLATES.TemplateResponse(
+        request, template, {"result": result, "error": error}
+    )
+
+
 @router.post("/suggestions/plan")
 async def suggestion_plan(request: Request, client: ClientDep) -> Any:
     form = await request.form()

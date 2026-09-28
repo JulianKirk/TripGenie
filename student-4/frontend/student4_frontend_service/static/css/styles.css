@@ -82,3 +82,10 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 @media (max-width: 800px) { .app-layout { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .schedule-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .itinerary-row { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .form-grid, .facts, .schedule-row { grid-template-columns: 1fr; } .pager { align-items: flex-start; flex-direction: column; } }
+
+/* Execution data is separate from advisory model prose. */
+.assistant-text { white-space: pre-wrap; }
+.assistant-tools { margin-top: 1rem; overflow-wrap: anywhere; }
+.assistant-tools summary { cursor: pointer; font-weight: 600; }
+.assistant-tools li { margin-block: 0.8rem; }
+.assistant-tools code { white-space: pre-wrap; }
