@@ -1,0 +1,35 @@
+{
+  "goal": "Validate Student 5 Release 1 MCP and RAG integration: the shared MCP server's read-only budget tools, the shared RAG server's grounded and insufficient-context answers for feature student-5, and the Student 5 backend routes that call both",
+  "_note": "Local run only; needs host AI-Mode, RAG and MCP plus the Compose stack. Set SERVICE_URL=http://127.0.0.1:8085 BACKEND_URL=http://127.0.0.1:18005 MCP_URL=http://127.0.0.1:8012 RAG_URL=http://127.0.0.1:8011 CHECKS_FILE=checks/student-5-release-1.json. All checks are read-only.",
+  "checks": [
+    {"label": "MCP server /ready", "path": "${MCP_URL}/ready", "contains": ["tripgenie-mcp"]},
+    {"label": "MCP tools/list registers the Student 5 tools", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-list", "method": "tools/list"}, "contains": ["\"budgets_list\"", "\"budgets_get_summary\"", "\"expenses_list\""]},
+    {"label": "MCP budgets_list", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-budgets", "method": "tools/call", "params": {"name": "budgets_list", "arguments": {"trip_id": "trip_2026_sydney_long_weekend", "limit": 5}}}, "contains": ["\"ok\":true", "\"source\":\"student-5\"", "5ad9845c-a7d1-5688-b06a-63e92bed4345"]},
+    {"label": "MCP expenses_list for the seeded trip", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-expenses", "method": "tools/call", "params": {"name": "expenses_list", "arguments": {"trip_id": "trip_2026_sydney_long_weekend", "limit": 5}}}, "contains": ["\"ok\":true", "\"expenses\""]},
+    {"label": "MCP invalid budget UUID is a structured validation error", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-invalid", "method": "tools/call", "params": {"name": "budgets_get_summary", "arguments": {"budget_id": "not-a-uuid"}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
+    {"label": "Student 5 backend MCP budget-summary route", "method": "POST", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/mcp/budget-summary", "timeout": 60, "contains": ["\"tool\":\"budgets_get_summary\"", "student5-mcp-", "remaining_budget"]},
+    {"label": "RAG server /ready", "path": "${RAG_URL}/ready", "contains": ["ready"]},
+    {"label": "RAG relevant Student 5 query is grounded", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "How is the remaining budget calculated?", "feature": "student-5", "top_k": 5, "correlation_id": "student5-loop-rag-1"}, "contains": ["\"insufficient_context\":false", "student-5-budget-rules"]},
+    {"label": "RAG unrelated Student 5 query is insufficient context", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "Who won the 2026 AFL Grand Final?", "feature": "student-5", "top_k": 5, "correlation_id": "student5-loop-rag-2"}, "contains": ["\"insufficient_context\":true", "\"citations\":[]"]},
+    {"label": "Student 5 backend RAG route round trip", "method": "POST", "path": "${BACKEND_URL}/api/v1/rag/query", "timeout": 150, "json": {"question": "What does an unavailable provider cost mean in a budget summary?"}, "contains": ["\"confidence_category\"", "student5-rag-", "\"citations\""]},
+    {"label": "Student 5 backend health reports integrations enabled", "path": "${BACKEND_URL}/health", "contains": ["\"integrations\":{\"rag\":\"enabled\",\"mcp\":\"enabled\"}"]}
+  ],
+  "rules": [
+    "Student 5 MCP tools are read-only: budgets_list, budgets_get_summary and expenses_list call only the Student 5 public API with GET.",
+    "An unavailable provider cost is reported as unavailable and the summary is incomplete; it is never treated as zero.",
+    "RAG confidence is calculated by the RAG server from retrieval scores; an insufficient-context answer has no citations.",
+    "The browser never calls MCP or RAG directly; the Student 5 backend fixes the RAG feature, top_k, MCP tool name and tool arguments."
+  ],
+  "flows": [
+    {
+      "name": "MCP summary arithmetic",
+      "steps": [
+        {"label": "MCP budgets_get_summary for the seeded budget", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-summary", "method": "tools/call", "params": {"name": "budgets_get_summary", "arguments": {"budget_id": "5ad9845c-a7d1-5688-b06a-63e92bed4345"}}}, "timeout": 40, "contains": ["\"ok\":true"], "save": {"TOTAL": "result.structuredContent.data.total_budget", "SPENT": "result.structuredContent.data.actual_spending", "COMMITTED": "result.structuredContent.data.committed_costs", "REMAINING": "result.structuredContent.data.remaining_budget"}},
+        {"label": "Backend summary agrees with the MCP tool", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/summary", "contains": ["\"remaining_budget\":\"${REMAINING}\""]}
+      ],
+      "invariants": [
+        {"label": "remaining_budget = total_budget - actual_spending - committed_costs (via MCP)", "expr": "abs(float(REMAINING) - (float(TOTAL) - float(SPENT) - float(COMMITTED))) < 0.01"}
+      ]
+    }
+  ]
+}

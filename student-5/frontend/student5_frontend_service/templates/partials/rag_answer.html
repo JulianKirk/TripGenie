@@ -1,0 +1,25 @@
+<div id="rag-assistant" class="panel rag-assistant" aria-live="polite">
+  <div><p class="eyebrow">Knowledge assistant</p><h2>Ask about budget rules</h2><p class="muted">Answers come only from indexed TripGenie budget documentation and list their sources.</p></div>
+  <form method="post" action="/rag" hx-post="/rag" hx-target="#rag-assistant" hx-swap="outerHTML" hx-indicator="#rag-loading">
+    <label class="field"><span>Your question</span><textarea name="question" rows="2" maxlength="500" required>{{ rag_question or '' }}</textarea></label>
+    <div class="actions"><button class="button button--primary" type="submit">Ask</button><span id="rag-loading" class="htmx-indicator muted">Searching the knowledge base...</span></div>
+  </form>
+  {% if rag_answer %}
+  <div class="rag-result">
+    {% if rag_answer.insufficient_context %}
+    <div class="banner banner--warning">There is not enough indexed context to answer this question. Try asking about budgets, expenses, summaries, or provider costs.</div>
+    <p><span class="confidence confidence--insufficient">Confidence: Insufficient context</span></p>
+    {% else %}
+    <p><span class="confidence confidence--{{ rag_answer.confidence_category }}">Confidence: {{ rag_answer.confidence_category | title }}</span></p>
+    <p class="rag-answer">{{ rag_answer.answer }}</p>
+    <h3>Sources</h3>
+    <ol class="citations">
+      {% for citation in rag_answer.citations %}
+      <li><strong>{{ citation.title }}</strong> &middot; {{ citation.section }}<span class="cell-note">{{ citation.path }}</span><blockquote>{{ citation.excerpt }}</blockquote></li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    <p class="cell-note">Correlation ID {{ rag_answer.correlation_id }} &middot; run {{ rag_answer.run_id }}</p>
+  </div>
+  {% elif rag_error %}<div class="banner banner--warning">{{ rag_error }} Budget and expense actions remain available.</div>{% endif %}
+</div>

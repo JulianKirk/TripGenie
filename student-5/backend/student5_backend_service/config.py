@@ -30,6 +30,13 @@ def _timeout(name: str, default: float = 5.0) -> float:
     return value
 
 
+def _flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name, str(default)).strip().lower()
+    if value not in {"true", "false", "1", "0", "yes", "no"}:
+        raise ValueError(f"{name} must be true or false.")
+    return value in {"true", "1", "yes"}
+
+
 def _positive_int(name: str, default: int) -> int:
     try:
         value = int(os.getenv(name, str(default)))
@@ -63,6 +70,12 @@ class Settings:
     ai_mode_timeout_seconds: float = 20.0
     ai_prompt_max_chars: int = 12000
     ai_prompt_asset: str = "budget_analysis_v1.md"
+    rag_enabled: bool = False
+    rag_base_url: str = "http://host.docker.internal:8011"
+    rag_timeout_seconds: float = 130.0
+    mcp_enabled: bool = False
+    mcp_base_url: str = "http://host.docker.internal:8012/mcp"
+    mcp_timeout_seconds: float = 40.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -130,4 +143,14 @@ class Settings:
             ai_prompt_asset=os.getenv(
                 "STUDENT5_BACKEND_AI_PROMPT_ASSET", "budget_analysis_v1.md"
             ).strip(),
+            rag_enabled=_flag("STUDENT5_BACKEND_RAG_ENABLED"),
+            rag_base_url=_url(
+                "STUDENT5_BACKEND_RAG_BASE_URL", "http://host.docker.internal:8011"
+            ),
+            rag_timeout_seconds=_timeout("STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS", 130.0),
+            mcp_enabled=_flag("STUDENT5_BACKEND_MCP_ENABLED"),
+            mcp_base_url=_url(
+                "STUDENT5_BACKEND_MCP_BASE_URL", "http://host.docker.internal:8012/mcp"
+            ),
+            mcp_timeout_seconds=_timeout("STUDENT5_BACKEND_MCP_TIMEOUT_SECONDS", 40.0),
         )

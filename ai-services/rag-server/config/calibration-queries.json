@@ -40,6 +40,31 @@
       "feature": "student-1",
       "expected_source_ids": [],
       "expect_insufficient_context": true
+    },
+    {
+      "case_id": "student-5-remaining-budget",
+      "query": "How is the remaining budget calculated?",
+      "feature": "student-5",
+      "expected_source_ids": [
+        "student-5-budget-rules"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-5-unavailable-provider",
+      "query": "What does an unavailable provider cost mean in a budget summary?",
+      "feature": "student-5",
+      "expected_source_ids": [
+        "student-5-budget-rules"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-5-unrelated",
+      "query": "Who won the 2026 AFL Grand Final?",
+      "feature": "student-5",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
     }
   ]
 }

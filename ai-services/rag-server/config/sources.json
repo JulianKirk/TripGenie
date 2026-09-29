@@ -18,6 +18,18 @@
       "path": "docs/architecture/student-1-data-models.md",
       "title": "Student 1 Data Models",
       "feature": "student-1"
+    },
+    {
+      "source_id": "student-5-budget-rules",
+      "path": "student-5/docs/budget-rules.md",
+      "title": "Student 5 Budget and Expense Rules",
+      "feature": "student-5"
+    },
+    {
+      "source_id": "student-5-budget-service-api",
+      "path": "student-5/docs/budget-service-api.md",
+      "title": "Student 5 Budget Service API",
+      "feature": "student-5"
     }
   ]
 }

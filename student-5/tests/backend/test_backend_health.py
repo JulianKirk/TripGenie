@@ -16,6 +16,7 @@ def test_backend_health_and_readiness() -> None:
                 "status": "healthy",
                 "service": "student-5-backend",
                 "dependencies": {"database": True},
+                "integrations": {"rag": "disabled", "mcp": "disabled"},
             }
         }
         assert client.get("/ready").json() == {

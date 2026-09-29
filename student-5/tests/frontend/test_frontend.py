@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from student5_frontend_service.app import create_app
 
@@ -389,3 +391,270 @@ def test_create_and_delete_routes_redirect_to_browser_views() -> None:
     assert created.headers["location"] == f"/budgets/{BUDGET_ID}"
     assert "Delete permanently" in confirmation.text
     assert deleted.headers["location"] == f"/budgets/{BUDGET_ID}"
+
+
+CITATION = {
+    "source_id": "student-5-budget-rules",
+    "path": "student-5/docs/budget-rules.md",
+    "title": "Student 5 Budget and Expense Rules",
+    "section": "Remaining budget",
+    "chunk_id": "student-5-budget-rules:2:ab12cd",
+    "excerpt": "remaining_budget = total_budget - committed_costs - actual_spending",
+}
+RAG_ANSWER = {
+    "answer": "Remaining budget is total minus committed and actual spending.",
+    "confidence_category": "medium",
+    "insufficient_context": False,
+    "citations": [CITATION],
+    "retrieval": {"requested_top_k": 5, "returned_chunks": 1, "maximum_score": 0.6},
+    "run_id": "rag_01",
+    "correlation_id": "student5-rag-0123456789ab",
+}
+MCP_SUMMARY = {
+    "action": "budget-summary",
+    "tool": "budgets_get_summary",
+    "correlation_id": "student5-mcp-0123456789ab",
+    "duration_ms": 412,
+    "result": SUMMARY
+    | {
+        "budget_id": BUDGET_ID,
+        "trip_id": "trip-7",
+        "unconverted_expense_count": 0,
+        "category_totals": {"food": "75.00"},
+    },
+}
+
+
+def error_body(code: str, message: str, details=None) -> dict[str, Any]:
+    return {"error": {"code": code, "message": message, "details": details or []}}
+
+
+def with_route(path: str, data: Any, status_code: int = 200):
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == path and request.method == "POST":
+            captured.append(request)
+            return response(request, data, status_code)
+        return backend(request)
+
+    return handler, captured
+
+
+def test_budget_list_includes_accessible_rag_panel() -> None:
+    with make_client() as client:
+        page = client.get("/")
+
+    assert 'id="rag-assistant"' in page.text
+    assert 'aria-live="polite"' in page.text
+    assert '<form method="post" action="/rag" hx-post="/rag"' in page.text
+    assert "<span>Your question</span><textarea" in page.text
+    assert 'maxlength="500"' in page.text
+
+
+def test_rag_grounded_answer_shows_confidence_and_citations() -> None:
+    handler, captured = with_route("/api/v1/rag/query", {"data": RAG_ANSWER})
+    with make_client(handler) as client:
+        result = client.post(
+            "/rag",
+            data={"question": " How is remaining calculated? "},
+            headers={"HX-Request": "true"},
+        )
+
+    assert result.text.lstrip().startswith('<div id="rag-assistant"')
+    assert "Confidence: Medium" in result.text
+    assert RAG_ANSWER["answer"] in result.text
+    assert "Student 5 Budget and Expense Rules</strong> &middot; Remaining budget" in (
+        result.text
+    )
+    assert "student-5/docs/budget-rules.md" in result.text
+    assert "student5-rag-0123456789ab" in result.text
+    assert json.loads(captured[0].read()) == {
+        "question": "How is remaining calculated?"
+    }
+
+
+def test_rag_insufficient_context_shows_fixed_message_without_citations() -> None:
+    insufficient = RAG_ANSWER | {
+        "answer": "There is not enough indexed context to answer this question.",
+        "confidence_category": "insufficient_context",
+        "insufficient_context": True,
+        "citations": [],
+    }
+    handler, _ = with_route("/api/v1/rag/query", {"data": insufficient})
+    with make_client(handler) as client:
+        result = client.post(
+            "/rag", data={"question": "Who won?"}, headers={"HX-Request": "true"}
+        )
+
+    assert "not enough indexed context" in result.text
+    assert "Confidence: Insufficient context" in result.text
+    assert "<h3>Sources</h3>" not in result.text
+
+
+def test_rag_without_javascript_renders_full_page() -> None:
+    handler, _ = with_route("/api/v1/rag/query", {"data": RAG_ANSWER})
+    with make_client(handler) as client:
+        result = client.post("/rag", data={"question": "How is remaining calculated?"})
+
+    assert "<html" in result.text
+    assert "Sydney Long Weekend" in result.text
+    assert "Confidence: Medium" in result.text
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "message"),
+    [
+        (503, "RAG_DISABLED", "(RAG) is disabled in this environment."),
+        (503, "INDEX_NOT_READY", "The knowledge index is not ready yet."),
+        (503, "DEPENDENCY_UNAVAILABLE", "knowledge assistant is currently unavailable"),
+        (504, "DEPENDENCY_TIMEOUT", "took too long to answer"),
+        (502, "INVALID_DEPENDENCY_RESPONSE", "gave an unusable reply"),
+        (422, "VALIDATION_ERROR", "Enter a question between 1 and 500 characters."),
+    ],
+)
+def test_rag_failure_states_are_distinct_and_keep_question(
+    status_code: int, code: str, message: str
+) -> None:
+    handler, _ = with_route(
+        "/api/v1/rag/query", error_body(code, "raw backend text"), status_code
+    )
+    with make_client(handler) as client:
+        result = client.post(
+            "/rag",
+            data={"question": "Keep this question"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert message in result.text
+    assert "Keep this question</textarea>" in result.text
+    assert "Budget and expense actions remain available." in result.text
+
+
+def test_rag_output_is_escaped() -> None:
+    hostile = RAG_ANSWER | {
+        "answer": "<script>alert(1)</script>",
+        "citations": [CITATION | {"excerpt": "<img src=x onerror=alert(1)>"}],
+    }
+    handler, _ = with_route("/api/v1/rag/query", {"data": hostile})
+    with make_client(handler) as client:
+        result = client.post(
+            "/rag",
+            data={"question": "<b>q</b>"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert "<script>" not in result.text
+    assert "<img" not in result.text
+    assert "<b>q</b>" not in result.text
+    assert "&lt;script&gt;" in result.text
+
+
+def test_budget_detail_includes_mcp_actions() -> None:
+    with make_client() as client:
+        page = client.get(f"/budgets/{BUDGET_ID}")
+
+    assert 'id="mcp-tools"' in page.text
+    assert f'action="/budgets/{BUDGET_ID}/mcp/budget-summary"' in page.text
+    assert f'hx-post="/budgets/{BUDGET_ID}/mcp/expenses"' in page.text
+
+
+def test_mcp_summary_result_is_readable_and_structured() -> None:
+    handler, _ = with_route(
+        f"/api/v1/budgets/{BUDGET_ID}/mcp/budget-summary", {"data": MCP_SUMMARY}
+    )
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/mcp/budget-summary",
+            headers={"HX-Request": "true"},
+        )
+
+    assert result.text.lstrip().startswith('<div id="mcp-tools"')
+    assert "<code>budgets_get_summary</code>" in result.text
+    assert "student5-mcp-0123456789ab" in result.text
+    assert "412 ms" in result.text
+    assert "AUD 1625.00" in result.text
+    assert "<strong>Accommodation</strong>: unavailable" in result.text
+    assert "<strong>Transport</strong>: available (AUD 300.00)" in result.text
+    assert "Structured tool result" in result.text
+
+
+def test_mcp_expenses_result_renders_table() -> None:
+    data = {
+        "action": "expenses",
+        "tool": "expenses_list",
+        "correlation_id": "student5-mcp-0123456789ab",
+        "duration_ms": 9,
+        "result": {"expenses": [EXPENSE], "count": 1, "truncated": True},
+    }
+    handler, _ = with_route(f"/api/v1/budgets/{BUDGET_ID}/mcp/expenses", {"data": data})
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/mcp/expenses", headers={"HX-Request": "true"}
+        )
+
+    assert "<td>Dinner</td>" in result.text
+    assert "more exist than the tool limit" in result.text
+
+
+def test_mcp_without_javascript_renders_full_detail_page() -> None:
+    handler, _ = with_route(
+        f"/api/v1/budgets/{BUDGET_ID}/mcp/budget-summary", {"data": MCP_SUMMARY}
+    )
+    with make_client(handler) as client:
+        result = client.post(f"/budgets/{BUDGET_ID}/mcp/budget-summary")
+
+    assert "<html" in result.text
+    assert "Planned allocations" in result.text
+    assert "<code>budgets_get_summary</code>" in result.text
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "details", "message"),
+    [
+        (503, "MCP_DISABLED", [], "MCP tools are disabled in this environment."),
+        (503, "DEPENDENCY_UNAVAILABLE", [], "shared MCP server is currently"),
+        (
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+            [{"field": "mcp", "issue": "tool not registered"}],
+            "not registered on the shared MCP server",
+        ),
+        (504, "DEPENDENCY_TIMEOUT", [], "took too long to respond"),
+        (502, "MCP_TOOL_ERROR", [], "reported an error: raw backend text"),
+        (502, "INVALID_DEPENDENCY_RESPONSE", [], "returned an unusable result"),
+        (404, "NOT_FOUND", [], "raw backend text"),
+    ],
+)
+def test_mcp_failure_states_are_distinct(
+    status_code: int, code: str, details: list, message: str
+) -> None:
+    handler, _ = with_route(
+        f"/api/v1/budgets/{BUDGET_ID}/mcp/budget-summary",
+        error_body(code, "raw backend text", details),
+        status_code,
+    )
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/mcp/budget-summary",
+            headers={"HX-Request": "true"},
+        )
+
+    assert message in result.text
+    assert "Budget and expense actions remain available." in result.text
+
+
+def test_mcp_structured_result_is_escaped() -> None:
+    hostile = MCP_SUMMARY | {
+        "result": MCP_SUMMARY["result"] | {"trip_id": "<script>x</script>"}
+    }
+    handler, _ = with_route(
+        f"/api/v1/budgets/{BUDGET_ID}/mcp/budget-summary", {"data": hostile}
+    )
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/mcp/budget-summary",
+            headers={"HX-Request": "true"},
+        )
+
+    assert "<script>" not in result.text

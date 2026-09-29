@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from datetime import date
-from uuid import UUID
+from time import perf_counter
+from typing import Any
+from uuid import UUID, uuid4
 
 from .accommodation_client import AccommodationApiClient
 from .activity_client import ActivityApiClient
@@ -11,6 +15,7 @@ from .calculations import calculate_summary
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_gateway, date_outside_trip
+from .mcp_client import McpClient
 from .models import (
     BudgetAnalysisRequest,
     BudgetAnalysisResponse,
@@ -22,10 +27,36 @@ from .models import (
     ExpenseCreate,
     ExpenseRecord,
     ExpenseUpdate,
+    McpActionResult,
+    RagAnswer,
+    RagQueryRequest,
     TripRecord,
 )
+from .rag_client import RagClient
 from .transport_client import TransportApiClient
 from .trips_client import TripsApiClient
+
+logger = logging.getLogger(__name__)
+
+MCP_ACTIONS: dict[str, tuple[str, Callable[[BudgetRecord], dict[str, Any]]]] = {
+    "budget-summary": (
+        "budgets_get_summary",
+        lambda budget: {"budget_id": str(budget.budget_id)},
+    ),
+    "expenses": (
+        "expenses_list",
+        lambda budget: {"trip_id": budget.trip_id, "limit": 20},
+    ),
+}
+
+
+def _disabled(code: str, field: str, name: str) -> ApiError:
+    return ApiError(
+        503,
+        code,
+        f"{name} is disabled in this environment.",
+        [{"field": field, "issue": "disabled by configuration"}],
+    )
 
 
 class BackendService:
@@ -38,6 +69,8 @@ class BackendService:
         activities: ActivityApiClient,
         ai_mode: AiModeClient,
         settings: Settings,
+        rag: RagClient,
+        mcp: McpClient,
     ) -> None:
         self.database = database
         self.trips = trips
@@ -46,9 +79,76 @@ class BackendService:
         self.activities = activities
         self.ai_mode = ai_mode
         self.settings = settings
+        self.rag = rag
+        self.mcp = mcp
 
     def ready(self) -> bool:
         return self.database.ready()
+
+    def integrations(self) -> dict[str, str]:
+        return {
+            "rag": "enabled" if self.settings.rag_enabled else "disabled",
+            "mcp": "enabled" if self.settings.mcp_enabled else "disabled",
+        }
+
+    def rag_query(self, request: RagQueryRequest) -> RagAnswer:
+        if not self.settings.rag_enabled:
+            raise _disabled("RAG_DISABLED", "rag", "The knowledge assistant")
+        correlation_id = f"student5-rag-{uuid4().hex[:12]}"
+        started = perf_counter()
+        outcome = "error"
+        try:
+            answer = self.rag.query(request.question, correlation_id)
+            outcome = answer.confidence_category
+            return answer
+        except ApiError as error:
+            outcome = error.code
+            raise
+        finally:
+            logger.info(
+                "rag_query correlation_id=%s outcome=%s duration_ms=%d",
+                correlation_id,
+                outcome,
+                (perf_counter() - started) * 1000,
+            )
+
+    def run_mcp_action(self, budget_id: UUID, action: str) -> McpActionResult:
+        if not self.settings.mcp_enabled:
+            raise _disabled("MCP_DISABLED", "mcp", "The MCP tool server")
+        if action not in MCP_ACTIONS:
+            raise ApiError(
+                422,
+                "VALIDATION_ERROR",
+                "The MCP action is not supported.",
+                [{"field": "action", "issue": f"must be one of {sorted(MCP_ACTIONS)}"}],
+            )
+        tool, build_arguments = MCP_ACTIONS[action]
+        budget = self.database.get_budget(budget_id)
+        correlation_id = f"student5-mcp-{uuid4().hex[:12]}"
+        started = perf_counter()
+        outcome = "error"
+        try:
+            result = self.mcp.call_tool(tool, build_arguments(budget), correlation_id)
+            outcome = "ok"
+        except ApiError as error:
+            outcome = error.code
+            raise
+        finally:
+            duration_ms = int((perf_counter() - started) * 1000)
+            logger.info(
+                "mcp_action correlation_id=%s action=%s outcome=%s duration_ms=%d",
+                correlation_id,
+                action,
+                outcome,
+                duration_ms,
+            )
+        return McpActionResult(
+            action=action,
+            tool=tool,
+            correlation_id=correlation_id,
+            duration_ms=duration_ms,
+            result=result,
+        )
 
     def list_trips(self) -> list[TripRecord]:
         return self.trips.list_trips()
@@ -137,23 +237,29 @@ class BackendService:
             "attempt": "1",
         }
         try:
-            result = self.ai_mode.generate(
+            result, used_tools = self.ai_mode.generate(
                 prompt=prompt,
                 correlation_id=f"budget_{budget_id.hex}",
                 metadata=metadata,
             )
+        except ApiError as error:
+            if error.code != "INVALID_DEPENDENCY_RESPONSE" or not error.retryable:
+                raise
+        else:
             if self._analysis_is_grounded(result, summary):
                 return result
-        except ApiError as error:
-            if error.code != "INVALID_DEPENDENCY_RESPONSE":
-                raise
+            if used_tools:
+                raise bad_gateway(
+                    "ai_mode",
+                    "analysis was not grounded and was not retried after tool calls",
+                )
 
         retry_prompt = (
             f"{prompt}\n\nYour previous response was invalid or ungrounded. "
             "Return valid schema-conforming JSON. In the overview, quote at least one "
             "exact currency amount from the authoritative key facts."
         )
-        result = self.ai_mode.generate(
+        result, _ = self.ai_mode.generate(
             prompt=retry_prompt,
             correlation_id=f"budget_{budget_id.hex}_retry",
             metadata=metadata | {"attempt": "2"},

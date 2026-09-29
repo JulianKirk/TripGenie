@@ -36,6 +36,25 @@ EXPENSE_FIELDS = (
     "notes",
 )
 CATEGORIES = ("accommodation", "transport", "activities", "food", "shopping", "other")
+MCP_ACTIONS = (
+    ("budget-summary", "Budget summary"),
+    ("expenses", "Recent expenses"),
+)
+RAG_MESSAGES = {
+    "RAG_DISABLED": "The knowledge assistant (RAG) is disabled in this environment.",
+    "INDEX_NOT_READY": "The knowledge index is not ready yet. Try again later.",
+    "DEPENDENCY_UNAVAILABLE": "The knowledge assistant is currently unavailable.",
+    "DEPENDENCY_TIMEOUT": "The knowledge assistant took too long to answer.",
+    "INVALID_DEPENDENCY_RESPONSE": "The knowledge assistant gave an unusable reply.",
+    "VALIDATION_ERROR": "Enter a question between 1 and 500 characters.",
+}
+MCP_MESSAGES = {
+    "MCP_DISABLED": "MCP tools are disabled in this environment.",
+    "DEPENDENCY_UNAVAILABLE": "The shared MCP server is currently unavailable.",
+    "DEPENDENCY_TIMEOUT": "The MCP tool took too long to respond.",
+    "INVALID_DEPENDENCY_RESPONSE": "The MCP server returned an unusable result.",
+    "VALIDATION_ERROR": "That MCP action is not available.",
+}
 FIELD_LABELS = {
     "trip_id": "Trip",
     "currency": "Currency",
@@ -83,6 +102,18 @@ def _errors_by_field(error: BackendError) -> dict[str, list[str]]:
     return grouped
 
 
+def _mcp_message(error: BackendError) -> str:
+    if error.code == "MCP_TOOL_ERROR":
+        return f"The MCP tool reported an error: {error}"
+    if any(detail.get("issue") == "tool not registered" for detail in error.details):
+        return "This tool is not registered on the shared MCP server."
+    return MCP_MESSAGES.get(error.code, str(error))
+
+
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").lower() == "true"
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -107,11 +138,7 @@ def create_app(
         budgets: list[dict[str, Any]] | None = None,
         **context: Any,
     ) -> Response:
-        template = (
-            "partials/app_shell.html"
-            if request.headers.get("HX-Request", "").lower() == "true"
-            else "page.html"
-        )
+        template = "partials/app_shell.html" if _is_htmx(request) else "page.html"
         return TEMPLATES.TemplateResponse(
             request,
             template,
@@ -120,6 +147,7 @@ def create_app(
                 "content_template": content_template,
                 "budgets": budgets or [],
                 "categories": CATEGORIES,
+                "mcp_actions": MCP_ACTIONS,
                 **context,
             },
         )
@@ -165,8 +193,7 @@ def create_app(
             status_code=200 if available else 503,
         )
 
-    @app.get("/")
-    def browse(request: Request) -> Response:
+    def render_list(request: Request, **extra: Any) -> Response:
         try:
             budgets = list_budgets()
         except BackendError as error:
@@ -177,7 +204,33 @@ def create_app(
             page_title="Budgets",
             budgets=budgets,
             **trip_context(budgets),
+            **extra,
         )
+
+    @app.get("/")
+    def browse(request: Request) -> Response:
+        return render_list(request)
+
+    @app.post("/rag")
+    async def rag_query(request: Request) -> Response:
+        form = await request.form()
+        question = str(form.get("question", "")).strip()
+        try:
+            answer = backend.request(
+                "POST",
+                "/rag/query",
+                json={"question": question},
+                timeout=settings.rag_timeout_seconds,
+            )
+            message = None
+        except BackendError as error:
+            answer, message = None, RAG_MESSAGES.get(error.code, str(error))
+        context = {"rag_question": question, "rag_answer": answer, "rag_error": message}
+        if _is_htmx(request):
+            return TEMPLATES.TemplateResponse(
+                request, "partials/rag_answer.html", context
+            )
+        return render_list(request, **context)
 
     @app.get("/budgets/new")
     def new_budget(request: Request) -> Response:
@@ -223,13 +276,13 @@ def create_app(
             )
         return RedirectResponse(f"/budgets/{budget['budget_id']}", status_code=303)
 
-    @app.get("/budgets/{budget_id}")
-    def budget_detail(
+    def render_detail(
         request: Request,
         budget_id: str,
         category: str = "",
         date_from: str = "",
         date_to: str = "",
+        **extra: Any,
     ) -> Response:
         try:
             budgets = list_budgets()
@@ -267,7 +320,42 @@ def create_app(
                 "date_to": date_to,
             },
             **trip_context(budgets, budget),
+            **extra,
         )
+
+    @app.get("/budgets/{budget_id}")
+    def budget_detail(
+        request: Request,
+        budget_id: str,
+        category: str = "",
+        date_from: str = "",
+        date_to: str = "",
+    ) -> Response:
+        return render_detail(request, budget_id, category, date_from, date_to)
+
+    @app.post("/budgets/{budget_id}/mcp/{action}")
+    def budget_mcp_action(request: Request, budget_id: str, action: str) -> Response:
+        try:
+            result = backend.request(
+                "POST",
+                f"/budgets/{budget_id}/mcp/{action}",
+                timeout=settings.mcp_timeout_seconds,
+            )
+            message = None
+        except BackendError as error:
+            result, message = None, _mcp_message(error)
+        context = {"mcp_result": result, "mcp_error": message}
+        if _is_htmx(request):
+            return TEMPLATES.TemplateResponse(
+                request,
+                "partials/mcp_tools.html",
+                {
+                    "budget": {"budget_id": budget_id},
+                    "mcp_actions": MCP_ACTIONS,
+                    **context,
+                },
+            )
+        return render_detail(request, budget_id, **context)
 
     @app.get("/budgets/{budget_id}/edit")
     def edit_budget(request: Request, budget_id: str) -> Response:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from student5_backend_service.ai_mode_client import AiModeClient
 from student5_backend_service.app import create_app
@@ -41,7 +42,7 @@ def test_ai_mode_client_sends_schema_and_parses_structured_analysis() -> None:
         Settings(ai_mode_base_url="http://ai-mode.test"),
         transport=httpx.MockTransport(ai_mode),
     )
-    result = client.generate(
+    result, used_tools = client.generate(
         prompt="Analyse this budget.",
         correlation_id="budget_1234",
         metadata={"feature": "student-5-budget-analysis"},
@@ -57,6 +58,7 @@ def test_ai_mode_client_sends_schema_and_parses_structured_analysis() -> None:
     ]
     assert result.analysis.recommendations == ["Keep a contingency reserve."]
     assert result.model == "qwen2.5:0.5b"
+    assert used_tools is False
 
 
 def test_budget_analysis_route_sends_only_selected_budget_context(
@@ -170,3 +172,68 @@ def test_budget_analysis_retries_ungrounded_output_once(settings: Settings) -> N
     assert response.status_code == 200
     assert response.json()["data"]["run_id"] == "aimode_2"
     assert attempts == 2
+
+
+TOOL_TRACE = [
+    {
+        "tool": "budgets_get_summary",
+        "arguments": {"budget_id": BUDGET_ID},
+        "status": "success",
+        "duration_ms": 40,
+        "result": {"ok": True},
+    }
+]
+
+
+@pytest.mark.parametrize(
+    "response_text",
+    [
+        json.dumps(
+            {
+                "overview": "The budget appears manageable.",
+                "risks": [],
+                "recommendations": ["Keep a contingency reserve."],
+                "disclaimer": "Advisory only; review before acting.",
+            }
+        ),
+        "not json",
+    ],
+)
+def test_budget_analysis_is_not_retried_after_tool_calls(
+    settings: Settings, response_text: str
+) -> None:
+    attempts = 0
+
+    def ai_mode(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "run_id": "aimode_1",
+                    "model": "llama3.1:8b",
+                    "provider": "ollama",
+                    "response": response_text,
+                    "done": True,
+                    "tools": TOOL_TRACE,
+                }
+            },
+        )
+
+    app = create_app(
+        settings,
+        database_transport=httpx.MockTransport(database_handler),
+        trips_transport=httpx.MockTransport(trips_handler),
+        provider_transport=httpx.MockTransport(provider_handler),
+        ai_mode_transport=httpx.MockTransport(ai_mode),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/budgets/{BUDGET_ID}/ai-analysis",
+            json={"question": "How am I tracking?"},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "INVALID_DEPENDENCY_RESPONSE"
+    assert attempts == 1
