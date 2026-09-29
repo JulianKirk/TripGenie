@@ -87,9 +87,10 @@ Ordinary browsing and CRUD continue working if AI-Mode or MCP is unavailable.
    then show ordinary catalogue browsing still works. There is no fallback to
    direct API search inside the assistant.
 
-Keep report evidence under `docs/reports/release-1/Student4/`. A deterministic
-model fixture proves protocol wiring and rendering but is not a live-model demo.
-Record RAG evidence and shared agentic-loop validation separately when implemented.
+Keep development review and testing artifacts outside the repository unless
+explicitly requested for a release submission. A deterministic model fixture
+proves protocol wiring and rendering but is not a live-model demo. Validate RAG
+and the shared agentic loop separately when implemented.
 
 ## Checks
 

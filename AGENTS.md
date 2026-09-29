@@ -102,8 +102,9 @@ working on the relevant slice.
   through every feature's UI and backend/API, plus insufficient-context
   behavior. Capture shared agentic-loop outputs for its separate MCP and RAG
   validation modes. This validation harness is distinct from runtime AI
-  workflow orchestration. Store evidence and contribution logs under the
-  existing Release 1 report structure, and never claim unexecuted checks.
+  workflow orchestration. Keep development evidence outside the repository;
+  commit release evidence or contribution logs only when explicitly requested.
+  Never claim unexecuted checks.
 
 ## Repository navigation
 
@@ -202,7 +203,10 @@ docker compose config --quiet
 - Update API and object-model documentation in the same change as a contract or
   persistence-model change. Record cross-service architectural decisions under
   `docs/architecture/decisions/` when the rationale will matter later.
-- Keep release evidence under the existing `docs/reports/release-*` structure.
+- Keep agent review reports, refinement experiments, benchmark runs, screenshots,
+  test logs and scratch scripts outside the repository unless the user explicitly
+  requests committing those artifacts. Summarize findings in chat or the PR.
+  When release evidence is explicitly requested, use `docs/reports/release-*`.
   Do not claim a check or runtime result without capturing reproducible evidence.
 - Do not hand-edit generated Graphify outputs. The `Graphify Update` workflow
   refreshes code relationships after changes reach `main` and opens a follow-up

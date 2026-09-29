@@ -1,3 +1,0 @@
-CONFIRMED FINDING: no-JavaScript View details sends no request and opens no dialog
-CONFIRMED FINDING: no-JavaScript Add to itinerary sends no request and opens no dialog
-No-JavaScript question submission and card rendering PASS; card actions FAIL

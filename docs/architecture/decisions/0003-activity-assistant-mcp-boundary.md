@@ -25,8 +25,8 @@ the sole Ollama adapter. Its schema-constrained generation contract gains an opt
 Both fields share the existing input character budget. Existing clients can omit
 `system`; no native tool-call API or retained chat history is added. The assistant
 places the current question after tool context and uses contrasting syntax examples
-to reduce accidental copying of example filters. Model quality still varies; measured
-results and rejected experiments live in the Student 4 Release 1 refinement report.
+to reduce accidental copying of example filters. Model quality still varies;
+generated prose and semantic matching remain advisory.
 
 Final model output contains plain text and typed activity references. Only IDs
 returned by successful activity tools in that request can become cards. The backend

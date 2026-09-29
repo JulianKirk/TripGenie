@@ -1,1 +1,0 @@
-No-JavaScript form submission and full-page category answer PASS
