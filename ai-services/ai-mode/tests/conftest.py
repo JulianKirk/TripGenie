@@ -22,7 +22,7 @@ def success_generate_response(
         json={
             "model": model,
             "created_at": "2026-08-31T11:00:00Z",
-            "response": response_text,
+            "message": {"role": "assistant", "content": response_text},
             "done": True,
             "done_reason": "stop",
             "context": [1, 2, 3],
@@ -108,7 +108,7 @@ class FakeOllamaApi:
                 return queued
             return httpx.Response(200, json={"models": deepcopy(self.models)})
 
-        if path == "/api/generate" and method == "POST":
+        if path == "/api/chat" and method == "POST":
             self.generate_requests.append(self._request_json(request))
             if self._generate_responses:
                 queued = self._generate_responses.pop(0)
@@ -174,8 +174,13 @@ def client_factory(settings: Settings):
         settings_override: Settings | None = None,
         ollama_handler=None,
     ) -> Iterator[TestClient]:
+        from test_agent import MCP
+
+        mcp = MCP()
+        mcp.tools = []
         app = create_app(
             settings_override or settings,
+            mcp_transport=httpx.MockTransport(mcp.handle),
             ollama_transport=(
                 httpx.MockTransport(ollama_handler) if ollama_handler else None
             ),

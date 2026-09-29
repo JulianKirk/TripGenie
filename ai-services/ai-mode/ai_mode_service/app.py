@@ -35,7 +35,10 @@ def _error_response(exc: ApiError) -> JSONResponse:
     )
     return JSONResponse(
         status_code=exc.status_code,
-        content=body.model_dump(mode="json"),
+        content={
+            **body.model_dump(mode="json"),
+            **({"tools": exc.tools} if exc.tools else {}),
+        },
     )
 
 
@@ -64,13 +67,16 @@ def create_app(
     settings: Settings | None = None,
     *,
     ollama_transport: httpx.AsyncBaseTransport | None = None,
+    mcp_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         provider = OllamaProviderAdapter(app_settings, transport=ollama_transport)
-        app.state.ai_mode_service = AiModeService(provider, app_settings)
+        app.state.ai_mode_service = AiModeService(
+            provider, app_settings, mcp_transport=mcp_transport
+        )
         try:
             yield
         finally:

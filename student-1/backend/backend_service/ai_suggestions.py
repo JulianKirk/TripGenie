@@ -769,7 +769,7 @@ class AiSuggestionService:
                     failure_kind=exc.kind,
                     summary=exc.summary,
                 )
-                if attempt >= self._settings.ai_max_attempts:
+                if generation.tools or attempt >= self._settings.ai_max_attempts:
                     break
                 retry_context = build_failure_note(exc, request.requested_date)
                 continue

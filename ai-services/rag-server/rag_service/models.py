@@ -182,6 +182,7 @@ class AiEmbedPayload(StrictModel):
 
 
 class AiGeneratePayload(StrictModel):
+    tools: list[dict[str, object]] = Field(default_factory=list)
     run_id: str
     correlation_id: str
     model: str

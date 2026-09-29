@@ -1,6 +1,12 @@
-"""Bounded read-only access to the five public backend APIs."""
+"""Bounded public API access; activity writes are never retried."""
+
+from contextvars import ContextVar
 
 import httpx
+
+request_correlation: ContextVar[str | None] = ContextVar(
+    "request_correlation", default=None
+)
 
 
 class ProviderError(Exception):
@@ -37,6 +43,9 @@ class ProviderClient:
                 self.urls[owner] + path,
                 params=params,
                 json=query,
+                headers={"X-Request-ID": request_correlation.get()}
+                if request_correlation.get()
+                else None,
             )
             if response.status_code == 404:
                 raise ProviderError("NOT_FOUND", "Resource not found")
@@ -62,3 +71,33 @@ class ProviderClient:
             ) from exc
         except ValueError as exc:
             raise ProviderError("INVALID_RESPONSE", "Invalid provider JSON") from exc
+
+    def write(self, path: str, *, method: str, body: dict | None = None) -> dict:
+        """One attempt only: an absent/invalid acknowledgement may conceal a write."""
+        try:
+            response = self.client.request(
+                method,
+                self.urls["student-4"] + path,
+                json=body,
+                headers={"X-Request-ID": request_correlation.get()}
+                if request_correlation.get()
+                else None,
+            )
+            if response.status_code == 404:
+                raise ProviderError("NOT_FOUND", "Resource not found")
+            if response.status_code in (400, 422):
+                raise ProviderError("VALIDATION_ERROR", "Provider rejected the request")
+            if response.status_code == 409:
+                raise ProviderError("CONFLICT", "Provider rejected conflicting changes")
+            expected = 201 if method == "POST" else 200
+            if response.status_code != expected or len(response.content) > 65536:
+                raise ValueError("Unexpected write acknowledgement")
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid write acknowledgement")
+            return payload
+        except (httpx.RequestError, ValueError) as exc:
+            raise ProviderError(
+                "WRITE_OUTCOME_UNKNOWN",
+                "Write outcome is unknown; inspect the catalogue before retrying",
+            ) from exc

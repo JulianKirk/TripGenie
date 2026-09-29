@@ -5,8 +5,31 @@ import logging
 import httpx
 import pytest
 
+from ai_mode_service.config import Settings
 from ai_mode_service.models import CORRELATION_ID_ISSUE
 from ai_mode_service.service import _sanitise_log_value
+
+
+def test_configured_ollama_auth_is_preserved_for_chat_health_and_embeddings(
+    monkeypatch, client_factory, ollama_api
+):
+    monkeypatch.setenv("OLLAMA_API_KEY", "test-ollama-token")
+    settings = Settings.from_env()
+    paths = []
+
+    def authenticated(request):
+        assert request.headers["Authorization"] == "Bearer test-ollama-token"
+        paths.append(request.url.path)
+        return ollama_api.handle(request)
+
+    with client_factory(
+        settings_override=settings, ollama_handler=authenticated
+    ) as client:
+        assert client.get("/health").status_code == 200
+        assert client.post("/generate", json={"prompt": "Hello"}).status_code == 200
+        assert client.post("/embed", json={"inputs": ["Hello"]}).status_code == 200
+    assert set(paths) == {"/api/tags", "/api/chat", "/api/embed"}
+    assert "test-ollama-token" not in repr(settings)
 
 
 def success_generate_response(
@@ -19,7 +42,7 @@ def success_generate_response(
         json={
             "model": model,
             "created_at": "2026-08-31T11:00:00Z",
-            "response": response_text,
+            "message": {"role": "assistant", "content": response_text},
             "done": True,
             "done_reason": "stop",
             "context": [1, 2, 3],
@@ -117,7 +140,7 @@ def test_ready_returns_model_unavailable_for_valid_empty_model_list(
     }
 
 
-def test_generate_uses_non_stream_official_ollama_client_request_shape(
+def test_generate_uses_non_stream_native_ollama_request_shape(
     client_factory,
     ollama_api,
 ) -> None:
@@ -151,10 +174,11 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
 
     ollama_request = ollama_api.generate_requests[0]
     assert ollama_request["model"] == "qwen2.5:0.5b"
-    assert ollama_request["prompt"] == "Return JSON only."
-    assert ollama_request["raw"] is True
+    assert ollama_request["messages"] == [
+        {"role": "user", "content": "Return JSON only."}
+    ]
     assert ollama_request["stream"] is False
-    assert ollama_request["options"] == {"temperature": 0}
+    assert ollama_request["options"] == {"temperature": 0, "num_ctx": 32768}
     assert ollama_request["format"]["type"] == "object"
 
 
@@ -366,6 +390,7 @@ def test_generate_uses_requested_model_when_provider_model_is_untrusted(
             "provider": "ollama",
             "response": '{"suggestions":[]}',
             "done": True,
+            "tools": [],
         }
     }
     assert response.json()["data"]["run_id"].startswith("aimode_")
@@ -531,6 +556,7 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
             "/generate",
             json={
                 "prompt": "SENSITIVE_PROMPT_SHOULD_NOT_BE_LOGGED",
+                "system": "SENSITIVE_SYSTEM_SHOULD_NOT_BE_LOGGED",
                 "correlation_id": "student1-run-02",
                 "metadata": {
                     "feature": "student-1-trip-suggestions",
@@ -543,6 +569,7 @@ def test_generate_logs_safe_metadata_without_prompt_or_output(
     assert "ai_mode stage=start" in caplog.text
     assert "ai_mode stage=success" in caplog.text
     assert "SENSITIVE_PROMPT_SHOULD_NOT_BE_LOGGED" not in caplog.text
+    assert "SENSITIVE_SYSTEM_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "SENSITIVE_OUTPUT_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "trip_2027_sydney_getaway" not in caplog.text
 
@@ -551,3 +578,63 @@ def test_log_sanitiser_replaces_control_characters() -> None:
     assert (
         _sanitise_log_value("safe\nvalue\twith\rcontrols") == "safe?value?with?controls"
     )
+
+
+def test_generate_separates_system_instructions_from_request(
+    client_factory, ollama_api
+):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={"prompt": "untrusted request", "system": "trusted policy"},
+        )
+    assert response.status_code == 200
+    assert ollama_api.generate_requests[0]["messages"][0] == {
+        "role": "system",
+        "content": "trusted policy",
+    }
+    assert ollama_api.generate_requests[0]["messages"][1] == {
+        "role": "user",
+        "content": "untrusted request",
+    }
+
+
+@pytest.mark.parametrize("system", [" ", "s" * 80])
+def test_generate_bounds_system_and_prompt_together(client_factory, ollama_api, system):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post("/generate", json={"prompt": "x", "system": system})
+    assert response.status_code == 422
+    assert not ollama_api.generate_requests
+
+
+def test_generate_accepts_exact_combined_budget(client_factory, ollama_api):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate", json={"prompt": "p" * 40, "system": "s" * 40}
+        )
+    assert response.status_code == 200
+    assert len(ollama_api.generate_requests) == 1
+
+
+def test_generate_null_system_preserves_existing_callers(client_factory, ollama_api):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post("/generate", json={"prompt": "hello", "system": None})
+    assert response.status_code == 200
+    assert not any(
+        m["role"] == "system" for m in ollama_api.generate_requests[0]["messages"]
+    )
+
+
+def test_external_schema_reference_is_rejected_before_execution(
+    client_factory, ollama_api
+):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={
+                "prompt": "hello",
+                "schema": {"$ref": "http://untrusted.test/schema"},
+            },
+        )
+    assert response.status_code == 422
+    assert not ollama_api.generate_requests

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -112,14 +112,17 @@ class GenerateRequest(StrictModel):
     )
 
     prompt: PromptText
+    system: PromptText | None = None
     model: ModelName | None = None
     output_schema: dict[str, Any] | None = Field(default=None, alias="schema")
     correlation_id: str | None = None
     metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict)
 
-    @field_validator("prompt")
+    @field_validator("prompt", "system")
     @classmethod
-    def validate_prompt(cls, value: str) -> str:
+    def validate_prompt(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("must not be blank")
@@ -151,6 +154,15 @@ class GenerateRequest(StrictModel):
         return value
 
 
+class ToolTrace(StrictModel):
+    tool: str
+    arguments: dict[str, Any]
+    status: Literal["success", "error", "rejected"] = "error"
+    duration_ms: int = 0
+    result: dict[str, Any] | None = None
+    error: str | None = None
+
+
 class GenerateResponsePayload(StrictModel):
     run_id: ShortText
     correlation_id: CorrelationId
@@ -158,6 +170,7 @@ class GenerateResponsePayload(StrictModel):
     provider: ShortText = "ollama"
     response: str
     done: bool = True
+    tools: list[ToolTrace] = Field(default_factory=list)
 
 
 class EmbedRequest(StrictModel):

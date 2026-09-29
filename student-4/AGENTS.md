@@ -26,9 +26,19 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve nullable accessibility values: `null` means unknown, not false.
 - Availability is local time and distinguishes weekly schedules from one-off
   dates. Enforce the aggregate invariants documented in the object model.
-- AI search and recommendations go through AI-Mode, operate on authoritative
-  catalogue results, expose chosen filters to the user, and never save without
-  an explicit user action.
+- The primary AI panel is a one-shot client of shared AI-Mode `/generate`.
+  Send the question and selected-trip data separately from the trusted system
+  prompt. Shared AI-Mode discovers and executes all MCP tools, including writes.
+- Keep Student 4 limited to wire validation, tool-result display and resolving
+  model-selected activity references through its ordinary activity lookup.
+  Card IDs must originate in successful activity tool results from this request.
+- Do not parse natural-language budgets, dates or other user requirements, rewrite
+  model tool arguments, filter recommendations independently, force detail calls,
+  or replace model prose with backend-authored answers. Improve system prompts or
+  MCP tool descriptions when functional testing reveals model-quality problems.
+- Preserve ordinary browsing/CRUD when shared generation is unavailable. Show the
+  returned tool trace, including partial execution on failure, and never claim
+  that no changes were saved when write tools may have executed.
 - Keep frontend query parsing and presentation in `query.py`, `forms.py`, and
   `presenters.py` rather than growing route handlers with duplicate logic.
 

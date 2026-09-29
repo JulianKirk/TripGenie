@@ -19,7 +19,9 @@ AI gateway backed by a host-managed Ollama runtime.
 | `student-5/` | Budgets, expenses, and cross-service cost summaries |
 | `shared/` | Country, city, and currency reference data plus the landing page |
 | `ai-services/ai-mode/` | The only application service that communicates with Ollama |
-| `ai-services/agentic-loop/` | CI-oriented service smoke and review harness |
+| `ai-services/mcp-server/` | Shared host-run MCP tools over public feature APIs |
+| `ai-services/rag-server/` | Shared host-run retrieval and grounded responses |
+| `ai-services/agentic-loop/` | Local validation harness, including MCP and RAG modes |
 | `docs/` | Architecture decisions and release evidence |
 
 Read the nearest service documentation before changing a contract. In
@@ -51,6 +53,50 @@ they exist; use `docs/architecture/` for cross-service decisions.
   environment-variable names as contracts. Update producers, consumers,
   contract tests, documentation, and Compose together when they change.
 
+## Release 1 AI, MCP, and RAG integration
+
+These are the target requirements for every student feature. Do not assume
+that an existing implementation already satisfies them; identify gaps when
+working on the relevant slice.
+
+- Preserve existing feature functionality. Frontends call their own backends;
+  feature backends supply prompts and presentation while shared AI-Mode owns
+  the model-directed MCP loop behind `/generate`.
+- Every `/generate` request discovers the full MCP tool catalogue. MCP owns
+  tool descriptions, schemas and public-API execution; AI-Mode owns inference,
+  protocol validation, execution limits and traces. Do not duplicate tool
+  definitions or natural-language request parsing in feature assistants.
+- MCP tools call the owning service's documented public data APIs, never its
+  database or AI orchestration endpoints. Ordinary CRUD and browsing retain
+  their existing paths. Avoid callbacks into the generation workflow.
+- All advertised tools, including writes, are available to shared generation.
+  Trusted prompts instruct the model to write only when explicitly requested;
+  this is not a hard read-only authorization guarantee. Keep results and partial
+  execution visible. Never retry ambiguous writes automatically.
+- Every feature must expose a successful MCP interaction through its UI and
+  backend/API and display the returned tool data. An AI narrative alone is
+  not evidence that an MCP tool executed successfully. Surface tool failures
+  clearly and keep ordinary feature functionality usable when MCP is disabled
+  or unavailable.
+- Every feature must also expose RAG queries through its UI and backend/API
+  to the shared RAG server. Display grounded answers with source citations
+  and a confidence category. When relevant context is unavailable, display
+  an insufficient-context response instead of an unsupported answer.
+- MCP, RAG, and the shared agentic loop run locally outside containers.
+  AI-Mode remains a Compose service alongside the frontend, backend/API, and
+  database services. Backends use `http://ai-mode:8006`; AI-Mode connects to
+  host-run MCP and Ollama through `host.docker.internal`. Container localhost
+  is not the host; use the documented host connection configuration.
+- Test MCP and RAG contracts and failure handling locally with injected
+  transports or protocol fakes without requiring live host services.
+- Capture local evidence of a valid MCP tool result and a grounded RAG answer
+  through every feature's UI and backend/API, plus insufficient-context
+  behavior. Capture shared agentic-loop outputs for its separate MCP and RAG
+  validation modes. This validation harness is distinct from runtime AI
+  workflow orchestration. Keep development evidence outside the repository;
+  commit release evidence or contribution logs only when explicitly requested.
+  Never claim unexecuted checks.
+
 ## Repository navigation
 
 - Start with the scoped `AGENTS.md`, service README, API documentation, and
@@ -81,8 +127,8 @@ Other editable installs follow the same pattern (`./shared[dev]`,
 `./shared[dev]`. The AI-Mode and agentic-loop subtrees have their own setup
 commands in `ai-services/AGENTS.md`.
 
-For an integrated run, Ollama is managed on the host, not by Compose. Follow
-`README.md` and `shared/configuration/.env.example`, then run:
+For a Release 1 integrated run, start the host-managed Ollama, MCP, and RAG services using their service READMEs. Follow `README.md` and
+`shared/configuration/.env.example` for the containerised application, then run:
 
 ```bash
 docker compose --env-file shared/configuration/.env.example config --quiet
@@ -147,7 +193,10 @@ docker compose config --quiet
 - Update API and object-model documentation in the same change as a contract or
   persistence-model change. Record cross-service architectural decisions under
   `docs/architecture/decisions/` when the rationale will matter later.
-- Keep release evidence under the existing `docs/reports/release-*` structure.
+- Keep agent review reports, refinement experiments, benchmark runs, screenshots,
+  test logs and scratch scripts outside the repository unless the user explicitly
+  requests committing those artifacts. Summarize findings in chat or the PR.
+  When release evidence is explicitly requested, use `docs/reports/release-*`.
   Do not claim a check or runtime result without capturing reproducible evidence.
 - Do not hand-edit generated Graphify outputs. The `Graphify Update` workflow
   refreshes code relationships after changes reach `main` and opens a follow-up

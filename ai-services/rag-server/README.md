@@ -23,12 +23,17 @@ must remain operational when this process is disabled, stopped, or not ready.
 Consumer backends own their own enable flag, base URL, timeout, and public
 error mapping.
 
+Shared AI-Mode `/generate` now has access to all MCP tools and returns an additive
+tool trace; the RAG decoder accepts it. Citation IDs are still validated against
+retrieved context. Tool results do not become source citations automatically.
+Generation requires host MCP; embedding/indexing does not.
+
 ## Prerequisites
 
 - Python 3.11 or later
 - `uv`
 - host Ollama
-- host AI-Mode on `http://127.0.0.1:8006`
+- AI-Mode on `http://127.0.0.1:8006` (Compose publishes this loopback port)
 - approved chat model, such as `qwen2.5:0.5b` or the configured alternative
 - `nomic-embed-text`
 

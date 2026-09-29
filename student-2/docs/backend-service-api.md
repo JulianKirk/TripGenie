@@ -974,3 +974,6 @@ curl -X DELETE localhost:9000/accommodation/3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11
 | 404    | The accommodation is not on that itinerary, or a malformed id |
 | 502    | Bad response from itinerary service                |
 | 503    | Itinerary service unavailable                      |
+
+Shared AI-Mode generation may execute MCP tools. Automatic answer-repair retries
+stop when the returned run contains tool calls, to avoid replaying actions.

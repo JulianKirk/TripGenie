@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import TYPE_CHECKING
 
 import httpx  # noqa: TC002 (public transport test seam)
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 
 from . import errors
+from .activity_routes import get as get_activity
 from .activity_routes import router as activity_router
 from .ai_mode_client import AiModeClient
+from .assistant import answer
+from .assistant_models import AssistantRequest, AssistantResponse
 from .client import DatabaseClient
 from .config import Settings
 from .dependencies import DbDep, LocationDep  # noqa: TC001 (FastAPI runtime)
 from .itinerary_client import ItineraryClient
 from .itinerary_routes import router as itinerary_router
 from .location_client import LocationClient
-from .recommendation_routes import router as recommendation_router
-from .recommendation_routes import trip_router
 from .schemas import HealthResponse
 
 if TYPE_CHECKING:
@@ -85,10 +87,19 @@ def create_app(
             location="not_checked",
         )
 
-    app.include_router(recommendation_router)
-    app.include_router(trip_router)
-    app.include_router(activity_router)
+    @app.post("/activity/assistant", response_model=AssistantResponse)
+    async def assistant(
+        payload: AssistantRequest, request: Request, db: DbDep, location: LocationDep
+    ) -> AssistantResponse:
+        return await answer(
+            payload,
+            settings,
+            request.app.state.ai,
+            resolve_activity=partial(get_activity, db=db, location=location),
+        )
+
     app.include_router(itinerary_router)
+    app.include_router(activity_router)
     return app
 
 
