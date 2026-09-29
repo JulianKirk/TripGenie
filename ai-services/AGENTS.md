@@ -25,8 +25,8 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
   natural-language interpretation in the model and tool descriptions in MCP.
   `/embed` remains independent of MCP.
 - `multi-agent-server/` is not implemented. Define its contract before adding
-  runtime code. MCP, RAG, and the validation loop stay outside Compose;
-  AI-Mode remains containerised.
+  runtime code. AI-Mode, MCP, RAG, and the validation loop stay outside
+  Compose.
 
 ## AI-Mode checks
 
@@ -39,7 +39,8 @@ python -m ruff check ai_mode_service tests examples
 python -m pytest tests
 ```
 
-The application runs AI-Mode in Compose, connecting to host Ollama and MCP. Validate from the repository root:
+The application runs AI-Mode on the host, not in Compose; the Dockerfile is
+kept for the CI image smoke test only. Validate from the repository root:
 
 ```bash
 docker build -f ai-services/ai-mode/Dockerfile ai-services/ai-mode

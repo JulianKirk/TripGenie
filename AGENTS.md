@@ -82,11 +82,11 @@ working on the relevant slice.
   to the shared RAG server. Display grounded answers with source citations
   and a confidence category. When relevant context is unavailable, display
   an insufficient-context response instead of an unsupported answer.
-- MCP, RAG, and the shared agentic loop run locally outside containers.
-  AI-Mode remains a Compose service alongside the frontend, backend/API, and
-  database services. Backends use `http://ai-mode:8006`; AI-Mode connects to
-  host-run MCP and Ollama through `host.docker.internal`. Container localhost
-  is not the host; use the documented host connection configuration.
+- AI-Mode, MCP, RAG, Ollama, and the shared agentic loop run locally outside
+  containers and must not be Compose services. Compose backends reach them at
+  `http://host.docker.internal:8006`, `:8011`, and `:8012/mcp` with the
+  `host.docker.internal:host-gateway` mapping. Container localhost is not the
+  host; see `docs/reports/release-1/local-host-services-runbook.md`.
 - Test MCP and RAG contracts and failure handling locally with injected
   transports or protocol fakes without requiring live host services.
 - Capture local evidence of a valid MCP tool result and a grounded RAG answer
@@ -127,7 +127,8 @@ Other editable installs follow the same pattern (`./shared[dev]`,
 `./shared[dev]`. The AI-Mode and agentic-loop subtrees have their own setup
 commands in `ai-services/AGENTS.md`.
 
-For a Release 1 integrated run, start the host-managed Ollama, MCP, and RAG services using their service READMEs. Follow `README.md` and
+For a Release 1 integrated run, start the host-managed Ollama, AI-Mode, RAG, and MCP services using
+`docs/reports/release-1/local-host-services-runbook.md`. Follow `README.md` and
 `shared/configuration/.env.example` for the containerised application, then run:
 
 ```bash

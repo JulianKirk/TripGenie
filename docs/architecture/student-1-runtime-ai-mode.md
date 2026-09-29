@@ -241,7 +241,7 @@ Instead, logs record safe metadata such as:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects `http://ai-mode:8006`. |
+| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects host AI-Mode at `http://host.docker.internal:8006`. |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for Student 1 calls to the shared AI-Mode service. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Student-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v2.md` | Versioned runtime prompt asset. |

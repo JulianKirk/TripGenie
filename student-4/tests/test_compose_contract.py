@@ -67,18 +67,10 @@ def test_student_4_publishes_public_backend_for_host_mcp() -> None:
     assert frontend_port["protocol"] == "tcp"
 
 
-def test_ai_mode_is_containerised_and_connects_to_host_mcp() -> None:
+def test_host_ai_services_stay_out_of_compose() -> None:
     services = compose_services()
-    assert not {"mcp-server", "rag-server", "agentic-loop"} & services.keys()
-    ai_mode = services["ai-mode"]
-    assert ai_mode["environment"]["AI_MODE_MCP_URL"] == (
-        "http://host.docker.internal:8012/mcp"
-    )
-    assert ai_mode["environment"]["AI_MODE_OLLAMA_BASE_URL"] == (
-        "http://host.docker.internal:11434"
-    )
-    assert "host.docker.internal=host-gateway" in ai_mode["extra_hosts"]
-    assert ai_mode["ports"][0]["host_ip"] == "127.0.0.1"
+    host_only = ("ai-mode", "mcp", "rag", "ollama", "agentic")
+    assert not [name for name in services if any(h in name for h in host_only)]
     for student, variable in (
         (1, "STUDENT1_BACKEND_AI_MODE_BASE_URL"),
         (2, "AI_MODE_URL"),
@@ -87,11 +79,17 @@ def test_ai_mode_is_containerised_and_connects_to_host_mcp() -> None:
         (5, "STUDENT5_BACKEND_AI_MODE_BASE_URL"),
     ):
         backend = services[f"student-{student}-backend"]
-        assert backend["environment"][variable] == "http://ai-mode:8006"
+        assert backend["environment"][variable] == "http://host.docker.internal:8006"
+        assert "host.docker.internal=host-gateway" in backend["extra_hosts"]
+    # Host MCP reaches the Student 3 transport tools here.
+    transport_port = services["student-3-backend"]["ports"][0]
+    assert (transport_port["host_ip"], transport_port["published"]) == (
+        "127.0.0.1",
+        "18003",
+    )
     backend = services["student-4-backend"]
     assert "MCP_URL" not in backend["environment"]
     assert backend["environment"]["AI_ASSISTANT_ENABLED"] == "true"
-    assert backend["depends_on"]["ai-mode"]["condition"] == "service_started"
 
 
 def test_agentic_overlay_preserves_single_activity_backend_binding() -> None:

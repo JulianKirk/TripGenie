@@ -148,36 +148,26 @@ deterministic and does not need an API key. Documentation, paper, and image
 changes still require semantic extraction with a supported LLM backend before
 their relationships can be added to the committed graph.
 
-## Release 0 local Docker Compose
+## Local Docker Compose
 
-Ollama, MCP, RAG, and the validation loop are **host processes**.
-Compose runs AI-Mode and the feature frontends, backends, and databases.
-Install the selected model on the host (if Ollama is already running, do not
-start a second process):
-
-```bash
-ollama pull llama3.1:8b
-curl http://localhost:11434/api/tags
-```
-
-Start MCP using its service README. Compose starts AI-Mode. See the complete
-[Student 4 MCP setup and demonstration guide](student-4/docs/mcp-assistant.md)
-for Python dependencies, host binding on Docker Desktop/native Linux, and the
-activity assistant. The [shared RAG README](ai-services/rag-server/README.md)
-describes RAG setup separately. Host services do not automatically load the
-example environment file.
+Ollama, AI-Mode, MCP, RAG, and the validation loop are **host processes**.
+Compose runs only the shared reference service and the feature frontends,
+backends, and databases. Start the host services first, in the order given by
+the [local host services runbook](docs/reports/release-1/local-host-services-runbook.md),
+then:
 
 ```bash
 docker compose --env-file shared/configuration/.env.example up --build -d
 docker compose --env-file shared/configuration/.env.example ps
 ```
 
-The portal is at `http://localhost:8080`. Backends reach AI-Mode at `http://ai-mode:8006`. AI-Mode reaches
-host Ollama and MCP through `host.docker.internal`; Compose supplies its Linux
-host-gateway mapping. Host RAG reaches AI-Mode at `http://127.0.0.1:8006`. Student 1 and Student 4 public APIs are published on **host loopback**
-ports 18001 and 18008 for MCP. Their database APIs remain private. On native
-Linux a host service bound only to 127.0.0.1 cannot be reached via the bridge;
-follow the restricted host-binding instructions in the guide above.
+The portal is at `http://localhost:8080`. Backends reach host AI-Mode, RAG, and
+MCP at `http://host.docker.internal:8006`, `:8011`, and `:8012/mcp`; each such
+backend declares the Linux `host-gateway` mapping. Student 1, 3, 4, and 5
+public APIs are published on **host loopback** ports 18001, 18003, 18008, and
+18005 (Student 2 on 9000) for host MCP. Database APIs remain private. See the
+[Student 4 MCP guide](student-4/docs/mcp-assistant.md) for the activity
+assistant demonstration.
 
 Ordinary feature workflows remain usable if host AI services are unavailable.
 AI requests report dependency failures separately. The Student 4 assistant
@@ -189,16 +179,15 @@ curl http://localhost:8081/health
 curl http://localhost:8081/ready
 ```
 
-Reset Compose containers and persisted application volumes with:
+Stop the containers and keep their data with `docker compose down`. Reset
+persisted application volumes only when that is intended:
 
 ```bash
 docker compose --env-file shared/configuration/.env.example down -v --remove-orphans
 ```
 
-This does not remove Ollama or models installed on the host. If AI-Mode cannot
-reach Ollama, verify the host binding and firewall access to port `11434`. On
-native Linux, confirm that the service is not listening on loopback only.
-Compose never installs Ollama or downloads models.
+Neither command touches host Ollama, its models, or the RAG index. Compose
+never installs Ollama or downloads models.
 
 ## Release 1 shared RAG planning
 

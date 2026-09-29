@@ -47,8 +47,8 @@ inside Docker.
 
 1. Install Ollama on the host OS using the official installer/package for that platform.
 2. Start Ollama so the shared AI-Mode service can reach its HTTP API.
-   - Native `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
-   - Compose backends call containerised AI-Mode at `http://ai-mode:8006`; AI-Mode reaches host Ollama through `http://host.docker.internal:11434`.
+   - Host `ai-mode` runs use the default `AI_MODE_OLLAMA_BASE_URL=http://127.0.0.1:11434`.
+   - Compose backends call host AI-Mode at `http://host.docker.internal:8006`.
 3. Pull the approved chat and embedding models on the host:
 
    ```bash
@@ -64,8 +64,8 @@ inside Docker.
 
 Platform notes:
 
-- Windows/macOS native runs can use the loopback default above.
-- On native Linux, Ollama and MCP must listen on a Docker-accessible host interface. See [host setup](../../student-4/docs/mcp-assistant.md).
+- Ollama only needs loopback; AI-Mode is its sole caller and runs on the host.
+- On native Linux, AI-Mode itself must listen on a Docker-accessible host interface for Compose backends. See the [runbook](../../docs/reports/release-1/local-host-services-runbook.md).
 - Tests and CI in this repository use mocked provider transports only. They do **not** install, start, or download Ollama/models.
 
 ## Public API
@@ -391,20 +391,22 @@ Correlation IDs and other logged fields are sanitized defensively to stay single
 
 ## Runtime expectation
 
-AI-Mode runs in Docker Compose. MCP, RAG, Ollama, and the validation loop remain
-host processes. Start the gateway with:
+AI-Mode runs on the host for Release 1, alongside MCP, RAG, Ollama, and the
+validation loop; it is not a Compose service. From this directory:
 
 ```bash
-docker compose --env-file shared/configuration/.env.example up --build -d ai-mode
+python -m pip install -e .
+AI_MODE_DEFAULT_MODEL=llama3.1:8b AI_MODE_TIMEOUT_SECONDS=90 \
+  python -m uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
 ```
 
-- Backend-to-AI-Mode URL: `http://ai-mode:8006`.
-- Host RAG/local clients: `http://127.0.0.1:8006` (loopback-only published port).
-- AI-Mode-to-Ollama: `http://host.docker.internal:11434`.
-- AI-Mode-to-MCP: `http://host.docker.internal:8012/mcp`.
-- AI-Mode has the Linux `host.docker.internal:host-gateway` mapping. Host MCP
-  and Ollama must listen on that reachable interface, not only host loopback.
-  See the [host-binding guide](../../student-4/docs/mcp-assistant.md).
+- Compose backends: `http://host.docker.internal:8006` (Compose adds the Linux
+  `host-gateway` mapping).
+- Host RAG/local clients: `http://127.0.0.1:8006`.
+- AI-Mode-to-Ollama and AI-Mode-to-MCP use the loopback defaults above.
+- The [local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md)
+  covers start order, Linux binding, and verification. The Dockerfile remains
+  for the CI image smoke test.
 
 Ollama remains a host prerequisite; Compose and CI do not install, start, or download Ollama or its models.
 
