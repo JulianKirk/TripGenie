@@ -30,7 +30,9 @@ generated prose and semantic matching remain advisory.
 
 Final model output contains plain text and typed activity references. Only IDs
 returned by successful activity tools in that request can become cards. The backend
-refetches details through MCP, while the frontend renders authoritative records and
+refetches card details through its normal activity read path (the same database
+and location-resolution logic as its public detail API), while the frontend renders
+authoritative records and
 existing explicit itinerary actions. This prevents invented cards; it cannot prove
 every assertion in generated prose is correct. No model HTML is rendered.
 
@@ -56,7 +58,10 @@ clients receive the same behavior.
 
 The UI's expandable Tools used section comes from backend execution records, not
 model descriptions. It shows names, arguments, statuses, durations, result IDs and
-correlation IDs, including card lookups and failures. Correlation travels in
+correlation IDs, including MCP detail calls and failures. Card presentation reads
+are separate application lookups and do not enter this trace or the model context.
+The agent retains `activities_get` for schedules and notes omitted from search
+summaries. Correlation travels in
 X-Request-ID through MCP to provider APIs. Failed MCP requests do not fall back to
 the former direct search pipeline. Legacy plan/evaluate endpoints are retained for
 compatibility and ordinary CRUD/browsing remains available.

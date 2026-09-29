@@ -69,6 +69,9 @@ working on the relevant slice.
   candidates, and uses AI-Mode to evaluate those results before returning
   them to the frontend. MCP supplies tools and data; AI-Mode supplies model
   inference. Autonomous model-selected tool calls are not required.
+  Presentation-only resolution of already-grounded activity IDs uses the owning
+  backend's normal activity lookup; it is not an AI retrieval fallback and does
+  not appear in the MCP tool trace. Full details needed by the agent still use MCP.
 - MCP tools call the owning service's documented public data APIs, never its
   database or AI orchestration endpoints. A tool may call the requesting
   feature's ordinary public API, but must not call back into the workflow

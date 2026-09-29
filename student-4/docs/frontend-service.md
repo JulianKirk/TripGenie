@@ -102,7 +102,8 @@ HTMX fragments and a full-page ordinary POST fallback.
 
 An expandable **Tools used** section displays backend-recorded calls, arguments,
 status, elapsed milliseconds, returned activity IDs/count, correlation IDs,
-and errors. Final card-detail calls appear too. This trace is execution data,
+and errors. Agent/workflow MCP detail calls appear too; ordinary backend card
+resolution reads do not. This trace is execution data,
 not generated model text. Errors retain the trace, and no silent direct-API
 fallback occurs. A loading indicator announces work and the submit button is
 disabled while HTMX waits. See [setup and demonstration](mcp-assistant.md).

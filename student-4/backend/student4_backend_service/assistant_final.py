@@ -1,8 +1,12 @@
-"""Resolve final cards from fresh MCP data and author checked recommendations."""
+"""Resolve final cards through the ordinary backend activity read path."""
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
+from uuid import UUID
+
+from fastapi import HTTPException
 
 from .assistant_constraints import party_total
 from .assistant_models import ActivityPart, TextPart
@@ -13,6 +17,8 @@ if TYPE_CHECKING:
     from .assistant_constraints import RequestConstraints
     from .assistant_models import FinalAction
     from .assistant_tools import ToolExecutor
+
+ActivityLookup = Callable[[UUID], Awaitable[Activity]]
 
 MAX_CARDS = 6
 
@@ -44,6 +50,7 @@ async def resolve_cards(
     executor: ToolExecutor,
     constraints: RequestConstraints,
     *,
+    resolve_activity: ActivityLookup,
     eligible_ids: set[str],
     activity_data_requested: bool,
 ) -> None:
@@ -62,15 +69,20 @@ async def resolve_cards(
         raise AgentError(message)
     excluded = 0
     for activity_id in ids:
-        value = await executor.call("activities_get", {"activity_id": activity_id})
-        if value["ok"]:
-            activity = Activity.model_validate(value["data"])
-            if constraints.accepts(activity):
-                executor.result.activities[activity_id] = activity
-            else:
-                excluded += 1
-        else:
+        try:
+            activity = await resolve_activity(UUID(activity_id))
+        except HTTPException:
             executor.result.unavailable_activity_ids.append(activity_id)
+            continue
+        if str(activity.id) != activity_id:
+            message = (
+                "The activity lookup returned a different activity than requested."
+            )
+            raise AgentError(message)
+        if constraints.accepts(activity):
+            executor.result.activities[activity_id] = activity
+        else:
+            excluded += 1
     executor.result.parts = action.parts
     if (checked and (activity_data_requested or ids)) or excluded:
         executor.result.parts = [

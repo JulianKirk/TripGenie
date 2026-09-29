@@ -111,8 +111,13 @@ The response has `status` (`complete` or `error`), `request_id`, ordered `parts`
 (`text` or `activity` with UUID), authoritative `activities` keyed by UUID,
 `unavailable_activity_ids`, `tools`, `error`, `model`, and `provider`.
 Activity references must come from this request's successful tool results.
-Final details are re-fetched through MCP; model-authored activity fields are
-never used for cards. Failed/deleted final lookups are marked unavailable.
+Final details are re-fetched using the same backend read path as `GET /activity/{id}`
+(database service plus location resolution); model-authored fields are never used
+for cards. These presentation reads are not MCP calls, are not supplied back to the
+model, and do not appear in `tools`. Failed/deleted final lookups are marked
+unavailable without retrying through MCP. Agent-requested full details still use
+`activities_get`; search summaries omit schedules, booking notes and accessibility
+notes. No browser or frontend service directly queries the database.
 
 Each `tools` entry contains the actual tool name, validated arguments, status
 (`success`, `error`, `rejected`), duration in milliseconds, MCP correlation ID,
@@ -132,7 +137,8 @@ output parts, 1,000 characters per text part, and a
 definitions crowd out successful observations, generation switches to final-only
 with the observations retained and tool definitions removed. Contexts still above
 the limit produce a visible request-to-narrow error. With at most five tool-action
-steps this permits at most 42 MCP calls, including schedule verification.
+steps this permits at most 36 MCP calls, including schedule verification, plus up to six
+ordinary backend reads for final cards.
 At most six items per tool
 observation are supplied to the model, with an explicit omitted-item count.
 

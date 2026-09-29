@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     import httpx
 
     from .ai_mode_client import AiModeClient
+    from .assistant_final import ActivityLookup
     from .assistant_models import AssistantRequest, ToolAction
     from .config import Settings
 
@@ -110,6 +111,7 @@ async def _loop(
     ai: AiModeClient,
     executor: ToolExecutor,
     constraints: RequestConstraints,
+    resolve_activity: ActivityLookup,
 ) -> None:
     context: dict[str, Any] = {
         "tools": [
@@ -170,6 +172,7 @@ async def _loop(
                 action,
                 executor,
                 constraints,
+                resolve_activity=resolve_activity,
                 eligible_ids=visible_ids,
                 activity_data_requested=activity_data_requested,
             )
@@ -232,6 +235,8 @@ async def answer(
     settings: Settings,
     ai: AiModeClient,
     transport: httpx.AsyncBaseTransport | None = None,
+    *,
+    resolve_activity: ActivityLookup,
 ) -> AssistantResponse:
     result = AssistantResponse(request_id=f"student4-agent-{uuid4().hex[:16]}")
     if not settings.mcp_enabled:
@@ -249,7 +254,9 @@ async def answer(
                 listed = await session.list_tools()
                 executor = ToolExecutor(session, listed.tools, result, payload.trip_id)
                 try:
-                    await _loop(payload, settings, ai, executor, constraints)
+                    await _loop(
+                        payload, settings, ai, executor, constraints, resolve_activity
+                    )
                 except ClarificationError as exc:
                     result.status = "complete"
                     result.parts = [TextPart(type="text", text=str(exc))]

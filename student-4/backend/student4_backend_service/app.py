@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import TYPE_CHECKING
 
 import httpx  # noqa: TC002 (public transport test seam)
 from fastapi import FastAPI, HTTPException, Request, Response, status
 
 from . import errors
+from .activity_routes import get as get_activity
 from .activity_routes import router as activity_router
 from .ai_mode_client import AiModeClient
 from .assistant import answer
@@ -90,9 +92,15 @@ def create_app(
 
     @app.post("/activity/assistant", response_model=AssistantResponse)
     async def assistant(
-        payload: AssistantRequest, request: Request
+        payload: AssistantRequest, request: Request, db: DbDep, location: LocationDep
     ) -> AssistantResponse:
-        return await answer(payload, settings, request.app.state.ai, mcp_transport)
+        return await answer(
+            payload,
+            settings,
+            request.app.state.ai,
+            mcp_transport,
+            resolve_activity=partial(get_activity, db=db, location=location),
+        )
 
     app.include_router(recommendation_router)
     app.include_router(trip_router)

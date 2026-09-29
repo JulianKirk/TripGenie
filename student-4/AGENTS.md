@@ -32,12 +32,15 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
   uses an explicit read-only allowlist and selected-trip scope. Reject write
   calls before execution regardless of model output or MCP annotations.
 - Render activity references only after checking this request's successful
-  tool results and resolving authoritative details through MCP. Never accept
+  tool results and resolving authoritative details through the ordinary backend
+  activity lookup (the same path as its public detail API). Never accept
   model-authored card data. Show the backend-recorded MCP tool trace, including
-  errors and final detail lookups. Adding to an itinerary remains an explicit
+  errors and agent/workflow detail calls. Presentation-only card reads are not MCP
+  calls and must not appear in that trace. Adding to an itinerary remains an explicit
   user action through the existing route.
 - Preserve ordinary browsing/CRUD when MCP is disabled or unavailable. Do not
-  silently bypass MCP in the assistant. Legacy plan/evaluate routes are retained
+  silently bypass MCP for agent retrieval. Final card resolution is ordinary
+  application presentation, not a fallback for failed agent retrieval. Legacy plan/evaluate routes are retained
   for compatibility, not used by the primary AI panel.
 - Retain request-local checked constraints independently of model tool arguments.
   Use Decimal party totals and public MCP schedule details to filter candidates,

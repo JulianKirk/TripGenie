@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+from fastapi import HTTPException
 from student4_backend_service.assistant_constraints import RequestConstraints
 from student4_backend_service.assistant_final import resolve_cards
 from student4_backend_service.assistant_models import AssistantResponse, FinalAction
 from student4_backend_service.assistant_tools import AgentError, ToolExecutor
+from student4_backend_service.schemas import Activity
 
 from tests.backend.test_assistant import ACTIVITY, DETAIL
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 class FinalExecutor(ToolExecutor):
@@ -23,17 +28,21 @@ class FinalExecutor(ToolExecutor):
         self.pricing_basis = "PER_PERSON"
 
     async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        assert name == "activities_get"
-        self.calls.append(arguments["activity_id"])
-        return {
-            "ok": not self.unavailable,
-            "data": {
+        message = "Card rendering must not call MCP"
+        raise AssertionError(message)
+
+    async def lookup(self, activity_id: UUID) -> Activity:
+        self.calls.append(str(activity_id))
+        if self.unavailable:
+            raise HTTPException(404, "not found")
+        return Activity.model_validate(
+            {
                 **DETAIL,
-                "id": arguments["activity_id"],
+                "id": str(activity_id),
                 "price": self.price,
                 "pricing_basis": self.pricing_basis,
-            },
-        }
+            }
+        )
 
 
 def finish(
@@ -56,6 +65,7 @@ def finish(
             action,
             executor,
             constraints,
+            resolve_activity=executor.lookup,
             eligible_ids=eligible or set(),
             activity_data_requested=requested,
         )

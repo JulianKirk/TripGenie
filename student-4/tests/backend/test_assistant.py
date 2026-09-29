@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 import httpx
@@ -8,6 +9,13 @@ import pytest
 from fastapi.testclient import TestClient
 from student4_backend_service.app import create_app
 from student4_backend_service.config import Settings
+
+from tests.backend.test_activity_api import (
+    CITY_ID,
+    COUNTRY_ID,
+    FakeDatabase,
+    location_handler,
+)
 
 ACTIVITY = "0f2b1c4e-aaaa-bbbb-cccc-000000000004"
 DETAIL: dict[str, Any] = {
@@ -32,6 +40,20 @@ DETAIL: dict[str, Any] = {
         }
     ],
 }
+
+
+def card_database(**changes: Any) -> FakeDatabase:
+    database = FakeDatabase()
+    database.records[ACTIVITY] = {
+        **deepcopy(DETAIL),
+        **changes,
+        "location_details": {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "country_id": COUNTRY_ID,
+            "city_id": CITY_ID,
+        },
+    }
+    return database
 
 
 class ProtocolFake:
@@ -134,6 +156,7 @@ def run(
     question: str = "Find walks",
     trip_id: str | None = None,
     prompt_max_chars: int | None = None,
+    database: FakeDatabase | None = None,
 ) -> dict[str, Any]:
     def ai(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -158,9 +181,12 @@ def run(
     )
     if prompt_max_chars is not None:
         settings.ai_prompt_max_chars = prompt_max_chars
+    database = database if database is not None else card_database()
     with TestClient(
         create_app(
             settings,
+            database_transport=httpx.MockTransport(database.handle),
+            location_transport=httpx.MockTransport(location_handler),
             ai_mode_transport=httpx.MockTransport(ai),
             mcp_transport=httpx.MockTransport(mcp.handle),
         )
@@ -174,6 +200,7 @@ def run(
 
 def test_agent_calls_mcp_and_returns_authoritative_cards_and_trace() -> None:
     mcp = ProtocolFake()
+    database = card_database(price="46.00")
     result = run(
         [
             {
@@ -190,19 +217,20 @@ def test_agent_calls_mcp_and_returns_authoritative_cards_and_trace() -> None:
             },
         ],
         mcp,
+        database=database,
     )
     assert result["status"] == "complete"
-    assert result["activities"][ACTIVITY]["price"] == "45.00"
+    assert result["activities"][ACTIVITY]["price"] == "46.00"
     assert [call["name"] for call in mcp.calls] == [
         "activities_search",
-        "activities_get",
     ]
     assert [entry["tool"] for entry in result["tools"]] == [
         "activities_search",
-        "activities_get",
     ]
     assert all(entry["status"] == "success" for entry in result["tools"])
     assert result["tools"][0]["correlation_id"] == "mcp-test"
+
+    assert database.calls == [("GET", f"/internal/activity/{ACTIVITY}", None)]
 
 
 def test_write_tool_is_rejected_without_execution() -> None:
@@ -363,7 +391,11 @@ def test_wrong_provider_activity_id_is_never_rendered() -> None:
 
     result = run(
         [
-            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {
+                "type": "tool",
+                "name": "activities_get",
+                "arguments": {"activity_id": ACTIVITY},
+            },
             {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
         ],
         WrongId(),
@@ -501,7 +533,6 @@ def test_repeated_successful_call_switches_to_final_answer_without_reexecution()
     assert result["status"] == "complete"
     assert [call["name"] for call in mcp.calls] == [
         "activities_search",
-        "activities_get",
     ]
     assert not Draft202012Validator(requests[-1]["schema"]).is_valid(tool)
     assert '"input_schema"' in requests[0]["prompt"]
@@ -695,19 +726,6 @@ def test_party_budget_filters_candidates_and_rechecks_model_card_references() ->
 
 
 def test_final_price_change_removes_card_and_stale_model_claim() -> None:
-    class ChangedPrice(ProtocolFake):
-        def handle(self, request: httpx.Request) -> httpx.Response:
-            response = super().handle(request)
-            request_data = json.loads(request.content)
-            if (
-                request_data["method"] == "tools/call"
-                and request_data["params"]["name"] == "activities_get"
-            ):
-                body = response.json()
-                body["result"]["structuredContent"]["data"]["price"] = "200.00"
-                return httpx.Response(200, json=body)
-            return response
-
     result = run(
         [
             {"type": "tool", "name": "activities_search", "arguments": {}},
@@ -719,7 +737,8 @@ def test_final_price_change_removes_card_and_stale_model_claim() -> None:
                 ],
             },
         ],
-        ChangedPrice(),
+        ProtocolFake(),
+        database=card_database(price="200.00"),
         question="For 2 people under $100 total",
     )
     assert result["status"] == "complete"
@@ -818,7 +837,6 @@ def test_context_overflow_uses_final_only_schema_and_fresh_cards() -> None:
     assert result["activities"][ACTIVITY]["price"] == "45.00"
     assert [call["name"] for call in mcp.calls] == [
         "activities_search",
-        "activities_get",
     ]
     validator = Draft202012Validator(requests[-1]["schema"])
     assert validator.is_valid(final)
@@ -852,3 +870,83 @@ def test_context_overflow_still_errors_when_final_only_context_does_not_fit() ->
     assert len(requests) == 1
     assert [call["name"] for call in mcp.calls] == ["activities_search"]
     assert result["tools"][0]["status"] == "success"
+
+
+def test_model_can_read_full_details_through_mcp_before_card_resolution() -> None:
+    mcp = ProtocolFake()
+    database = card_database(price="46.00")
+    requests: list[dict[str, Any]] = []
+    result = run(
+        [
+            {
+                "type": "tool",
+                "name": "activities_search",
+                "arguments": {"text": "walk"},
+            },
+            {
+                "type": "tool",
+                "name": "activities_get",
+                "arguments": {"activity_id": ACTIVITY},
+            },
+            {
+                "type": "final",
+                "parts": [
+                    {"type": "text", "text": "Saturday 09:00 to 11:00"},
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        mcp,
+        requests,
+        database=database,
+        question="What is the full weekly schedule for the Harbour walk?",
+    )
+    assert result["status"] == "complete"
+    assert [t["tool"] for t in result["tools"]] == [
+        "activities_search",
+        "activities_get",
+    ]
+    assert "SATURDAY" in requests[-1]["prompt"]
+    assert result["activities"][ACTIVITY]["price"] == "46.00"
+    assert len(database.calls) == 1
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_card_lookup_failure_does_not_fallback_to_mcp(missing: bool) -> None:
+    class UnavailableDatabase(FakeDatabase):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            self.calls.append((request.method, request.url.path, None))
+            return httpx.Response(
+                404 if missing else 503, json={"detail": "unavailable"}
+            )
+
+    mcp = ProtocolFake()
+    database = UnavailableDatabase()
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        mcp,
+        database=database,
+    )
+    assert result["status"] == "complete"
+    assert result["activities"] == {}
+    assert result["unavailable_activity_ids"] == [ACTIVITY]
+    assert [t["tool"] for t in result["tools"]] == ["activities_search"]
+    assert len(database.calls) == 1
+
+
+def test_wrong_card_lookup_id_is_not_rendered() -> None:
+    database = card_database(id="11111111-1111-1111-1111-111111111111")
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        ProtocolFake(),
+        database=database,
+    )
+    assert result["status"] == "error"
+    assert result["activities"] == {}
+    assert "different activity" in result["error"]

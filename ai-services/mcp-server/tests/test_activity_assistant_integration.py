@@ -42,9 +42,57 @@ DETAIL = {
 }
 
 
-def test_frontend_backend_real_mcp_session_and_card_resolution():
+@pytest.mark.parametrize("needs_details", [False, True])
+def test_frontend_backend_real_mcp_session_and_card_resolution(needs_details):
     provider_calls = []
     model_calls = []
+    database_calls = []
+
+    def database_response(request):
+        database_calls.append(request)
+        assert request.method == "GET"
+        assert request.url.path == f"/internal/activity/{ACTIVITY}"
+        return httpx.Response(
+            200,
+            json={
+                **DETAIL,
+                "price": "46.00",
+                "location_details": {
+                    "id": "33333333-3333-3333-3333-333333333333",
+                    "country_id": "11111111-1111-1111-1111-111111111111",
+                    "city_id": "22222222-2222-2222-2222-222222222222",
+                },
+            },
+        )
+
+    def location_response(request):
+        if request.url.path == "/location/country":
+            return httpx.Response(
+                200,
+                json={
+                    "countries": [
+                        {
+                            "id": "11111111-1111-1111-1111-111111111111",
+                            "name": "australia",
+                        }
+                    ],
+                    "total": 1,
+                },
+            )
+        assert request.url.path == "/location/city"
+        return httpx.Response(
+            200,
+            json={
+                "cities": [
+                    {
+                        "id": "22222222-2222-2222-2222-222222222222",
+                        "name": "sydney",
+                        "country_id": "11111111-1111-1111-1111-111111111111",
+                    }
+                ],
+                "total": 1,
+            },
+        )
 
     def provider_response(request):
         provider_calls.append(request)
@@ -66,6 +114,12 @@ def test_frontend_backend_real_mcp_session_and_card_resolution():
                 "type": "tool",
                 "name": "activities_search",
                 "arguments": {"filters": {"price": {"max": "50.00"}}, "limit": 6},
+            }
+        elif needs_details and len(model_calls) == 2:
+            action = {
+                "type": "tool",
+                "name": "activities_get",
+                "arguments": {"activity_id": ACTIVITY},
             }
         else:
             action = {
@@ -100,6 +154,8 @@ def test_frontend_backend_real_mcp_session_and_card_resolution():
                 mcp_url="http://localhost:8012/mcp",
                 ai_mode_url="http://ai.test",
             ),
+            database_transport=httpx.MockTransport(database_response),
+            location_transport=httpx.MockTransport(location_response),
             mcp_transport=httpx.ASGITransport(mcp),
             ai_mode_transport=httpx.MockTransport(model_response),
         )
@@ -124,15 +180,19 @@ def test_frontend_backend_real_mcp_session_and_card_resolution():
             assert "Real catalogue walk" in response.text, response.text
             assert "Tools used" in response.text
             assert "activities_search" in response.text
-            assert "activities_get" in response.text
+            assert ("activities_get" in response.text) is needs_details
+            assert "$46.00" in response.text
             assert "Add to itinerary" in response.text
         provider.close()
 
     asyncio.run(scenario())
-    assert len(model_calls) == 2
+    assert len(model_calls) == (3 if needs_details else 2)
+    assert len(database_calls) == 1
     assert len(json.dumps(model_calls[0]["schema"])) <= 8000
     assert "activities_create" not in json.dumps(model_calls)
-    assert [request.method for request in provider_calls] == ["QUERY", "GET"]
+    assert [request.method for request in provider_calls] == (
+        ["QUERY", "GET"] if needs_details else ["QUERY"]
+    )
     assert json.loads(provider_calls[0].content)["price"] == {"max": "49.99"}
     correlation = provider_calls[0].headers["X-Request-ID"]
     assert correlation.startswith("student4-agent-")

@@ -2,8 +2,9 @@
 
 Each question is a separate request. The frontend calls its backend; the backend
 uses AI-Mode to choose from allowed MCP tools and compose text/activity references.
-MCP tools call public APIs. The backend resolves the references through MCP and
-returns authoritative cards plus an execution trace. Only the user can add an
+MCP tools call public APIs. For presentation, the backend resolves the references
+through its ordinary activity lookup (the same path as its public detail API) and
+returns authoritative cards plus an execution trace of actual MCP calls. Only the user can add an
 activity to a trip using the existing button. No conversation history is retained. Tool schemas are included in the model context.
 Repeated successful calls move the request to a final-answer step, and the last
 step is always reserved for a final answer. Its schema permits only activity IDs
@@ -124,8 +125,30 @@ Explicit party counts, AUD bounds and ISO dates are retained by the backend, not
 re-read from each model tool call. Ambiguous/unsupported expressions ask for
 clarification. MCP searches use safe listed-price bounds; retrieved candidates
 are checked with exact party-cost arithmetic, participant limits, accessibility
-and catalogue schedule overlap. The backend repeats checks after final MCP detail
+and catalogue schedule overlap. The backend repeats checks after final ordinary backend detail
 reads and writes the verification text itself. See the public API document for
 supported grammar, default selected-trip values, and limits. External MCP clients
 share the improved catalogue word variants, but must enforce their own budgets
 and recommendation policy.
+
+### When the agent needs a detail tool
+
+Search returns summaries suitable for selecting activities. Full schedules,
+booking notes and accessibility notes are available through `activities_get`.
+The model can choose this tool when those fields are needed to answer a question;
+external clients retain both tools. Rendering a card itself does not require an
+MCP detail call. To exercise model-selected detail retrieval, try:
+
+> Find the Sydney Harbour sunrise kayak activity and tell me its full weekly schedule and any booking or accessibility notes.
+
+Expand **Tools used** to inspect search and detail calls. A simple kayaking search
+can return cards with only an MCP search call. Date-constrained recommendation
+workflows may also perform MCP detail reads for schedule verification.
+
+Tool choice remains model-driven. For an explicit detail-tool check with the seeded
+kayak activity, use:
+
+> Use activities_get for activity b5536559-88c6-5879-acb3-354630651c7a and tell me its booking notes.
+
+This should show an `activities_get` call and the booking notes, without requiring
+a card or a search first. The activity ID must exist in the local catalogue.
