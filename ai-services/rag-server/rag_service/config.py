@@ -80,9 +80,9 @@ class Settings:
     manifest_path: Path | None = None
     default_top_k: int = 5
     max_top_k: int = 10
-    min_relevance_score: float = 0.35
-    medium_relevance_score: float = 0.55
-    high_relevance_score: float = 0.75
+    min_relevance_score: float = 0.5
+    medium_relevance_score: float = 0.7
+    high_relevance_score: float = 0.8
     max_query_chars: int = 2000
     max_context_chars: int = 12000
     max_answer_chars: int = 4000
@@ -174,17 +174,17 @@ class Settings:
             min_relevance_score=_score(
                 os.getenv("RAG_MIN_RELEVANCE_SCORE"),
                 name="RAG_MIN_RELEVANCE_SCORE",
-                default=0.35,
+                default=0.5,
             ),
             medium_relevance_score=_score(
                 os.getenv("RAG_MEDIUM_RELEVANCE_SCORE"),
                 name="RAG_MEDIUM_RELEVANCE_SCORE",
-                default=0.55,
+                default=0.7,
             ),
             high_relevance_score=_score(
                 os.getenv("RAG_HIGH_RELEVANCE_SCORE"),
                 name="RAG_HIGH_RELEVANCE_SCORE",
-                default=0.75,
+                default=0.8,
             ),
             max_query_chars=_positive_int(
                 os.getenv("RAG_MAX_QUERY_CHARS"),

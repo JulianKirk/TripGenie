@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date, timedelta
 from typing import Any
+from uuid import uuid4
 
 from .accommodation_client import AccommodationClient
 from .activity_client import ActivityClient, ActivityDetails
@@ -15,7 +17,8 @@ from .ai_suggestions import (
 )
 from .client import DatabaseApiClient
 from .config import Settings
-from .errors import ApiError, validation_error
+from .errors import ApiError, dependency_unavailable, validation_error
+from .mcp_client import McpCallError, McpClient
 from .models import (
     DependencyStatus,
     HealthDependencies,
@@ -24,6 +27,11 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    McpOptionsRequest,
+    McpOptionsResponse,
+    McpToolResult,
+    RagQueryRequest,
+    RagQueryResponse,
     TripAccommodationDetail,
     TripAccommodationRecord,
     TripActivityDetail,
@@ -39,6 +47,7 @@ from .models import (
     TripTransportRecord,
     TripUpdate,
 )
+from .rag_client import RagClient
 from .transport_client import TransportClient, TransportDetails
 from .trip_rules import (
     ensure_trip_detail_supported,
@@ -47,6 +56,28 @@ from .trip_rules import (
 )
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
+MCP_RESULT_LIMIT = 5
+# Failures that mean the MCP server itself was not reachable, not a tool error.
+MCP_TRANSPORT_FAILURES = {"DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"}
+
+logger = logging.getLogger(__name__)
+
+
+def _disabled(code: str, field: str, name: str) -> ApiError:
+    return ApiError(
+        status_code=503,
+        code=code,
+        message=f"{name} is disabled in this environment.",
+        details=[{"field": field, "issue": "disabled by configuration"}],
+    )
+
+
+def _split_destination(destination: str) -> tuple[str, str | None]:
+    """`"Sydney, Australia"` -> `("Sydney", "Australia")`; else no country."""
+    city, _, country = destination.rpartition(",")
+    if city.strip() and country.strip():
+        return city.strip(), country.strip()
+    return destination.strip(), None
 
 
 class BackendService:
@@ -58,6 +89,8 @@ class BackendService:
         accommodations: AccommodationClient | None = None,
         activities: ActivityClient | None = None,
         transport: TransportClient | None = None,
+        rag: RagClient | None = None,
+        mcp: McpClient | None = None,
     ) -> None:
         self._client = client
         self._ai_suggestions = ai_suggestions
@@ -65,6 +98,8 @@ class BackendService:
         self._accommodations = accommodations
         self._activities = activities
         self._transport = transport
+        self._rag = rag
+        self._mcp = mcp
 
     def list_trips(
         self,
@@ -364,6 +399,137 @@ class BackendService:
             transport_sources=transport_sources,
         )
         return trip, items, cross_service_context, time_blocks
+
+    def rag_query(self, trip_id: str, payload: RagQueryRequest) -> dict[str, object]:
+        if not self._settings.rag_enabled or self._rag is None:
+            raise _disabled("RAG_DISABLED", "rag", "The knowledge assistant")
+        self._client.get_trip(trip_id)
+        correlation_id = f"student1-rag-{uuid4().hex[:12]}"
+        answer = self._rag.query(payload.question, correlation_id)
+        logger.info(
+            "rag_query correlation_id=%s trip_id=%s confidence=%s",
+            correlation_id,
+            trip_id,
+            answer.confidence_category,
+        )
+        return RagQueryResponse(
+            trip_id=trip_id,
+            **answer.model_dump(mode="json"),
+        ).model_dump(mode="json")
+
+    def mcp_options(
+        self,
+        trip_id: str,
+        payload: McpOptionsRequest | None,
+    ) -> dict[str, object]:
+        """Read-only option discovery through the shared MCP tools.
+
+        Nothing is persisted: the user adds what they like through the existing
+        itinerary, accommodation and activity routes. One tool failing is
+        recorded against that tool and the rest still run.
+        """
+        if not self._settings.mcp_enabled or self._mcp is None:
+            raise _disabled("MCP_DISABLED", "mcp", "The MCP tool server")
+        trip = self._client.get_trip(trip_id)
+        city, country = _split_destination(trip.destination)
+        if country is None and payload is not None:
+            country = payload.country
+        location = {"country": country, "city": city}
+        no_country = (
+            "country is required for a location search; use a 'City, Country' "
+            "destination or send a country"
+        )
+        plan: list[tuple[str, dict[str, Any], str | None]] = [
+            ("trip_get_context", {"trip_id": trip_id}, None),
+            (
+                "accommodations_search",
+                {**location, "limit": MCP_RESULT_LIMIT},
+                None if country else no_country,
+            ),
+            (
+                "activities_search",
+                {"limit": MCP_RESULT_LIMIT, "filters": {"location": location}},
+                None if country else no_country,
+            ),
+            (
+                "transport_search",
+                {"destination": city, "limit": MCP_RESULT_LIMIT},
+                None,
+            ),
+            # budgets_list, not budgets_get_summary: the summary fans out to
+            # Students 2-4 and back to this service, a cycle not worth risking.
+            ("budgets_list", {"trip_id": trip_id, "limit": MCP_RESULT_LIMIT}, None),
+        ]
+        correlation_id = f"student1-mcp-{uuid4().hex[:12]}"
+        # ponytail: sequential, worst case = 5 x MCP timeout; parallelise the
+        # independent searches if latency matters.
+        results = [
+            self._call_mcp_tool(tool, arguments, skip_reason, correlation_id)
+            for tool, arguments, skip_reason in plan
+        ]
+        attempted = [result for result in results if result.status != "skipped"]
+        if all(
+            result.error is not None and result.error.code in MCP_TRANSPORT_FAILURES
+            for result in attempted
+        ):
+            raise dependency_unavailable(
+                "The MCP tool server is unavailable.",
+                [
+                    {"field": result.tool, "issue": result.error.code}
+                    for result in attempted
+                    if result.error is not None
+                ],
+            )
+        statuses = [result.status for result in results]
+        logger.info(
+            "mcp_options correlation_id=%s trip_id=%s statuses=%s",
+            correlation_id,
+            trip_id,
+            ",".join(statuses),
+        )
+        return McpOptionsResponse(
+            trip_id=trip_id,
+            correlation_id=correlation_id,
+            location={"city": city, "country": country},
+            results=results,
+            summary={
+                "ok": statuses.count("ok"),
+                "error": statuses.count("error"),
+                "skipped": statuses.count("skipped"),
+            },
+        ).model_dump(mode="json")
+
+    def _call_mcp_tool(
+        self,
+        tool: str,
+        arguments: dict[str, Any],
+        skip_reason: str | None,
+        correlation_id: str,
+    ) -> McpToolResult:
+        if skip_reason is not None:
+            return McpToolResult(
+                tool=tool, arguments=arguments, status="skipped", reason=skip_reason
+            )
+        try:
+            envelope = self._mcp.call_tool(tool, arguments, correlation_id)
+        except McpCallError as exc:
+            return McpToolResult(
+                tool=tool,
+                arguments=arguments,
+                status="error",
+                error={
+                    "code": exc.code,
+                    "message": exc.message,
+                    "retryable": exc.retryable,
+                },
+            )
+        return McpToolResult(
+            tool=tool,
+            arguments=arguments,
+            status="ok",
+            data=envelope["data"],
+            correlation_id=envelope.get("correlation_id"),
+        )
 
     def update_trip(self, trip_id: str, payload: TripUpdate) -> dict[str, object]:
         updates = payload.model_dump(exclude_unset=True, mode="json")

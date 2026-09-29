@@ -159,10 +159,11 @@ the index after changing the model.
 
 Confidence is deterministic:
 
-- `high`: maximum retrieval score at least `0.75`
-- `medium`: maximum retrieval score at least `0.55`
-- `low`: maximum retrieval score at least `0.35`
-- `insufficient_context`: no retrieved chunk reaches `0.35`
+- `high`: maximum retrieval score at least `0.8`
+- `medium`: maximum retrieval score at least `0.7`
+- `low`: maximum retrieval score at least `0.5`
+- `insufficient_context`: no retrieved chunk reaches `0.5`, or the model
+  reports that the retrieved context does not support an answer
 
 Automated tests cover each exact boundary. The versioned
 [`config/calibration-queries.json`](./config/calibration-queries.json) set
@@ -185,9 +186,9 @@ evidence.
 | `RAG_INDEX_PATH` | `data/rag.sqlite3` |
 | `RAG_DEFAULT_TOP_K` | `5` |
 | `RAG_MAX_TOP_K` | `10` |
-| `RAG_MIN_RELEVANCE_SCORE` | `0.35` |
-| `RAG_MEDIUM_RELEVANCE_SCORE` | `0.55` |
-| `RAG_HIGH_RELEVANCE_SCORE` | `0.75` |
+| `RAG_MIN_RELEVANCE_SCORE` | `0.5` |
+| `RAG_MEDIUM_RELEVANCE_SCORE` | `0.7` |
+| `RAG_HIGH_RELEVANCE_SCORE` | `0.8` |
 | `RAG_MAX_QUERY_CHARS` | `2000` |
 | `RAG_MAX_CONTEXT_CHARS` | `12000` (complete grounded prompt budget) |
 | `RAG_MAX_ANSWER_CHARS` | `4000` |

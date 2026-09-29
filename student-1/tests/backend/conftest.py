@@ -913,6 +913,8 @@ def client_factory(
         *,
         settings_override: Settings | None = None,
         ai_mode_handler=None,
+        rag_handler=None,
+        mcp_handler=None,
     ) -> Iterator[TestClient]:
         app = create_app(
             settings_override or Settings(database_api_base_url="http://database.test"),
@@ -923,6 +925,8 @@ def client_factory(
             accommodation_transport=httpx.MockTransport(accommodation_api.handle),
             activity_transport=httpx.MockTransport(activity_api.handle),
             transport_api_transport=httpx.MockTransport(transport_api.handle),
+            rag_transport=httpx.MockTransport(rag_handler) if rag_handler else None,
+            mcp_transport=httpx.MockTransport(mcp_handler) if mcp_handler else None,
         )
         return TestClient(app)
 

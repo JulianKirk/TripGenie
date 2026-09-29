@@ -2,9 +2,9 @@
   "schema_version": "1",
   "embedding_model": "nomic-embed-text",
   "thresholds": {
-    "minimum": 0.35,
-    "medium": 0.55,
-    "high": 0.75
+    "minimum": 0.5,
+    "medium": 0.7,
+    "high": 0.8
   },
   "cases": [
     {
@@ -35,8 +35,51 @@
       "expect_insufficient_context": false
     },
     {
+      "case_id": "student-1-travel-day-trips",
+      "query": "What are good day trips from Melbourne?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-destination-guides"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-cherry-blossom",
+      "query": "When is cherry blossom season in Tokyo?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-seasons-and-events"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-pacing",
+      "query": "How many activities should I plan per day on a trip?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-itinerary-planning"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-flight-time",
+      "query": "How long is the flight from Sydney to Queenstown?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-logistics-and-documents"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
       "case_id": "unsupported-live-weather",
       "query": "What is the live weather in Lisbon right now?",
+      "feature": "student-1",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
+    },
+    {
+      "case_id": "student-1-unrelated-recipe",
+      "query": "How do I bake sourdough bread?",
       "feature": "student-1",
       "expected_source_ids": [],
       "expect_insufficient_context": true

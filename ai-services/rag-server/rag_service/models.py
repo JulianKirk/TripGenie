@@ -164,6 +164,7 @@ class IngestionPayload(StrictModel):
 
 class GroundedGeneration(StrictModel):
     answer: str = Field(min_length=1, max_length=10000)
+    insufficient_context: bool = False
     citation_ids: list[str] = Field(max_length=10)
 
     @field_validator("citation_ids")

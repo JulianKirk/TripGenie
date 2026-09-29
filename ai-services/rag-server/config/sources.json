@@ -30,6 +30,30 @@
       "path": "student-5/docs/budget-service-api.md",
       "title": "Student 5 Budget Service API",
       "feature": "student-5"
+    },
+    {
+      "source_id": "travel-destination-guides",
+      "path": "ai-services/rag-server/knowledge/travel/destination-guides.md",
+      "title": "Destination Guides",
+      "feature": "student-1"
+    },
+    {
+      "source_id": "travel-itinerary-planning",
+      "path": "ai-services/rag-server/knowledge/travel/itinerary-planning-guide.md",
+      "title": "Itinerary Planning Guide",
+      "feature": "student-1"
+    },
+    {
+      "source_id": "travel-seasons-and-events",
+      "path": "ai-services/rag-server/knowledge/travel/seasons-and-events.md",
+      "title": "Seasons, Weather, and Events Calendar",
+      "feature": "student-1"
+    },
+    {
+      "source_id": "travel-logistics-and-documents",
+      "path": "ai-services/rag-server/knowledge/travel/logistics-and-documents.md",
+      "title": "Travel Logistics and Documents",
+      "feature": "student-1"
     }
   ]
 }
