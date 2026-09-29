@@ -64,7 +64,7 @@ def _result(score: float, *, text: str = "Grounded source text.") -> SearchResul
 
 @pytest.mark.parametrize(
     ("score", "expected"),
-    [(0.75, "high"), (0.55, "medium"), (0.35, "low")],
+    [(0.8, "high"), (0.7, "medium"), (0.5, "low")],
 )
 def test_query_returns_grounded_citations_and_confidence(
     settings,
@@ -120,6 +120,22 @@ def test_query_skips_generation_when_context_is_below_threshold(settings) -> Non
     assert payload.citations == []
     assert payload.retrieval.maximum_score == 0.2
     assert ai_mode.generate_calls == []
+
+
+def test_query_honours_model_insufficient_flag_despite_citations(settings) -> None:
+    ai_mode = FakeAiMode(
+        generated_response=(
+            '{"answer":"Insufficient context.","insufficient_context":true,'
+            '"citation_ids":["c1"]}'
+        )
+    )
+    service = RagService(settings, ai_mode, StubIndex([_result(0.9)]))
+
+    payload = asyncio.run(service.query(QueryRequest(query="Live weather?")))
+
+    assert payload.insufficient_context is True
+    assert payload.confidence_category == "insufficient_context"
+    assert payload.citations == []
 
 
 def test_query_rejects_fabricated_citation(settings) -> None:

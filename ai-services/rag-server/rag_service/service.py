@@ -33,13 +33,14 @@ GROUNDING_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "answer": {"type": "string"},
+        "insufficient_context": {"type": "boolean"},
         "citation_ids": {
             "type": "array",
             "items": {"type": "string"},
             "minItems": 0,
         },
     },
-    "required": ["answer", "citation_ids"],
+    "required": ["answer", "insufficient_context", "citation_ids"],
     "additionalProperties": False,
 }
 
@@ -161,7 +162,9 @@ class RagService:
                 issue=f"must be at most {self._settings.max_answer_chars} characters",
             )
 
-        if not grounded.citation_ids:
+        # The model's own verdict: similarity cannot tell "live weather in X"
+        # from climate text, and small models still cite chunks when unsure.
+        if grounded.insufficient_context or not grounded.citation_ids:
             return _insufficient(run_id, correlation_id, top_k, results)
 
         by_id = {result.chunk_id: result for result in selected}
@@ -257,7 +260,9 @@ def _grounding_prompt(query: str, results: list[SearchResult]) -> str:
         "supports any substantive part of the question, answer that part and "
         "state limitations. Every claim needs a citation_ids entry copied exactly "
         "from CONTEXT. Do not invent IDs or facts. If no substantive answer is "
-        "supported, explain that context is insufficient and return citation_ids=[]. "
+        "supported, explain that context is insufficient, set "
+        "insufficient_context=true, and return citation_ids=[]. Otherwise set "
+        "insufficient_context=false. "
         "Similarity alone is not support. Do not use tools or outside knowledge "
         "to fill gaps.\n\nQUESTION:\n"
         f"{query}\n\nCONTEXT:\n"

@@ -2,9 +2,9 @@
   "schema_version": "1",
   "embedding_model": "nomic-embed-text",
   "thresholds": {
-    "minimum": 0.35,
-    "medium": 0.55,
-    "high": 0.75
+    "minimum": 0.5,
+    "medium": 0.7,
+    "high": 0.8
   },
   "cases": [
     {
@@ -73,6 +73,13 @@
     {
       "case_id": "unsupported-live-weather",
       "query": "What is the live weather in Lisbon right now?",
+      "feature": "student-1",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
+    },
+    {
+      "case_id": "student-1-unrelated-recipe",
+      "query": "How do I bake sourdough bread?",
       "feature": "student-1",
       "expected_source_ids": [],
       "expect_insufficient_context": true
