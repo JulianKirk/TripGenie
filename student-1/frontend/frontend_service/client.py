@@ -13,6 +13,8 @@ from .models import (
     DeleteResponse,
     ErrorEnvelope,
     ItineraryItemRecord,
+    McpOptionsResponse,
+    RagQueryResponse,
     TripDetail,
     TripRecord,
 )
@@ -32,6 +34,8 @@ class BackendApiClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_prefix = settings.backend_api_prefix
+        self._rag_timeout = settings.rag_timeout_seconds
+        self._mcp_timeout = settings.mcp_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -86,6 +90,34 @@ class BackendApiClient:
             malformed_message=(
                 "Backend API returned a malformed AI suggestion response."
             ),
+        )
+        return envelope.data
+
+    async def rag_query(self, trip_id: str, question: str) -> RagQueryResponse:
+        envelope = await self._request_model(
+            "POST",
+            f"{self._api_prefix}/trips/{trip_id}/rag-query",
+            json={"question": question},
+            expected_statuses={200},
+            response_type=DataEnvelope[RagQueryResponse],
+            malformed_message="Backend API returned a malformed RAG answer.",
+            timeout=self._rag_timeout,
+        )
+        return envelope.data
+
+    async def mcp_options(
+        self,
+        trip_id: str,
+        country: str | None,
+    ) -> McpOptionsResponse:
+        envelope = await self._request_model(
+            "POST",
+            f"{self._api_prefix}/trips/{trip_id}/mcp-options",
+            json={"country": country},
+            expected_statuses={200},
+            response_type=DataEnvelope[McpOptionsResponse],
+            malformed_message="Backend API returned a malformed MCP options response.",
+            timeout=self._mcp_timeout,
         )
         return envelope.data
 
@@ -212,8 +244,9 @@ class BackendApiClient:
         expected_statuses: set[int],
         response_type: type[T],
         malformed_message: str,
+        timeout: float | None = None,
     ) -> T:
-        response = await self._send(method, path, json=json)
+        response = await self._send(method, path, json=json, timeout=timeout)
         if response.status_code not in expected_statuses:
             self._raise_error_response(response)
 
@@ -237,9 +270,16 @@ class BackendApiClient:
         path: str,
         *,
         json: dict[str, object] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         try:
-            return await self._client.request(method, path, json=json)
+            return await self._client.request(
+                method,
+                path,
+                json=json,
+                # RAG and MCP outlast the ordinary CRUD timeout; see config.py.
+                timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
+            )
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
                 "Backend API did not respond before the configured timeout.",
