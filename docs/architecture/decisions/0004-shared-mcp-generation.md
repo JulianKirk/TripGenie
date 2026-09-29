@@ -8,6 +8,10 @@ callers get the full dynamically discovered MCP catalogue, including write tools
 The native Ollama chat interface returns tool calls; shared AI-Mode validates and
 executes them, returns actual results to the model, and returns its final answer.
 MCP remains the owner of tool descriptions, schemas and public-API integration.
+AI-Mode stays in Compose; MCP and Ollama run on the host. Backends retain
+`http://ai-mode:8006`, and AI-Mode reaches MCP through the host gateway.
+RAG retains its existing host process and reaches AI-Mode on published loopback
+port 8006. This supersedes ADR 0003's host AI-Mode deployment.
 `/embed` retains its numerical embedding behavior and does not require MCP.
 Ollama requests retain the existing SDK. Health and embedding methods are unchanged.
 Native chat uses its pinned lower-level request helper to preserve complete MCP

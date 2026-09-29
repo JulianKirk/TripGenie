@@ -33,7 +33,7 @@ Generation requires host MCP; embedding/indexing does not.
 - Python 3.11 or later
 - `uv`
 - host Ollama
-- host AI-Mode on `http://127.0.0.1:8006`
+- AI-Mode on `http://127.0.0.1:8006` (Compose publishes this loopback port)
 - approved chat model, such as `qwen2.5:0.5b` or the configured alternative
 - `nomic-embed-text`
 

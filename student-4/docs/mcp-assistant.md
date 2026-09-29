@@ -24,26 +24,32 @@ ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ```
 
-Use a generation model with native tool support. Ollama, AI-Mode and MCP run on
-the host, outside Compose. In separate terminals on Docker Desktop:
+Use a generation model with native tool support. AI-Mode runs in Compose;
+Ollama and MCP run on the host. On native Linux, obtain Docker's host-gateway
+address with `docker network inspect bridge` (typically `172.17.0.1`). Start MCP
+on that interface, for example:
 
 ```bash
-AI_MODE_DEFAULT_MODEL=qwen2.5:7b AI_MODE_ALLOWED_MODELS=qwen2.5:7b AI_MODE_TIMEOUT_SECONDS=90 AI_MODE_MCP_URL=http://127.0.0.1:8012/mcp .venv/bin/uvicorn ai_mode_service.app:app --host 0.0.0.0 --port 8006
-.venv/bin/python -m tripgenie_mcp serve
+MCP_HOST=172.17.0.1 .venv/bin/python -m tripgenie_mcp serve
 ```
 
-Restrict AI-Mode access to the local application. On native Linux, bind AI-Mode to
-an interface reachable through Docker's host gateway (for example the bridge
-address printed by `docker network inspect bridge`), and restrict access using
-host networking/firewall configuration. MCP can bind loopback because AI-Mode is
-also a host process; feature containers no longer connect directly to MCP.
-Example environment files are documentation and are not automatically loaded by
-host processes. See [AI-Mode configuration](../../ai-services/ai-mode/README.md).
+On Docker Desktop, use a host binding reachable through `host.docker.internal`
+(such as `MCP_HOST=0.0.0.0`) and restrict access to the local application with the
+host firewall. Ollama must likewise listen on a Docker-accessible host interface.
+Keep an existing host-managed Ollama process; configure its binding instead of
+starting a second instance. AI-Mode connects to host ports 11434 and 8012.
+
+Example environment files are not automatically loaded by host processes.
+See [AI-Mode configuration](../../ai-services/ai-mode/README.md).
+To use the tool-capable Qwen model for the demonstration:
 
 ```bash
 docker compose --env-file shared/configuration/.env.example config --quiet
-docker compose --env-file shared/configuration/.env.example up --build -d
+AI_MODE_DEFAULT_MODEL=qwen2.5:7b AI_MODE_ALLOWED_MODELS=qwen2.5:7b,llama3.1:8b docker compose --env-file shared/configuration/.env.example up --build -d
 ```
+
+Backends use `http://ai-mode:8006`; host RAG uses the loopback-published gateway
+at `http://127.0.0.1:8006`. RAG's hosting and retrieval workflow are unchanged.
 
 Compose publishes Student 4's public backend at `127.0.0.1:18008` and Student 1's
 at `127.0.0.1:18001` for host MCP; databases remain private. Other tool providers

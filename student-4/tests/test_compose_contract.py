@@ -67,13 +67,31 @@ def test_student_4_publishes_public_backend_for_host_mcp() -> None:
     assert frontend_port["protocol"] == "tcp"
 
 
-def test_shared_ai_services_are_host_processes() -> None:
+def test_ai_mode_is_containerised_and_connects_to_host_mcp() -> None:
     services = compose_services()
-    assert not {"ai-mode", "mcp-server", "rag-server", "agentic-loop"} & services.keys()
+    assert not {"mcp-server", "rag-server", "agentic-loop"} & services.keys()
+    ai_mode = services["ai-mode"]
+    assert ai_mode["environment"]["AI_MODE_MCP_URL"] == (
+        "http://host.docker.internal:8012/mcp"
+    )
+    assert ai_mode["environment"]["AI_MODE_OLLAMA_BASE_URL"] == (
+        "http://host.docker.internal:11434"
+    )
+    assert "host.docker.internal=host-gateway" in ai_mode["extra_hosts"]
+    assert ai_mode["ports"][0]["host_ip"] == "127.0.0.1"
+    for student, variable in (
+        (1, "STUDENT1_BACKEND_AI_MODE_BASE_URL"),
+        (2, "AI_MODE_URL"),
+        (3, "STUDENT3_BACKEND_AI_MODE_BASE_URL"),
+        (4, "AI_MODE_URL"),
+        (5, "STUDENT5_BACKEND_AI_MODE_BASE_URL"),
+    ):
+        backend = services[f"student-{student}-backend"]
+        assert backend["environment"][variable] == "http://ai-mode:8006"
     backend = services["student-4-backend"]
     assert "MCP_URL" not in backend["environment"]
     assert backend["environment"]["AI_ASSISTANT_ENABLED"] == "true"
-    assert "host.docker.internal=host-gateway" in backend["extra_hosts"]
+    assert backend["depends_on"]["ai-mode"]["condition"] == "service_started"
 
 
 def test_agentic_overlay_preserves_single_activity_backend_binding() -> None:
