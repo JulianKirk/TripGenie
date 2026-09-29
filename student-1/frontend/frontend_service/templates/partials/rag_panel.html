@@ -1,0 +1,107 @@
+{% import "macros/forms.html" as forms %}
+
+{# The form swaps only this section (outerHTML), so the trip page around it is
+   never re-rendered or nested. #}
+<section id="rag-panel" class="mode-panel mode-panel--ai" aria-labelledby="rag-heading">
+  <p class="section-eyebrow">AI mode · knowledge base</p>
+  <h3 id="rag-heading">Ask the TripGenie knowledge base</h3>
+  <p>
+    Ask a question about planning trips and itineraries. Answers come only from TripGenie's own documentation and always list their sources. If the documentation does not cover the question, TripGenie says so instead of guessing.
+  </p>
+
+  <form
+    class="form-grid"
+    action="{{ request.url_for('rag_query', trip_id=trip_id) }}"
+    method="post"
+    hx-post="{{ request.url_for('rag_query', trip_id=trip_id) }}"
+    hx-target="#rag-panel"
+    hx-swap="outerHTML"
+    hx-indicator="#rag-loading"
+    hx-disabled-elt="find button"
+    novalidate
+  >
+    {% set question_errors = rag_errors_by_field.get('question') %}
+    <div class="form-field form-field--full">
+      <label for="rag-question">Question</label>
+      <textarea
+        id="rag-question"
+        name="question"
+        rows="3"
+        maxlength="2000"
+        required
+        aria-describedby="rag-question-hint{% if question_errors %} question-errors{% endif %}"
+        {% if question_errors %}aria-invalid="true"{% endif %}
+      >{{ rag_question }}</textarea>
+      <p id="rag-question-hint" class="hint-copy">Up to 2,000 characters, for example “What limits apply to itinerary items?”</p>
+      {{ forms.field_errors('question', rag_errors_by_field) }}
+    </div>
+
+    <div class="form-field form-field--actions">
+      <button class="button button--secondary" type="submit">Ask the knowledge base</button>
+    </div>
+  </form>
+
+  <div id="rag-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
+    Searching the knowledge base — this can take up to a minute with a local model.
+  </div>
+
+  {% if rag_error %}
+    {{ forms.panel_error(rag_error, 'rag-result-heading') }}
+  {% elif rag_result and rag_result.insufficient_context %}
+    <section class="panel panel--nested" aria-labelledby="rag-result-heading">
+      <div class="badge-row">
+        <span class="badge badge--muted">Insufficient context</span>
+      </div>
+      <h4 id="rag-result-heading" data-autofocus>Not enough information to answer</h4>
+      <p role="status" aria-live="polite">
+        The knowledge base does not cover this question well enough, so no answer is shown. Try rephrasing it or asking about trips, itinerary items or TripGenie features.
+      </p>
+    </section>
+  {% elif rag_result %}
+    {% set confidence_labels = {
+      "high": ("High confidence", ""),
+      "medium": ("Medium confidence", "badge--warning"),
+      "low": ("Low confidence — check the sources", "badge--danger"),
+    } %}
+    {% set label, badge_class = confidence_labels[rag_result.confidence_category] %}
+    <section class="panel panel--nested" aria-labelledby="rag-result-heading">
+      <div class="badge-row">
+        <span class="badge {{ badge_class }}">{{ label }}</span>
+      </div>
+      <h4 id="rag-result-heading" data-autofocus>Answer</h4>
+      <p class="muted-copy" role="status" aria-live="polite">
+        Answer ready with {{ rag_result.citations|length }} source{% if rag_result.citations|length != 1 %}s{% endif %}.
+      </p>
+      <p class="rag-answer">{{ rag_result.answer }}</p>
+
+      <h5>Sources</h5>
+      <ol class="item-list">
+        {% for citation in rag_result.citations %}
+          <li class="item-card">
+            <div class="item-card__content">
+              <h5>{{ citation.title }}</h5>
+              <p class="item-card__meta">{{ citation.section }}</p>
+              <blockquote class="rag-excerpt">{{ citation.excerpt }}</blockquote>
+              <p class="muted-copy">Source: <code>{{ citation.path }}</code></p>
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+
+      <dl class="ai-result-meta">
+        <div>
+          <dt>Chunks used</dt>
+          <dd>{{ rag_result.retrieval.returned_chunks }} of {{ rag_result.retrieval.requested_top_k }}</dd>
+        </div>
+        <div>
+          <dt>Run ID</dt>
+          <dd>{{ rag_result.run_id }}</dd>
+        </div>
+        <div>
+          <dt>Correlation ID</dt>
+          <dd>{{ rag_result.correlation_id }}</dd>
+        </div>
+      </dl>
+    </section>
+  {% endif %}
+</section>

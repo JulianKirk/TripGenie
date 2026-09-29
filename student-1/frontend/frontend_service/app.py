@@ -28,6 +28,8 @@ from .models import (
     HealthResponse,
     ItineraryCategory,
     ItineraryItemRecord,
+    McpOptionsResponse,
+    RagQueryResponse,
     TripDay,
     TripDetail,
     TripRecord,
@@ -82,6 +84,7 @@ ITEM_FORM_DEFAULT_DATE_MESSAGE = (
 )
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ISO_TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
+MCP_SUMMARY_FIELDS = ("name", "destination", "start_date", "end_date")
 
 
 @dataclass(slots=True)
@@ -109,6 +112,78 @@ class AiSuggestionResultView:
     approval_required: bool
     persisted: bool
     suggestions: list[AiSuggestionReviewCard]
+
+
+def _option_line(row: object) -> str:
+    if not isinstance(row, dict):
+        return str(row)[:120]
+    transport = " ".join(str(row[k]) for k in ("provider", "type") if row.get(k))
+    parts = [
+        str(
+            row.get("name")
+            or transport
+            or row.get("id")
+            or row.get("budget_id")
+            or "Unnamed option"
+        ),
+    ]
+    if row.get("origin") or row.get("destination"):
+        parts.append(f"{row.get('origin') or '?'} to {row.get('destination') or '?'}")
+    if row.get("price_per_night") is not None:
+        parts.append(f"${row['price_per_night']}/night")
+    elif row.get("price") is not None:
+        basis = str(row.get("pricing_basis") or "").replace("_", " ").lower()
+        parts.append(f"${row['price']} {basis}".strip())
+    if row.get("total_budget") is not None:
+        parts.append(f"{row.get('currency') or ''} {row['total_budget']}".strip())
+    return " · ".join(parts)
+
+
+def summarise_mcp_data(data: dict[str, object] | None) -> list[str]:
+    """A few readable lines per tool result; never raises on odd shapes."""
+    if not data:
+        return ["No data returned."]
+    rows = data.get("items", data.get("budgets"))
+    if isinstance(rows, list):
+        lines = [_option_line(row) for row in rows] or ["No matching options found."]
+        if data.get("truncated") is True:
+            lines.append("More options are available than shown.")
+        return lines
+    if any(data.get(field) for field in MCP_SUMMARY_FIELDS):
+        line = " · ".join(str(data[f]) for f in MCP_SUMMARY_FIELDS if data.get(f))
+        if data.get("traveller_count") is not None:
+            line += f" · {data['traveller_count']} traveller(s)"
+        return [line]
+    return [f"Returned fields: {', '.join(sorted(str(key) for key in data)[:8])}"]
+
+
+TEMPLATES.env.globals["summarise_mcp_data"] = summarise_mcp_data
+
+
+def rag_panel_context(
+    question: str = "",
+    error: ApiError | None = None,
+    result: RagQueryResponse | None = None,
+) -> dict[str, object]:
+    return {
+        "rag_question": question,
+        "rag_error": error,
+        "rag_errors_by_field": error_details_by_field(error),
+        "rag_result": result,
+    }
+
+
+def mcp_panel_context(
+    country: str = "",
+    error: ApiError | None = None,
+    result: McpOptionsResponse | None = None,
+) -> dict[str, object]:
+    return {
+        "mcp_country": country,
+        "mcp_error": error,
+        "mcp_errors_by_field": error_details_by_field(error),
+        "mcp_result": result,
+    }
 
 
 def get_backend_client(request: Request) -> BackendApiClient:
@@ -828,6 +903,7 @@ def render_trip_detail_screen(
     ai_form: dict[str, str] | None = None,
     ai_error: ApiError | None = None,
     ai_result: AiSuggestionResultView | None = None,
+    panel_context: dict[str, object] | None = None,
 ) -> Response:
     display_days, filter_error, date_resolution = validate_filter_state(
         trip,
@@ -866,8 +942,52 @@ def render_trip_detail_screen(
         ai_error=ai_error,
         ai_errors_by_field=error_details_by_field(ai_error),
         ai_result=ai_result,
+        **{**rag_panel_context(), **mcp_panel_context(), **(panel_context or {})},
         # Browser-facing, so a row can link out to student 2's own page.
         accommodation_ui_url=request.app.state.settings.accommodation_ui_url,
+    )
+
+
+async def render_feature_panel(
+    request: Request,
+    client: BackendApiClient,
+    *,
+    trip_id: str,
+    template: str,
+    context: dict[str, object],
+    status_code: int,
+) -> Response:
+    """HTMX swaps just the panel; a no-JS post gets the whole trip page."""
+    if is_htmx_request(request):
+        return TEMPLATES.TemplateResponse(
+            request,
+            template,
+            {"trip_id": trip_id, **context},
+            status_code=status_code,
+        )
+
+    trips, trip_list_error = await safe_list_trips(client)
+    try:
+        trip = await client.get_trip(trip_id)
+    except ApiError as exc:
+        return render_error_screen(
+            request,
+            error=exc,
+            error_title="Trip unavailable",
+            page_title="Trip unavailable",
+            trips=trips,
+            selected_trip_id=trip_id,
+            trip_list_error=trip_list_error,
+            retry_url=path_for(request, "view_trip", trip_id=trip_id),
+            fallback_url=path_for(request, "dashboard"),
+        )
+    return render_trip_detail_screen(
+        request,
+        trip=trip,
+        trips=trips,
+        trip_list_error=trip_list_error,
+        status_code=status_code,
+        panel_context=context,
     )
 
 
@@ -1342,6 +1462,57 @@ def create_app(
                 date_value=selected_date,
                 category_value=category_value,
             ),
+        )
+
+    @app.post("/trips/{trip_id}/rag-query", name="rag_query")
+    async def rag_query(
+        trip_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        values = await read_form_values(request, ("question",))
+        try:
+            result = await client.rag_query(trip_id, values["question"])
+        except ApiError as exc:
+            context = rag_panel_context(values["question"], error=exc)
+            status_code = exc.status_code
+        else:
+            context = rag_panel_context(values["question"], result=result)
+            status_code = 200
+        return await render_feature_panel(
+            request,
+            client,
+            trip_id=trip_id,
+            template="partials/rag_panel.html",
+            context=context,
+            status_code=status_code,
+        )
+
+    @app.post("/trips/{trip_id}/mcp-options", name="mcp_options")
+    async def mcp_options(
+        trip_id: str,
+        request: Request,
+        client: BackendApiClient = Depends(get_backend_client),
+    ) -> Response:
+        values = await read_form_values(request, ("country",))
+        try:
+            result = await client.mcp_options(
+                trip_id,
+                normalise_optional_text(values["country"]),
+            )
+        except ApiError as exc:
+            context = mcp_panel_context(values["country"], error=exc)
+            status_code = exc.status_code
+        else:
+            context = mcp_panel_context(values["country"], result=result)
+            status_code = 200
+        return await render_feature_panel(
+            request,
+            client,
+            trip_id=trip_id,
+            template="partials/mcp_panel.html",
+            context=context,
+            status_code=status_code,
         )
 
     @app.get("/trips/{trip_id}/edit", name="edit_trip_form")
