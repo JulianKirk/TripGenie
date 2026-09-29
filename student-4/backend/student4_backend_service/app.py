@@ -19,8 +19,6 @@ from .dependencies import DbDep, LocationDep  # noqa: TC001 (FastAPI runtime)
 from .itinerary_client import ItineraryClient
 from .itinerary_routes import router as itinerary_router
 from .location_client import LocationClient
-from .recommendation_routes import router as recommendation_router
-from .recommendation_routes import trip_router
 from .schemas import HealthResponse
 
 if TYPE_CHECKING:
@@ -100,10 +98,8 @@ def create_app(
             resolve_activity=partial(get_activity, db=db, location=location),
         )
 
-    app.include_router(recommendation_router)
-    app.include_router(trip_router)
-    app.include_router(activity_router)
     app.include_router(itinerary_router)
+    app.include_router(activity_router)
     return app
 
 

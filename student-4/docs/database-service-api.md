@@ -276,7 +276,7 @@ records together, paginated. The public backend always sends
 
 | Field | Type | Description |
 |---|---|---|
-| `text` | string | Case-insensitive substring across name and description, with the single-word activity variants below. |
+| `text` | string | Case-insensitive substring across name and description. |
 | `location_details` | object | Exact `country_id`/`city_id` and optional case-insensitive street substring. |
 | `categories` | object | Unique seeded `codes` plus `ANY` or `ALL` matching. |
 | `price` | decimal range | Inclusive listed-price `min` and/or `max` strings. |
@@ -291,13 +291,6 @@ records together, paginated. The public backend always sends
 | `sort` | enum | `NAME_ASC`, `PRICE_ASC`, `PRICE_DESC`, `DURATION_ASC` or `DURATION_DESC`. |
 | `limit` | integer | Page size, 1-100; default 20. |
 | `offset` | integer | Rows to skip; default 0. |
-
-Only whole single-word text queries use these variants: `kayaks` and `kayaking`
-search for `kayak`; `walks` and `walking` search for `walk`. Matching remains
-case-insensitive across both text fields. Other words and multi-word phrases
-remain literal substrings, with `%`, `_`, and backslashes escaped. This bounded
-normalization adds no fuzzy matching or extra database queries; all other
-filters, counts, ordering, and pagination are applied normally.
 
 A `city_id` does not require `country_id` internally because a shared city UUID
 already identifies one city in one country. Category, suitability,

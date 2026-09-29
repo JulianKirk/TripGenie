@@ -5,6 +5,8 @@ trusted system prompt and final-answer schema to shared AI-Mode `/generate`.
 AI-Mode discovers the complete shared MCP catalogue and runs the model/tool loop.
 The model interprets requirements, selects tools and writes its answer. Student 4
 only validates the response, resolves grounded activity cards and displays the trace.
+The superseded plan/evaluate endpoints, their two prompt assets and their parser
+have been removed. `activity_assistant_v1.md` is the sole Student 4 AI prompt.
 
 All advertised tools are available, including other students' tools and activity
 create/update/delete. Prompts direct writes only when requested; there is no hard

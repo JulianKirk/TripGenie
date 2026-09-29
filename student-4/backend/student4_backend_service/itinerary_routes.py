@@ -14,9 +14,19 @@ from .schemas import (
     ItinerarySelection,
     ItinerarySelectionResponse,
     TripActivityWire,
+    TripDirectory,
 )
 
 router = APIRouter(prefix="/activity", tags=["itinerary"])
+
+
+@router.get("/trips", response_model=TripDirectory)
+async def trips(itinerary: ItineraryDep) -> TripDirectory:
+    try:
+        found = await itinerary.list_itineraries()
+    except HTTPException:
+        return TripDirectory(available=False, trips=[])
+    return TripDirectory(available=True, trips=found)
 
 
 @router.get(

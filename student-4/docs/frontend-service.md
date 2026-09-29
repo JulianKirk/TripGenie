@@ -68,8 +68,7 @@ These routes return pages or fragments, not a public JSON API.
 | `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
 | `GET /ready` | Readiness JSON; returns `503` until the backend is ready. |
-| `POST /suggestions/plan` | Translate a prompt and optional trip into advanced filters. |
-| `POST /suggestions/evaluate` | Run the planned search and evaluate authoritative matches. |
+| `POST /suggestions/ask` | Submit a question and optional trip to the shared MCP assistant. |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
 reached, matching the other frontend services.

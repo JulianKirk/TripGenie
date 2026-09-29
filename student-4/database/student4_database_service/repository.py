@@ -34,15 +34,6 @@ WEEKDAYS = (
     DayOfWeek.SUNDAY,
 )
 
-# Only whole single-word queries are normalized. Keep phrases, arbitrary words,
-# and SQL wildcard characters literal; this is not general-purpose stemming.
-ACTIVITY_TEXT_VARIANTS = {
-    "kayaks": "kayak",
-    "kayaking": "kayak",
-    "walks": "walk",
-    "walking": "walk",
-}
-
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -207,8 +198,7 @@ class ActivityRepository:
         self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
     ) -> Select[tuple[Activity]]:
         if query.text is not None:
-            term = query.text.casefold()
-            pattern = _substring_pattern(ACTIVITY_TEXT_VARIANTS.get(term, term))
+            pattern = _substring_pattern(query.text.casefold())
             statement = statement.where(
                 or_(
                     func.unicode_casefold(Activity.name).like(pattern, escape="\\"),

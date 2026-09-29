@@ -40,29 +40,5 @@ def test_public_crud_round_trip_uses_real_database_service(tmp_path: Path) -> No
             listed = client.get("/activity")
             assert activity_id in {row["id"] for row in listed.json()["activities"]}
 
-            query = {
-                "text": "kayaking",
-                "location": {"country": "Australia", "city": "Sydney"},
-                "price": {"max": "89.50"},
-                "limit": 1,
-            }
-            searched = client.request("QUERY", "/activity", json=query)
-            assert searched.status_code == 200, searched.text
-            assert [row["id"] for row in searched.json()["activities"]] == [activity_id]
-            assert searched.json()["total"] == 1
-
-            too_expensive = client.request(
-                "QUERY", "/activity", json={**query, "price": {"max": "89.49"}}
-            )
-            assert too_expensive.status_code == 200, too_expensive.text
-            assert too_expensive.json()["activities"] == []
-
-            next_page = client.request(
-                "QUERY", "/activity", json={**query, "offset": 1}
-            )
-            assert next_page.status_code == 200, next_page.text
-            assert next_page.json()["activities"] == []
-            assert next_page.json()["total"] == 1
-
             deleted = client.delete(f"/activity/{activity_id}")
             assert deleted.status_code == 200

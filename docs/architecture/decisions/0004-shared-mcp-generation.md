@@ -26,7 +26,8 @@ Student 4 supplies its system prompt and response schema and resolves grounded
 activity references for display. It no longer parses natural-language constraints,
 rewrites model arguments, filters recommendations, forces detail reads or replaces
 model answers. Quality improvements belong in prompts and MCP descriptions.
-The older, separate legacy recommendation endpoints remain unchanged.
+The superseded plan/evaluate endpoints, prompts and deterministic filter parser
+are removed. The trip-context directory remains available for the assistant picker.
 
 All advertised tools are available: the previous read-only/selected-trip execution
 allowlist is deliberately removed. Trusted instructions direct writes only for

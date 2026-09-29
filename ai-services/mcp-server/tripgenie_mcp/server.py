@@ -37,8 +37,9 @@ CATALOGUE = {
     "student-4": {
         "activities_search": (
             "Search activities by structured filters. Optional text matches literal "
-            "words in names/descriptions (single-word kayaking/kayaks and "
-            "walking/walks also match kayak/walk); omit it for location, price, "
+            "substrings in names/descriptions, without stemming or synonyms. "
+            "Choose a short catalogue term, such as kayak for kayaking or walk for "
+            "walking; omit text for location, price, "
             "accessibility and category-only searches. Put structured fields inside "
             'filters, for example {"text":"kayak","limit":6,'
             '"filters":{"location":{"country":"Australia","city":"Sydney"}}}. '

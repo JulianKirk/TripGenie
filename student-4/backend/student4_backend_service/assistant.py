@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
+from importlib import resources
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -11,7 +13,6 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from .ai_mode_client import GenerationError
-from .ai_recommendations import _prompt_asset
 from .assistant_models import ActivityPart, AssistantResponse, FinalAction
 
 if TYPE_CHECKING:
@@ -44,6 +45,21 @@ def _activity_ids(trace: ToolTrace) -> set[str]:
         for row in rows
         if isinstance(row, dict) and "id" in row
     }
+
+
+PROMPT_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\.md$")
+PROMPT_PACKAGE = "student4_backend_service"
+
+
+def _prompt_asset(name: str) -> str:
+    if PROMPT_ASSET_PATTERN.fullmatch(name) is None:
+        message = "AI prompt assets must name a markdown file."
+        raise ValueError(message)
+    return (
+        resources.files(PROMPT_PACKAGE)
+        .joinpath("prompts", name)
+        .read_text(encoding="utf-8")
+    )
 
 
 async def answer(

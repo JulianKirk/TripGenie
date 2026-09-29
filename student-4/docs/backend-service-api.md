@@ -53,12 +53,8 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
-| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, only recommendations are unavailable. |
+| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
 | `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
-| `AI_PROMPT_MAX_CHARS` | `12000` | Maximum rendered planning or evaluation prompt size, aligned with AI Mode. |
-| `AI_MAX_CANDIDATES` | `20` | Maximum authoritative activity records evaluated by AI. |
-| `AI_PLAN_PROMPT_ASSET` | `activity_search_plan_v1.md` | Packaged search-planning prompt. |
-| `AI_EVALUATION_PROMPT_ASSET` | `activity_recommendations_v1.md` | Packaged grounded-evaluation prompt. |
 
 ### Publicly writable data
 
@@ -139,64 +135,15 @@ and CRUD workflows remain available independently.
 MCP URL and tool limits are configured on shared AI-Mode, not Student 4.
 See [setup and demonstration](mcp-assistant.md). No persistence schema changes.
 
-## Legacy AI-assisted activity search
+## Trip context directory
 
-The following plan/evaluate endpoints remain compatible but are no longer
-called by the primary frontend AI panel. They do not demonstrate MCP execution.
+`GET /activity/trips` supplies the optional assistant trip picker. It returns
+`available` and `trips`; if the itinerary service is unavailable, it returns
+`available: false` with an empty list. The assistant passes a selected trip ID to
+shared generation, which obtains any needed trip details through MCP.
 
-AI suggestions are advisory and use two explicit stages. Planning turns a
-traveller's question and optional trip into the same structured `ActivityQuery`
-accepted by `QUERY /activity`. Evaluation executes that query, loads the real
-matching activity details, and lets AI shortlist only supplied identifiers.
-Neither route writes catalogue or itinerary data.
-
-`GET /activity/trips` returns `{"available": true, "trips": [...]}` for the
-optional context picker. If Student 1 is unavailable it returns
-`{"available": false, "trips": []}` so ordinary catalogue use continues.
-
-### POST /activity/recommendations/plan
-
-```json
-{
-  "question": "Something outdoors and relaxed for our first morning",
-  "trip_id": "trip_2026_sydney_long_weekend"
-}
-```
-
-The response includes the validated `query`, a readable `summary`, and whether
-trip context was loaded. A selected trip's resolvable destination and traveller
-count are applied after model output. Paging is fixed to the first 20 active
-activities.
-
-The planning prompt documents every supported filter and requires all explicit
-constraints to be represented structurally. Before validation, the backend also
-reconciles unambiguous category, price, duration, party, age, accessibility and
-booking phrases from the original question. This prevents a small model from
-silently omitting or contradicting a constraint such as “outdoor”, “under $100”
-or “no more than three hours”.
-
-### POST /activity/recommendations/evaluate
-
-```json
-{
-  "question": "Something outdoors and relaxed for our first morning",
-  "trip_id": "trip_2026_sydney_long_weekend",
-  "query": {"categories": {"codes": ["OUTDOOR"], "match": "ANY"}},
-  "summary": "outdoor activities in Sydney",
-  "attempt": 1
-}
-```
-
-A `complete` response includes `matched_count`, `evaluated_count`, one to three
-grounded recommendations, the query used, and model provenance. When no result
-is suitable, attempt one may return `retry` with one materially changed query
-and `revision_explanation`. Attempt two returns `no_match` instead of looping.
-Activities already present in the selected trip are excluded.
-
-The response distinguishes catalogue matches from the smaller AI shortlist.
-Unknown model-generated activity identifiers are rejected with `502`; duplicate
-identifiers are collapsed. The traveller still uses the normal itinerary
-endpoint to add a recommendation.
+The former `/activity/recommendations/plan` and `/activity/recommendations/evaluate`
+endpoints and their prompts have been removed. Use `/activity/assistant`.
 
 ## Response representations
 
@@ -553,7 +500,7 @@ All fields are optional. An empty body has the same filtering semantics as
 
 | Field | Type | Description |
 |---|---|---|
-| `text` | string | Case-insensitive substring across name and description, with the single-word activity variants below. |
+| `text` | string | Case-insensitive substring across name and description. |
 | `location` | object | Country/city names and optional street substring. |
 | `categories` | object | Category codes and `ANY`/`ALL` matching. |
 | `price` | decimal range | Inclusive listed-price `min` and/or `max` in canonical AUD decimal strings. |
@@ -570,14 +517,6 @@ All fields are optional. An empty body has the same filtering semantics as
 | `offset` | integer | Rows to skip; default 0. |
 
 Unknown fields are rejected rather than silently ignored.
-
-Text queries consisting only of `kayaks` or `kayaking` use the substring
-`kayak`; `walks` or `walking` use `walk`. These conservative English variants
-apply equally to ordinary API searches and MCP activity searches. All other
-text, including multi-word name phrases, keeps literal substring semantics;
-`%`, `_`, and backslashes are not wildcard syntax. This is not fuzzy or synonym
-search. Location, price, other filters, total counts, and pagination still
-apply to the matched catalogue rows.
 
 ### Location filter
 

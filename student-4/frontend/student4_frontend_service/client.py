@@ -16,8 +16,6 @@ from .models import (
     DeleteResult,
     ItineraryPicker,
     ItinerarySelectionWrite,
-    RecommendationEvaluation,
-    RecommendationPlan,
     TripDirectory,
 )
 
@@ -159,28 +157,6 @@ class BackendClient:
             "POST",
             "/activity/assistant",
             AssistantResponse,
-            {200},
-            json=body,
-            request_timeout=self._settings.ai_timeout,
-        )
-
-    async def plan_recommendations(self, body: dict[str, object]) -> RecommendationPlan:
-        return await self._request(
-            "POST",
-            "/activity/recommendations/plan",
-            RecommendationPlan,
-            {200},
-            json=body,
-            request_timeout=self._settings.ai_timeout,
-        )
-
-    async def evaluate_recommendations(
-        self, body: dict[str, object]
-    ) -> RecommendationEvaluation:
-        return await self._request(
-            "POST",
-            "/activity/recommendations/evaluate",
-            RecommendationEvaluation,
             {200},
             json=body,
             request_timeout=self._settings.ai_timeout,

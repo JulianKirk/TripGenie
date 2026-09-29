@@ -69,8 +69,6 @@ which previously occupied port 8084.
 | `GET /health` | Frontend and backend status. |
 | `GET /ready` | Readiness status; returns `503` until the backend is ready. |
 | `POST /suggestions/ask` | Run the one-shot MCP activity assistant and render its execution trace. |
-| `POST /suggestions/plan` | Plan an advanced search from a prompt and optional trip. |
-| `POST /suggestions/evaluate` | Evaluate real matches and render a shortlist or one retry. |
 
 Backend validation remains authoritative. Browser forms are translated into
 allow-listed structured payloads; no arbitrary browser JSON is forwarded.
@@ -87,5 +85,5 @@ docker build -f student-4/frontend/Dockerfile \
   -t student-4-frontend student-4
 ```
 
-The primary AI panel uses `/suggestions/ask`; plan/evaluate routes are legacy
-compatibility endpoints. See [MCP assistant setup](../docs/mcp-assistant.md).
+The AI panel uses `/suggestions/ask`. The old plan/evaluate flow has been removed.
+See [MCP assistant setup](../docs/mcp-assistant.md).
