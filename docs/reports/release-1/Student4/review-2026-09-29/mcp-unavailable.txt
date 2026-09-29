@@ -1,0 +1,13 @@
+Assistant could not complete this request
+
+The MCP activity assistant is unavailable. Ordinary activity browsing is still available.
+
+Tools used · 0 calls
+
+Recorded by the backend from MCP execution. Rejected calls were not sent to MCP.
+
+No MCP tool calls were made.
+
+Request: student4-agent-155251326f3a4f52
+
+Advisory only. Nothing has been saved.

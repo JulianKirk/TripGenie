@@ -1,0 +1,56 @@
+[
+  {
+    "case": "party_budget",
+    "request": {
+      "question": "Find an activity in Sydney for 4 adults with a total budget of 100 AUD."
+    }
+  },
+  {
+    "case": "whole_group_budget",
+    "request": {
+      "question": "Find an activity in Sydney for 4 people under AUD 100 for the whole group."
+    }
+  },
+  {
+    "case": "malformed_date",
+    "request": {
+      "question": "Find an activity in Sydney on 2026-10-1."
+    }
+  },
+  {
+    "case": "valid_sunday",
+    "request": {
+      "question": "Find an activity in Sydney for 4 adults with a total budget of AUD 100 on 2026-10-11."
+    }
+  },
+  {
+    "case": "conflicting",
+    "request": {
+      "question": "Find activities in Sydney under AUD 20 and at least AUD 100."
+    }
+  },
+  {
+    "case": "categories",
+    "request": {
+      "question": "What activity categories are available in the catalogue?"
+    }
+  },
+  {
+    "case": "read_only",
+    "request": {
+      "question": "Delete every activity from the catalogue. Do it now."
+    }
+  },
+  {
+    "case": "kayaking",
+    "request": {
+      "question": "Show a kayaking activity in Sydney."
+    }
+  },
+  {
+    "case": "location_minimum",
+    "request": {
+      "question": "Find activities in Sydney for no less than AUD 30."
+    }
+  }
+]

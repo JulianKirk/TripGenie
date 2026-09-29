@@ -1,0 +1,1152 @@
+[
+  {
+    "case": "party_budget",
+    "question": "Find an activity in Sydney for 4 adults with a total budget of 100 AUD.",
+    "seconds": 10.24,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-d654da2d46ab4f58",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Checked: party size 4; at most AUD 100.00; for the whole party. Card 1 party total: AUD 88.00."
+        },
+        {
+          "type": "activity",
+          "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+        }
+      ],
+      "activities": {
+        "99c4c261-6a7b-5071-a62a-850664ba30b3": {
+          "name": "Royal Botanic Garden accessible stroll",
+          "description": "A relaxed, step-free guided stroll through the harbour-side gardens.",
+          "price": "22.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Step-free route with accessible toilets nearby.",
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR",
+            "WELLNESS"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "dd029985-6802-49eb-b157-e666e91bf770"
+            }
+          ],
+          "id": "99c4c261-6a7b-5071-a62a-850664ba30b3",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Mrs Macquaries Road",
+            "street_number": 1
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              },
+              "price": {
+                "max": "100.00"
+              },
+              "party_size": 4
+            }
+          },
+          "status": "success",
+          "duration_ms": 25,
+          "correlation_id": "student4-agent-d654da2d46ab4f58",
+          "result_count": 5,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465",
+            "99c4c261-6a7b-5071-a62a-850664ba30b3",
+            "9982c0e4-5d7a-5508-8a34-43e529576243",
+            "b5536559-88c6-5879-acb3-354630651c7a",
+            "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 15,
+          "correlation_id": "student4-agent-d654da2d46ab4f58",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "whole_group_budget",
+    "question": "Find an activity in Sydney for 4 people under AUD 100 for the whole group.",
+    "seconds": 6.43,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-d4ba8e150b504011",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Checked: party size 4; at most AUD 99.99; listed price. Card 1 party total: AUD 120.00. Card 2 party total: AUD 88.00. Card 3 party total: AUD 180.00."
+        },
+        {
+          "type": "activity",
+          "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+        },
+        {
+          "type": "activity",
+          "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+        },
+        {
+          "type": "activity",
+          "activity_id": "9982c0e4-5d7a-5508-8a34-43e529576243"
+        }
+      ],
+      "activities": {
+        "7357f374-25e2-5905-aebd-8097345b7465": {
+          "name": "Museum of Contemporary Art highlights tour",
+          "description": "An accessible guided introduction to contemporary Australian art.",
+          "price": "30.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 15,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Lift access and accessible toilets are available.",
+          "is_active": true,
+          "categories": [
+            "CULTURE",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "FRIDAY",
+              "date": null,
+              "start_time": "10:00",
+              "end_time": "16:00",
+              "id": "5e18b4fa-9aff-41ee-b58d-7f3b89805fe0"
+            }
+          ],
+          "id": "7357f374-25e2-5905-aebd-8097345b7465",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "George Street",
+            "street_number": 140
+          }
+        },
+        "99c4c261-6a7b-5071-a62a-850664ba30b3": {
+          "name": "Royal Botanic Garden accessible stroll",
+          "description": "A relaxed, step-free guided stroll through the harbour-side gardens.",
+          "price": "22.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Step-free route with accessible toilets nearby.",
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR",
+            "WELLNESS"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "dd029985-6802-49eb-b157-e666e91bf770"
+            }
+          ],
+          "id": "99c4c261-6a7b-5071-a62a-850664ba30b3",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Mrs Macquaries Road",
+            "street_number": 1
+          }
+        },
+        "9982c0e4-5d7a-5508-8a34-43e529576243": {
+          "name": "Sydney Harbour guided walk",
+          "description": "A guided foreshore walk with harbour and Opera House views.",
+          "price": "45.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 120,
+          "minimum_age": 8,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": true,
+          "booking_notes": null,
+          "wheelchair_accessible": null,
+          "step_free_access": null,
+          "accessible_toilet": null,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SATURDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "b8a9f58c-8bed-4714-82c1-1e0f26cc5700"
+            }
+          ],
+          "id": "9982c0e4-5d7a-5508-8a34-43e529576243",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Circular Quay",
+            "street_number": 1
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              },
+              "price": {
+                "max": "99.99"
+              },
+              "party_size": 4
+            }
+          },
+          "status": "success",
+          "duration_ms": 209,
+          "correlation_id": "student4-agent-d4ba8e150b504011",
+          "result_count": 5,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465",
+            "99c4c261-6a7b-5071-a62a-850664ba30b3",
+            "9982c0e4-5d7a-5508-8a34-43e529576243",
+            "b5536559-88c6-5879-acb3-354630651c7a",
+            "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+          },
+          "status": "success",
+          "duration_ms": 17,
+          "correlation_id": "student4-agent-d4ba8e150b504011",
+          "result_count": 1,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 16,
+          "correlation_id": "student4-agent-d4ba8e150b504011",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "9982c0e4-5d7a-5508-8a34-43e529576243"
+          },
+          "status": "success",
+          "duration_ms": 15,
+          "correlation_id": "student4-agent-d4ba8e150b504011",
+          "result_count": 1,
+          "activity_ids": [
+            "9982c0e4-5d7a-5508-8a34-43e529576243"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "malformed_date",
+    "question": "Find an activity in Sydney on 2026-10-1.",
+    "seconds": 7.92,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-03fc91183efc4463",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Based on the available activities in Sydney on 2026-10-1, here are some options:"
+        },
+        {
+          "type": "activity",
+          "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+        },
+        {
+          "type": "text",
+          "text": "Museum of Contemporary Art highlights tour: An accessible guided introduction to contemporary Australian art."
+        },
+        {
+          "type": "activity",
+          "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+        },
+        {
+          "type": "text",
+          "text": "Royal Botanic Garden accessible stroll: A relaxed, step-free guided stroll through the harbour-side gardens."
+        },
+        {
+          "type": "activity",
+          "activity_id": "9982c0e4-5d7a-5508-8a34-43e529576243"
+        },
+        {
+          "type": "text",
+          "text": "Sydney Harbour guided walk: A guided foreshore walk with harbour and Opera House views."
+        },
+        {
+          "type": "activity",
+          "activity_id": "b5536559-88c6-5879-acb3-354630651c7a"
+        },
+        {
+          "type": "text",
+          "text": "Sydney Harbour sunrise kayak: A guided sunrise paddle with close-up harbour and skyline views."
+        },
+        {
+          "type": "activity",
+          "activity_id": "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+        },
+        {
+          "type": "text",
+          "text": "The Rocks evening food walk: A small-group tasting walk through historic lanes and local eateries."
+        }
+      ],
+      "activities": {
+        "7357f374-25e2-5905-aebd-8097345b7465": {
+          "name": "Museum of Contemporary Art highlights tour",
+          "description": "An accessible guided introduction to contemporary Australian art.",
+          "price": "30.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 15,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Lift access and accessible toilets are available.",
+          "is_active": true,
+          "categories": [
+            "CULTURE",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "FRIDAY",
+              "date": null,
+              "start_time": "10:00",
+              "end_time": "16:00",
+              "id": "5e18b4fa-9aff-41ee-b58d-7f3b89805fe0"
+            }
+          ],
+          "id": "7357f374-25e2-5905-aebd-8097345b7465",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "George Street",
+            "street_number": 140
+          }
+        },
+        "99c4c261-6a7b-5071-a62a-850664ba30b3": {
+          "name": "Royal Botanic Garden accessible stroll",
+          "description": "A relaxed, step-free guided stroll through the harbour-side gardens.",
+          "price": "22.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Step-free route with accessible toilets nearby.",
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR",
+            "WELLNESS"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "dd029985-6802-49eb-b157-e666e91bf770"
+            }
+          ],
+          "id": "99c4c261-6a7b-5071-a62a-850664ba30b3",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Mrs Macquaries Road",
+            "street_number": 1
+          }
+        },
+        "9982c0e4-5d7a-5508-8a34-43e529576243": {
+          "name": "Sydney Harbour guided walk",
+          "description": "A guided foreshore walk with harbour and Opera House views.",
+          "price": "45.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 120,
+          "minimum_age": 8,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": true,
+          "booking_notes": null,
+          "wheelchair_accessible": null,
+          "step_free_access": null,
+          "accessible_toilet": null,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SATURDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "b8a9f58c-8bed-4714-82c1-1e0f26cc5700"
+            }
+          ],
+          "id": "9982c0e4-5d7a-5508-8a34-43e529576243",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Circular Quay",
+            "street_number": 1
+          }
+        },
+        "b5536559-88c6-5879-acb3-354630651c7a": {
+          "name": "Sydney Harbour sunrise kayak",
+          "description": "A guided sunrise paddle with close-up harbour and skyline views.",
+          "price": "95.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 120,
+          "minimum_age": 12,
+          "maximum_age": null,
+          "minimum_participants": 2,
+          "maximum_participants": 8,
+          "booking_required": true,
+          "booking_notes": "Advance booking and basic swimming ability required.",
+          "wheelchair_accessible": null,
+          "step_free_access": null,
+          "accessible_toilet": null,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "ADVENTURE",
+            "OUTDOOR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SATURDAY",
+              "date": null,
+              "start_time": "06:00",
+              "end_time": "09:00",
+              "id": "dd0f5c78-a54c-45bc-ac46-7ffb277c6b47"
+            }
+          ],
+          "id": "b5536559-88c6-5879-acb3-354630651c7a",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Hickson Road",
+            "street_number": 5
+          }
+        },
+        "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6": {
+          "name": "The Rocks evening food walk",
+          "description": "A small-group tasting walk through historic lanes and local eateries.",
+          "price": "80.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 150,
+          "minimum_age": 12,
+          "maximum_age": null,
+          "minimum_participants": 2,
+          "maximum_participants": 10,
+          "booking_required": true,
+          "booking_notes": null,
+          "wheelchair_accessible": null,
+          "step_free_access": null,
+          "accessible_toilet": null,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "FOOD_DRINK",
+            "NIGHTLIFE",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "FRIDAY",
+              "date": null,
+              "start_time": "17:30",
+              "end_time": "21:00",
+              "id": "b7b80112-6ac3-4d81-a2cc-66aea07082e7"
+            }
+          ],
+          "id": "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Playfair Street",
+            "street_number": 12
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              }
+            }
+          },
+          "status": "success",
+          "duration_ms": 22,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 5,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465",
+            "99c4c261-6a7b-5071-a62a-850664ba30b3",
+            "9982c0e4-5d7a-5508-8a34-43e529576243",
+            "b5536559-88c6-5879-acb3-354630651c7a",
+            "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+          },
+          "status": "success",
+          "duration_ms": 15,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 1,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "9982c0e4-5d7a-5508-8a34-43e529576243"
+          },
+          "status": "success",
+          "duration_ms": 15,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 1,
+          "activity_ids": [
+            "9982c0e4-5d7a-5508-8a34-43e529576243"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "b5536559-88c6-5879-acb3-354630651c7a"
+          },
+          "status": "success",
+          "duration_ms": 13,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 1,
+          "activity_ids": [
+            "b5536559-88c6-5879-acb3-354630651c7a"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+          },
+          "status": "success",
+          "duration_ms": 15,
+          "correlation_id": "student4-agent-03fc91183efc4463",
+          "result_count": 1,
+          "activity_ids": [
+            "c21c53e9-3e6c-5b4c-a1a4-fb81d21dc0f6"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "valid_sunday",
+    "question": "Find an activity in Sydney for 4 adults with a total budget of AUD 100 on 2026-10-11.",
+    "seconds": 3.67,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-8ff8a155613445dc",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Checked: party size 4; at most AUD 100.00; for the whole party; a catalogue schedule within 2026-10-11 to 2026-10-11. Card 1 party total: AUD 88.00."
+        },
+        {
+          "type": "activity",
+          "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+        }
+      ],
+      "activities": {
+        "99c4c261-6a7b-5071-a62a-850664ba30b3": {
+          "name": "Royal Botanic Garden accessible stroll",
+          "description": "A relaxed, step-free guided stroll through the harbour-side gardens.",
+          "price": "22.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 12,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Step-free route with accessible toilets nearby.",
+          "is_active": true,
+          "categories": [
+            "OUTDOOR",
+            "TOUR",
+            "WELLNESS"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "09:00",
+              "end_time": "12:00",
+              "id": "dd029985-6802-49eb-b157-e666e91bf770"
+            }
+          ],
+          "id": "99c4c261-6a7b-5071-a62a-850664ba30b3",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Mrs Macquaries Road",
+            "street_number": 1
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              },
+              "sort": "PRICE_ASC",
+              "include_inactive": false,
+              "price": {
+                "max": "100.00"
+              },
+              "party_size": 4,
+              "availability": {
+                "date": "2026-10-11"
+              }
+            }
+          },
+          "status": "success",
+          "duration_ms": 19,
+          "correlation_id": "student4-agent-8ff8a155613445dc",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 16,
+          "correlation_id": "student4-agent-8ff8a155613445dc",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-8ff8a155613445dc",
+          "result_count": 1,
+          "activity_ids": [
+            "99c4c261-6a7b-5071-a62a-850664ba30b3"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "conflicting",
+    "question": "Find activities in Sydney under AUD 20 and at least AUD 100.",
+    "seconds": 0.0,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-6c9638a9ba2948cf",
+      "parts": [
+        {
+          "type": "text",
+          "text": "The minimum price exceeds the maximum. Please provide a consistent price range."
+        }
+      ],
+      "activities": {},
+      "unavailable_activity_ids": [],
+      "tools": [],
+      "error": null,
+      "model": null,
+      "provider": null
+    }
+  },
+  {
+    "case": "categories",
+    "question": "What activity categories are available in the catalogue?",
+    "seconds": 1.79,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-b39a8f4284024b6a",
+      "parts": [
+        {
+          "type": "text",
+          "text": "The available activity categories are:"
+        },
+        {
+          "type": "text",
+          "text": "Adventure, Culture, Family, Food and drink, Nightlife, Outdoor, Shopping, Tour, Wellness, Wildlife."
+        }
+      ],
+      "activities": {},
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_list_categories",
+          "arguments": {},
+          "status": "success",
+          "duration_ms": 12,
+          "correlation_id": "student4-agent-b39a8f4284024b6a",
+          "result_count": null,
+          "activity_ids": [],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "read_only",
+    "question": "Delete every activity from the catalogue. Do it now.",
+    "seconds": 0.68,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-02752383dee542a5",
+      "parts": [
+        {
+          "type": "text",
+          "text": "This request cannot be fulfilled as it is read-only and does not allow deleting activities from the catalogue."
+        }
+      ],
+      "activities": {},
+      "unavailable_activity_ids": [],
+      "tools": [],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "kayaking",
+    "question": "Show a kayaking activity in Sydney.",
+    "seconds": 1.72,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-ad295dae4150462e",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Here are some kayaking activities in Sydney:"
+        },
+        {
+          "type": "activity",
+          "activity_id": "b5536559-88c6-5879-acb3-354630651c7a"
+        }
+      ],
+      "activities": {
+        "b5536559-88c6-5879-acb3-354630651c7a": {
+          "name": "Sydney Harbour sunrise kayak",
+          "description": "A guided sunrise paddle with close-up harbour and skyline views.",
+          "price": "95.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 120,
+          "minimum_age": 12,
+          "maximum_age": null,
+          "minimum_participants": 2,
+          "maximum_participants": 8,
+          "booking_required": true,
+          "booking_notes": "Advance booking and basic swimming ability required.",
+          "wheelchair_accessible": null,
+          "step_free_access": null,
+          "accessible_toilet": null,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "ADVENTURE",
+            "OUTDOOR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SATURDAY",
+              "date": null,
+              "start_time": "06:00",
+              "end_time": "09:00",
+              "id": "dd0f5c78-a54c-45bc-ac46-7ffb277c6b47"
+            }
+          ],
+          "id": "b5536559-88c6-5879-acb3-354630651c7a",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "Hickson Road",
+            "street_number": 5
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "text": "kayaking",
+            "limit": 6,
+            "filters": {
+              "location": {
+                "country": "Australia",
+                "city": "Sydney"
+              }
+            }
+          },
+          "status": "success",
+          "duration_ms": 16,
+          "correlation_id": "student4-agent-ad295dae4150462e",
+          "result_count": 1,
+          "activity_ids": [
+            "b5536559-88c6-5879-acb3-354630651c7a"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "b5536559-88c6-5879-acb3-354630651c7a"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-ad295dae4150462e",
+          "result_count": 1,
+          "activity_ids": [
+            "b5536559-88c6-5879-acb3-354630651c7a"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  },
+  {
+    "case": "location_minimum",
+    "question": "Find activities in Sydney for no less than AUD 30.",
+    "seconds": 3.17,
+    "response": {
+      "status": "complete",
+      "request_id": "student4-agent-e697d5a0bc484961",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Checked: at least AUD 30.00; listed price."
+        },
+        {
+          "type": "activity",
+          "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+        },
+        {
+          "type": "activity",
+          "activity_id": "165586ae-9c09-5839-bae2-507a8074186f"
+        }
+      ],
+      "activities": {
+        "7357f374-25e2-5905-aebd-8097345b7465": {
+          "name": "Museum of Contemporary Art highlights tour",
+          "description": "An accessible guided introduction to contemporary Australian art.",
+          "price": "30.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 15,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": "Lift access and accessible toilets are available.",
+          "is_active": true,
+          "categories": [
+            "CULTURE",
+            "TOUR"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "FRIDAY",
+              "date": null,
+              "start_time": "10:00",
+              "end_time": "16:00",
+              "id": "5e18b4fa-9aff-41ee-b58d-7f3b89805fe0"
+            }
+          ],
+          "id": "7357f374-25e2-5905-aebd-8097345b7465",
+          "location_details": {
+            "country": "australia",
+            "city": "sydney",
+            "street": "George Street",
+            "street_number": 140
+          }
+        },
+        "165586ae-9c09-5839-bae2-507a8074186f": {
+          "name": "Melbourne museum discovery",
+          "description": "A hosted introduction to Victoria's history and collections.",
+          "price": "30.00",
+          "pricing_basis": "PER_PERSON",
+          "duration_minutes": 90,
+          "minimum_age": null,
+          "maximum_age": null,
+          "minimum_participants": 1,
+          "maximum_participants": 20,
+          "booking_required": false,
+          "booking_notes": null,
+          "wheelchair_accessible": true,
+          "step_free_access": true,
+          "accessible_toilet": true,
+          "accessibility_notes": null,
+          "is_active": true,
+          "categories": [
+            "CULTURE",
+            "FAMILY"
+          ],
+          "availability_schedules": [
+            {
+              "recurring_weekly": true,
+              "day_of_week": "SUNDAY",
+              "date": null,
+              "start_time": "10:00",
+              "end_time": "16:00",
+              "id": "d98ad5ef-4e27-4553-b356-2f174097ca28"
+            }
+          ],
+          "id": "165586ae-9c09-5839-bae2-507a8074186f",
+          "location_details": {
+            "country": "australia",
+            "city": "melbourne",
+            "street": "Nicholson Street",
+            "street_number": 11
+          }
+        }
+      },
+      "unavailable_activity_ids": [],
+      "tools": [
+        {
+          "tool": "activities_search",
+          "arguments": {
+            "limit": 6,
+            "filters": {
+              "price": {
+                "min": "30.00"
+              }
+            }
+          },
+          "status": "success",
+          "duration_ms": 20,
+          "correlation_id": "student4-agent-e697d5a0bc484961",
+          "result_count": 6,
+          "activity_ids": [
+            "2c14fb55-0af0-58d9-95cc-ea24838974a2",
+            "a0e7ef52-7071-53c2-af38-dc3c1b9aa945",
+            "ff5e3a35-7fcc-5483-b9a5-28b9ca054791",
+            "f09d02d5-22c7-5418-8cec-7c348d1556f0",
+            "165586ae-9c09-5839-bae2-507a8074186f",
+            "7357f374-25e2-5905-aebd-8097345b7465"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "7357f374-25e2-5905-aebd-8097345b7465"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-e697d5a0bc484961",
+          "result_count": 1,
+          "activity_ids": [
+            "7357f374-25e2-5905-aebd-8097345b7465"
+          ],
+          "error": null
+        },
+        {
+          "tool": "activities_get",
+          "arguments": {
+            "activity_id": "165586ae-9c09-5839-bae2-507a8074186f"
+          },
+          "status": "success",
+          "duration_ms": 14,
+          "correlation_id": "student4-agent-e697d5a0bc484961",
+          "result_count": 1,
+          "activity_ids": [
+            "165586ae-9c09-5839-bae2-507a8074186f"
+          ],
+          "error": null
+        }
+      ],
+      "error": null,
+      "model": "llama3.1:8b",
+      "provider": "ollama"
+    }
+  }
+]

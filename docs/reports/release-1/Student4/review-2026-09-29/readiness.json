@@ -1,0 +1,65 @@
+{
+  "frontend": {
+    "status": "ready",
+    "service": "student-4-frontend",
+    "backend": "ok"
+  },
+  "backend": {
+    "status": "ready",
+    "service": "student-4-backend",
+    "database": "ok",
+    "location": "not_checked"
+  },
+  "ai_mode": {
+    "data": {
+      "status": "ok",
+      "service": "ai-mode",
+      "dependencies": {
+        "ollama": {
+          "status": "ok",
+          "service": "ollama",
+          "detail": "Ollama responded successfully and the configured models are available.",
+          "code": null
+        }
+      }
+    }
+  },
+  "after_mcp_restart": {
+    "status": "complete",
+    "request_id": "student4-agent-8d3ead10df9e4221",
+    "parts": [
+      {
+        "type": "text",
+        "text": "The available activity categories are:"
+      },
+      {
+        "type": "text",
+        "text": "Adventure, Culture, Family, Food and drink, Nightlife, Outdoor, Shopping, Tour, Wellness, Wildlife."
+      }
+    ],
+    "activities": {},
+    "unavailable_activity_ids": [],
+    "tools": [
+      {
+        "tool": "activities_list_categories",
+        "arguments": {},
+        "status": "success",
+        "duration_ms": 14,
+        "correlation_id": "student4-agent-8d3ead10df9e4221",
+        "result_count": null,
+        "activity_ids": [],
+        "error": null
+      }
+    ],
+    "error": null,
+    "model": "llama3.1:8b",
+    "provider": "ollama"
+  },
+  "host_units": [
+    "active",
+    "active"
+  ],
+  "catalogue_unchanged": true,
+  "catalogue_count": 14,
+  "temporary_trip_deleted": "trip_review_20260929"
+}
