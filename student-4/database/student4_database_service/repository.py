@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import Numeric, String, and_, cast, func, or_, select
 from sqlalchemy.orm import selectinload
@@ -39,6 +39,10 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Select
     from sqlalchemy.orm import Session
+
+
+# Preserve the statement type across SQLAlchemy 2.0 and 2.1 row typing.
+_Statement = TypeVar("_Statement", bound="Select[Any]")
 
 
 def _commit(session: Session) -> None:
@@ -187,16 +191,16 @@ class ActivityRepository:
         return [row.to_summary() for row in rows], total
 
     def _apply_filters(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         statement = self._apply_text_and_location_filters(statement, query)
         statement = self._apply_category_and_range_filters(statement, query)
         statement = self._apply_suitability_filters(statement, query)
         return self._apply_state_and_availability_filters(statement, query)
 
     def _apply_text_and_location_filters(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         if query.text is not None:
             pattern = _substring_pattern(query.text.casefold())
             statement = statement.where(
@@ -230,8 +234,8 @@ class ActivityRepository:
         return statement
 
     def _apply_category_and_range_filters(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         categories = query.categories
         if categories is not None:
             category_clauses = [
@@ -260,8 +264,8 @@ class ActivityRepository:
         return statement
 
     def _apply_suitability_filters(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         if query.party_size is not None:
             statement = statement.where(
                 Activity.minimum_participants <= query.party_size,
@@ -291,8 +295,8 @@ class ActivityRepository:
         return statement
 
     def _apply_state_and_availability_filters(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         accessibility = query.accessibility
         if accessibility is not None:
             for field in (
@@ -354,8 +358,8 @@ class ActivityRepository:
         return Activity.availability_schedules.any(and_(*clauses))
 
     def _apply_order(
-        self, statement: Select[tuple[Activity]], query: ActivityQueryRequest
-    ) -> Select[tuple[Activity]]:
+        self, statement: _Statement, query: ActivityQueryRequest
+    ) -> _Statement:
         name = func.unicode_casefold(Activity.name)
         if query.sort is ActivitySort.NAME_ASC:
             return statement.order_by(name, Activity.id)
