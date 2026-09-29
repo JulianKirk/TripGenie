@@ -1,0 +1,7 @@
+{
+  "goal": "Summarise the latest build-and-validate workflow run for every service on this branch, with its artifacts",
+  "rules": [
+    "Each service's own student-x-ci.yml decides whether its build passed; the loop only reports the conclusion.",
+    "A service with no run on this branch was not changed there; that is a skip, not a failure."
+  ]
+}

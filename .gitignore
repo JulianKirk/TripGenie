@@ -45,3 +45,6 @@ graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/.*
 graphify-out/[0-9][0-9][0-9][0-9]-*/
+
+# Agentic loop run reports and downloaded CI artifacts
+ai-services/agentic-loop/reports/

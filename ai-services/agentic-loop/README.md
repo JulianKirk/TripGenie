@@ -83,6 +83,61 @@ backends while the loop runs. They remain private in the main Compose file.
 
 `--ci` skips the human-review prompt.
 
+Several services at once, the way CI runs them -- the loop waits for each one's
+readiness itself, reports a service that never becomes ready as failed in its
+own section, and marks the rest skipped:
+
+```bash
+SERVICES="student-1 student-3" python agentic_loop.py --ci --mode services
+```
+
+## Modes
+
+`--mode {services,mcp,rag,ci}` picks what the collector observes. Run with no
+flag in a terminal and the loop shows a menu instead (`0` exits); `--ci` without
+`--mode` runs `services`, so existing invocations are unchanged. Every mode ends
+the same way: the two agents comment, and only the collector's checks decide
+the exit code.
+
+| Mode | Collector | Checks file |
+| --- | --- | --- |
+| `services` | HTTP checks against running backends | `checks/<service>.json` |
+| `mcp` | JSON-RPC tool calls to the host MCP server | `checks/mcp.json` |
+| `rag` | Calibration queries to the host RAG server | `checks/rag.json` -> `../rag-server/config/calibration-queries.json` |
+| `ci` | Latest `student-x-ci.yml` run per service via `gh` | `checks/ci.json` |
+
+**MCP** (`python -m tripgenie_mcp serve` plus the five backends): all 16 tools
+are listed; one valid read per student returns `ok: true`, `data` and the right
+`source`; IDs and amounts match the same backend read directly; `limit: 0`, a
+malformed ID and an unknown tool are rejected; each call repeats with the same
+data and finishes under 3 s. Steps chain with `save` like flows do. Direct
+backend reads use the MCP server's own `MCP_STUDENT_n_URL` variables and
+defaults (loopback ports 18001/9000/18003/18008/18005). The agentic Compose
+overlay publishes students 1 and 3 on 8001/8003, so set `MCP_STUDENT_1_URL` and
+`MCP_STUDENT_3_URL` for both processes until the host-port scheme (#129) lands.
+
+**RAG** (AI-Mode plus `python -m rag_service serve` with a built index): every
+answerable calibration case returns an answer, a confidence category and its
+`expected_source_ids`; the unanswerable one returns insufficient context; a
+repeat returns the same citations and category; insufficient context comes back
+under 3 s and answers under 30 s. The cases live in the RAG server's own
+calibration file, so there is one list to maintain.
+
+**CI** (`gh auth login` first): for the current branch (`CI_BRANCH` overrides),
+the latest run of each service's workflow becomes a check -- `success` passes,
+any other conclusion fails, no run is a skip -- and its artifacts are downloaded
+to `reports/ci/<service>/`. Without `gh` the mode reports that and passes.
+
+| Variable | Default |
+| --- | --- |
+| `SERVICES` / `SKIPPED` | unset -- use `CHECKS_FILE`; `SKIPPED` is `service=reason;...` |
+| `MCP_URL` | `http://127.0.0.1:8012/mcp` |
+| `RAG_URL` | `http://127.0.0.1:8011` |
+| `CI_BRANCH` | the checked-out branch |
+
+Every run saves its report to `reports/<mode>-<UTC timestamp>.md` (git-ignored).
+Copy the ones the release needs into `docs/reports/release-*`.
+
 The two agents call Claude. Credentials come from the environment the way the
 `anthropic` SDK resolves them -- `ANTHROPIC_API_KEY`, or an `ant auth login`
 profile locally. The implementation agent defaults to `claude-sonnet-5` and the
@@ -94,15 +149,19 @@ the run still passes or fails on the checks, so CI works either way (add
 
 ## In CI
 
-`.github/workflows/agentic-ci.yml` runs on push and pull request as three jobs:
+`.github/workflows/agentic-ci.yml` runs on push and pull request as two jobs.
+Only `services` mode runs there -- MCP and RAG are host processes that CI does
+not start.
 
 - **Loop unit tests** -- `pytest` on the loop itself. Always runs, starts no
   containers, and is the reason a change to `agentic_loop.py` still gets tested
   when every service below is skipped. One registry-contract test uses
   `docker compose config`, which is available on the GitHub runner.
-- **Pick services** -- the gate. For each service it polls that service's own
-  build-and-validate workflow for this commit and decides whether the loop runs.
-- **One job per chosen service** -- the loop.
+- **Agentic loop** -- one job. Its first step is the gate: for each service it
+  polls that service's own build-and-validate workflow for this commit and
+  decides whether the loop runs. Compose then starts only the chosen services
+  in one command, and the loop runs with `SERVICES` set to them and `SKIPPED`
+  carrying the gate's reason for the rest. Any failed check fails the job.
 
 | That service's workflow | This service |
 | --- | --- |
@@ -133,8 +192,8 @@ Both agents' output is written to the job's **Summary** page (via
 buried in the log. Locally it prints to stdout; `--ci` skips the human-review
 prompt but not the printing.
 
-On a pull request the workflow posts that same report as a comment -- one per
-service, edited in place on later pushes rather than appended, so a busy pull
+On a pull request the workflow posts that same report as a comment -- one for
+the whole run, with a section per service, edited in place on later pushes rather than appended, so a busy pull
 request does not fill with tables. It posts whether the loop passed or failed,
 and says nothing at all when the commit is not on an open pull request.
 
