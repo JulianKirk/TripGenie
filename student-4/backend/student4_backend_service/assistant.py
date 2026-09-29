@@ -15,6 +15,7 @@ from .assistant_constraints import (
     RequestConstraints,
     parse_constraints,
 )
+from .assistant_details import complete_details
 from .assistant_final import resolve_cards
 from .assistant_models import (
     ACTION,
@@ -71,10 +72,19 @@ def _prompt(
             "No more tool calls are available."
             if final_only
             else "\nChoose the NEXT action using the observations above. "
-            "If they answer the question, return final with activity cards now. "
+            "If any requested facts are missing, retrieve them before answering. "
+            "Search summaries cannot answer schedule or booking/accessibility notes "
+            "questions: use activities_get on the relevant discovered ID. "
+            "For a simple find/show/recommend request, search summaries suffice: "
+            "return final activity cards WITHOUT activities_get. "
+            "If all requested facts are available, return final now. "
             "Do not repeat a successful call with identical arguments."
         )
-        + "\nOutput exactly one JSON object and stop. No commentary, markdown, "
+        + "\nIn final text, explicitly answer each part of the question using the "
+        "observations. Include requested schedule days/times and requested notes; "
+        "a card alone does not answer them. State when requested facts are unknown. "
+        "Do not substitute an unrelated price/description summary. "
+        "Output exactly one JSON object and stop. No commentary, markdown, "
         "or explanation outside that object."
     )
 
@@ -140,10 +150,9 @@ async def _loop(
     instructions = _prompt_asset(settings.ai_assistant_prompt_asset)
     completed_calls: set[str] = set()
     visible_ids: set[str] = set()
-    force_final = False
     activity_data_requested = False
     for step in range(MAX_STEPS):
-        final_only = force_final or step == MAX_STEPS - 1
+        final_only = step == MAX_STEPS - 1
         if final_only:
             context["tools"] = []
         context["steps_remaining"] = MAX_STEPS - step
@@ -176,6 +185,9 @@ async def _loop(
                 eligible_ids=visible_ids,
                 activity_data_requested=activity_data_requested,
             )
+            await complete_details(
+                payload.question, executor, constraints, context["observations"]
+            )
             return
         if final_only:
             message = "The assistant ignored its final-answer step limit."
@@ -184,8 +196,15 @@ async def _loop(
         action = _constrain_action(action, constraints)
         signature = json.dumps([action.name, action.arguments], sort_keys=True)
         if signature in completed_calls:
-            force_final = True
+            context["action_feedback"] = (
+                f"The {action.name} call with arguments "
+                f"{json.dumps(action.arguments, sort_keys=True)} already succeeded. "
+                "Read its existing observation; DO NOT call it again. "
+                "Choose a different tool or arguments for unanswered parts of the "
+                "question; only finish when all requested facts are addressed."
+            )
             continue
+        context.pop("action_feedback", None)
         activity_data_requested |= action.name in {
             "activities_search",
             "activities_get",

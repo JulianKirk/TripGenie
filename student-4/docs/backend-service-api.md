@@ -133,11 +133,24 @@ is selected. The backend rejects every other tool, including MCP CRUD tools.
 Limits are six model steps/calls, one initial selected-trip read, up to six
 schedule-detail reads per search page, at most six final card lookups, twelve
 output parts, 1,000 characters per text part, and a
-180-second total deadline. Existing AI prompt limits remain enforced. If tool
+180-second total deadline. Repeated successful calls are not re-executed: the
+model receives feedback and can choose another tool within the remaining steps.
+Explicit schedule, booking-note/requirement and accessibility-note questions also
+have a final backend verification step. For selected cards it reuses successful
+MCP detail observations or calls `activities_get`, then renders the requested facts
+as a verified catalogue summary from those records (price, duration, participants,
+booking requirement and requested detail fields), replacing model-authored prose
+for those selected records. This prevents conflicting unverified detail claims; it
+is not a general narrative/comparison validator. Long fields are marked shortened.
+Missing fields are labeled not provided; failed reads
+produce an explicit verification limitation. Ordinary card reads are never used as
+MCP evidence. This step preserves checked budget explanations and adds at most six
+MCP calls. It covers these explicit detail topics, not arbitrary semantic questions.
+Existing AI prompt limits remain enforced. If tool
 definitions crowd out successful observations, generation switches to final-only
 with the observations retained and tool definitions removed. Contexts still above
 the limit produce a visible request-to-narrow error. With at most five tool-action
-steps this permits at most 36 MCP calls, including schedule verification, plus up to six
+steps this permits at most 42 MCP calls, including schedule and final requested-detail verification, plus up to six
 ordinary backend reads for final cards.
 At most six items per tool
 observation are supplied to the model, with an explicit omitted-item count.

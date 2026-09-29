@@ -513,9 +513,7 @@ def test_standard_mcp_tool_error_is_recoverable() -> None:
     assert ACTIVITY in result["activities"]
 
 
-def test_repeated_successful_call_switches_to_final_answer_without_reexecution() -> (
-    None
-):
+def test_repeated_successful_call_allows_final_answer_without_reexecution() -> None:
     from jsonschema import Draft202012Validator
 
     mcp = ProtocolFake()
@@ -534,7 +532,7 @@ def test_repeated_successful_call_switches_to_final_answer_without_reexecution()
     assert [call["name"] for call in mcp.calls] == [
         "activities_search",
     ]
-    assert not Draft202012Validator(requests[-1]["schema"]).is_valid(tool)
+    assert Draft202012Validator(requests[-1]["schema"]).is_valid(tool)
     assert '"input_schema"' in requests[0]["prompt"]
 
 
@@ -950,3 +948,148 @@ def test_wrong_card_lookup_id_is_not_rendered() -> None:
     assert result["status"] == "error"
     assert result["activities"] == {}
     assert "different activity" in result["error"]
+
+
+def test_duplicate_search_keeps_detail_tool_available_and_answers_question() -> None:
+    from jsonschema import Draft202012Validator
+
+    search = {"type": "tool", "name": "activities_search", "arguments": {}}
+    detail = {
+        "type": "tool",
+        "name": "activities_get",
+        "arguments": {"activity_id": ACTIVITY},
+    }
+    requests: list[dict[str, Any]] = []
+    mcp = ProtocolFake()
+    result = run(
+        [
+            search,
+            search,
+            detail,
+            {
+                "type": "final",
+                "parts": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Saturday 09:00 to 11:00. Booking notes are not provided."
+                        ),
+                    },
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        mcp,
+        requests,
+        question="Find Harbour walk and tell me its weekly schedule and booking notes.",
+    )
+    assert result["status"] == "complete"
+    assert Draft202012Validator(requests[2]["schema"]).is_valid(detail)
+    assert "already succeeded" in requests[2]["prompt"]
+    assert [call["name"] for call in mcp.calls] == [
+        "activities_search",
+        "activities_get",
+    ]
+    assert "Saturday 09:00" in result["parts"][0]["text"]
+
+
+def test_requested_details_are_verified_even_when_model_finishes_after_search() -> None:
+    mcp = ProtocolFake()
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {
+                "type": "final",
+                "parts": [
+                    {"type": "text", "text": "No schedule is available."},
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        mcp,
+        question="Find Harbour walk and tell me its weekly schedule and booking notes.",
+    )
+    assert result["status"] == "complete"
+    assert [t["tool"] for t in result["tools"]] == [
+        "activities_search",
+        "activities_get",
+    ]
+    text = " ".join(p.get("text", "") for p in result["parts"])
+    assert "Saturday 09:00 to 11:00" in text
+    assert "Booking notes: Not provided" in text
+    assert "No schedule is available" not in text
+
+
+def test_requested_detail_failure_does_not_use_ordinary_card_as_mcp_evidence() -> None:
+    class DetailFailure(ProtocolFake):
+        def handle(self, request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            self.fail = body.get("params", {}).get("name") == "activities_get"
+            return super().handle(request)
+
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {
+                "type": "final",
+                "parts": [
+                    {"type": "text", "text": "Saturday from 09:00."},
+                    {"type": "activity", "activity_id": ACTIVITY},
+                ],
+            },
+        ],
+        DetailFailure(),
+        question="Find Harbour walk and give its weekly schedule.",
+    )
+    assert result["status"] == "complete"
+    assert result["tools"][-1]["status"] == "error"
+    assert "could not be verified through MCP" in result["parts"][0]["text"]
+    assert ACTIVITY in result["activities"]
+
+
+def test_verified_details_retain_checked_budget_explanation() -> None:
+    result = run(
+        [
+            {"type": "tool", "name": "activities_search", "arguments": {}},
+            {"type": "final", "parts": [{"type": "activity", "activity_id": ACTIVITY}]},
+        ],
+        ProtocolFake(),
+        question=(
+            "Find Harbour walk for 2 adults under AUD100 total "
+            "and give its weekly schedule."
+        ),
+    )
+    assert result["status"] == "complete"
+    text = " ".join(p.get("text", "") for p in result["parts"])
+    assert "Saturday 09:00 to 11:00" in text
+    assert "90.00" in text
+
+
+def test_text_only_verified_details_include_duration_and_booking_requirement() -> None:
+    result = run(
+        [
+            {
+                "type": "tool",
+                "name": "activities_get",
+                "arguments": {"activity_id": ACTIVITY},
+            },
+            {
+                "type": "final",
+                "parts": [
+                    {
+                        "type": "text",
+                        "text": "It lasts 60 minutes. Booking is not required.",
+                    }
+                ],
+            },
+        ],
+        ProtocolFake(),
+        question=(
+            "Tell me Harbour walk duration, weekly schedule and booking requirements."
+        ),
+    )
+    text = " ".join(p.get("text", "") for p in result["parts"])
+    assert "60 minutes" in text
+    assert "Booking required: No" in text
+    assert "Saturday 09:00 to 11:00" in text
+    assert [t["tool"] for t in result["tools"]] == ["activities_get"]
