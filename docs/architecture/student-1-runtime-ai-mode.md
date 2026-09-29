@@ -1,5 +1,10 @@
 # Student 1 Runtime AI-Mode Contract and Implementation Notes
 
+These issue #12 notes describe the original Release 0 integration. The shared
+provider implementation is superseded by [ADR 0004](./decisions/0004-shared-mcp-generation.md):
+AI-Mode now uses `httpx` directly and runs the native MCP tool loop for `/generate`.
+Student 1 stops automatic answer-repair retries after a response includes tool calls.
+
 Related architecture: [Student 1 Release 0 architecture, runtime modes, and decision traceability](./student-1-release-0-architecture.md)
 Shared AI-Mode contract: [`ai-services/ai-mode/README.md`](../../ai-services/ai-mode/README.md)
 Related ADR: [ADR-0002](./decisions/0002-student-1-internal-api-and-observability.md)

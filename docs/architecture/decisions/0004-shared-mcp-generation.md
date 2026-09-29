@@ -9,6 +9,9 @@ The native Ollama chat interface returns tool calls; shared AI-Mode validates an
 executes them, returns actual results to the model, and returns its final answer.
 MCP remains the owner of tool descriptions, schemas and public-API integration.
 `/embed` retains its numerical embedding behavior and does not require MCP.
+All Ollama requests use `httpx` directly, with Pydantic validation of native wire
+messages. Complete MCP schemas are forwarded unchanged on every tool round; no
+provider SDK serializes or reduces them.
 
 This avoids implementing the same loop separately in each student backend. No new
 process or endpoint is introduced. Existing generation request fields and final

@@ -21,7 +21,10 @@ CATALOGUE = {
         "trips_list_itinerary_items": "List bounded itinerary items for a trip.",
     },
     "student-2": {
-        "accommodations_search": "Discover accommodation IDs using location filters.",
+        "accommodations_search": (
+            "Discover accommodation IDs using location filters. When supplying city, "
+            "also supply country, for example country='Australia', city='Sydney'."
+        ),
         "accommodations_get": "Read an accommodation by UUID.",
         "accommodations_committed_costs": "Read committed stay costs for a trip.",
     },
@@ -36,13 +39,28 @@ CATALOGUE = {
             "Search activities by structured filters. Optional text matches literal "
             "words in names/descriptions (single-word kayaking/kayaks and "
             "walking/walks also match kayak/walk); omit it for location, price, "
-            "accessibility and category-only searches."
+            "accessibility and category-only searches. Put structured fields inside "
+            'filters, for example {"text":"kayak","limit":6,'
+            '"filters":{"location":{"country":"Australia","city":"Sydney"}}}. '
+            "A city filter requires country. "
+            'categories is an object {"codes":["OUTDOOR"],"match":"ANY"}, '
+            "not a list. party_size is an integer, not a range object. Omit filters "
+            "the question does not require. "
+            'Prices are decimal strings such as "50.00". Search returns summaries; '
+            "use activities_get for schedules and booking notes."
         ),
         "activities_create": "Create an activity (trusted local clients only).",
         "activities_update": "Replace a complete activity, including its schedules.",
         "activities_delete": "Hard delete an activity; requires confirm=true.",
-        "activities_get": "Read an activity with exact price and pricing basis.",
-        "activities_list_categories": "Read public activity category codes.",
+        "activities_get": (
+            "Read full activity details by a discovered activity_id, including exact "
+            "price, pricing basis, weekly schedules, booking and accessibility notes. "
+            "Use this after search when the user asks for those details."
+        ),
+        "activities_list_categories": (
+            "Read global activity category codes. This does not establish that "
+            "activities in every category exist in a particular city."
+        ),
         "activities_committed_costs": "Read committed activity costs for a trip.",
     },
     "student-5": {

@@ -163,6 +163,24 @@ class ToolTrace(StrictModel):
     error: str | None = None
 
 
+class ProviderFunction(BaseModel):
+    name: str
+    arguments: dict[str, Any]
+
+
+class ProviderToolCall(BaseModel):
+    function: ProviderFunction
+
+
+class ProviderMessage(BaseModel):
+    """Native Ollama message validation; tool arguments remain unchanged."""
+
+    model_config = ConfigDict(extra="allow")
+    role: Literal["assistant"]
+    content: str | None = None
+    tool_calls: list[ProviderToolCall] | None = None
+
+
 class GenerateResponsePayload(StrictModel):
     run_id: ShortText
     correlation_id: CorrelationId

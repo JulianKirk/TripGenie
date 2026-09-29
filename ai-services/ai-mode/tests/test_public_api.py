@@ -5,8 +5,31 @@ import logging
 import httpx
 import pytest
 
+from ai_mode_service.config import Settings
 from ai_mode_service.models import CORRELATION_ID_ISSUE
 from ai_mode_service.service import _sanitise_log_value
+
+
+def test_configured_ollama_auth_is_preserved_for_chat_health_and_embeddings(
+    monkeypatch, client_factory, ollama_api
+):
+    monkeypatch.setenv("OLLAMA_API_KEY", "test-ollama-token")
+    settings = Settings.from_env()
+    paths = []
+
+    def authenticated(request):
+        assert request.headers["Authorization"] == "Bearer test-ollama-token"
+        paths.append(request.url.path)
+        return ollama_api.handle(request)
+
+    with client_factory(
+        settings_override=settings, ollama_handler=authenticated
+    ) as client:
+        assert client.get("/health").status_code == 200
+        assert client.post("/generate", json={"prompt": "Hello"}).status_code == 200
+        assert client.post("/embed", json={"inputs": ["Hello"]}).status_code == 200
+    assert set(paths) == {"/api/tags", "/api/chat", "/api/embed"}
+    assert "test-ollama-token" not in repr(settings)
 
 
 def success_generate_response(
@@ -117,7 +140,7 @@ def test_ready_returns_model_unavailable_for_valid_empty_model_list(
     }
 
 
-def test_generate_uses_non_stream_official_ollama_client_request_shape(
+def test_generate_uses_non_stream_native_ollama_request_shape(
     client_factory,
     ollama_api,
 ) -> None:

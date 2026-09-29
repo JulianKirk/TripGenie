@@ -88,4 +88,4 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 .assistant-tools { margin-top: 1rem; overflow-wrap: anywhere; }
 .assistant-tools summary { cursor: pointer; font-weight: 600; }
 .assistant-tools li { margin-block: 0.8rem; }
-.assistant-tools code { white-space: pre-wrap; }
+.assistant-tools code, .assistant-tools pre { white-space: pre-wrap; }

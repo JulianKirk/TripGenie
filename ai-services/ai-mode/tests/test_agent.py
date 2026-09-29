@@ -134,6 +134,35 @@ def test_all_discovered_tools_and_verbatim_arguments_reach_shared_loop():
     assert len(response.json()["data"]["tools"]) == 2
 
 
+def test_complete_mcp_schemas_reach_ollama_on_every_tool_round():
+    mcp = MCP()
+    schema = mcp.tools[0]["inputSchema"]
+    schema["$defs"] = {
+        "Filter": {
+            "type": "object",
+            "properties": {"count": {"type": "integer", "minimum": 1}},
+            "additionalProperties": False,
+        }
+    }
+    schema["properties"]["filters"] = {
+        "anyOf": [{"$ref": "#/$defs/Filter"}, {"type": "null"}],
+        "default": None,
+    }
+    response, requests, _ = run(
+        [
+            message(name="activities_search", arguments={"value": "first"}),
+            message(name="budgets_get_summary", arguments={"value": "second"}),
+            message("Done"),
+        ],
+        mcp=mcp,
+    )
+    assert response.status_code == 200
+    for request in requests:
+        advertised = {t["function"]["name"]: t["function"] for t in request["tools"]}
+        for tool in mcp.tools:
+            assert advertised[tool["name"]]["parameters"] == tool["inputSchema"]
+
+
 def test_unknown_tool_and_invalid_arguments_never_execute():
     for name, arguments in [
         ("invented", {"value": "x"}),

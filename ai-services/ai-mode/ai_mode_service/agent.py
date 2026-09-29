@@ -151,6 +151,10 @@ class Agent:
                             "role": "user",
                             "content": "Return the final answer as the requested JSON, "
                             "using the conversation and tool results. "
+                            "Recheck the draft against the original user request "
+                            "and system instructions. Correct unsupported claims "
+                            "or mismatches. If essential information is missing, "
+                            "ask the user for it instead of assuming it. "
                             "Do not call more tools or invent missing facts.",
                         }
                     )

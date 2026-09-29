@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 MAX_APPROVED_MODELS = 10
@@ -112,6 +112,7 @@ def _validate_limit(
 class Settings:
     service_name: str = "ai-mode"
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    ollama_api_key: str | None = field(default=None, repr=False)
     default_model: str = "qwen2.5:0.5b"
     allowed_models: tuple[str, ...] = ("qwen2.5:0.5b", "llama3.1:8b")
     default_embedding_model: str = "nomic-embed-text"
@@ -210,6 +211,7 @@ class Settings:
             or "nomic-embed-text"
         )
         return cls(
+            ollama_api_key=os.getenv("OLLAMA_API_KEY"),
             mcp_url=os.getenv("AI_MODE_MCP_URL", "http://127.0.0.1:8012/mcp"),
             mcp_timeout_seconds=float(os.getenv("AI_MODE_MCP_TIMEOUT_SECONDS", "15")),
             agent_timeout_seconds=float(
