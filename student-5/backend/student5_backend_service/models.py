@@ -4,7 +4,7 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -231,3 +231,53 @@ class BudgetAnalysisResponse(StrictModel):
     run_id: str
     model: str
     provider: str
+
+
+class RagQueryRequest(StrictModel):
+    question: AnalysisQuestion
+
+
+class UpstreamModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+class RagCitation(UpstreamModel):
+    source_id: str
+    title: str
+    section: str
+    path: str
+    chunk_id: str
+    excerpt: str
+
+
+class RagRetrieval(UpstreamModel):
+    requested_top_k: int
+    returned_chunks: int
+    maximum_score: float | None
+
+
+class RagAnswer(UpstreamModel):
+    answer: str
+    confidence_category: Literal["high", "medium", "low", "insufficient_context"]
+    insufficient_context: bool
+    citations: list[RagCitation]
+    retrieval: RagRetrieval
+    run_id: str
+    correlation_id: str
+
+    @model_validator(mode="after")
+    def grounding_is_consistent(self) -> RagAnswer:
+        if self.insufficient_context:
+            if self.citations or self.confidence_category != "insufficient_context":
+                raise ValueError("insufficient context must have no citations")
+        elif not self.citations or self.confidence_category == "insufficient_context":
+            raise ValueError("a grounded answer needs citations and a confidence")
+        return self
+
+
+class McpActionResult(StrictModel):
+    action: str
+    tool: str
+    correlation_id: str
+    duration_ms: int
+    result: dict[str, Any]

@@ -4,6 +4,7 @@
   <p class="muted">Create a budget to compare planned funds, committed provider costs, and recorded expenses.</p>
   <a class="button button--primary" href="/budgets/new">Create budget</a>
 </div>
+{% include "partials/rag_answer.html" %}
 {% if trip_error %}<div class="banner banner--warning">Live trip details are unavailable. Stored trip IDs and all local budget actions remain available.</div>{% endif %}
 {% if budgets %}
 <div class="budget-grid">

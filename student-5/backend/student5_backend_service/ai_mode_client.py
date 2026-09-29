@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_error
@@ -18,6 +18,7 @@ class _GenerateData(BaseModel):
     provider: str
     response: str
     done: bool
+    tools: list[Any] = Field(default_factory=list)
 
 
 class _GenerateEnvelope(BaseModel):
@@ -46,7 +47,7 @@ class AiModeClient:
         prompt: str,
         correlation_id: str,
         metadata: dict[str, str],
-    ) -> BudgetAnalysisResponse:
+    ) -> tuple[BudgetAnalysisResponse, bool]:
         try:
             response = self._client.post(
                 "/generate",
@@ -72,19 +73,29 @@ class AiModeClient:
 
         try:
             generated = _GenerateEnvelope.model_validate(response.json()).data
-            if not generated.done:
-                raise ValueError("generation did not finish")
-            analysis = BudgetAnalysis.model_validate_json(generated.response)
         except (ValueError, ValidationError) as exc:
             raise bad_gateway(
                 "ai_mode", "response did not match the analysis schema"
             ) from exc
 
-        return BudgetAnalysisResponse(
-            analysis=analysis,
-            run_id=generated.run_id,
-            model=generated.model,
-            provider=generated.provider,
+        used_tools = bool(generated.tools)
+        try:
+            if not generated.done:
+                raise ValueError("generation did not finish")
+            analysis = BudgetAnalysis.model_validate_json(generated.response)
+        except (ValueError, ValidationError) as exc:
+            error = bad_gateway("ai_mode", "response did not match the analysis schema")
+            error.retryable = not used_tools
+            raise error from exc
+
+        return (
+            BudgetAnalysisResponse(
+                analysis=analysis,
+                run_id=generated.run_id,
+                model=generated.model,
+                provider=generated.provider,
+            ),
+            used_tools,
         )
 
     @staticmethod

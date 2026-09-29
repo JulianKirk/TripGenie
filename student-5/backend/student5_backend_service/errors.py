@@ -9,6 +9,7 @@ class ApiError(Exception):
     code: str
     message: str
     details: list[dict[str, str]] = field(default_factory=list)
+    retryable: bool = True
 
 
 def dependency_error(dependency: str, issue: str) -> ApiError:

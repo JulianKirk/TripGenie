@@ -69,6 +69,7 @@ def measure(check):
         url,
         data=check.get("form"),
         json=check.get("json"),
+        headers=check.get("headers"),
         timeout=check.get("timeout", 10),
     )
     return response, (time.perf_counter() - started) * 1000

@@ -13,7 +13,7 @@
     {"label": "GET /api/v1/expenses filtered", "path": "${BACKEND_URL}/api/v1/expenses?trip_id=trip_2026_sydney_long_weekend&category=accommodation&date_from=2026-10-03&date_to=2026-10-03", "contains": ["trip_2026_sydney_long_weekend", "accommodation"]},
     {"label": "GET seeded budget summary", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/summary", "contains": ["actual_spending", "committed_costs", "remaining_budget", "providers"], "nfr_ms": 500},
     {"label": "GET malformed budget id", "path": "${BACKEND_URL}/api/v1/budgets/not-a-uuid", "status": 422, "contains": ["VALIDATION_ERROR"]},
-    {"label": "POST seeded budget AI analysis", "method": "POST", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/ai-analysis", "json": {"question": "Where can this trip save money?"}, "status": [200, 503, 504], "contains_any": ["\"analysis\"", "MODEL_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"]}
+    {"label": "POST seeded budget AI analysis", "method": "POST", "path": "${BACKEND_URL}/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/ai-analysis", "json": {"question": "Where can this trip save money?"}, "timeout": 230, "status": [200, 503, 504], "contains_any": ["\"analysis\"", "MODEL_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"]}
   ],
   "rules": [
     "One budget belongs to one trip; trip_id is not unique across expenses, since a trip has many expenses.",

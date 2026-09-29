@@ -439,7 +439,9 @@ services:
       dockerfile: frontend/Dockerfile
     environment:
       STUDENT5_FRONTEND_BACKEND_BASE_URL: http://student-5-backend:8005
-      STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "210"
+      STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "230"
+      STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
+      STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS: "60"
     ports:
       - "8085:8085"
     depends_on:
@@ -470,9 +472,19 @@ services:
       STUDENT5_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT5_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
       STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
-      STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS: "100"
+      STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS: "200"
+      STUDENT5_BACKEND_RAG_ENABLED: "${STUDENT5_BACKEND_RAG_ENABLED:-true}"
+      STUDENT5_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
+      STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS: "130"
+      STUDENT5_BACKEND_MCP_ENABLED: "${STUDENT5_BACKEND_MCP_ENABLED:-true}"
+      STUDENT5_BACKEND_MCP_BASE_URL: http://host.docker.internal:8012/mcp
+      STUDENT5_BACKEND_MCP_TIMEOUT_SECONDS: "40"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "8005"
+    ports:
+      - "127.0.0.1:${STUDENT5_BACKEND_HOST_PORT:-18005}:8005"
     depends_on:
       student-5-database:
         condition: service_healthy

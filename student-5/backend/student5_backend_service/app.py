@@ -17,6 +17,7 @@ from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError
+from .mcp_client import McpClient
 from .models import (
     BudgetAnalysisRequest,
     BudgetCreate,
@@ -24,7 +25,9 @@ from .models import (
     ExpenseCategory,
     ExpenseCreate,
     ExpenseUpdate,
+    RagQueryRequest,
 )
+from .rag_client import RagClient
 from .service import BackendService
 from .transport_client import TransportApiClient
 from .trips_client import TripsApiClient
@@ -73,6 +76,8 @@ def create_app(
     accommodation_transport: httpx.BaseTransport | None = None,
     activity_transport: httpx.BaseTransport | None = None,
     ai_mode_transport: httpx.BaseTransport | None = None,
+    rag_transport: httpx.BaseTransport | None = None,
+    mcp_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     database = DatabaseApiClient(settings, transport=database_transport)
@@ -81,8 +86,18 @@ def create_app(
     accommodation = AccommodationApiClient(settings, transport=accommodation_transport)
     activities = ActivityApiClient(settings, transport=activity_transport)
     ai_mode = AiModeClient(settings, transport=ai_mode_transport)
+    rag = RagClient(settings, transport=rag_transport)
+    mcp = McpClient(settings, transport=mcp_transport)
     service = BackendService(
-        database, trips, transport, accommodation, activities, ai_mode, settings
+        database,
+        trips,
+        transport,
+        accommodation,
+        activities,
+        ai_mode,
+        settings,
+        rag,
+        mcp,
     )
 
     @asynccontextmanager
@@ -94,6 +109,8 @@ def create_app(
         accommodation.close()
         activities.close()
         ai_mode.close()
+        rag.close()
+        mcp.close()
 
     app = FastAPI(title="TripGenie Student 5 Backend", lifespan=lifespan)
 
@@ -130,6 +147,7 @@ def create_app(
                 "status": "healthy" if database_ready else "degraded",
                 "service": settings.service_name,
                 "dependencies": {"database": database_ready},
+                "integrations": service.integrations(),
             }
         }
 
@@ -183,6 +201,14 @@ def create_app(
         budget_id: UUID, payload: BudgetAnalysisRequest
     ) -> dict[str, Any]:
         return _json_data(service.budget_analysis(budget_id, payload))
+
+    @app.post(f"{prefix}/budgets/{{budget_id}}/mcp/{{action}}")
+    def budget_mcp_action(budget_id: UUID, action: str) -> dict[str, Any]:
+        return _json_data(service.run_mcp_action(budget_id, action))
+
+    @app.post(f"{prefix}/rag/query")
+    def rag_query(payload: RagQueryRequest) -> dict[str, Any]:
+        return _json_data(service.rag_query(payload))
 
     @app.get(f"{prefix}/expenses")
     def list_expenses(
