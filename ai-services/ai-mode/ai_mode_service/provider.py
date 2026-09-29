@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from pydantic import TypeAdapter, ValidationError
+from ollama import AsyncClient, ChatResponse, Message, ResponseError
+from pydantic import ValidationError
 
 from .config import Settings
 from .errors import (
@@ -16,7 +17,7 @@ from .errors import (
     dependency_unavailable,
     model_unavailable,
 )
-from .models import DependencyStatus, ProviderMessage
+from .models import DependencyStatus
 
 
 @dataclass(slots=True)
@@ -33,35 +34,19 @@ class OllamaProviderAdapter:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._settings = settings
-        headers = (
-            {"Authorization": f"Bearer {settings.ollama_api_key}"}
-            if settings.ollama_api_key
-            else {}
-        )
-        self._client = httpx.AsyncClient(
-            base_url=settings.ollama_base_url,
+        self._client = AsyncClient(
+            host=settings.ollama_base_url,
             timeout=settings.ollama_timeout_seconds,
             transport=transport,
-            headers=headers,
             follow_redirects=False,
         )
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._client.close()
 
     async def health(self) -> DependencyStatus:
         try:
-            response = await self._client.get("/api/tags")
-            response.raise_for_status()
-            payload = TypeAdapter(dict[str, Any]).validate_python(response.json())
-            models = payload.get("models")
-            if not isinstance(models, list) or any(
-                not isinstance(item, dict) for item in models
-            ):
-                raise ValueError("Invalid model list")
-            available_models = TypeAdapter(set[str]).validate_python(
-                [item.get("model", item.get("name")) for item in models]
-            )
+            payload = await self._client.list()
         except httpx.TimeoutException:
             return DependencyStatus(
                 status="timeout",
@@ -90,13 +75,13 @@ class OllamaProviderAdapter:
                 detail="Ollama request failed.",
                 code="DEPENDENCY_UNAVAILABLE",
             )
-        except httpx.HTTPStatusError as exc:
+        except ResponseError as exc:
             return DependencyStatus(
                 status="unavailable",
                 service="ollama",
                 detail=(
                     "Ollama reported an unexpected status while listing models: "
-                    f"HTTP {exc.response.status_code}."
+                    f"HTTP {exc.status_code}."
                 ),
                 code="DEPENDENCY_UNAVAILABLE",
             )
@@ -108,6 +93,7 @@ class OllamaProviderAdapter:
                 code="BAD_GATEWAY",
             )
 
+        available_models = {model.model for model in payload.models if model.model}
         required_models = tuple(
             dict.fromkeys(
                 (
@@ -147,10 +133,14 @@ class OllamaProviderAdapter:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         schema: dict[str, Any] | None = None,
-    ) -> ProviderMessage:
+    ) -> Message:
         try:
-            # Preserve the complete MCP JSON Schema, including nested references.
-            response = await self._client.post(
+            # The pinned SDK's chat() tool serializer drops anyOf/$ref and other
+            # MCP schema fields. Keep its transport, auth and response validation,
+            # bypassing only that serializer. Covered by outgoing-payload tests.
+            payload = await self._client._request(
+                ChatResponse,
+                "POST",
                 "/api/chat",
                 json={
                     "model": model,
@@ -164,9 +154,6 @@ class OllamaProviderAdapter:
                     },
                 },
             )
-            response.raise_for_status()
-            payload = TypeAdapter(dict[str, Any]).validate_python(response.json())
-            message = ProviderMessage.model_validate(payload.get("message"))
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
                 "The AI provider did not respond before the configured timeout.",
@@ -187,7 +174,7 @@ class OllamaProviderAdapter:
                 "The AI provider request failed.",
                 [{"field": "ai_mode", "issue": "provider request failed"}],
             ) from exc
-        except httpx.HTTPStatusError as exc:
+        except ResponseError as exc:
             if _is_model_unavailable(exc):
                 raise model_unavailable(
                     "Requested AI model is not available.",
@@ -204,8 +191,8 @@ class OllamaProviderAdapter:
                     {
                         "field": "ai_mode",
                         "issue": (
-                            f"provider returned HTTP {exc.response.status_code}"
-                            if exc.response.status_code > 0
+                            f"provider returned HTTP {exc.status_code}"
+                            if exc.status_code > 0
                             else "provider rejected the generate request"
                         ),
                     },
@@ -222,7 +209,7 @@ class OllamaProviderAdapter:
                 ],
             ) from exc
 
-        if payload.get("done") is not True:
+        if payload.done is not True or payload.message is None:
             raise bad_gateway(
                 "The AI provider returned a malformed generate response.",
                 [
@@ -236,7 +223,9 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        response_bytes = len(message.model_dump_json(exclude_none=True).encode("utf-8"))
+        response_bytes = len(
+            payload.message.model_dump_json(exclude_none=True).encode("utf-8")
+        )
         if response_bytes > self._settings.max_response_bytes:
             raise dependency_response_too_large(
                 (
@@ -254,7 +243,7 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        return message
+        return payload.message
 
     async def embed(
         self,
@@ -263,14 +252,7 @@ class OllamaProviderAdapter:
         inputs: list[str],
     ) -> ProviderEmbedResult:
         try:
-            response = await self._client.post(
-                "/api/embed", json={"model": model, "input": inputs}
-            )
-            response.raise_for_status()
-            payload = TypeAdapter(dict[str, Any]).validate_python(response.json())
-            embeddings = TypeAdapter(list[list[float]]).validate_python(
-                payload.get("embeddings", [])
-            )
+            payload = await self._client.embed(model=model, input=inputs)
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
                 "The AI provider did not respond before the configured timeout.",
@@ -291,7 +273,7 @@ class OllamaProviderAdapter:
                 "The AI provider request failed.",
                 [{"field": "ai_mode", "issue": "provider request failed"}],
             ) from exc
-        except httpx.HTTPStatusError as exc:
+        except ResponseError as exc:
             if _is_model_unavailable(exc):
                 raise model_unavailable(
                     "Requested embedding model is not available.",
@@ -308,8 +290,8 @@ class OllamaProviderAdapter:
                     {
                         "field": "ai_mode",
                         "issue": (
-                            f"provider returned HTTP {exc.response.status_code}"
-                            if exc.response.status_code > 0
+                            f"provider returned HTTP {exc.status_code}"
+                            if exc.status_code > 0
                             else "provider rejected the embed request"
                         ),
                     },
@@ -321,6 +303,7 @@ class OllamaProviderAdapter:
                 [{"field": "ai_mode", "issue": "provider response body was malformed"}],
             ) from exc
 
+        embeddings = [list(vector) for vector in payload.embeddings]
         if len(embeddings) != len(inputs) or not embeddings:
             raise bad_gateway(
                 "The AI provider returned a malformed embedding response.",
@@ -367,7 +350,7 @@ def _model_is_available(required: str, available: set[str]) -> bool:
     )
 
 
-def _is_model_unavailable(exc: httpx.HTTPStatusError) -> bool:
+def _is_model_unavailable(exc: ResponseError) -> bool:
     error_text = _response_error_text(exc)
     lowered = error_text.casefold()
     return "model" in lowered and any(
@@ -375,8 +358,8 @@ def _is_model_unavailable(exc: httpx.HTTPStatusError) -> bool:
     )
 
 
-def _response_error_text(exc: httpx.HTTPStatusError) -> str:
-    raw_error = exc.response.text
+def _response_error_text(exc: ResponseError) -> str:
+    raw_error = exc.error if isinstance(exc.error, str) else str(exc.error)
     try:
         payload = json.loads(raw_error)
     except ValueError:

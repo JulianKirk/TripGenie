@@ -4,7 +4,7 @@ This service provides the shared runtime boundary between TripGenie services
 and a host-managed Ollama runtime.
 
 - Runtime: FastAPI on Python 3.11
-- Provider transport: `httpx.AsyncClient` for Ollama chat, model discovery and embeddings.
+- Provider client: the existing pinned `ollama==0.6.2` SDK.
 - Scope: bounded model-directed MCP generation and embeddings
 - Out of scope: streaming, retained chat sessions, retrieval/indexing,
   and multi-agent orchestration
@@ -20,7 +20,6 @@ Clients must not automatically retry a run that has executed tools.
 | --- | --- | --- |
 | `AI_MODE_SERVICE_NAME` | `ai-mode` | Service name reported by health endpoints. |
 | `AI_MODE_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Host Ollama base URL used only by this shared service. Container deployments must override this to `http://host.docker.internal:11434`. |
-| `OLLAMA_API_KEY` | unset | Optional Bearer token for an authenticated Ollama endpoint; used consistently for chat, health and embeddings. |
 | `AI_MODE_DEFAULT_MODEL` | `qwen2.5:0.5b` | Default approved model used when callers do not request an override. |
 | `AI_MODE_ALLOWED_MODELS` | `qwen2.5:0.5b,llama3.1:8b` | Allowlist of approved runtime models. Arbitrary provider model names are rejected. |
 | `AI_MODE_DEFAULT_EMBEDDING_MODEL` | `nomic-embed-text` | Default approved embedding model. |
@@ -130,9 +129,12 @@ baseline; `/generate` reports MCP availability at request time.
 
 Use a generation model that supports native tool calls. Allow enough consumer HTTP
 time for several inference rounds (Student 4 defaults to 210 seconds).
-The complete MCP schemas are sent on every tool-capable round. All Ollama calls use
-`httpx` directly with Pydantic wire validation. This also avoids the former Ollama
-SDK's tool serializer dropping nested JSON Schema keywords.
+The complete MCP schemas are sent on every tool-capable round. Health checks and
+embeddings retain the existing SDK methods. Native chat uses the pinned SDK's
+lower-level `_request` helper because its high-level `chat()` tool serializer drops
+nested JSON Schema keywords. This narrow compatibility workaround retains SDK
+transport, authentication, error handling and response validation. Outgoing-payload
+tests protect schema preservation; review this helper when upgrading the SDK.
 The model's Ollama chat template must also retain tool definitions after a tool
 response. The installed `llama3.1:8b` template exposes definitions only on the last
 user turn, so use a template that retains them, such as `qwen2.5:7b`, for multi-step
