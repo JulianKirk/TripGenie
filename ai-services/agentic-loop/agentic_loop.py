@@ -400,8 +400,15 @@ def observe_mcp(plan):
         missing, extra = sorted(expected - names), sorted(names - expected)
         results = [("tools/list", f"FAIL: missing {missing}, unexpected {extra}")]
 
+    # In CI only the services that passed their own build are started, so a read
+    # from any other student would fail for a reason that is not the MCP server.
+    started = os.getenv("SERVICES")
     values = {}
     for step in plan["steps"]:
+        source = step.get("source")
+        if started is not None and source and source not in started.split():
+            results.append((step["label"], f"SKIP: {source} not started in this run"))
+            continue
         results += mcp_step(resolve(step, values), values)
     return results
 

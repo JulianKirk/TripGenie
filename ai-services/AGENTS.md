@@ -80,7 +80,9 @@ ADAPT reporting sequence. Keep CI summaries useful even when an optional API
 key is absent or a target service fails to start. The `mcp` and `rag` modes are
 driven by `checks/mcp.json` and the RAG server's
 `config/calibration-queries.json`; update them when a tool or calibration case
-changes. These modes run locally only, not in CI.
+changes. Only `agentic-ci.yml` runs them in CI, starting Ollama with the small
+approved models, AI-Mode, and the host MCP and RAG servers on the runner; each
+student's own CI keeps MCP and RAG disabled.
 
 ## MCP checks
 

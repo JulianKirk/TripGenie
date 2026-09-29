@@ -370,6 +370,16 @@ def test_mcp_skips_a_step_whose_input_was_never_saved(monkeypatch):
     assert outcomes["chained"].startswith("SKIP")
 
 
+def test_mcp_only_reads_from_services_started_in_this_run(monkeypatch):
+    monkeypatch.setenv("SERVICES", "student-1")
+    invalid = {"ok": False, "error": {"code": "VALIDATION_ERROR"}}
+    monkeypatch.setattr(loop, "mcp_call", fake_mcp([], {"budgets_list": [invalid]}))
+    plan = {"tools": [], "steps": [MCP_STEPS[0], MCP_STEPS[2]]}
+    outcomes = dict(loop.observe_mcp(plan))
+    assert outcomes["read"] == "SKIP: student-5 not started in this run"
+    assert outcomes["bad limit"] == "OK: VALIDATION_ERROR"
+
+
 def test_mcp_compares_tool_data_with_the_backend(monkeypatch):
     monkeypatch.setenv("MCP_STUDENT_5_URL", "http://s5")
     envelope = {"ok": True, "data": {"items": [{"id": "a", "price": "1.00"}]}}

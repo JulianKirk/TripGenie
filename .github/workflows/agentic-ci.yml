@@ -14,6 +14,9 @@ on:
       - 'shared/**'
       - 'student-*/**'
       - 'ai-services/agentic-loop/**'
+      - 'ai-services/ai-mode/**'
+      - 'ai-services/mcp-server/**'
+      - 'ai-services/rag-server/**'
       - 'docker-compose.yml'
       - '.github/workflows/agentic-ci.yml'
   pull_request:
@@ -21,6 +24,9 @@ on:
       - 'shared/**'
       - 'student-*/**'
       - 'ai-services/agentic-loop/**'
+      - 'ai-services/ai-mode/**'
+      - 'ai-services/mcp-server/**'
+      - 'ai-services/rag-server/**'
       - 'docker-compose.yml'
       - '.github/workflows/agentic-ci.yml'
   workflow_dispatch:
@@ -43,7 +49,12 @@ jobs:
   # One job for every service: the gate picks which ones passed their own
   # build-and-validate workflow, Compose starts only those, and the loop runs
   # each one's checks and writes a single report with a section per service.
-  # MCP, RAG and CI modes are local-only -- MCP and RAG are disabled here.
+  #
+  # MCP and RAG are switched on here and nowhere else: each student's own CI
+  # keeps them disabled so a student build never needs a model, while this job
+  # starts the host MCP server, Ollama, AI-Mode and the RAG server and adds an
+  # MCP and a RAG report to the same comment. The ci mode stays local -- this
+  # job already is the CI view.
   loop:
     name: Agentic loop
     needs: test
@@ -176,45 +187,112 @@ jobs:
           fi
 
       - name: Set up Python
-        if: steps.pick.outputs.empty == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: ai-services/agentic-loop/requirements.txt
+          cache-dependency-path: |
+            ai-services/agentic-loop/requirements.txt
+            ai-services/mcp-server/pyproject.toml
+            ai-services/rag-server/pyproject.toml
+      # Editable installs: both servers resolve their config and the repository
+      # root from their own source folder.
       - name: Install dependencies
-        if: steps.pick.outputs.empty == 'false'
-        run: pip install -r ai-services/agentic-loop/requirements.txt
-      - name: Start the selected services
-        if: steps.pick.outputs.empty == 'false'
+        run: |
+          pip install -r ai-services/agentic-loop/requirements.txt \
+            -e ai-services/mcp-server -e ai-services/rag-server
+
+      # The official image rather than an install script, published on all
+      # interfaces so the AI-Mode container reaches it via host.docker.internal.
+      # Only the small approved models: qwen2.5:0.5b for RAG answers and
+      # nomic-embed-text for the index.
+      - name: Start Ollama and pull the RAG models
+        run: |
+          docker run -d --name ollama -p 11434:11434 -v ollama:/root/.ollama ollama/ollama
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:11434/api/version >/dev/null && break
+            sleep 2
+          done
+          docker exec ollama ollama pull qwen2.5:0.5b
+          docker exec ollama ollama pull nomic-embed-text
+
+      - name: Start the selected services and AI-Mode
+        env:
+          AI_MODE_DEFAULT_MODEL: qwen2.5:0.5b
         run: |
           docker compose \
             -f docker-compose.yml \
             -f ai-services/agentic-loop/docker-compose.agentic.yml \
-            up -d --build ${{ steps.pick.outputs.compose }}
+            up -d --build ${{ steps.pick.outputs.compose }} ai-mode
+
       # The loop waits for each service itself: one that never becomes ready
       # fails its own section and the others still run.
-      - name: Run the agentic loop
+      - name: Run the agentic loop (services)
         if: steps.pick.outputs.empty == 'false'
         working-directory: ai-services/agentic-loop
         env:
           SERVICES: ${{ steps.pick.outputs.services }}
           SKIPPED: ${{ steps.pick.outputs.skipped }}
         run: python agentic_loop.py --ci --mode services
-      # The loop saved its report under reports/ as well as on the summary tab
-      # (GITHUB_STEP_SUMMARY is a different file in every step, so it cannot
-      # be read back here) -- reuse that file verbatim as the comment body.
+
+      # Student 3 is published on 8003 by the agentic overlay, not the 18003
+      # the MCP server defaults to; every other backend matches its default.
+      - name: Start the MCP server
+        if: ${{ !cancelled() }}
+        env:
+          MCP_STUDENT_3_URL: http://127.0.0.1:8003
+        run: |
+          nohup python -m tripgenie_mcp serve > "$RUNNER_TEMP/mcp.log" 2>&1 &
+          for _ in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8012/ready >/dev/null && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/mcp.log"
+          exit 1
+      # SERVICES limits the per-student reads to the backends started above;
+      # tool registration and the validation probes always run.
+      - name: Run the agentic loop (MCP)
+        if: ${{ !cancelled() }}
+        working-directory: ai-services/agentic-loop
+        env:
+          SERVICES: ${{ steps.pick.outputs.services }}
+          MCP_STUDENT_3_URL: http://127.0.0.1:8003
+        run: python agentic_loop.py --ci --mode mcp
+
+      - name: Build the RAG index and start the RAG server
+        if: ${{ !cancelled() }}
+        run: |
+          for _ in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8006/ready >/dev/null && break
+            sleep 3
+          done
+          python -m rag_service ingest --rebuild
+          nohup python -m rag_service serve > "$RUNNER_TEMP/rag.log" 2>&1 &
+          for _ in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8011/ready >/dev/null && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/rag.log"
+          exit 1
+      - name: Run the agentic loop (RAG)
+        if: ${{ !cancelled() }}
+        working-directory: ai-services/agentic-loop
+        run: python agentic_loop.py --ci --mode rag
+
+      # Every mode saved its report under reports/ as well as on the summary
+      # tab (GITHUB_STEP_SUMMARY is a different file in every step, so it
+      # cannot be read back here) -- post them together, in the order they ran.
       - name: Comment the report on the pull request
         # always(), because a failing loop is the run worth commenting on.
-        if: always() && steps.pick.outputs.empty == 'false'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MARKER: '<!-- agentic-loop -->'
         run: |
-          report=$(ls -t ai-services/agentic-loop/reports/services-*.md 2>/dev/null | head -1)
-          if [ -z "$report" ]; then
+          reports=$(ls -tr ai-services/agentic-loop/reports/*.md 2>/dev/null || true)
+          if [ -z "$reports" ]; then
             echo "no report to post -- the loop did not get far enough"
             exit 0
           fi
@@ -223,7 +301,8 @@ jobs:
             echo "commit $SHA is not on an open pull request; nothing to comment on"
             exit 0
           fi
-          body=$(printf '%s\n\n%s' "$MARKER" "$(cat "$report")")
+          # shellcheck disable=SC2086
+          body=$(printf '%s\n\n' "$MARKER"; cat $reports)
           # One comment, edited in place, so a busy pull request does not
           # collect a new wall of tables on every push.
           existing=$(gh api "repos/$REPO/issues/$pr/comments" --paginate \
@@ -235,5 +314,8 @@ jobs:
           fi
 
       - name: Service logs
-        if: failure() && steps.pick.outputs.empty == 'false'
-        run: docker compose logs --tail 100
+        if: failure()
+        run: |
+          docker compose logs --tail 100
+          docker logs --tail 50 ollama || true
+          cat "$RUNNER_TEMP/mcp.log" "$RUNNER_TEMP/rag.log" 2>/dev/null || true

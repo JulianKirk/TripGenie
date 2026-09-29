@@ -48,7 +48,9 @@ The collector turns each run's conclusion and artifacts into evidence for the ag
 3. **Run** `python agentic_loop.py --ci --mode services` with `SERVICES="student-1 student-3"`. The loop iterates over those entries in `services.json`, runs each one's `checks/*.json`, and marks the rest as skipped.
 4. **Report once**: one check table with a section per service (including skipped ones and why), one implementation-agent and review-agent pass over the combined evidence, and one step summary and PR comment.
 
-A service that doesn't become ready is reported as failed in its own section; the rest still run. Any failed check fails the job. The `Loop unit tests` job stays separate. MCP, RAG and CI modes are not run in CI because MCP and RAG are disabled there.
+A service that doesn't become ready is reported as failed in its own section; the rest still run. Any failed check fails the job. The `Loop unit tests` job stays separate.
+
+MCP and RAG stay disabled in each student's own `student-x-ci.yml`, so a student build never needs a model. The agentic loop job is where they are switched on: after the services run it starts the MCP server (per-student reads limited to the services started above), then Ollama with `qwen2.5:0.5b` and `nomic-embed-text`, AI-Mode and the RAG server, and runs `--mode mcp` and `--mode rag`. All three reports go into the same PR comment. The `ci` mode stays local, since this job is already the CI view.
 
 ## Testing with the Agentic Loop
 

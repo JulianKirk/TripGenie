@@ -150,8 +150,9 @@ the run still passes or fails on the checks, so CI works either way (add
 ## In CI
 
 `.github/workflows/agentic-ci.yml` runs on push and pull request as two jobs.
-Only `services` mode runs there -- MCP and RAG are host processes that CI does
-not start.
+It runs the `services`, `mcp` and `rag` modes; `ci` stays local. MCP and RAG
+are switched on only here -- each student's own CI keeps them disabled so a
+student build never needs a model.
 
 - **Loop unit tests** -- `pytest` on the loop itself. Always runs, starts no
   containers, and is the reason a change to `agentic_loop.py` still gets tested
@@ -162,6 +163,13 @@ not start.
   decides whether the loop runs. Compose then starts only the chosen services
   in one command, and the loop runs with `SERVICES` set to them and `SKIPPED`
   carrying the gate's reason for the rest. Any failed check fails the job.
+  Then it starts the MCP server on the runner and runs `--mode mcp`, with the
+  per-student reads limited to the services just started (tool registration
+  and the validation probes always run). Finally it starts Ollama from the
+  official image with `qwen2.5:0.5b` and `nomic-embed-text`, AI-Mode from
+  Compose, builds the RAG index, starts the RAG server and runs `--mode rag`.
+  MCP and RAG run even when no service was selected, and a change under
+  `ai-services/ai-mode`, `mcp-server` or `rag-server` triggers the workflow.
 
 | That service's workflow | This service |
 | --- | --- |
@@ -192,8 +200,8 @@ Both agents' output is written to the job's **Summary** page (via
 buried in the log. Locally it prints to stdout; `--ci` skips the human-review
 prompt but not the printing.
 
-On a pull request the workflow posts that same report as a comment -- one for
-the whole run, with a section per service, edited in place on later pushes rather than appended, so a busy pull
+On a pull request the workflow posts the services, MCP and RAG reports as one
+comment, edited in place on later pushes rather than appended, so a busy pull
 request does not fill with tables. It posts whether the loop passed or failed,
 and says nothing at all when the commit is not on an open pull request.
 
