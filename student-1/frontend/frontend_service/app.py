@@ -122,8 +122,8 @@ def _option_line(row: object) -> str:
         str(
             row.get("name")
             or transport
+            or ("Trip budget" if row.get("budget_id") else None)
             or row.get("id")
-            or row.get("budget_id")
             or "Unnamed option"
         ),
     ]

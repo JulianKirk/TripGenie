@@ -429,7 +429,7 @@ def test_mcp_all_tools_ok_render_readable_summaries(
     assert "Bridge Climb · $300 per person" in text
     assert "More options are available than shown." in text
     assert "Harbour Ferries FERRY · Manly to Sydney · $9 per person" in text
-    assert "b1 · AUD 2500.00" in text
+    assert "Trip budget · AUD 2500.00" in text
     assert "<code>accommodations_search</code>" in text
     assert "country=Australia · city=Sydney · limit=5" in text
     assert "Some lookups failed" not in text
@@ -563,3 +563,41 @@ def test_mcp_summary_survives_unexpected_shapes(data, expected) -> None:
     from frontend_service.app import summarise_mcp_data
 
     assert expected in summarise_mcp_data(data)
+
+
+def test_long_running_calls_get_their_own_timeouts() -> None:
+    import asyncio
+
+    from frontend_service.client import BackendApiClient
+    from frontend_service.config import Settings
+    from frontend_service.errors import ApiError
+
+    seen: dict[str, float] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.path.rsplit("/", 1)[-1]] = request.extensions["timeout"][
+            "read"
+        ]
+        return httpx.Response(503, json={"error": {"code": "X", "message": "x"}})
+
+    client = BackendApiClient(
+        Settings(
+            backend_base_url="http://backend",
+            ai_timeout_seconds=250,
+            rag_timeout_seconds=150,
+            mcp_timeout_seconds=210,
+        ),
+        transport=httpx.MockTransport(handler),
+    )
+
+    async def call_all() -> None:
+        for call in (
+            client.generate_ai_suggestions(TRIP_ID, {}),
+            client.rag_query(TRIP_ID, "q"),
+            client.mcp_options(TRIP_ID, None),
+        ):
+            with pytest.raises(ApiError):
+                await call
+
+    asyncio.run(call_all())
+    assert seen == {"ai-suggestions": 250, "rag-query": 150, "mcp-options": 210}
