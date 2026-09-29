@@ -175,7 +175,7 @@ duration; never the question, answer, excerpts, or tool payloads.
 
 | Variable | Default | Compose |
 | --- | --- | --- |
-| `STUDENT5_BACKEND_AI_MODE_BASE_URL` | `http://ai-mode:8006` | same (AI-Mode is a Compose service, ADR 0004) |
+| `STUDENT5_BACKEND_AI_MODE_BASE_URL` | `http://ai-mode:8006` | `http://host.docker.internal:8006` (host AI-Mode, ADR 0004) |
 | `STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `20` | `200` |
 | `STUDENT5_BACKEND_RAG_ENABLED` | `false` | `${STUDENT5_BACKEND_RAG_ENABLED:-true}` |
 | `STUDENT5_BACKEND_RAG_BASE_URL` | `http://host.docker.internal:8011` | same |

@@ -24,35 +24,31 @@ ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ```
 
-Use a generation model with native tool support. AI-Mode runs in Compose;
-Ollama and MCP run on the host. On native Linux, obtain Docker's host-gateway
-address with `docker network inspect bridge` (typically `172.17.0.1`). Start MCP
-on that interface, for example:
-
-```bash
-MCP_HOST=172.17.0.1 .venv/bin/python -m tripgenie_mcp serve
-```
-
-On Docker Desktop, use a host binding reachable through `host.docker.internal`
-(such as `MCP_HOST=0.0.0.0`) and restrict access to the local application with the
-host firewall. Ollama must likewise listen on a Docker-accessible host interface.
-Keep an existing host-managed Ollama process; configure its binding instead of
-starting a second instance. AI-Mode connects to host ports 11434 and 8012.
+Use a generation model with native tool support. Ollama, AI-Mode and MCP run on
+the host; start them with the
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md),
+which also covers native Linux binding. Host AI-Mode reaches Ollama and MCP on
+loopback; the Student 4 backend container reaches AI-Mode at
+`http://host.docker.internal:8006`.
 
 Example environment files are not automatically loaded by host processes.
 See [AI-Mode configuration](../../ai-services/ai-mode/README.md).
 To use the tool-capable Qwen model for the demonstration:
 
 ```bash
-docker compose --env-file shared/configuration/.env.example config --quiet
-AI_MODE_DEFAULT_MODEL=qwen2.5:7b AI_MODE_ALLOWED_MODELS=qwen2.5:7b,llama3.1:8b docker compose --env-file shared/configuration/.env.example up --build -d
+cd ai-services/ai-mode
+AI_MODE_DEFAULT_MODEL=qwen2.5:7b AI_MODE_ALLOWED_MODELS=qwen2.5:7b,llama3.1:8b AI_MODE_TIMEOUT_SECONDS=90 \
+  ../../.venv/bin/python -m uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
 ```
 
-Backends use `http://ai-mode:8006`; host RAG uses the loopback-published gateway
-at `http://127.0.0.1:8006`. RAG's hosting and retrieval workflow are unchanged.
+Then, from the repository root:
+
+```bash
+docker compose --env-file shared/configuration/.env.example up --build -d
+```
 
 Compose publishes Student 4's public backend at `127.0.0.1:18008` and Student 1's
-at `127.0.0.1:18001` for host MCP; databases remain private. Other tool providers
+at `127.0.0.1:18001` (Student 3 `18003`, Student 5 `18005`) for host MCP; databases remain private. Other tool providers
 must be reachable at the URLs configured on MCP. An unavailable provider produces
 an explicit tool error. All catalogue definitions are still discoverable.
 

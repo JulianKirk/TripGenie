@@ -33,11 +33,12 @@ a structured error when its tool is called. The `call` command prints the MCP
 The server binds to loopback by default. Docker Desktop backends reach it at
 `http://host.docker.internal:8012/mcp` when configured by their owners. Never
 bind it to a public interface without adding authentication. Host-side backend
-ports must be reachable from the host. Compose now publishes Student 1 at
-127.0.0.1:18001 and Student 4 at 127.0.0.1:18008. On native Linux, see
-[the host-binding guide](../../student-4/docs/mcp-assistant.md) for restricted
-Docker-bridge binding and CLI `--url`; loopback-only listeners cannot be
-reached through the container host gateway.
+ports must be reachable from the host. Compose publishes Student 1, 3, 4 and 5
+on 127.0.0.1 ports 18001, 18003, 18008 and 18005, and Student 2 on 9000. On
+native Linux, see the
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md)
+for Docker-bridge binding (use CLI `--url` to match); loopback-only listeners
+cannot be reached through the container host gateway.
 
 | Environment variable | Default public backend URL |
 | --- | --- |
@@ -49,9 +50,8 @@ reached through the container host gateway.
 
 `MCP_HOST` (default `127.0.0.1`) and `MCP_PORT` (default `8012`) set the
 server binding. Set each URL to the **public backend root**, without an API
-prefix. Student 1 and 4 defaults match Compose loopback ports; Student 2
-publishes port 9000. Other provider ports must be published by their owners;
-override the relevant URLs if they use different bindings.
+prefix. All defaults match the Compose loopback ports; override the relevant
+URLs if they use different bindings.
 The Student 5 backend serves `/api/v1` in Compose; Student 1 and 3 serve `/api`.
 
 ## Tool contract

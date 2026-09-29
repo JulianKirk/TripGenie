@@ -1,3 +1,10 @@
+# Release 1: AI-Mode (8006), RAG (8011), MCP (8012), Ollama and the agentic
+# loop run on the host, never in here. Backends that use them reach the host as
+# host.docker.internal; each declares the host-gateway mapping so that name also
+# resolves on native Linux Docker Engine, which lacks Docker Desktop's alias. None of
+# them is a depends_on or healthcheck target: a stopped host service turns off
+# the AI feature, not the container. Startup order and binding notes:
+# docs/reports/release-1/local-host-services-runbook.md.
 services:
   # Shared Frontend Portal
   shared-ui:
@@ -64,9 +71,17 @@ services:
     environment:
       STUDENT1_BACKEND_DB_API_BASE_URL: http://student-1-database:8002
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
-      STUDENT1_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+      STUDENT1_BACKEND_AI_MODE_BASE_URL: http://host.docker.internal:8006
       STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
       STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
+      STUDENT1_BACKEND_RAG_ENABLED: "${STUDENT1_BACKEND_RAG_ENABLED:-true}"
+      STUDENT1_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
+      STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS: "130"
+      STUDENT1_BACKEND_MCP_ENABLED: "${STUDENT1_BACKEND_MCP_ENABLED:-true}"
+      STUDENT1_BACKEND_MCP_BASE_URL: http://host.docker.internal:8012/mcp
+      STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS: "40"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "8001"
     depends_on:
@@ -169,18 +184,20 @@ services:
       # The ask box on the accommodation page. Unset it and the service still
       # runs -- /health says "not_configured" and only /accommodation/ai-search
       # is gone.
-      AI_MODE_URL: http://ai-mode:8006
-      # Longer than AI-Mode's own wait on Ollama below, so a slow generation is
+      AI_MODE_URL: http://host.docker.internal:8006
+      # Longer than AI-Mode's own 90-second wait on Ollama (AI_MODE_TIMEOUT_SECONDS
+      # in the runbook's host AI-Mode command), so a slow generation is
       # reported by the service that is actually waiting on it rather than
       # guessed at from here. Under it, a 44-second answer -- measured, on a
       # cold model -- reached the page as "ai mode service unavailable" while
       # AI-Mode was still patiently waiting.
       AI_MODE_TIMEOUT: "100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - student-2-database
       - student-1-backend
       - shared-backend
-      - ai-mode
 
   # The accommodation webpage. Talks to the backend service and nothing else.
   student-2-frontend:
@@ -268,22 +285,23 @@ services:
       STUDENT3_BACKEND_VERIFY_TRIP_EXISTS: "${STUDENT3_BACKEND_VERIFY_TRIP_EXISTS:-false}"
       STUDENT3_BACKEND_SERVICE_NAME: "${STUDENT3_BACKEND_SERVICE_NAME:-student-3-backend}"
       STUDENT3_BACKEND_CURRENCY: "${STUDENT3_BACKEND_CURRENCY:-AUD}"
-      STUDENT3_BACKEND_AI_MODE_BASE_URL: "${STUDENT3_BACKEND_AI_MODE_BASE_URL:-http://ai-mode:8006}"
+      STUDENT3_BACKEND_AI_MODE_BASE_URL: "${STUDENT3_BACKEND_AI_MODE_BASE_URL:-http://host.docker.internal:8006}"
       # Deliberately longer than AI-Mode's own budget so a slow generation
       # comes back as its error rather than as a timeout here.
       STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS: "${STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS:-120}"
       STUDENT3_BACKEND_AI_PROMPT_ASSET: "${STUDENT3_BACKEND_AI_PROMPT_ASSET:-transport_recommendations_v1.md}"
       STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS: "${STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
       STUDENT3_BACKEND_AI_MAX_CANDIDATES: "${STUDENT3_BACKEND_AI_MAX_CANDIDATES:-12}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "8003"
+    # Host loopback only, for the host-run MCP server's transport tools.
+    ports:
+      - "127.0.0.1:18003:8003"
     depends_on:
       student-3-database:
         condition: service_healthy
-      # Started, not healthy: AI suggestions are advisory, so transport
-      # browsing and planning must keep working when AI-Mode does not.
-      ai-mode:
-        condition: service_started
       # The itinerary service holds which transport belongs to which trip, so
       # every selection and every seat count goes through it. Declared for the
       # same reason student-2-backend declares it: this service reads Student
@@ -354,10 +372,12 @@ services:
       DATABASE_URL: http://student-4-database:8009
       LOCATION_URL: http://shared-backend:9100
       ITINERARY_URL: http://student-1-backend:8001
-      AI_MODE_URL: "${STUDENT4_BACKEND_AI_MODE_URL:-http://ai-mode:8006}"
+      AI_MODE_URL: "${STUDENT4_BACKEND_AI_MODE_URL:-http://host.docker.internal:8006}"
       AI_MODE_TIMEOUT: "${STUDENT4_BACKEND_AI_MODE_TIMEOUT:-100}"
       AI_ASSISTANT_ENABLED: "${STUDENT4_AI_ASSISTANT_ENABLED:-true}"
       AGENT_TIMEOUT: "${STUDENT4_AGENT_TIMEOUT:-210}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "8008"
     depends_on:
@@ -366,8 +386,6 @@ services:
       shared-backend:
         condition: service_started
       student-1-backend:
-        condition: service_started
-      ai-mode:
         condition: service_started
 
   # HTMX frontend. Talks to the Student 4 backend and nothing else.
@@ -471,7 +489,7 @@ services:
       STUDENT5_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
       STUDENT5_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT5_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
-      STUDENT5_BACKEND_AI_MODE_BASE_URL: http://ai-mode:8006
+      STUDENT5_BACKEND_AI_MODE_BASE_URL: http://host.docker.internal:8006
       STUDENT5_BACKEND_AI_MODE_TIMEOUT_SECONDS: "200"
       STUDENT5_BACKEND_RAG_ENABLED: "${STUDENT5_BACKEND_RAG_ENABLED:-true}"
       STUDENT5_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
@@ -495,8 +513,6 @@ services:
       student-2-backend:
         condition: service_started
       student-4-backend:
-        condition: service_started
-      ai-mode:
         condition: service_started
     healthcheck:
       test:
@@ -528,53 +544,6 @@ services:
           "python",
           "-c",
           "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/ready', timeout=3)",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # Shared AI gateway. Every student's backend reaches it over HTTP, so the
-  # model client, the approved-model allowlist and the prompt/response bounds
-  # live in one place -- and it is the only service that speaks to Ollama.
-  # Backends use the internal network; host RAG uses the loopback port.
-  # Backends wait for the process to start, not for AI readiness, so ordinary
-  # CRUD remains available without a model.
-  ai-mode:
-    # Host-run RAG and local clients use loopback; backends use ai-mode:8006.
-    ports:
-      - "127.0.0.1:8006:8006"
-    build:
-      context: ./ai-services/ai-mode
-      dockerfile: Dockerfile
-    expose:
-      - "8006"
-    environment:
-      # Ollama is installed and run on the host for Release 0. The host-gateway
-      # alias resolves the host; native Linux Ollama must listen beyond loopback.
-      AI_MODE_OLLAMA_BASE_URL: http://host.docker.internal:11434
-      AI_MODE_MCP_URL: http://host.docker.internal:8012/mcp
-      # The image's own default is qwen2.5:0.5b, which is too small for the
-      # accommodation ask box: it reads "under 100 a night" as a number of beds,
-      # or as a minimum price, and answers with filters that match nothing. The
-      # 8b model is already on the service's approved list and is what the
-      # feature is built against. Run `ollama pull llama3.1:8b` on the host
-      # before using it. Drop this line to return to the smaller model.
-      AI_MODE_DEFAULT_MODEL: "${AI_MODE_DEFAULT_MODEL:-llama3.1:8b}"
-      AI_MODE_ALLOWED_MODELS: "${AI_MODE_ALLOWED_MODELS:-qwen2.5:0.5b,llama3.1:8b}"
-      # A local model on a laptop is slower than the 15s the image assumes:
-      # measured on this stack, an 8b answering a cold prompt takes ~32s of
-      # inference on top of ~11s of loading itself off disk.
-      AI_MODE_TIMEOUT_SECONDS: "90"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/ready', timeout=3)",
         ]
       interval: 15s
       timeout: 5s

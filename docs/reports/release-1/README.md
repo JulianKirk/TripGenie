@@ -11,6 +11,11 @@ separately.
 - [Student 1 RAG delivery plan](./student-1-release-1-plan.md)
 - [Student 1 data models retained from Release 0](../../architecture/student-1-data-models.md)
 
+## Running locally
+
+- [Local host services runbook](./local-host-services-runbook.md): Ollama,
+  AI-Mode, RAG, and MCP on the host, then Docker Compose.
+
 ## Evidence rules
 
 - Store only reproducible, sanitized evidence.

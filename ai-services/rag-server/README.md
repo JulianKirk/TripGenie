@@ -34,7 +34,7 @@ system instruction to use only retrieved CONTEXT, without calling MCP for facts.
 - Python 3.11 or later
 - `uv`
 - host Ollama
-- AI-Mode on `http://127.0.0.1:8006` (Compose publishes this loopback port)
+- host AI-Mode on `http://127.0.0.1:8006`
 - approved chat model, such as `qwen2.5:0.5b` or the configured alternative
 - `nomic-embed-text`
 
@@ -58,15 +58,9 @@ models.
 
 ## Start the host services
 
-Start containerised AI-Mode from the repository root:
-
-```powershell
-docker compose --env-file shared/configuration/.env.example up --build -d ai-mode
-```
-
-Host RAG uses its loopback-published port. Start host MCP as described in the
-[activity assistant setup](../../student-4/docs/mcp-assistant.md); AI-Mode needs
-it for generation.
+Start Ollama, host AI-Mode, and host MCP as described in the
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md);
+AI-Mode needs MCP for generation.
 
 Verify it can see both configured models:
 
