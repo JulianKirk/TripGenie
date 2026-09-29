@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Any, TypeVar
 
 import httpx
-from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError
+from pydantic import ConfigDict, Field, StringConstraints, TypeAdapter, ValidationError
 
 from .ai_contract import CORRELATION_ID_PATTERN
 from .config import Settings
@@ -44,6 +44,7 @@ class AiModeHealthPayload(AiModeResponseModel):
 
 
 class AiModeGeneratePayload(AiModeResponseModel):
+    tools: list[dict[str, Any]] = Field(default_factory=list)
     run_id: ShortText
     correlation_id: CorrelationId
     model: ShortText
@@ -337,8 +338,7 @@ class AiModeClient:
                 code=envelope.error.code,
                 message=envelope.error.message,
                 details=[
-                    detail.model_dump(mode="json")
-                    for detail in envelope.error.details
+                    detail.model_dump(mode="json") for detail in envelope.error.details
                 ],
             )
             if response.status_code != 422:

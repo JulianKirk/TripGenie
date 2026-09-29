@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from ollama import AsyncClient, ResponseError
+from ollama import AsyncClient, ChatResponse, Message, ResponseError
 from pydantic import ValidationError
 
 from .config import Settings
@@ -18,12 +18,6 @@ from .errors import (
     model_unavailable,
 )
 from .models import DependencyStatus
-
-
-@dataclass(slots=True)
-class ProviderGenerateResult:
-    model: str
-    response: str
 
 
 @dataclass(slots=True)
@@ -132,21 +126,33 @@ class OllamaProviderAdapter:
             ),
         )
 
-    async def generate(
+    async def chat(
         self,
         *,
         model: str,
-        prompt: str,
-        schema: dict[str, Any] | None,
-    ) -> ProviderGenerateResult:
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        schema: dict[str, Any] | None = None,
+    ) -> Message:
         try:
-            payload = await self._client.generate(
-                model=model,
-                prompt=prompt,
-                format=schema,
-                stream=False,
-                raw=True,
-                options={"temperature": 0},
+            # The pinned SDK's chat() tool serializer drops anyOf/$ref and other
+            # MCP schema fields. Keep its transport, auth and response validation,
+            # bypassing only that serializer. Covered by outgoing-payload tests.
+            payload = await self._client._request(
+                ChatResponse,
+                "POST",
+                "/api/chat",
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "tools": tools,
+                    "format": schema,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0,
+                        "num_ctx": self._settings.context_tokens,
+                    },
+                },
             )
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
@@ -203,8 +209,7 @@ class OllamaProviderAdapter:
                 ],
             ) from exc
 
-        response_text = payload.response
-        if payload.done is not True or response_text is None:
+        if payload.done is not True or payload.message is None:
             raise bad_gateway(
                 "The AI provider returned a malformed generate response.",
                 [
@@ -218,7 +223,14 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        response_bytes = len(response_text.encode("utf-8"))
+        if payload.done_reason == "length":
+            raise bad_gateway(
+                "The AI provider truncated its response at the generation limit."
+            )
+
+        response_bytes = len(
+            payload.message.model_dump_json(exclude_none=True).encode("utf-8")
+        )
         if response_bytes > self._settings.max_response_bytes:
             raise dependency_response_too_large(
                 (
@@ -236,10 +248,7 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        return ProviderGenerateResult(
-            model=model,
-            response=response_text,
-        )
+        return payload.message
 
     async def embed(
         self,

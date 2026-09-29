@@ -72,14 +72,8 @@ class AiClient:
             return UNREACHABLE
         return _unwrap(body).get("status", UNREACHABLE)
 
-    async def generate(self, prompt: str, schema: dict[str, Any]) -> str:
-        """The model's raw answer, constrained to `schema`.
-
-        AI-Mode forwards the schema to Ollama as its `format`, so what comes
-        back is JSON of that shape -- but it is still just a string here.
-        Nothing validates it against the schema on either side of the wire;
-        that is `ai_search`'s job, and the reason it can retry.
-        """
+    async def generate(self, prompt: str, schema: dict[str, Any]) -> tuple[str, bool]:
+        """Return final text and whether the run used tools (prevent action replay)."""
         if self._client is None:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE, "ai mode is not configured"
@@ -95,7 +89,7 @@ class AiClient:
         answer = _unwrap(body).get("response")
         if not isinstance(answer, str):
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
-        return answer
+        return answer, bool(_unwrap(body).get("tools"))
 
 
 def _unwrap(body: Any) -> dict[str, Any]:

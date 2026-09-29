@@ -13,10 +13,6 @@ services:
     ports:
       - "8003:8003"
 
-  student-4-backend:
-    ports:
-      - "18008:8008"
-
   student-5-backend:
     ports:
       - "18005:8005"

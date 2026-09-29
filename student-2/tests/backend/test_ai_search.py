@@ -508,3 +508,21 @@ class TestWhenAiModeIsNotThere:
             response = client.post("/accommodation/ai-search", json={"query": QUESTION})
             assert response.status_code == 503
             assert response.json()["detail"] == "ai mode is not configured"
+
+
+def test_answer_repair_does_not_replay_agent_tool_actions(ai_client):
+    class ToolRun(FakeAiMode):
+        def handle(self, request):
+            response = super().handle(request)
+            body = response.json()
+            if request.url.path == "/generate":
+                body["data"]["tools"] = [
+                    {"tool": "activities_create", "status": "success"}
+                ]
+            return httpx.Response(response.status_code, json=body)
+
+    ai = ToolRun("{invalid", json.dumps(UNDER_100_IN_JAPAN))
+    with ai_client(ai) as (client, _):
+        response = client.post("/accommodation/ai-search", json={"query": QUESTION})
+    assert response.status_code == 502
+    assert len(ai.prompts) == 1

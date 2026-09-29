@@ -1,12 +1,16 @@
-"""Read-only tools backed by public student APIs."""
+"""Bounded tools backed by public student APIs."""
 
 import json
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from .provider import ProviderClient, ProviderError
+from pydantic import BeforeValidator, Field, ValidationError
+
+from .activity_models import Activity, ActivityFilters, ActivityWrite
+from .provider import ProviderClient, ProviderError, request_correlation
 
 TRIP_ID = re.compile(r"trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}\Z")
 ITEM_ID = re.compile(r"item_[A-Za-z0-9][A-Za-z0-9_-]{2,63}\Z")
@@ -15,6 +19,12 @@ CORRELATION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 CATEGORIES = {"accommodation", "transport", "activities", "food", "shopping", "other"}
 EXACT_MONEY = re.compile(r"-?\d+\.\d{2}\Z")
 CURRENCY = re.compile(r"[A-Z]{3}\Z")
+
+
+def explicit_confirmation(value: object) -> bool:
+    if value is not True:
+        raise ValueError("Deletion requires the boolean true")
+    return True
 
 
 def invalid(message: str) -> None:
@@ -132,6 +142,7 @@ class DomainTools:
         correlation_id = correlation_id or f"mcp-{uuid4().hex[:12]}"
         if not CORRELATION_ID.fullmatch(correlation_id):
             correlation_id = f"mcp-{uuid4().hex[:12]}"
+        token = request_correlation.set(correlation_id)
         try:
             data = action()
             if len(json.dumps(data, ensure_ascii=True).encode()) > 32768:
@@ -153,6 +164,9 @@ class DomainTools:
                 "correlation_id": correlation_id,
                 "source": owner,
             }
+
+        finally:
+            request_correlation.reset(token)
 
     def trip_get_context(self, trip_id: str) -> dict:
         value = self.provider.read(
@@ -284,24 +298,108 @@ class DomainTools:
             item["estimated_cost"] = money(item["estimated_cost"])
         return summary
 
-    def activities_search(self, text: str | None = None, limit: int = 20) -> dict:
+    def activities_search(
+        self,
+        text: Annotated[str, Field(min_length=1, max_length=255)] | None = None,
+        limit: Annotated[int, Field(ge=1, le=50, strict=True)] = 20,
+        offset: Annotated[int, Field(ge=0, strict=True)] = 0,
+        filters: ActivityFilters | None = None,
+    ) -> dict:
         limit_value(limit)
+        if type(offset) is not int or offset < 0:
+            invalid("Offset must be non-negative")
         if text is not None and (not text.strip() or len(text) > 255):
             invalid("Invalid search text")
+        query = filters.model_dump(mode="json", exclude_unset=True) if filters else {}
+        if text:
+            query["text"] = text
+        query.update(limit=limit, offset=offset)
         value = self.provider.read(
             "student-4",
             "/activity",
-            query={"text": text, "limit": limit} if text else None,
-            params={"limit": limit} if not text else None,
+            query=query if filters is not None or text else None,
+            params={"limit": limit, "offset": offset}
+            if filters is None and not text
+            else None,
         )
-        return page(value, "activities", limit, "id", "uuid")
+        result = page(value, "activities", limit, "id", "uuid")
+        result["truncated"] = value["total"] > offset + len(result["items"])
+        for item in result["items"]:
+            exact_money(record(item, "price", "pricing_basis")["price"])
+            if item["pricing_basis"] not in ("PER_PERSON", "FLAT_ADMISSION"):
+                raise ProviderError(
+                    "INVALID_RESPONSE", "Invalid activity pricing basis"
+                )
+        return result
+
+    def _activity_write(
+        self, method: str, activity: ActivityWrite, activity_id: str | None = None
+    ) -> dict:
+        path = (
+            "/activity"
+            if activity_id is None
+            else f"/activity/{identifier(activity_id, 'uuid')}"
+        )
+        body = activity.model_dump(mode="json")
+        # Reserve the generated record and schedule UUIDs before mutating anything.
+        projected = body | {"id": str(UUID(int=0))}
+        projected["availability_schedules"] = [
+            schedule | {"id": str(UUID(int=0))}
+            for schedule in body["availability_schedules"]
+        ]
+        if len(json.dumps(projected, ensure_ascii=True).encode()) > 32768:
+            invalid("Activity including generated IDs must fit within 32 KB")
+        value = self.provider.write(path, method=method, body=body)
+        try:
+            parsed = Activity.model_validate(value)
+            if activity_id is not None and parsed.id != UUID(activity_id):
+                raise ValueError("Mismatched activity ID")
+            result = parsed.model_dump(mode="json")
+            if len(json.dumps(result, ensure_ascii=True).encode()) > 32768:
+                raise ValueError("Oversized write acknowledgement")
+            return result
+        except (ValidationError, ValueError) as exc:
+            raise ProviderError(
+                "WRITE_OUTCOME_UNKNOWN",
+                "Invalid write acknowledgement; inspect the catalogue before retrying",
+            ) from exc
+
+    def activities_create(self, activity: ActivityWrite) -> dict:
+        return self._activity_write("POST", activity)
+
+    def activities_update(self, activity_id: UUID, activity: ActivityWrite) -> dict:
+        return self._activity_write("PUT", activity, str(activity_id))
+
+    def activities_delete(
+        self,
+        activity_id: UUID,
+        confirm: Annotated[Literal[True], BeforeValidator(explicit_confirmation)],
+    ) -> dict:
+        if confirm is not True:
+            invalid("Deletion requires confirm=true")
+        activity_id = identifier(str(activity_id), "uuid")
+        value = self.provider.write(f"/activity/{activity_id}", method="DELETE")
+        if (
+            value.get("id") != activity_id
+            or value.get("deleted") is not True
+            or set(value) != {"id", "deleted"}
+        ):
+            raise ProviderError(
+                "WRITE_OUTCOME_UNKNOWN",
+                "Invalid deletion acknowledgement; "
+                "inspect the catalogue before retrying",
+            )
+        return value
 
     def activities_get(self, activity_id: str) -> dict:
         value = self.provider.read(
             "student-4", f"/activity/{identifier(activity_id, 'uuid')}"
         )
         item = matching(value, "id", activity_id)
-        return record(item, "price", "pricing_basis")
+        exact_money(record(item, "price", "pricing_basis")["price"])
+        if item["pricing_basis"] not in ("PER_PERSON", "FLAT_ADMISSION"):
+            raise ProviderError("INVALID_RESPONSE", "Invalid activity pricing basis")
+        return item
 
     def activities_list_categories(self) -> dict:
         value = self.provider.read("student-4", "/activity/categories")

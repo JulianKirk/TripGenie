@@ -169,3 +169,6 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 - `GET /health` may report a degraded shared AI-Mode dependency, while `GET /ready` remains database-only and never waits on AI-mode.
 - Correlation IDs are validated to safe single-line values before they are echoed or logged.
 - The runtime prompt asset is versioned at `backend_service/prompts/runtime_ai_suggestions_v2.md`, validated at startup, and treats all downstream/user strings as untrusted data that cannot override instructions. Rendering replaces template placeholders in one pass so placeholder-like text inside context is never recursively expanded. It must stay inside `backend_service/prompts/`; implementation notes live in `docs/architecture/student-1-runtime-ai-mode.md`.
+
+Shared AI-Mode generation may execute MCP tools. Automatic answer-repair retries
+stop when the returned run contains tool calls, to avoid replaying actions.

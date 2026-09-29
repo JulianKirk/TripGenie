@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, cast
@@ -19,10 +18,7 @@ from .config import Settings
 from .errors import FrontendError
 from .forms import activity_form_values, parse_activity_form, submitted_form_values
 from .models import (
-    ActivityQueryPayload,
     ItinerarySelectionWrite,
-    RecommendationEvaluationState,
-    RecommendationPlan,
     TripDirectory,
 )
 from .presenters import (
@@ -33,7 +29,7 @@ from .presenters import (
     group_schedules,
     party_total,
 )
-from .query import QueryInputError, build_search_body, search_body_to_params
+from .query import QueryInputError, build_search_body
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -279,137 +275,26 @@ async def results(request: Request, client: ClientDep) -> Any:
     return TEMPLATES.TemplateResponse(request, "partials/results.html", context)
 
 
-def _encoded_evaluation_state(
-    *,
-    question: str,
-    trip_id: str | None,
-    query: ActivityQueryPayload,
-    summary: str,
-    attempt: int,
-) -> str:
-    return json.dumps(
-        {
-            "question": question,
-            "trip_id": trip_id,
-            "query": query.model_dump(mode="json", exclude_none=True),
-            "summary": summary,
-            "attempt": attempt,
-        },
-        separators=(",", ":"),
-    )
-
-
-def _ai_error_response(request: Request, message: str) -> Any:
-    return TEMPLATES.TemplateResponse(
-        request,
-        "partials/ai_results.html",
-        {"error": message, "result": None, "params": None, "categories": None},
-    )
-
-
-@router.post("/suggestions/plan")
-async def suggestion_plan(request: Request, client: ClientDep) -> Any:
+@router.post("/suggestions/ask")
+async def suggestion_ask(request: Request, client: ClientDep) -> Any:
     form = await request.form()
-    question = str(form.get("question", "")).strip()
-    trip_id = str(form.get("trip_id", "")).strip() or None
-    payload: dict[str, object] = {"question": question}
-    if trip_id is not None:
+    payload: dict[str, object] = {"question": str(form.get("question", "")).strip()}
+    trip_id = str(form.get("trip_id", "")).strip()
+    if trip_id:
         payload["trip_id"] = trip_id
+    result = None
+    error = None
     try:
-        plan = await client.plan_recommendations(payload)
+        result = await client.ask_assistant(payload)
     except FrontendError as exc:
-        return _ai_error_response(request, exc.detail)
-    return TEMPLATES.TemplateResponse(
-        request,
-        "partials/ai_progress.html",
-        {
-            "plan": plan,
-            "retry": False,
-            "revision_explanation": None,
-            "state_json": _encoded_evaluation_state(
-                question=plan.question,
-                trip_id=plan.trip_id,
-                query=plan.query,
-                summary=plan.summary,
-                attempt=1,
-            ),
-        },
+        error = exc.detail
+    template = (
+        "partials/assistant_results.html"
+        if request.headers.get("HX-Request") == "true"
+        else "assistant_page.html"
     )
-
-
-def _decode_evaluation_state(raw: str) -> RecommendationEvaluationState:
-    try:
-        body = json.loads(raw)
-    except ValueError as exc:
-        message = "The suggestion progress state is invalid. Please start again."
-        raise ValueError(message) from exc
-    if not isinstance(body, dict):
-        message = "The suggestion progress state is invalid. Please start again."
-        raise ValueError(message)
-    return RecommendationEvaluationState.model_validate(body)
-
-
-@router.post("/suggestions/evaluate")
-async def suggestion_evaluate(request: Request, client: ClientDep) -> Any:
-    form = await request.form()
-    raw_state = str(form.get("state", ""))
-    try:
-        state = _decode_evaluation_state(raw_state)
-        payload = state.model_dump(mode="json", exclude_none=True)
-        result = await client.evaluate_recommendations(payload)
-    except (FrontendError, ValidationError, ValueError, TypeError) as exc:
-        return _ai_error_response(
-            request,
-            _error(exc, "The suggestion request is invalid. Please start again."),
-        )
-
-    if result.status == "retry":
-        retry_plan = RecommendationPlan(
-            question=state.question,
-            trip_id=state.trip_id,
-            query=result.query,
-            summary=result.summary,
-            trip_context_available=state.trip_id is not None,
-        )
-        return TEMPLATES.TemplateResponse(
-            request,
-            "partials/ai_progress.html",
-            {
-                "plan": retry_plan,
-                "retry": True,
-                "revision_explanation": result.revision_explanation,
-                "state_json": _encoded_evaluation_state(
-                    question=state.question,
-                    trip_id=state.trip_id,
-                    query=result.query,
-                    summary=result.summary,
-                    attempt=2,
-                ),
-            },
-        )
-
-    try:
-        categories = await client.categories()
-    except FrontendError:
-        categories = None
     return TEMPLATES.TemplateResponse(
-        request,
-        "partials/ai_results.html",
-        {
-            "error": None,
-            "result": result,
-            "params": (
-                search_body_to_params(
-                    result.query.model_dump(mode="json", exclude_none=True)
-                )
-                if categories is not None
-                else None
-            ),
-            "categories": categories,
-            "categories_error": None,
-            "selected_limit": result.query.limit,
-            "labels": _category_labels(categories) if categories else {},
-        },
+        request, template, {"result": result, "error": error}
     )
 
 

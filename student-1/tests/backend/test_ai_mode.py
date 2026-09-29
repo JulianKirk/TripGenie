@@ -1857,3 +1857,35 @@ def test_ai_suggestion_logs_redact_free_text_and_prompt_body(
     assert "SENSITIVE_TRIP_NOTE_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "SENSITIVE_GOAL_SHOULD_NOT_BE_LOGGED" not in caplog.text
     assert "Trip request context" not in caplog.text
+
+
+def test_ai_suggestions_does_not_retry_after_agent_tool_execution(
+    client_factory, database_api, ai_mode_api
+):
+    ai_mode_api.queue_response(
+        httpx.Response(
+            200,
+            json={
+                "data": {
+                    "run_id": "run-tool",
+                    "correlation_id": "request-tool",
+                    "model": "llama3.1:8b",
+                    "provider": "ollama",
+                    "done": True,
+                    "response": "{bad json",
+                    "tools": [{"tool": "activities_create", "status": "success"}],
+                }
+            },
+        )
+    )
+    with client_factory(
+        database_api.handle,
+        settings_override=ai_settings(),
+        ai_mode_handler=ai_mode_api.handle,
+    ) as client:
+        response = client.post(
+            "/api/trips/trip_2027_sydney_getaway/ai-suggestions",
+            json={"requested_date": "2027-04-02", "goal": "Suggest one stop."},
+        )
+    assert response.status_code == 502
+    assert len(ai_mode_api.requests) == 1

@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from fastapi import HTTPException, status
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .assistant_models import ToolTrace
 
 if TYPE_CHECKING:
     from .config import Settings
@@ -18,6 +20,7 @@ class _GenerateData(BaseModel):
     provider: str = "ollama"
     response: str
     done: bool = True
+    tools: list[ToolTrace] = Field(default_factory=list)
 
 
 class _GenerateEnvelope(BaseModel):
@@ -33,6 +36,16 @@ class GeneratedAnswer(BaseModel):
     run_id: str
     model: str
     provider: str
+    tools: list[ToolTrace] = Field(default_factory=list)
+
+
+class GenerationError(HTTPException):
+    def __init__(self, status_code: int, tools: list[ToolTrace]) -> None:
+        super().__init__(
+            status_code,
+            "AI generation failed. Review the tool trace for any completed actions.",
+        )
+        self.tools = tools
 
 
 class AiModeClient:
@@ -68,6 +81,8 @@ class AiModeClient:
         schema: dict[str, Any],
         correlation_id: str,
         metadata: dict[str, str],
+        system: str | None = None,
+        request_timeout: float | None = None,
     ) -> GeneratedAnswer:
         if self._client is None:
             raise HTTPException(
@@ -77,8 +92,12 @@ class AiModeClient:
         try:
             response = await self._client.post(
                 "/generate",
+                timeout=request_timeout
+                if request_timeout is not None
+                else self._client.timeout,
                 json={
                     "prompt": prompt,
+                    **({"system": system} if system is not None else {}),
                     "schema": schema,
                     "correlation_id": correlation_id,
                     "metadata": metadata,
@@ -98,7 +117,14 @@ class AiModeClient:
         if response.is_error:
             upstream_status = response.status_code
             public_status = upstream_status if upstream_status in {503, 504} else 502
-            raise HTTPException(public_status, "AI recommendations are unavailable.")
+            try:
+                tools = [
+                    ToolTrace.model_validate(item)
+                    for item in response.json().get("tools", [])
+                ]
+            except (ValueError, TypeError, AttributeError):
+                tools = []
+            raise GenerationError(public_status, tools)
 
         try:
             generated = _GenerateEnvelope.model_validate(response.json()).data
@@ -117,4 +143,5 @@ class AiModeClient:
             run_id=generated.run_id,
             model=generated.model,
             provider=generated.provider,
+            tools=generated.tools,
         )

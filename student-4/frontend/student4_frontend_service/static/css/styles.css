@@ -22,14 +22,8 @@ a { color: var(--accent-dark); }
 .ai-panel { margin-top: 1.25rem; border-top: 4px solid var(--accent); }
 .ai-panel form { display: grid; gap: .75rem; }
 .ai-working { color: var(--muted); font-weight: 700; }
-.ai-progress, .ai-result { padding: 1rem; margin-top: 1rem; background: #f3faf7; border: 1px solid #b9dacf; border-radius: var(--radius); }
-.ai-progress h3, .ai-result h3 { margin: .25rem 0; }
-.ai-progress__track { height: .35rem; overflow: hidden; background: #d8e8e2; border-radius: 999px; }
-.ai-progress__track span { display: block; width: 45%; height: 100%; background: var(--accent); animation: ai-progress 1.2s ease-in-out infinite alternate; }
-.ai-result__grid { margin-top: 1rem; }
-.ai-reason { padding-left: .75rem; border-left: 3px solid var(--accent); }
-@keyframes ai-progress { to { transform: translateX(120%); } }
-@media (prefers-reduced-motion: reduce) { .ai-progress__track span { width: 100%; animation: none; } }
+.ai-result { padding: 1rem; margin-top: 1rem; background: #f3faf7; border: 1px solid #b9dacf; border-radius: var(--radius); }
+.ai-result h3 { margin: .25rem 0; }
 .intro h2 { margin: .25rem 0; font-size: clamp(1.6rem, 4vw, 2.35rem); }
 .panel-heading, .activity-card__heading, .pager { display: flex; gap: 1rem; justify-content: space-between; align-items: center; }
 .panel-heading h2 { margin: .1rem 0; }
@@ -82,3 +76,10 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 @media (max-width: 800px) { .app-layout { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .schedule-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .itinerary-row { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .form-grid, .facts, .schedule-row { grid-template-columns: 1fr; } .pager { align-items: flex-start; flex-direction: column; } }
+
+/* Execution data is separate from advisory model prose. */
+.assistant-text { white-space: pre-wrap; }
+.assistant-tools { margin-top: 1rem; overflow-wrap: anywhere; }
+.assistant-tools summary { cursor: pointer; font-weight: 600; }
+.assistant-tools li { margin-block: 0.8rem; }
+.assistant-tools code, .assistant-tools pre { white-space: pre-wrap; }

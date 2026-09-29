@@ -4,8 +4,10 @@ import json
 import logging
 from uuid import uuid4
 
+import httpx
 from pydantic import ValidationError
 
+from .agent import Agent
 from .config import Settings
 from .errors import ApiError, bad_gateway, validation_error
 from .models import (
@@ -17,6 +19,7 @@ from .models import (
     HealthResponse,
 )
 from .provider import OllamaProviderAdapter
+from .schema import validate_schema
 
 LOGGER = logging.getLogger(__name__)
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
@@ -24,9 +27,16 @@ LOG_VALUE_MAX_CHARS = 160
 
 
 class AiModeService:
-    def __init__(self, provider: OllamaProviderAdapter, settings: Settings) -> None:
+    def __init__(
+        self,
+        provider: OllamaProviderAdapter,
+        settings: Settings,
+        *,
+        mcp_transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._provider = provider
         self._settings = settings
+        self._agent = Agent(provider, settings, mcp_transport)
 
     async def health(self) -> HealthResponse:
         ollama = await self._provider.health()
@@ -67,10 +77,8 @@ class AiModeService:
         )
 
         try:
-            result = await self._provider.generate(
-                model=resolved_model,
-                prompt=payload.prompt,
-                schema=payload.output_schema,
+            response, tools = await self._agent.generate(
+                payload, resolved_model, correlation_id
             )
         except ApiError as exc:
             _log_stage(
@@ -87,9 +95,10 @@ class AiModeService:
             response_payload = GenerateResponsePayload(
                 run_id=run_id,
                 correlation_id=correlation_id,
-                model=result.model,
+                model=resolved_model,
                 provider="ollama",
-                response=result.response,
+                response=response,
+                tools=tools,
                 done=True,
             )
         except ValidationError as exc:
@@ -194,17 +203,23 @@ class AiModeService:
 
     def _validate_payload_bounds(self, payload: GenerateRequest) -> None:
         details: list[dict[str, str]] = []
-        if len(payload.prompt) > self._settings.max_prompt_chars:
+        if (
+            len(payload.prompt) + len(payload.system or "")
+            > self._settings.max_prompt_chars
+        ):
             details.append(
                 {
                     "field": "prompt",
                     "issue": (
-                        f"must be at most {self._settings.max_prompt_chars} characters"
+                        ("combined prompt and system " if payload.system else "")
+                        + f"must be at most {self._settings.max_prompt_chars}"
+                        + " characters"
                     ),
                 },
             )
 
         if payload.output_schema is not None:
+            validate_schema(payload.output_schema)
             schema_chars = _json_char_count(payload.output_schema)
             if schema_chars > self._settings.max_schema_chars:
                 details.append(

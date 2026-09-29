@@ -106,15 +106,15 @@ the exit code.
 | `rag` | Calibration queries to the host RAG server | `checks/rag.json` -> `../rag-server/config/calibration-queries.json` |
 | `ci` | Latest `student-x-ci.yml` run per service via `gh` | `checks/ci.json` |
 
-**MCP** (`python -m tripgenie_mcp serve` plus the five backends): all 16 tools
-are listed; one valid read per student returns `ok: true`, `data` and the right
+**MCP** (`python -m tripgenie_mcp serve` plus the five backends, started with the agentic overlay): all 19 tools
+are listed (the three activity write tools are listed, never called); one valid read per student returns `ok: true`, `data` and the right
 `source`; IDs and amounts match the same backend read directly; `limit: 0`, a
 malformed ID and an unknown tool are rejected; each call repeats with the same
 data and finishes under 3 s. Steps chain with `save` like flows do. Direct
 backend reads use the MCP server's own `MCP_STUDENT_n_URL` variables and
-defaults (loopback ports 18001/9000/18003/18008/18005). The agentic Compose
-overlay publishes students 1 and 3 on 8001/8003, so set `MCP_STUDENT_1_URL` and
-`MCP_STUDENT_3_URL` for both processes until the host-port scheme (#129) lands.
+defaults (loopback ports 18001/9000/18003/18008/18005). Compose does not yet
+publish student 3 on 18003 -- the agentic overlay uses 8003 -- so set
+`MCP_STUDENT_3_URL=http://127.0.0.1:8003` for both processes until it does.
 
 **RAG** (AI-Mode plus `python -m rag_service serve` with a built index): every
 answerable calibration case returns an answer, a confidence category and its

@@ -1,4 +1,4 @@
-"""Shared host-run MCP server for read-only student tools."""
+"""Shared host-run MCP server for bounded public student tools."""
 
 import json
 from functools import wraps
@@ -7,7 +7,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
@@ -21,7 +21,10 @@ CATALOGUE = {
         "trips_list_itinerary_items": "List bounded itinerary items for a trip.",
     },
     "student-2": {
-        "accommodations_search": "Discover accommodation IDs using location filters.",
+        "accommodations_search": (
+            "Discover accommodation IDs using location filters. When supplying city, "
+            "also supply country, for example country='Australia', city='Sydney'."
+        ),
         "accommodations_get": "Read an accommodation by UUID.",
         "accommodations_committed_costs": "Read committed stay costs for a trip.",
     },
@@ -32,9 +35,33 @@ CATALOGUE = {
         "transport_trip_costs": "Read a trip's priced transport selections.",
     },
     "student-4": {
-        "activities_search": "Discover activities using optional text search.",
-        "activities_get": "Read an activity with exact price and pricing basis.",
-        "activities_list_categories": "Read public activity category codes.",
+        "activities_search": (
+            "Search activities by structured filters. Optional text matches literal "
+            "substrings in names/descriptions, without stemming or synonyms. "
+            "Choose a short catalogue term, such as kayak for kayaking or walk for "
+            "walking; omit text for location, price, "
+            "accessibility and category-only searches. Put structured fields inside "
+            'filters, for example {"text":"kayak","limit":6,'
+            '"filters":{"location":{"country":"Australia","city":"Sydney"}}}. '
+            "A city filter requires country. "
+            'categories is an object {"codes":["OUTDOOR"],"match":"ANY"}, '
+            "not a list. party_size is an integer, not a range object. Omit filters "
+            "the question does not require. "
+            'Prices are decimal strings such as "50.00". Search returns summaries; '
+            "use activities_get for schedules and booking notes."
+        ),
+        "activities_create": "Create an activity (trusted local clients only).",
+        "activities_update": "Replace a complete activity, including its schedules.",
+        "activities_delete": "Hard delete an activity; requires confirm=true.",
+        "activities_get": (
+            "Read full activity details by a discovered activity_id, including exact "
+            "price, pricing basis, weekly schedules, booking and accessibility notes. "
+            "Use this after search when the user asks for those details."
+        ),
+        "activities_list_categories": (
+            "Read global activity category codes. This does not establish that "
+            "activities in every category exist in a particular city."
+        ),
         "activities_committed_costs": "Read committed activity costs for a trip.",
     },
     "student-5": {
@@ -58,7 +85,12 @@ def create_server(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(
-            allowed_hosts=["127.0.0.1:*", "localhost:*", "host.docker.internal:*"],
+            allowed_hosts=[
+                "127.0.0.1:*",
+                "localhost:*",
+                "host.docker.internal:*",
+                f"{settings.host}:*",
+            ],
             allowed_origins=["http://127.0.0.1:*", "http://localhost:*"],
         ),
     )
@@ -66,7 +98,14 @@ def create_server(
     def wrap(action, owner):
         @wraps(action)
         def call(**kwargs):
-            result = tools.execute(owner, lambda: action(**kwargs))
+            try:
+                request = server.get_context().request_context.request
+                correlation = (
+                    request.headers.get("X-Request-ID") if request is not None else None
+                )
+            except ValueError:
+                correlation = None
+            result = tools.execute(owner, lambda: action(**kwargs), correlation)
             if not result["ok"]:
                 return CallToolResult(
                     content=[TextContent(type="text", text=json.dumps(result))],
@@ -85,6 +124,17 @@ def create_server(
                 name=name,
                 description=description,
                 structured_output=True,
+                annotations=ToolAnnotations(
+                    readOnlyHint=name
+                    not in {
+                        "activities_create",
+                        "activities_update",
+                        "activities_delete",
+                    },
+                    destructiveHint=name in {"activities_update", "activities_delete"},
+                    idempotentHint=name != "activities_create",
+                    openWorldHint=False,
+                ),
             )
             registered = server._tool_manager.get_tool(name)
             registered.fn_metadata.arg_model.model_config["extra"] = "forbid"

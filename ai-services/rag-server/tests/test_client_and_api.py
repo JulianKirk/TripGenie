@@ -53,6 +53,10 @@ def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
             return httpx.Response(200, json=_ready_response())
         if request.url.path == "/embed":
             return httpx.Response(200, json=_embed_response())
+        payload = json.loads(request.content)
+        assert payload["prompt"] == "prompt"
+        assert "Do not call MCP tools" in payload["system"]
+        assert "CONTEXT" in payload["system"]
         return httpx.Response(
             200,
             json={
@@ -317,3 +321,28 @@ def test_public_readiness_reports_unavailable_ai_mode(settings) -> None:
     dependency = ready.json()["data"]["dependencies"]["ai_mode"]
     assert dependency["status"] == "unavailable"
     assert dependency["code"] == "DEPENDENCY_UNAVAILABLE"
+
+
+def test_generation_decoder_accepts_shared_agent_trace():
+    from rag_service.models import AiGeneratePayload
+
+    payload = AiGeneratePayload.model_validate(
+        {
+            "run_id": "agent-1",
+            "correlation_id": "rag-1",
+            "model": "llama3.1:8b",
+            "provider": "ollama",
+            "done": True,
+            "response": '{"answer":"grounded"}',
+            "tools": [
+                {
+                    "tool": "activities_search",
+                    "arguments": {},
+                    "status": "success",
+                    "duration_ms": 1,
+                    "result": {"content": []},
+                }
+            ],
+        }
+    )
+    assert payload.response == '{"answer":"grounded"}'

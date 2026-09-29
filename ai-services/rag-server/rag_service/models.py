@@ -164,7 +164,7 @@ class IngestionPayload(StrictModel):
 
 class GroundedGeneration(StrictModel):
     answer: str = Field(min_length=1, max_length=10000)
-    citation_ids: list[str] = Field(min_length=1, max_length=10)
+    citation_ids: list[str] = Field(max_length=10)
 
     @field_validator("citation_ids")
     @classmethod
@@ -182,6 +182,7 @@ class AiEmbedPayload(StrictModel):
 
 
 class AiGeneratePayload(StrictModel):
+    tools: list[dict[str, object]] = Field(default_factory=list)
     run_id: str
     correlation_id: str
     model: str
