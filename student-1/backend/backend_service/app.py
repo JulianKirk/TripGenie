@@ -21,6 +21,7 @@ from .ai_suggestions import (
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_request, validation_error
+from .mcp_client import McpClient
 from .models import (
     AccommodationIdentifier,
     ActivityIdentifier,
@@ -34,6 +35,10 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    McpOptionsRequest,
+    McpOptionsResponse,
+    RagQueryRequest,
+    RagQueryResponse,
     TransportIdentifier,
     TransportTravellerTotal,
     TripAccommodationCreate,
@@ -50,6 +55,7 @@ from .models import (
     TripTransportDetail,
     TripUpdate,
 )
+from .rag_client import RagClient
 from .service import BackendService
 from .transport_client import TransportClient
 
@@ -247,6 +253,8 @@ def create_app(
     accommodation_transport: httpx.BaseTransport | None = None,
     activity_transport: httpx.BaseTransport | None = None,
     transport_api_transport: httpx.BaseTransport | None = None,
+    rag_transport: httpx.BaseTransport | None = None,
+    mcp_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     resolved_database_transport = database_transport or transport
@@ -267,6 +275,8 @@ def create_app(
             app_settings,
             transport=transport_api_transport,
         )
+        rag = RagClient(app_settings, transport=rag_transport)
+        mcp = McpClient(app_settings, transport=mcp_transport)
         app.state.backend_service = BackendService(
             client,
             AiSuggestionService(ai_mode_client, app_settings),
@@ -274,6 +284,8 @@ def create_app(
             accommodations,
             activities,
             transport_options,
+            rag,
+            mcp,
         )
         try:
             yield
@@ -283,6 +295,8 @@ def create_app(
             accommodations.close()
             activities.close()
             transport_options.close()
+            rag.close()
+            mcp.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -418,6 +432,33 @@ def create_app(
                 correlation_id=correlation_id,
             ),
         )
+
+    # Sync handlers on purpose: they block a threadpool worker, not the event
+    # loop, so trip_get_context's call back into GET /api/trips/{trip_id} is
+    # served on another worker while this one waits on MCP.
+    @router.post(
+        "/trips/{trip_id}/rag-query",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[RagQueryResponse],
+    )
+    def rag_query(
+        trip_id: TripIdentifier,
+        payload: RagQueryRequest,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.rag_query(trip_id, payload))
+
+    @router.post(
+        "/trips/{trip_id}/mcp-options",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[McpOptionsResponse],
+    )
+    def mcp_options(
+        trip_id: TripIdentifier,
+        payload: McpOptionsRequest | None = None,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.mcp_options(trip_id, payload))
 
     @router.patch(
         "/trips/{trip_id}",

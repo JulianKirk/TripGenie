@@ -97,6 +97,17 @@ def _parse_positive_int(
     return parsed
 
 
+def _parse_bool(value: str | None, *, env_name: str, default: bool = False) -> bool:
+    if value is None or not value.strip():
+        return default
+
+    cleaned = value.strip().lower()
+    if cleaned not in {"true", "false", "1", "0", "yes", "no"}:
+        raise ValueError(f"{env_name} must be true or false.")
+
+    return cleaned in {"true", "1", "yes"}
+
+
 def _parse_int(
     value: str | None,
     *,
@@ -165,6 +176,14 @@ class Settings:
     ai_max_context_accommodations: int = 6
     ai_max_context_activities: int = 12
     ai_max_context_transport: int = 8
+    # Release 1 host-run RAG and MCP servers. Off unless Compose turns them on,
+    # so CI and plain local runs never reach for a live host service.
+    rag_enabled: bool = False
+    rag_base_url: str = "http://127.0.0.1:8011"
+    rag_timeout_seconds: float = 130.0
+    mcp_enabled: bool = False
+    mcp_base_url: str = "http://127.0.0.1:8012/mcp"
+    mcp_timeout_seconds: float = 40.0
 
     def __post_init__(self) -> None:
         self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
@@ -298,5 +317,33 @@ class Settings:
                 os.getenv("STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT"),
                 env_name="STUDENT1_BACKEND_AI_MAX_CONTEXT_TRANSPORT",
                 default=8,
+            ),
+            rag_enabled=_parse_bool(
+                os.getenv("STUDENT1_BACKEND_RAG_ENABLED"),
+                env_name="STUDENT1_BACKEND_RAG_ENABLED",
+            ),
+            rag_base_url=_normalise_base_url(
+                os.getenv("STUDENT1_BACKEND_RAG_BASE_URL"),
+                env_name="STUDENT1_BACKEND_RAG_BASE_URL",
+                default="http://127.0.0.1:8011",
+            ),
+            rag_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS",
+                default=130.0,
+            ),
+            mcp_enabled=_parse_bool(
+                os.getenv("STUDENT1_BACKEND_MCP_ENABLED"),
+                env_name="STUDENT1_BACKEND_MCP_ENABLED",
+            ),
+            mcp_base_url=_normalise_base_url(
+                os.getenv("STUDENT1_BACKEND_MCP_BASE_URL"),
+                env_name="STUDENT1_BACKEND_MCP_BASE_URL",
+                default="http://127.0.0.1:8012/mcp",
+            ),
+            mcp_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS",
+                default=40.0,
             ),
         )

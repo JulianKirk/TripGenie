@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, time
 from enum import Enum
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import (
     BaseModel,
@@ -495,3 +495,94 @@ class HealthResponse(StrictModel):
     status: ShortText
     service: ShortText
     dependencies: HealthDependencies
+
+
+class RagQueryRequest(StrictModel):
+    # The shared RAG contract bounds a query to 2,000 characters.
+    question: Annotated[str, StringConstraints(min_length=1, max_length=2000)]
+
+
+class UpstreamModel(BaseModel):
+    """Shapes another service owns: new upstream fields must not break us."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class RagCitation(UpstreamModel):
+    source_id: str
+    title: str
+    section: str
+    path: str
+    chunk_id: str
+    excerpt: str
+
+
+class RagRetrieval(UpstreamModel):
+    requested_top_k: int
+    returned_chunks: int
+    maximum_score: float | None
+
+
+class RagAnswer(UpstreamModel):
+    answer: str
+    confidence_category: Literal["high", "medium", "low", "insufficient_context"]
+    insufficient_context: bool
+    citations: list[RagCitation]
+    retrieval: RagRetrieval
+    run_id: str
+    correlation_id: str
+
+    @model_validator(mode="after")
+    def grounding_is_consistent(self) -> RagAnswer:
+        if self.insufficient_context:
+            if self.citations or self.confidence_category != "insufficient_context":
+                raise ValueError("insufficient context must have no citations")
+        elif not self.citations or self.confidence_category == "insufficient_context":
+            raise ValueError("a grounded answer needs citations and a confidence")
+        return self
+
+
+class RagQueryResponse(RagAnswer):
+    trip_id: str
+
+
+class McpOptionsRequest(StrictModel):
+    country: Annotated[str, StringConstraints(min_length=1, max_length=100)] | None = (
+        None
+    )
+
+
+class McpToolError(StrictModel):
+    code: str
+    message: str
+    retryable: bool
+
+
+class McpToolResult(StrictModel):
+    tool: str
+    arguments: dict[str, Any]
+    status: Literal["ok", "error", "skipped"]
+    data: dict[str, Any] | None = None
+    error: McpToolError | None = None
+    reason: str | None = None
+    correlation_id: str | None = None
+
+
+class McpLocation(StrictModel):
+    city: str
+    country: str | None
+
+
+class McpSummary(StrictModel):
+    ok: int
+    error: int
+    skipped: int
+
+
+class McpOptionsResponse(StrictModel):
+    trip_id: str
+    correlation_id: str
+    location: McpLocation
+    persisted: Literal[False] = False
+    results: list[McpToolResult]
+    summary: McpSummary
