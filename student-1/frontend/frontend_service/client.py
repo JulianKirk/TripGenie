@@ -34,6 +34,7 @@ class BackendApiClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_prefix = settings.backend_api_prefix
+        self._ai_timeout = settings.ai_timeout_seconds
         self._rag_timeout = settings.rag_timeout_seconds
         self._mcp_timeout = settings.mcp_timeout_seconds
         self._client = httpx.AsyncClient(
@@ -90,6 +91,7 @@ class BackendApiClient:
             malformed_message=(
                 "Backend API returned a malformed AI suggestion response."
             ),
+            timeout=self._ai_timeout,
         )
         return envelope.data
 
