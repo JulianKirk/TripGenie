@@ -111,7 +111,12 @@ calls and returns their results until the model answers. No domain-specific prom
 parsing, recommendation filtering or answer rewriting happens here.
 
 When `schema` is provided, a final model formatting call with tools disabled emits
-that schema. `response` remains a string; `done`, `model`, `provider`, `run_id` and
+that schema. If the initial structured-answer draft used no tools, one bounded
+check keeps the full tool catalogue available before formatting; the model can
+retrieve missing data or ask for clarification. This uses the existing turn/time
+budget and does not guarantee semantic completeness. Provider responses marked
+`done_reason=length` fail explicitly rather than being accepted or retried.
+`response` remains a string; `done`, `model`, `provider`, `run_id` and
 `correlation_id` retain their existing meanings. Success responses also contain
 `tools`: ordered entries with `tool`, `arguments`, `status`, `duration_ms`, `error`
 and `result` (the actual MCP result). Errors after execution add a top-level `tools`

@@ -223,6 +223,11 @@ class OllamaProviderAdapter:
                 ],
             )
 
+        if payload.done_reason == "length":
+            raise bad_gateway(
+                "The AI provider truncated its response at the generation limit."
+            )
+
         response_bytes = len(
             payload.message.model_dump_json(exclude_none=True).encode("utf-8")
         )

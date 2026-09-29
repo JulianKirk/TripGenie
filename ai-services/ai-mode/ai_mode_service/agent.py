@@ -133,6 +133,7 @@ class Agent:
             messages.append({"role": "system", "content": payload.system})
         messages.append({"role": "user", "content": payload.prompt})
         executed: set[str] = set()
+        checked_without_tools = False
         for _ in range(self.settings.agent_max_turns):
             self._bound(messages, tools)
             reply = await self.provider.chat(
@@ -143,6 +144,25 @@ class Agent:
             )
             messages.append(reply.model_dump(mode="json", exclude_none=True))
             if not reply.tool_calls:
+                if (
+                    payload.output_schema is not None
+                    and tools
+                    and not trace
+                    and not checked_without_tools
+                ):
+                    checked_without_tools = True
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Before finalising, check whether your answer "
+                            "actually fulfils the original request. If it needs "
+                            "application data, call the available tools now. An "
+                            "introduction or promise to retrieve data is not an "
+                            "answer. If clarification is needed, ask the question; "
+                            "if no tools are needed, provide the complete answer.",
+                        }
+                    )
+                    continue
                 # Schema-constrained formatting is a model call, not authored prose or
                 # domain logic. Keep native tool selection separate from JSON grammar.
                 if payload.output_schema is not None and tools:

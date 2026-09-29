@@ -62,16 +62,22 @@ class MCP:
         )
 
 
-def message(content="", name=None, arguments=None):
+def message(content="", name=None, arguments=None, done_reason="stop"):
     result = {"role": "assistant", "content": content}
     if name:
         result["tool_calls"] = [{"function": {"name": name, "arguments": arguments}}]
     return httpx.Response(
-        200, json={"model": "llama3.1:8b", "message": result, "done": True}
+        200,
+        json={
+            "model": "llama3.1:8b",
+            "message": result,
+            "done": True,
+            "done_reason": done_reason,
+        },
     )
 
 
-def run(responses, mcp=None, **settings):
+def run(responses, mcp=None, request_payload=None, **settings):
     mcp = mcp or MCP()
     requests = []
 
@@ -94,6 +100,7 @@ def run(responses, mcp=None, **settings):
             json={
                 "system": "trusted instructions",
                 "prompt": "Next Friday, under twenty dollars for everyone",
+                **(request_payload or {}),
             },
         )
     return response, requests, mcp
@@ -270,3 +277,70 @@ def test_oversized_successful_write_is_reported_as_completed():
     assert response.status_code == 502
     assert response.json()["tools"][0]["status"] == "success"
     assert response.json()["tools"][0]["error"] == "RESULT_TOO_LARGE"
+
+
+ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string"}},
+    "required": ["answer"],
+    "additionalProperties": False,
+}
+
+
+def test_preamble_gets_a_tool_enabled_check_before_final_formatting():
+    response, requests, mcp = run(
+        [
+            message("Here are some activities:"),
+            message(name="activities_search", arguments={"value": "kayak"}),
+            message("The search returned an activity."),
+            message('{"answer":"The search returned an activity."}'),
+        ],
+        request_payload={"schema": ANSWER_SCHEMA},
+    )
+    assert response.status_code == 200, response.text
+    assert len(mcp.calls) == 1
+    assert requests[1]["tools"] == requests[0]["tools"]
+    assert requests[1]["format"] is None
+    assert requests[-1]["tools"] == []
+    assert requests[-1]["format"] == ANSWER_SCHEMA
+
+
+def test_tool_free_clarification_is_checked_once_then_formatted():
+    response, requests, mcp = run(
+        [
+            message("How many people?"),
+            message("How many people?"),
+            message('{"answer":"How many people?"}'),
+        ],
+        request_payload={"schema": ANSWER_SCHEMA},
+    )
+    assert response.status_code == 200, response.text
+    assert len(requests) == 3
+    assert not mcp.calls
+    assert response.json()["data"]["response"] == '{"answer":"How many people?"}'
+
+
+def test_truncated_response_is_rejected_before_any_tool_execution():
+    response, _, mcp = run(
+        [
+            message(
+                name="activities_delete", arguments={"value": "x"}, done_reason="length"
+            )
+        ]
+    )
+    assert response.status_code == 502
+    assert "truncated" in response.json()["error"]["message"]
+    assert not mcp.calls
+
+
+def test_truncated_answer_preserves_prior_write_trace_without_retry():
+    response, requests, mcp = run(
+        [
+            message(name="activities_delete", arguments={"value": "x"}),
+            message("I have", done_reason="length"),
+        ]
+    )
+    assert response.status_code == 502
+    assert len(requests) == 2
+    assert len(mcp.calls) == 1
+    assert response.json()["tools"][0]["status"] == "success"
