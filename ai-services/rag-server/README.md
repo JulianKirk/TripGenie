@@ -26,7 +26,8 @@ error mapping.
 Shared AI-Mode `/generate` now has access to all MCP tools and returns an additive
 tool trace; the RAG decoder accepts it. Citation IDs are still validated against
 retrieved context. Tool results do not become source citations automatically.
-Generation requires host MCP; embedding/indexing does not.
+Generation requires host MCP; embedding/indexing does not. RAG supplies a trusted
+system instruction to use only retrieved CONTEXT, without calling MCP for facts.
 
 ## Prerequisites
 
@@ -123,7 +124,13 @@ The response contains:
 - bounded retrieval counts and maximum score
 
 If no result reaches the minimum relevance score, the service does not call
-generation and returns:
+generation. If retrieved chunks pass that threshold but do not answer the
+question, the model can explicitly report insufficient context with no citation
+IDs. Both cases return the same existing insufficient-context response below.
+Supported answers still require citations to retrieved chunks; invented IDs and
+malformed results remain errors.
+
+The insufficient-context answer is:
 
 ```text
 There is not enough indexed context to answer this question.

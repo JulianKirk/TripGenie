@@ -24,6 +24,12 @@ from .models import (
 if TYPE_CHECKING:
     from .config import Settings
 
+GROUNDING_SYSTEM_PROMPT = (
+    "Use only supplied CONTEXT as evidence. Do not call MCP tools "
+    "to verify document rules. Cite supported answers; abstain "
+    "with citation_ids=[] when context cannot answer."
+)
+
 MALFORMED_EMBED_MESSAGE = "AI-Mode returned a malformed embedding response."
 MALFORMED_GENERATE_MESSAGE = "AI-Mode returned a malformed generation response."
 AI_MODE_TIMEOUT_MESSAGE = "AI-Mode did not respond before the configured timeout."
@@ -150,6 +156,7 @@ class AiModeClient:
             "/generate",
             {
                 "prompt": prompt,
+                "system": GROUNDING_SYSTEM_PROMPT,
                 "schema": schema,
                 "correlation_id": correlation_id,
                 "metadata": {"feature": "shared-rag"},

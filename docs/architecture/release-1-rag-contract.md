@@ -197,7 +197,12 @@ Insufficient-context response:
   for the chosen embedding model. Changing that model invalidates the
   calibration evidence and index.
 - Retrieval below the configured minimum skips generation and returns the
-  fixed insufficient-context response.
+  fixed insufficient-context response. When above-threshold chunks still do
+  not answer the question, generation can explicitly report insufficient
+  context with an empty citation list; this returns the same public response.
+  An empty citation list signals abstention: the generated prose is discarded
+  in favour of the fixed insufficient-context answer. Unknown citation IDs
+  remain invalid.
 
 ## 6. Limits and failure contract
 

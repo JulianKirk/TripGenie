@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 import pytest
 from conftest import FakeAiMode
+from rag_service.ai_mode_client import GROUNDING_SYSTEM_PROMPT
 from rag_service.errors import ApiError
 from rag_service.index import SearchResult
 from rag_service.models import IndexStatus, QueryRequest
@@ -196,3 +198,30 @@ def test_query_logs_metadata_without_query_or_source_content(
     assert "stage=insufficient" in caplog.text
     assert query_secret not in caplog.text
     assert source_secret not in caplog.text
+
+
+def test_model_can_abstain_when_high_similarity_context_does_not_answer(settings):
+    ai_mode = FakeAiMode(
+        generated_response=json.dumps(
+            {
+                "answer": "The supplied context does not answer this question.",
+                "citation_ids": [],
+            }
+        )
+    )
+    service = RagService(settings, ai_mode, StubIndex([_result(0.9)]))
+    payload = asyncio.run(service.query(QueryRequest(query="Temperature on Neptune?")))
+    assert payload.answer == INSUFFICIENT_ANSWER
+    assert payload.insufficient_context is True
+    assert payload.confidence_category == "insufficient_context"
+    assert payload.citations == []
+    assert len(ai_mode.generate_calls) == 1
+    assert "citation_ids=[]" in ai_mode.generate_calls[0][0]
+
+
+def test_context_budget_includes_trusted_system_prompt(settings):
+    ai_mode = FakeAiMode()
+    service = RagService(settings, ai_mode, StubIndex([_result(0.9, text="x" * 2000)]))
+    asyncio.run(service.query(QueryRequest(query="Question")))
+    prompt = ai_mode.generate_calls[0][0]
+    assert len(prompt) + len(GROUNDING_SYSTEM_PROMPT) <= settings.max_context_chars
