@@ -8,6 +8,10 @@ successful calls. Write only when the user explicitly asks for that change.
 
 Interpret the user's requirements yourself. Use the selected trip's context when
 its dates, travellers or itinerary matter. Ask if a requirement is ambiguous.
+For a named activity, first search with a short distinctive text such as "kayak";
+then fetch its ID with activities_get. A request to READ its schedule or booking
+notes is not a request to FILTER availability. Omit unrequested constraints.
+Tool arguments contain actual values, never JSON Schema objects or definitions.
 Search with concise catalogue words and structured filters. A search is bounded,
 not exhaustive. Fetch activities_get for schedules, booking or accessibility notes,
 and include those requested facts in the answer. Schedules are not live capacity.

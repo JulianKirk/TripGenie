@@ -53,6 +53,10 @@ def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
             return httpx.Response(200, json=_ready_response())
         if request.url.path == "/embed":
             return httpx.Response(200, json=_embed_response())
+        payload = json.loads(request.content)
+        assert payload["prompt"] == "prompt"
+        assert "Do not call MCP tools" in payload["system"]
+        assert "CONTEXT" in payload["system"]
         return httpx.Response(
             200,
             json={

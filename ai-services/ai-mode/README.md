@@ -126,7 +126,11 @@ writes. Oversized results are omitted but their known execution status is retain
 All tools are executable; prompts should direct writes only for explicit requests.
 This is a trusted local service, not a new authorization layer. Unknown tool names,
 invalid arguments, external schema references, duplicate non-read-only calls and
-excessive execution are rejected. Protocol validation does not interpret user intent.
+excessive execution are rejected. A known tool's invalid arguments are returned
+to the model with tools still available for up to three correction attempts
+per run, within the existing turn and time limits. Invalid arguments are never
+sent to MCP. If arguments remain invalid after those attempts, the run returns
+an explicit tool-call failure with its trace. This does not retry completed or uncertain writes. Protocol validation does not interpret user intent.
 MCP must be running for generation, even if no tool is ultimately called. A tool's
 provider may be unavailable independently and returns an explicit tool error.
 `/embed` does not connect to MCP. Existing health/readiness report the Ollama model
