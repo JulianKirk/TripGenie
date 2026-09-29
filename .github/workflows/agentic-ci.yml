@@ -237,9 +237,16 @@ jobs:
 
       # Student 3 is published on 8003 by the agentic overlay, not the 18003
       # the MCP server defaults to; every other backend matches its default.
+      #
+      # AI-Mode's /generate runs its tool loop against this server, so RAG
+      # answers need the AI-Mode container to reach it at host.docker.internal.
+      # On Linux that is the docker bridge, not the host's loopback, so the
+      # server binds all interfaces -- acceptable only because a hosted runner
+      # is a throwaway VM with no inbound access. Never do this on a real host.
       - name: Start the MCP server
         if: ${{ !cancelled() }}
         env:
+          MCP_HOST: 0.0.0.0
           MCP_STUDENT_3_URL: http://127.0.0.1:8003
         run: |
           nohup python -m tripgenie_mcp serve > "$RUNNER_TEMP/mcp.log" 2>&1 &

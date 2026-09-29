@@ -28,6 +28,7 @@ lives behind its own service, so its API is already the honest way in.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -46,7 +47,9 @@ IMPLEMENTATION_MODEL = os.getenv("IMPLEMENTATION_MODEL", "claude-sonnet-5")
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", "claude-opus-5")
 NFR_SAMPLES = int(os.getenv("NFR_SAMPLES", "20"))
 NFR_PASS_RATIO = 0.95
-OUTCOME_ICONS = {"OK": "✅", "FAIL": "❌", "SKIP": "⏭️"}
+# NOTE is advisory: agent-scored rows such as MCP tool selection. Only FAIL
+# counts towards the exit code.
+OUTCOME_ICONS = {"OK": "✅", "FAIL": "❌", "SKIP": "⏭️", "NOTE": "⚠️"}
 READY_ATTEMPTS = 20
 READY_DELAY = 3
 MCP_URL = os.getenv("MCP_URL", "http://127.0.0.1:8012/mcp")
@@ -69,8 +72,11 @@ def load_plan(name):
     return json.loads((HERE / name).read_text())
 
 
-def load_prompt(name, **fields):
-    text = (HERE / "prompts" / name).read_text(encoding="utf-8").strip()
+def load_prompt(mode, name, **fields):
+    """Each mode has its own prompts, like the labs: what counts as evidence,
+    and what a useful finding looks like, differ between an HTTP service, an
+    MCP tool server, a RAG pipeline and a CI run."""
+    text = (HERE / "prompts" / mode / name).read_text(encoding="utf-8").strip()
     for key, value in fields.items():
         text = text.replace("{{" + key + "}}", value)
     return text
@@ -390,7 +396,13 @@ def observe_mcp(plan):
         os.environ.setdefault(name, url)
     try:
         listed, _ = mcp_call("tools/list")
-        names = {tool["name"] for tool in listed["result"]["tools"]}
+        # The descriptions the server advertises are what the tool-selection
+        # agent chooses from, the same way AI-Mode's model does.
+        plan["catalogue"] = {
+            tool["name"]: tool.get("description", "")
+            for tool in listed["result"]["tools"]
+        }
+        names = set(plan["catalogue"])
     except Exception as exc:  # noqa: BLE001
         return [("tools/list", f"FAIL: MCP server unreachable at {MCP_URL} ({exc})")]
     expected = set(plan["tools"])
@@ -415,7 +427,39 @@ def observe_mcp(plan):
 
 def run_mcp():
     plan = load_plan("checks/mcp.json")
-    return plan, [(None, observe_mcp(plan))]
+    results = observe_mcp(plan)
+    cases = plan.get("tool_selection", [])
+    plan["prompt_fields"] = {
+        "TOOL_CATALOGUE": "\n".join(
+            f"- {name}: {text}" for name, text in plan.get("catalogue", {}).items()
+        )
+        or "Unavailable: tools/list failed.",
+        "TOOL_REQUESTS": "\n".join(
+            f"{number}. {item['request']}" for number, item in enumerate(cases, start=1)
+        ),
+    }
+    return plan, [(None, results)]
+
+
+def score_tool_selection(plan, selections):
+    """The implementation agent's picks against the expected tools. Advisory:
+    a wrong pick is a NOTE, never a FAIL -- the model decides it, not the server."""
+    cases = plan.get("tool_selection", [])
+    if not plan.get("catalogue"):
+        return [(case["request"], "SKIP: no tool catalogue") for case in cases]
+    selected = re.compile(r"^\s*(\d+)\.\s*Selected Tool:\s*`?(\w+)", re.MULTILINE)
+    picked = dict(selected.findall(selections))
+    rows = []
+    for number, case in enumerate(cases, start=1):
+        choice = picked.get(str(number))
+        if choice is None:
+            outcome = "SKIP: agent gave no selection"
+        elif choice == case["expected"]:
+            outcome = f"OK: picked {choice}"
+        else:
+            outcome = f"NOTE: picked {choice}, expected {case['expected']}"
+        rows.append((case["request"], outcome))
+    return rows
 
 
 def rag_query(case):
@@ -587,29 +631,32 @@ def call_model(model, system_prompt, user_prompt, max_tokens):
         return f"{model} unavailable ({exc})"
 
 
-def implementation_advice(plan, evidence):
+def prompt_fields(plan, **fields):
+    """The placeholders every prompt may use, plus any a mode adds itself
+    (the MCP tool catalogue and requests)."""
+    return {"SERVICE_SCOPE": scope(plan), **plan.get("prompt_fields", {}), **fields}
+
+
+def implementation_advice(mode, plan, evidence):
+    fields = prompt_fields(plan, VALIDATION_EVIDENCE=evidence)
     return call_model(
         IMPLEMENTATION_MODEL,
-        load_prompt("implementation_system_prompt.txt", SERVICE_SCOPE=scope(plan)),
-        load_prompt(
-            "implementation_task_prompt.txt",
-            SERVICE_SCOPE=scope(plan),
-            VALIDATION_EVIDENCE=evidence,
-        ),
+        load_prompt(mode, "implementation_system_prompt.txt", **fields),
+        load_prompt(mode, "implementation_task_prompt.txt", **fields),
         2000,
     )
 
 
-def review_advice(plan, recommendation, evidence):
+def review_advice(mode, plan, recommendation, evidence):
+    fields = prompt_fields(
+        plan,
+        IMPLEMENTATION_RECOMMENDATION=recommendation,
+        VALIDATION_EVIDENCE=evidence,
+    )
     return call_model(
         REVIEW_MODEL,
-        load_prompt("review_system_prompt.txt"),
-        load_prompt(
-            "review_task_prompt.txt",
-            SERVICE_SCOPE=scope(plan),
-            IMPLEMENTATION_RECOMMENDATION=recommendation,
-            VALIDATION_EVIDENCE=evidence,
-        ),
+        load_prompt(mode, "review_system_prompt.txt", **fields),
+        load_prompt(mode, "review_task_prompt.txt", **fields),
         2000,
     )
 
@@ -719,11 +766,20 @@ def main(argv=None):
     evidence = "; ".join(f"{label} -> {outcome}" for label, outcome in results)
 
     print(f"\nIMPLEMENTATION AGENT ({IMPLEMENTATION_MODEL})")
-    recommendation = implementation_advice(plan, evidence)
+    recommendation = implementation_advice(mode, plan, evidence)
     print(recommendation)
 
+    if mode == "mcp":
+        # The reviewer sees how the picks scored, so it can judge them.
+        selection = score_tool_selection(plan, recommendation)
+        sections.append(("Tool selection (advisory)", selection))
+        print("\nTOOL SELECTION (advisory)")
+        for label, outcome in selection:
+            print(f"  {label} -> {outcome}")
+        evidence += "; " + "; ".join(f"{req} -> {out}" for req, out in selection)
+
     print(f"\nREVIEW AGENT ({REVIEW_MODEL})")
-    review = review_advice(plan, recommendation, evidence)
+    review = review_advice(mode, plan, recommendation, evidence)
     print(review)
 
     decision = human_review() if interactive else "Deferred (non-interactive run)"

@@ -1,0 +1,20 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+These calibration cases are the ONLY queries under test.
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Assess whether the RAG pipeline behaves correctly using the evidence above. It covers, per calibration case:
+- grounding: an answer, a confidence category, and citations that include the expected sources, or the insufficient-context response for an unanswerable question,
+- latency: under 3 s for insufficient context (generation is skipped) and under 30 s for a full answer,
+- consistency: a repeated query returns the same citations and confidence category.
+
+Base your answer only on the Validation Evidence - it already reflects real queries made to the running RAG server. Do not claim to have made requests yourself. If the evidence shows a dependency failure (for example AI-Mode or MCP unavailable) rather than a RAG result, name the dependency and say retrieval quality could not be assessed.
+
+Output rules:
+- If the evidence does not support an improvement, write: No evidence-backed improvement identified.
+- Otherwise return exactly two bullet points.
+- Maximum 60 words.

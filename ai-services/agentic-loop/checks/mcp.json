@@ -27,6 +27,15 @@
     {"label": "transport_get malformed id (rejected)", "tool": "transport_get", "arguments": {"transport_id": "nope"}, "error": "VALIDATION_ERROR"},
     {"label": "unknown tool name (rejected)", "tool": "no_such_tool", "rejected": true}
   ],
+  "_tool_selection_note": "Advisory. The implementation agent picks a tool for each request; the loop reports whether it matches, and a mismatch never fails the run.",
+  "tool_selection": [
+    {"request": "What total budget has been set for each of my trips?", "expected": "budgets_list"},
+    {"request": "Find somewhere to stay in Sydney, Australia.", "expected": "accommodations_search"},
+    {"request": "What kinds of activity categories does TripGenie offer?", "expected": "activities_list_categories"},
+    {"request": "Show me transport options from Sydney to Melbourne.", "expected": "transport_search"},
+    {"request": "List the expenses recorded for trip trip_2026_sydney_long_weekend.", "expected": "expenses_list"},
+    {"request": "How much have I committed to activities on trip trip_2026_sydney_long_weekend?", "expected": "activities_committed_costs"}
+  ],
   "rules": [
     "The loop only calls read tools; activities_create, activities_update and activities_delete are listed but never called, and writes whose outcome is unknown are never retried.",
     "The server never reads a database or calls Ollama; it reaches each student only through that student's public backend.",

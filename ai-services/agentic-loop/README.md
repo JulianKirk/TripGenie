@@ -135,6 +135,14 @@ to `reports/ci/<service>/`. Without `gh` the mode reports that and passes.
 | `RAG_URL` | `http://127.0.0.1:8011` |
 | `CI_BRANCH` | the checked-out branch |
 
+Each mode has its own agent prompts in `prompts/<mode>/`, following the labs:
+`services` reviews endpoints and flows; `mcp` has the implementation agent pick
+a tool for each `tool_selection` request in `checks/mcp.json` (Lab 7) -- scored
+as advisory `NOTE` rows that never fail the run -- and the reviewer answers
+Strengths / Risks / Recommendations; `rag` reviews output quality and the
+architecture together (Lab 8); `ci` proposes one pipeline improvement and the
+reviewer approves it or raises a risk (Lab 5).
+
 Every run saves its report to `reports/<mode>-<UTC timestamp>.md` (git-ignored).
 Copy the ones the release needs into `docs/reports/release-*`.
 
@@ -168,6 +176,8 @@ student build never needs a model.
   and the validation probes always run). Finally it starts Ollama from the
   official image with `qwen2.5:0.5b` and `nomic-embed-text`, AI-Mode from
   Compose, builds the RAG index, starts the RAG server and runs `--mode rag`.
+  RAG answers need the MCP server too: AI-Mode's `/generate` runs its tool
+  loop against it, so locally start MCP before running `--mode rag`.
   MCP and RAG run even when no service was selected, and a change under
   `ai-services/ai-mode`, `mcp-server` or `rag-server` triggers the workflow.
 

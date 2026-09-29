@@ -52,6 +52,7 @@ def test_student_4_functional_flow_starts_location_dependencies():
 
 def test_prompt_substitution():
     text = loop.load_prompt(
+        "services",
         "review_task_prompt.txt",
         SERVICE_SCOPE="scope",
         IMPLEMENTATION_RECOMMENDATION="rec",
@@ -59,6 +60,33 @@ def test_prompt_substitution():
     )
     assert "{{" not in text
     assert "scope" in text and "rec" in text and "ev" in text
+
+
+def test_every_mode_has_its_own_complete_prompts():
+    fields = {
+        "SERVICE_SCOPE": "scope",
+        "IMPLEMENTATION_RECOMMENDATION": "rec",
+        "VALIDATION_EVIDENCE": "ev",
+        "TOOL_CATALOGUE": "- budgets_list: List budgets.",
+        "TOOL_REQUESTS": "1. What budgets exist?",
+    }
+    names = [
+        "implementation_system_prompt.txt",
+        "implementation_task_prompt.txt",
+        "review_system_prompt.txt",
+        "review_task_prompt.txt",
+    ]
+    texts = {}
+    for mode in loop.MODES:
+        for name in names:
+            text = loop.load_prompt(mode, name, **fields)
+            assert "{{" not in text, f"{mode}/{name} has an unfilled placeholder"
+            texts[mode, name] = text
+    # Different evidence needs different instructions, not one shared prompt.
+    for name in names:
+        assert len({texts[mode, name] for mode in loop.MODES}) == len(loop.MODES)
+    assert "Selected Tool:" in texts["mcp", "implementation_task_prompt.txt"]
+    assert "citation" in texts["rag", "review_system_prompt.txt"]
 
 
 class FakeResponse:
@@ -368,6 +396,42 @@ def test_mcp_skips_a_step_whose_input_was_never_saved(monkeypatch):
     outcomes = dict(loop.observe_mcp(plan))
     assert outcomes["read"].startswith("FAIL")
     assert outcomes["chained"].startswith("SKIP")
+
+
+def test_tool_selection_is_scored_but_never_fails():
+    plan = {
+        "catalogue": {"budgets_list": "", "transport_search": ""},
+        "tool_selection": [
+            {"request": "budgets?", "expected": "budgets_list"},
+            {"request": "trains?", "expected": "transport_search"},
+            {"request": "hotels?", "expected": "accommodations_search"},
+        ],
+    }
+    picks = (
+        "1. Selected Tool: budgets_list | Reason: r | Expected Evidence: e\n"
+        "2. Selected Tool: `budgets_list` | Reason: r | Expected Evidence: e\n"
+    )
+    outcomes = dict(loop.score_tool_selection(plan, picks))
+    assert outcomes["budgets?"] == "OK: picked budgets_list"
+    assert outcomes["trains?"] == "NOTE: picked budgets_list, expected transport_search"
+    assert outcomes["hotels?"] == "SKIP: agent gave no selection"
+    assert not any(o.startswith("FAIL") for o in outcomes.values())
+
+    del plan["catalogue"]
+    assert loop.score_tool_selection(plan, picks)[0][1] == "SKIP: no tool catalogue"
+
+
+def test_mcp_prompt_fields_carry_the_live_catalogue_and_requests(monkeypatch):
+    def fake_observe(plan):
+        plan["catalogue"] = {"budgets_list": "List budgets."}
+        return []
+
+    monkeypatch.setattr(loop, "observe_mcp", fake_observe)
+    plan, _ = loop.run_mcp()
+    fields = plan["prompt_fields"]
+    assert fields["TOOL_CATALOGUE"] == "- budgets_list: List budgets."
+    assert fields["TOOL_REQUESTS"].startswith("1. ")
+    assert len(fields["TOOL_REQUESTS"].splitlines()) == len(plan["tool_selection"])
 
 
 def test_mcp_only_reads_from_services_started_in_this_run(monkeypatch):
