@@ -22,6 +22,12 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_SERVICE_NAME` | `student-1-backend` | Service name reported by health endpoints. |
 | `STUDENT1_BACKEND_ACTIVITY_API_BASE_URL` | `http://student-4-backend:8008` | Student 4 public API used to enrich activity selections. |
 | `STUDENT1_BACKEND_ACTIVITY_API_TIMEOUT_SECONDS` | `5` | Student 4 lookup timeout. |
+| `STUDENT1_BACKEND_RAG_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/rag-query`. Compose turns it on; CI and plain local runs leave it off. |
+| `STUDENT1_BACKEND_RAG_BASE_URL` | `http://127.0.0.1:8011` | Shared host-run RAG server. |
+| `STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | RAG query timeout (retrieval plus generation). |
+| `STUDENT1_BACKEND_MCP_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/mcp-options`. |
+| `STUDENT1_BACKEND_MCP_BASE_URL` | `http://127.0.0.1:8012/mcp` | Shared host-run MCP server's streamable-HTTP endpoint. |
+| `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS` | `40` | Timeout per MCP tool call. |
 
 ## Activities on a trip
 
@@ -172,3 +178,71 @@ TripGenie applies a project-specific maximum trip duration of **366 inclusive ca
 
 Shared AI-Mode generation may execute MCP tools. Automatic answer-repair retries
 stop when the returned run contains tool calls, to avoid replaying actions.
+
+## Release 1 RAG and MCP
+
+Both routes are off unless enabled (above). Disabled returns `503` with
+`RAG_DISABLED` / `MCP_DISABLED`, never an empty success. `/health` and `/ready`
+never probe RAG or MCP. Each request generates one correlation id
+(`student1-rag-…` / `student1-mcp-…`), sent as `correlation_id` and
+`X-Request-ID`. An unknown trip is the usual `404 NOT_FOUND`.
+
+### `POST /api/trips/{tripId}/rag-query`
+
+Body `{"question": "What limits apply to itinerary items?"}` (1–2,000
+characters after trimming, else `422 VALIDATION_ERROR`). Queries RAG with
+`feature="student-1"` and returns the answer unchanged apart from validation:
+
+```json
+{"data": {"trip_id": "trip_...", "answer": "...", "confidence_category": "high",
+  "insufficient_context": false,
+  "citations": [{"source_id": "...", "title": "...", "section": "...", "path": "...", "chunk_id": "...", "excerpt": "..."}],
+  "retrieval": {"requested_top_k": 5, "returned_chunks": 3, "maximum_score": 0.84},
+  "run_id": "...", "correlation_id": "student1-rag-..."}}
+```
+
+`insufficient_context: true` comes with `confidence_category:
+"insufficient_context"` and no citations. Errors: `503 INDEX_NOT_READY`,
+`503 DEPENDENCY_UNAVAILABLE`, `504 DEPENDENCY_TIMEOUT` (preserved from RAG or
+raised on connect failure/timeout), `502 BAD_GATEWAY` for any response that
+breaks the RAG contract.
+
+### `POST /api/trips/{tripId}/mcp-options`
+
+Optional body `{"country": "Australia"}` (1–100 characters). Read-only option
+discovery through the shared MCP tools; **nothing is persisted** — users add
+options through the existing itinerary, accommodation and activity routes.
+
+Location: a `"City, Country"` destination is split on its last comma;
+otherwise the destination is the city and `country` comes from the body. The
+body's country is ignored when the destination already names one.
+
+Tools run sequentially, each with `limit=5`: `trip_get_context`,
+`accommodations_search` and `activities_search` (both `skipped` without a
+country), `transport_search` (destination = city) and `budgets_list`.
+`budgets_get_summary` is deliberately not called: it fans out to Students 2–4
+and back to this service. `trip_get_context` makes the MCP server call back
+into `GET /api/trips/{tripId}`; the route handlers are sync, so that callback
+runs on another threadpool worker of the same uvicorn process.
+
+```json
+{"data": {"trip_id": "trip_...", "correlation_id": "student1-mcp-...",
+  "location": {"city": "Sydney", "country": "Australia"}, "persisted": false,
+  "results": [
+    {"tool": "trip_get_context", "arguments": {"trip_id": "trip_..."}, "status": "ok",
+     "data": {"id": "trip_..."}, "error": null, "reason": null, "correlation_id": "student1-mcp-..."},
+    {"tool": "accommodations_search", "arguments": {"country": "Australia", "city": "Sydney", "limit": 5},
+     "status": "error", "data": null,
+     "error": {"code": "PROVIDER_UNAVAILABLE", "message": "Provider failed", "retryable": true},
+     "reason": null, "correlation_id": null}
+  ],
+  "summary": {"ok": 4, "error": 1, "skipped": 0}}}
+```
+
+One tool failing (tool error, timeout, malformed result) is recorded against
+that tool and the rest still run. Per-tool error codes are the MCP tool's own
+(`NOT_FOUND`, `PROVIDER_UNAVAILABLE`, …) or `DEPENDENCY_TIMEOUT`,
+`DEPENDENCY_UNAVAILABLE`, `BAD_GATEWAY` (malformed), `MCP_TOOL_ERROR`
+(rejected call). If **every** attempted tool failed because the MCP server
+could not be reached or timed out, the route returns
+`503 DEPENDENCY_UNAVAILABLE` with one `details` entry per tool instead.
