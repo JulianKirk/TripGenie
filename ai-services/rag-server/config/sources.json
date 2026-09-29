@@ -50,12 +50,6 @@
       "feature": "student-1"
     },
     {
-      "source_id": "travel-budgeting-and-money",
-      "path": "ai-services/rag-server/knowledge/travel/budgeting-and-money.md",
-      "title": "Travel Budgeting and Money",
-      "feature": "student-1"
-    },
-    {
       "source_id": "travel-logistics-and-documents",
       "path": "ai-services/rag-server/knowledge/travel/logistics-and-documents.md",
       "title": "Travel Logistics and Documents",
