@@ -33,6 +33,26 @@ from conftest import FakeDatabaseApi
 from fastapi.testclient import TestClient
 
 
+def empty_mcp(request: httpx.Request) -> httpx.Response:
+    if request.method != "POST":
+        return httpx.Response(405)
+    body = json.loads(request.content)
+    if "id" not in body:
+        return httpx.Response(202)
+    result = (
+        {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "test", "version": "1"},
+        }
+        if body["method"] == "initialize"
+        else {"tools": []}
+    )
+    return httpx.Response(
+        200, json={"jsonrpc": "2.0", "id": body["id"], "result": result}
+    )
+
+
 class CountingASGITransport(httpx.AsyncBaseTransport):
     def __init__(self, app) -> None:
         self.request_count = 0
@@ -75,7 +95,7 @@ class FakeOllamaProviderApi:
                 },
             )
 
-        if path == "/api/generate" and method == "POST":
+        if path == "/api/chat" and method == "POST":
             payload = json.loads(request.content.decode("utf-8"))
             self.generate_requests.append(payload)
             return httpx.Response(
@@ -83,7 +103,7 @@ class FakeOllamaProviderApi:
                 json={
                     "model": "qwen2.5:0.5b",
                     "created_at": "2026-08-31T11:00:00Z",
-                    "response": '{"suggestions":[]}',
+                    "message": {"role": "assistant", "content": '{"suggestions":[]}'},
                     "done": True,
                     "done_reason": "stop",
                     "context": [1, 2, 3],
@@ -134,6 +154,7 @@ def integrated_client(
     shared_app = create_shared_ai_mode_app(
         shared_service_settings,
         ollama_transport=httpx.MockTransport(ollama_api.handle),
+        mcp_transport=httpx.MockTransport(empty_mcp),
     )
     with TestClient(shared_app):
         transport = CountingASGITransport(shared_app)
@@ -219,7 +240,7 @@ def test_prompt_budgeting_handles_worst_case_valid_data(database_api) -> None:
     assert transport.paths == ["/generate"]
     assert len(ollama_api.generate_requests) == 1
 
-    prompt = str(ollama_api.generate_requests[0]["prompt"])
+    prompt = str(ollama_api.generate_requests[0]["messages"][0]["content"])
     prompt_context = extract_prompt_context(prompt)
     assert len(prompt) <= 12000
     assert prompt_context["requested_date"] == "2027-04-02"
@@ -374,7 +395,9 @@ def test_prompt_budgeting_supports_exact_shared_boundary(database_api) -> None:
 
         assert response.status_code == 200
         assert len(ollama_api.generate_requests) == 1
-        final_prompt_length = len(str(ollama_api.generate_requests[0]["prompt"]))
+        final_prompt_length = len(
+            str(ollama_api.generate_requests[0]["messages"][0]["content"])
+        )
         if final_prompt_length == boundary:
             break
         boundary = final_prompt_length
@@ -434,7 +457,7 @@ def test_prompt_budgeting_trims_optional_fields_before_shared_call(
     assert response.status_code == 200
     assert transport.request_count == 1
     prompt_context = extract_prompt_context(
-        str(ollama_api.generate_requests[0]["prompt"])
+        str(ollama_api.generate_requests[0]["messages"][0]["content"])
     )
     assert prompt_context["goal"] == request_payload["goal"]
     assert prompt_context["requested_date"] == "2027-04-02"

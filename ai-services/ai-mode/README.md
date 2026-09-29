@@ -5,11 +5,14 @@ and a host-managed Ollama runtime.
 
 - Runtime: FastAPI on Python 3.11
 - Official provider dependency: `ollama==0.6.2`
-- Scope: single-shot bounded generation and embeddings
-- Out of scope: streaming, chat sessions, memory, tools, retrieval/indexing,
+- Scope: bounded model-directed MCP generation and embeddings
+- Out of scope: streaming, retained chat sessions, retrieval/indexing,
   and multi-agent orchestration
 
-Student backends must render their own prompts, own domain retries/validation, and keep human approval/persistence rules outside this service.
+Student backends supply prompts and final-answer schemas. This service owns MCP
+discovery and the tool loop; MCP owns tool descriptions and input schemas. All
+advertised tools, including writes, are available to every generation caller.
+Clients must not automatically retry a run that has executed tools.
 
 ## Environment variables
 
@@ -27,6 +30,14 @@ Student backends must render their own prompts, own domain retries/validation, a
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
 | `AI_MODE_MAX_EMBED_INPUTS` | `32` | Maximum texts accepted by one embedding request. |
 | `AI_MODE_MAX_EMBED_INPUT_CHARS` | `12000` | Maximum characters in each embedding input. |
+| `AI_MODE_CONTEXT_TOKENS` | `32768` | Native chat context window for the full tool catalogue and conversation. |
+| `AI_MODE_MCP_URL` | `http://127.0.0.1:8012/mcp` | Host-run shared MCP endpoint. |
+| `AI_MODE_MCP_TIMEOUT_SECONDS` | `15` | MCP request timeout. |
+| `AI_MODE_AGENT_TIMEOUT_SECONDS` | `180` | Whole generation-run deadline. |
+| `AI_MODE_AGENT_MAX_TURNS` | `8` | Maximum tool-decision rounds, plus final schema formatting. |
+| `AI_MODE_AGENT_MAX_CALLS` | `16` | Maximum executed tool calls per run. |
+| `AI_MODE_AGENT_CONTEXT_CHARS` | `120000` | Bounded serialized conversation and full tool catalogue. |
+| `AI_MODE_AGENT_RESULT_BYTES` | `32768` | Maximum serialized result per tool call. |
 | `AI_MODE_MAX_EMBED_DIMENSIONS` | `4096` | Maximum accepted provider vector dimension. |
 
 ## Host Ollama prerequisite
@@ -93,11 +104,35 @@ Example:
 
 ### `POST /generate`
 
-Single-shot non-stream generation only.
+Each request starts a fresh non-streaming native Ollama chat/tool conversation.
+The service discovers the full configured MCP catalogue (including pagination),
+sends its descriptions and argument schemas to the model, executes model-selected
+calls and returns their results until the model answers. No domain-specific prompt
+parsing, recommendation filtering or answer rewriting happens here.
+
+When `schema` is provided, a final model formatting call with tools disabled emits
+that schema. `response` remains a string; `done`, `model`, `provider`, `run_id` and
+`correlation_id` retain their existing meanings. Success responses also contain
+`tools`: ordered entries with `tool`, `arguments`, `status`, `duration_ms`, `error`
+and `result` (the actual MCP result). Errors after execution add a top-level `tools`
+trace beside the existing `error` envelope. A failed run does not undo completed
+writes. Oversized results are omitted but their known execution status is retained.
+
+All tools are executable; prompts should direct writes only for explicit requests.
+This is a trusted local service, not a new authorization layer. Unknown tool names,
+invalid arguments, external schema references, duplicate non-read-only calls and
+excessive execution are rejected. Protocol validation does not interpret user intent.
+MCP must be running for generation, even if no tool is ultimately called. A tool's
+provider may be unavailable independently and returns an explicit tool error.
+`/embed` does not connect to MCP. Existing health/readiness report the Ollama model
+baseline; `/generate` reports MCP availability at request time.
+
+Use a generation model that supports native tool calls. Allow enough consumer HTTP
+time for several inference rounds (Student 4 defaults to 210 seconds).
 
 An optional `system` string carries trusted application instructions separately from
-`prompt` (user request and other untrusted context). AI-Mode forwards it through the
-provider's system instruction field with model templating enabled. Existing callers
+`prompt` (user request and other untrusted context). AI-Mode forwards it as a system-role message in the
+provider chat conversation. Existing callers
 can omit it. A supplied string must be nonblank; `null` behaves like omission. The
 combined character count of both fields must fit `AI_MODE_MAX_PROMPT_CHARS`; splitting
 input does not increase the allowance. Role separation improves instruction clarity,
@@ -293,7 +328,9 @@ Generic provider `404` responses that do **not** explicitly describe a missing m
 
 ## Consumer guidance for Students 2-5
 
-Student backends should treat this service as a thin generation dependency.
+Student backends call the shared generation agent over the existing HTTP contract.
+They can consume the additive tool trace or ignore it for tool-free responses.
+No MCP SDK or duplicated tool catalogue is needed in a feature backend.
 
 ### Recommended environment-variable pattern
 
@@ -310,7 +347,7 @@ Student backends should treat this service as a thin generation dependency.
 - render the full prompt for the relevant domain feature
 - define any domain output schema
 - validate generated content against business rules
-- decide whether and when to retry correctable domain failures
+- retry correctable domain failures only when the previous run executed no tools
 - enforce `persisted=false` / `approval_required=true` or equivalent approval rules
 
 ### Minimal consumer example
@@ -362,8 +399,8 @@ Ollama remains a host prerequisite; Compose and CI do not install, start, or dow
 
 ### Instruction formatting
 
-Feature prompts are ordinary instructions, not preformatted model chat tokens.
-Generation uses Ollama's model instruction template (`raw=false`) while retaining
-the JSON schema constraint and deterministic temperature. Bypassing that template
-caused the activity agent to repeat searches or invent unnecessary filters in live
-`llama3.1:8b` testing.
+System instructions and user input use separate chat roles. MCP responses use tool
+messages. Native tool calls run without a final-output JSON grammar; if a caller
+supplies `schema`, final formatting uses that grammar after tool work finishes.
+Tool descriptions are passed directly from MCP. Improve prompts/descriptions for
+model-quality issues rather than implementing domain-specific reasoning in Python.

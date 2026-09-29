@@ -6,7 +6,7 @@
     </div>
     <span class="pill">Advisory only</span>
   </div>
-  <p class="field-hint">Describe what would suit you. Ask about activities, compare options, or explore your selected trip. The assistant uses read-only MCP tools and shows the calls it made; nothing is added to a trip until you choose it. Each question starts fresh.</p>
+  <p class="field-hint">Describe what would suit you. Ask about activities, compare options, or explore your selected trip. The assistant uses shared MCP tools and shows their results. It can perform actions you request; review the tool results to see what changed. Each question starts fresh.</p>
   <form method="post" action="/suggestions/ask" hx-post="/suggestions/ask" hx-target="#ai-suggestions" hx-swap="innerHTML" hx-indicator="#ai-understanding" hx-disabled-elt="find button[type=submit]">
     <label class="field" for="ai-question">What would you like to do?
       <textarea id="ai-question" name="question" maxlength="500" required placeholder="Something outdoors, accessible, and relaxed for our first morning"></textarea>

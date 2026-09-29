@@ -101,104 +101,43 @@ an empty result, not an error.
 
 ## MCP activity assistant
 
-`POST /activity/assistant` accepts `{"question":"Find outdoor activities","trip_id":null}`.
-The question is 1–500 nonblank characters; an optional trip ID scopes all trip
-tools to that trip. Each request has independent ephemeral state and a generated
-request ID. The backend uses AI-Mode's schema-constrained `/generate` endpoint
-and executes real MCP tools through the pinned MCP SDK.
+`POST /activity/assistant` accepts `question` (1–500 characters) and optional
+`trip_id`. Each question starts a fresh request. The backend sends one `/generate`
+request to shared AI-Mode with the question/trip as data, its packaged system
+prompt, and the final-answer JSON schema. Shared AI-Mode discovers all MCP tools,
+executes model-selected calls, and returns the model's answer and actual tool data.
 
-The response has `status` (`complete` or `error`), `request_id`, ordered `parts`
-(`text` or `activity` with UUID), authoritative `activities` keyed by UUID,
-`unavailable_activity_ids`, `tools`, `error`, `model`, and `provider`.
-Activity references must come from this request's successful tool results.
-Final details are re-fetched using the same backend read path as `GET /activity/{id}`
-(database service plus location resolution); model-authored fields are never used
-for cards. These presentation reads are not MCP calls, are not supplied back to the
-model, and do not appear in `tools`. Failed/deleted final lookups are marked
-unavailable without retrying through MCP. Agent-requested full details still use
-`activities_get`; search summaries omit schedules, booking notes and accessibility
-notes. No browser or frontend service directly queries the database.
+The response retains `status`, `request_id`, ordered `parts` (text or activity ID),
+`activities`, `unavailable_activity_ids`, `tools`, `error`, `model` and `provider`.
+Each tool trace includes `tool`, `arguments`, `status`, `duration_ms`, optional
+`error` and `result` containing the actual MCP result. Completed calls remain in
+error responses; failure does not roll back completed writes.
 
-Each `tools` entry contains the actual tool name, validated arguments, status
-(`success`, `error`, `rejected`), duration in milliseconds, MCP correlation ID,
-activity IDs/count when applicable, and an error code. Rejected calls never
-reach MCP. Execution failures return HTTP 200 with `status=error` so the UI can
-retain the trace; malformed caller input still returns HTTP 422. No raw
-provider exceptions are exposed. There is no direct-API fallback.
+Student 4 validates the final wire structure and allows at most six cards. Card IDs
+must originate in successful Student 4 MCP records for this request. It resolves
+cards through its ordinary public-detail implementation; these presentation reads
+are not MCP calls. Missing records are reported without inventing card data.
 
-The allowlist is `activities_search`, `activities_get`,
-`activities_list_categories`, `activities_committed_costs`, `trip_get_context`,
-and `trips_list_itinerary_items`. Trip-specific tools are omitted unless a trip
-is selected. The backend rejects every other tool, including MCP CRUD tools.
-Limits are six model steps/calls, one initial selected-trip read, up to six
-schedule-detail reads per search page, at most six final card lookups, twelve
-output parts, 1,000 characters per text part, and a
-180-second total deadline. Repeated successful calls are not re-executed: the
-model receives feedback and can choose another tool within the remaining steps.
-Explicit schedule, booking-note/requirement and accessibility-note questions also
-have a final backend verification step. For selected cards it reuses successful
-MCP detail observations or calls `activities_get`, then renders the requested facts
-as a verified catalogue summary from those records (price, duration, participants,
-booking requirement and requested detail fields), replacing model-authored prose
-for those selected records. This prevents conflicting unverified detail claims; it
-is not a general narrative/comparison validator. Long fields are marked shortened.
-Missing fields are labeled not provided; failed reads
-produce an explicit verification limitation. Ordinary card reads are never used as
-MCP evidence. This step preserves checked budget explanations and adds at most six
-MCP calls. It covers these explicit detail topics, not arbitrary semantic questions.
-Existing AI prompt limits remain enforced. If tool
-definitions crowd out successful observations, generation switches to final-only
-with the observations retained and tool definitions removed. Contexts still above
-the limit produce a visible request-to-narrow error. With at most five tool-action
-steps this permits at most 42 MCP calls, including schedule and final requested-detail verification, plus up to six
-ordinary backend reads for final cards.
-At most six items per tool
-observation are supplied to the model, with an explicit omitted-item count.
+The model interprets budgets, party sizes, dates and accessibility, decides which
+search/detail tools to use, asks clarifying questions and writes the answer. The
+backend does not parse these requirements, rewrite filters, reject recommendations
+on their behalf, force detail reads or replace model prose. Prices on cards are
+fresh catalogue values; narrative correctness remains model-dependent.
 
-The backend retains immutable constraints parsed from explicit request values before
-calling MCP. Supported inputs include whole-number party counts (digits or words
-zero through twelve), AUD amounts with `$`, `AUD`, or `dollars`, `under`/`below` and
-inclusive `at most`/`at least` bounds, ISO local dates or date ranges joined by `to`,
-and 24-hour time windows. `under` and `over` are strict, represented at cent precision.
-Contradictions, unsupported numeric/currency/date forms, missing party size for a
-total budget, and ambiguous alternatives return an authored clarification with
-`status=complete`. Preflight clarification makes no model or MCP calls.
-
-A selected trip supplies dates and missing party size through `trip_get_context`.
-Explicit party size takes precedence; explicit dates must fit inside the selected
-trip. Search arguments cannot weaken the checked price, party, date, accessibility,
-or booking constraints. Unstated values in those fields are removed. Other semantic
-interpretation (for example location/category/topic) remains model-assisted.
-
-The price search filter remains a **listed-price** filter. After MCP retrieval,
-backend Decimal arithmetic checks total-party bounds using `PER_PERSON * party_size`
-or `FLAT_ADMISSION` once, plus participant limits and required accessibility facts.
-For date constraints it reads candidate details through MCP and requires a weekly
-or one-off catalogue schedule within the inclusive date range, with enough time
-for the activity's full duration in the requested local window. This is catalogue
-schedule matching, not a reservation or confirmation of live capacity.
-
-Only checked candidates are given to the model. The trace still records the actual
-raw MCP results and extra detail calls; model observations separately state excluded,
-unavailable and truncated counts. Final card details are checked again to catch
-changes between search and rendering. Constrained activity answers use backend-written
-verification text and exact party totals; if the model omits IDs, at most six eligible
-IDs from inspected results are used. Removed cards cannot leave stale model prose
-claiming they passed. No verified matches means only the inspected results, never an
-exhaustive catalogue claim. Prose outside verified activity results remains advisory.
-If no activity tool is requested, price-constrained recommendation claims are
-suppressed. Other no-activity-read text is preserved for factual trip answers and
-is not certified for schedule, accessibility or booking suitability.
+All tools discovered by shared AI-Mode are available, including other students'
+tools and activity writes. The prompt directs writes only for explicit user requests;
+this replaces the earlier hard read-only allowlist. The ordinary itinerary button
+and CRUD workflows remain available independently.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Packaged assistant instructions; markdown filename only. |
-| `MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant's MCP workflow. |
-| `MCP_URL` | `http://host.docker.internal:8012/mcp` | Fixed shared MCP endpoint; never model-controlled. |
-| `MCP_TIMEOUT` | `15` | Positive finite MCP request timeout in seconds. |
-| `AGENT_TIMEOUT` | `180` | Positive finite total deadline, including tool/card calls. |
+| `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Trusted packaged system prompt. |
+| `AI_ASSISTANT_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant UI/API workflow. |
+| `AI_MODE_URL` | unset standalone | Shared AI-Mode base URL. |
+| `AGENT_TIMEOUT` | `210` | HTTP deadline for the shared generation run, in seconds. |
 
-See [MCP setup and evidence](mcp-assistant.md). No persistence contract changes.
+MCP URL and tool limits are configured on shared AI-Mode, not Student 4.
+See [setup and demonstration](mcp-assistant.md). No persistence schema changes.
 
 ## Legacy AI-assisted activity search
 

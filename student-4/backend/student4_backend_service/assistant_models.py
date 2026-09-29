@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID  # noqa: TC003 - Pydantic resolves the inherited model.
 
-from pydantic import Field, TypeAdapter, field_validator
+from pydantic import Field, field_validator
 
 from .schemas import Activity, StrictModel
 
@@ -36,19 +36,9 @@ class ActivityPart(StrictModel):
 Part = Annotated[TextPart | ActivityPart, Field(discriminator="type")]
 
 
-class ToolAction(StrictModel):
-    type: Literal["tool"]
-    name: str = Field(min_length=1, max_length=80)
-    arguments: dict[str, Any]
-
-
 class FinalAction(StrictModel):
     type: Literal["final"]
     parts: list[Part] = Field(min_length=1, max_length=12)
-
-
-Action = Annotated[ToolAction | FinalAction, Field(discriminator="type")]
-ACTION: TypeAdapter[Action] = TypeAdapter(Action)
 
 
 class ToolTrace(StrictModel):
@@ -60,6 +50,7 @@ class ToolTrace(StrictModel):
     result_count: int | None = None
     activity_ids: list[str] = Field(default_factory=list)
     error: str | None = None
+    result: dict[str, Any] | None = None
 
 
 class AssistantResponse(StrictModel):

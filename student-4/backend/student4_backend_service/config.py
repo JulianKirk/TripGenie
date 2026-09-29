@@ -35,14 +35,12 @@ class Settings:
     ai_plan_prompt_asset: str = DEFAULT_AI_PLAN_PROMPT_ASSET
     ai_evaluation_prompt_asset: str = DEFAULT_AI_EVALUATION_PROMPT_ASSET
     ai_assistant_prompt_asset: str = DEFAULT_AI_ASSISTANT_PROMPT_ASSET
-    mcp_enabled: bool = False
-    mcp_url: str = "http://host.docker.internal:8012/mcp"
-    mcp_timeout: float = 15.0
-    agent_timeout: float = 180.0
+    assistant_enabled: bool = False
+    agent_timeout: float = 210.0
     service_name: str = "student-4-backend"
 
     def __post_init__(self) -> None:
-        for name in ("mcp_timeout", "agent_timeout"):
+        for name in ("agent_timeout",):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 message = f"{name} must be positive and finite"
                 raise ValueError(message)
@@ -55,18 +53,16 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        enabled = os.environ.get("MCP_ENABLED", "false").lower()
+        enabled = os.environ.get("AI_ASSISTANT_ENABLED", "false").lower()
         if enabled not in {"true", "false", "1", "0"}:
-            message = "MCP_ENABLED must be true or false"
+            message = "AI_ASSISTANT_ENABLED must be true or false"
             raise ValueError(message)
         return cls(
             ai_assistant_prompt_asset=os.environ.get(
                 "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
             ),
-            mcp_enabled=enabled in {"true", "1"},
-            mcp_url=os.environ.get("MCP_URL", "http://host.docker.internal:8012/mcp"),
-            mcp_timeout=float(os.environ.get("MCP_TIMEOUT", "15")),
-            agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "180")),
+            assistant_enabled=enabled in {"true", "1"},
+            agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "210")),
             database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             db_timeout=float(os.environ.get("DB_TIMEOUT", DEFAULT_DB_TIMEOUT)),
             location_url=os.environ.get("LOCATION_URL", DEFAULT_LOCATION_URL),

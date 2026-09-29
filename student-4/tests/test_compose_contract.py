@@ -71,7 +71,8 @@ def test_shared_ai_services_are_host_processes() -> None:
     services = compose_services()
     assert not {"ai-mode", "mcp-server", "rag-server", "agentic-loop"} & services.keys()
     backend = services["student-4-backend"]
-    assert backend["environment"]["MCP_URL"] == "http://host.docker.internal:8012/mcp"
+    assert "MCP_URL" not in backend["environment"]
+    assert backend["environment"]["AI_ASSISTANT_ENABLED"] == "true"
     assert "host.docker.internal=host-gateway" in backend["extra_hosts"]
 
 

@@ -19,8 +19,11 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
   Compose or call Ollama directly.
 - `mcp-server/` is the shared host-run tool server over public backend APIs.
   It exposes Student 4 activity CRUD for trusted local external clients.
-  Feature agents enforce their own read-only tool allowlists before execution;
+  Shared AI-Mode discovers every tool for `/generate`, including writes;
   MCP annotations and model instructions alone are not authorization.
+- Shared AI-Mode owns the native model/MCP tool loop behind `/generate`. Keep
+  natural-language interpretation in the model and tool descriptions in MCP.
+  `/embed` remains independent of MCP.
 - `multi-agent-server/` is not implemented. Define its contract before adding
   runtime code. AI-Mode, MCP, RAG, and the validation loop stay outside Compose.
 

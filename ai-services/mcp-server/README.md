@@ -147,9 +147,12 @@ behavior. These annotations describe behavior and are not access controls.
 There is no MCP authentication or per-client authorization in this local server.
 Loopback and DNS-rebinding checks are the existing trusted-client boundary;
 any client able to reach it can call the catalogue write tools. Do not expose it
-on a network without adding authentication and authorization. The Student 4
-frontend agent must enforce its own read-only allowlist before every execution,
-regardless of the write tools advertised here. No tool changes itinerary choices.
+on a network without adding authentication and authorization. The shared
+generation agent discovers all advertised tools for every request. Tool
+names, descriptions and schemas come from this server. All tools, including writes,
+are executable; prompts instruct models to write only when explicitly requested.
+There is no feature-specific read-only allowlist. Failed runs can contain completed
+writes, and ambiguous writes must not be retried automatically.
 
 Writes make exactly one provider request. A timeout, transport failure, 5xx,
 unexpected status or malformed acknowledgement returns `WRITE_OUTCOME_UNKNOWN`

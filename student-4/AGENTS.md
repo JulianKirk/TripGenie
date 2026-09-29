@@ -26,27 +26,19 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve nullable accessibility values: `null` means unknown, not false.
 - Availability is local time and distinguishes weekly schedules from one-off
   dates. Enforce the aggregate invariants documented in the object model.
-- The primary AI panel is a one-shot assistant: no retained conversation history.
-  Its backend orchestrates schema-constrained AI-Mode steps and real MCP tool
-  calls. MCP exposes full activity CRUD for external clients, but this agent
-  uses an explicit read-only allowlist and selected-trip scope. Reject write
-  calls before execution regardless of model output or MCP annotations.
-- Render activity references only after checking this request's successful
-  tool results and resolving authoritative details through the ordinary backend
-  activity lookup (the same path as its public detail API). Never accept
-  model-authored card data. Show the backend-recorded MCP tool trace, including
-  errors and agent/workflow detail calls. Presentation-only card reads are not MCP
-  calls and must not appear in that trace. Adding to an itinerary remains an explicit
-  user action through the existing route.
-- Preserve ordinary browsing/CRUD when MCP is disabled or unavailable. Do not
-  silently bypass MCP for agent retrieval. Final card resolution is ordinary
-  application presentation, not a fallback for failed agent retrieval. Legacy plan/evaluate routes are retained
-  for compatibility, not used by the primary AI panel.
-- Retain request-local checked constraints independently of model tool arguments.
-  Use Decimal party totals and public MCP schedule details to filter candidates,
-  then repeat eligibility checks on final detail reads. Model prose must not
-  describe rejected cards as valid. Clarify unsupported or ambiguous constraint
-  syntax; do not silently invent numeric or date requirements.
+- The primary AI panel is a one-shot client of shared AI-Mode `/generate`.
+  Send the question and selected-trip data separately from the trusted system
+  prompt. Shared AI-Mode discovers and executes all MCP tools, including writes.
+- Keep Student 4 limited to wire validation, tool-result display and resolving
+  model-selected activity references through its ordinary activity lookup.
+  Card IDs must originate in successful activity tool results from this request.
+- Do not parse natural-language budgets, dates or other user requirements, rewrite
+  model tool arguments, filter recommendations independently, force detail calls,
+  or replace model prose with backend-authored answers. Improve system prompts or
+  MCP tool descriptions when functional testing reveals model-quality problems.
+- Preserve ordinary browsing/CRUD when shared generation is unavailable. Show the
+  returned tool trace, including partial execution on failure, and never claim
+  that no changes were saved when write tools may have executed.
 - Keep frontend query parsing and presentation in `query.py`, `forms.py`, and
   `presenters.py` rather than growing route handlers with duplicate logic.
 

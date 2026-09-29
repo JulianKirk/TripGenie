@@ -30,6 +30,7 @@ class ToolTrace(StrictModel):
     result_count: int | None = None
     activity_ids: list[str] = Field(default_factory=list)
     error: str | None = None
+    result: dict[str, Any] | None = None
 
 
 class AssistantResponse(StrictModel):

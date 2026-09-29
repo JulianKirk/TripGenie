@@ -1,154 +1,79 @@
-# Activity assistant and shared MCP integration
+# Activity assistant through shared generation
 
-Each question is a separate request. The frontend calls its backend; the backend
-uses AI-Mode to choose from allowed MCP tools and compose text/activity references.
-MCP tools call public APIs. For presentation, the backend resolves the references
-through its ordinary activity lookup (the same path as its public detail API) and
-returns authoritative cards plus an execution trace of actual MCP calls. Only the user can add an
-activity to a trip using the existing button. No conversation history is retained. Tool schemas are included in the model context.
-Repeated successful calls move the request to a final-answer step, and the last
-step is always reserved for a final answer. Its schema permits only activity IDs
-already discovered in this request (or text only when none are known).
+The frontend calls its backend, which sends the question, optional selected trip,
+trusted system prompt and final-answer schema to shared AI-Mode `/generate`.
+AI-Mode discovers the complete shared MCP catalogue and runs the model/tool loop.
+The model interprets requirements, selects tools and writes its answer. Student 4
+only validates the response, resolves grounded activity cards and displays the trace.
 
-The shared MCP server supports external-client activity create/read/update/delete.
-The frontend agent cannot execute those writes: the backend hides their schemas
-and rejects their names even if a model requests one. See the
-[shared MCP tool contract](../../ai-services/mcp-server/README.md).
+All advertised tools are available, including other students' tools and activity
+create/update/delete. Prompts direct writes only when requested; there is no hard
+read-only guarantee. Inspect tool results for actions completed, even after a failure.
+No conversation history is retained. Ordinary browsing and CRUD work without AI.
 
 ## Local setup
 
-Use Python 3.11 and install from the repository root:
+From the repository root with Python 3.11:
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -e './student-4[dev]' -e './ai-services/mcp-server[dev]' -e './ai-services/ai-mode[dev]'
+.venv/bin/python -m pip install -e './student-4[dev]' -e './ai-services/ai-mode[dev]' -e './ai-services/mcp-server[dev]'
+ollama pull llama3.1:8b
+ollama pull nomic-embed-text
 ```
 
-Ollama runs on the host. Install `llama3.1:8b` for generation and
-`nomic-embed-text` for the gateway's default embedding readiness check,
-then configure AI-Mode with `AI_MODE_DEFAULT_MODEL=llama3.1:8b` and an allowlist
-containing that model. Do not assume the example environment file is loaded.
-AI-Mode's default prompt/schema limits are sufficient for the six allowed tools.
-
-On Docker Desktop, start host services in separate terminals:
+Use a generation model with native tool support. Ollama, AI-Mode and MCP run on
+the host, outside Compose. In separate terminals on Docker Desktop:
 
 ```bash
-AI_MODE_TIMEOUT_SECONDS=90 AI_MODE_DEFAULT_MODEL=llama3.1:8b .venv/bin/uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
+AI_MODE_DEFAULT_MODEL=llama3.1:8b AI_MODE_TIMEOUT_SECONDS=90 AI_MODE_MCP_URL=http://127.0.0.1:8012/mcp .venv/bin/uvicorn ai_mode_service.app:app --host 0.0.0.0 --port 8006
 .venv/bin/python -m tripgenie_mcp serve
 ```
 
-On native Linux, container `host.docker.internal` maps to the Docker host gateway,
-not host loopback. Bind AI-Mode and MCP to the Docker bridge address instead of
-127.0.0.1, and restrict access to the local Docker network. Obtain that address:
-
-```bash
-docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
-```
-
-For example, if it prints `172.17.0.1`, use `--host 172.17.0.1` for AI-Mode and
-`MCP_HOST=172.17.0.1` for the MCP process. Keep Ollama on loopback: host AI-Mode
-can reach it directly. Do not bind unauthenticated MCP CRUD to a public interface.
-For host CLI inspection of a bridge-bound MCP server, pass its URL explicitly,
-for example `.venv/bin/python -m tripgenie_mcp inspect --url http://172.17.0.1:8012/mcp`.
-DNS-rebinding protection allows the configured bind host as well as loopback
-and `host.docker.internal`; it does not allow arbitrary Host values.
-
-Start the integrated application:
+Restrict AI-Mode access to the local application. On native Linux, bind AI-Mode to
+an interface reachable through Docker's host gateway (for example the bridge
+address printed by `docker network inspect bridge`), and restrict access using
+host networking/firewall configuration. MCP can bind loopback because AI-Mode is
+also a host process; feature containers no longer connect directly to MCP.
+Example environment files are documentation and are not automatically loaded by
+host processes. See [AI-Mode configuration](../../ai-services/ai-mode/README.md).
 
 ```bash
 docker compose --env-file shared/configuration/.env.example config --quiet
 docker compose --env-file shared/configuration/.env.example up --build -d
 ```
 
-Compose publishes Student 4's public API at `127.0.0.1:18008` and Student 1's at
-`127.0.0.1:18001`, matching MCP provider defaults. Database services stay private.
-All feature backends now reach host AI-Mode; there is no AI-Mode Compose service.
-MCP and RAG likewise stay outside Compose. This change does not implement the
-separate Student 4 RAG UI or shared validation-loop modes.
+Compose publishes Student 4's public backend at `127.0.0.1:18008` and Student 1's
+at `127.0.0.1:18001` for host MCP; databases remain private. Other tool providers
+must be reachable at the URLs configured on MCP. An unavailable provider produces
+an explicit tool error. All catalogue definitions are still discoverable.
 
-Open `http://localhost:8084` and ask an activity question. Expand **Tools used**
-to inspect the actual calls, filters, results and timings. Optional selected-trip
-reads use existing `trip_get_context` and `trips_list_itinerary_items` MCP tools.
-Ordinary browsing and CRUD continue working if AI-Mode or MCP is unavailable.
+## Functional checks
 
-## Demonstration and evidence
+Open `http://localhost:8084`. Use the [showcase prompts](../../docs/reports/release-1/Student4/showcase-prompts.md):
 
-1. Run the shared MCP `inspect` command and call `activities_list_categories`
-   from a terminal as documented in its README.
-2. Ask the frontend for accessible outdoor activities under a price limit.
-3. Show returned activity cards and expand **Tools used**. It lists the real
-   search and detail calls, rather than a model-generated claim of MCP usage.
-4. Show the request/correlation ID in the backend trace and provider request logs.
-   Request IDs propagate in `X-Request-ID` across backend, MCP and public API.
-   Backend logs include tool/status/timing; application-specific HTTP access
-   logs may not display custom headers without explicit logging configuration.
-5. Show **Add to itinerary** opening the existing review action; the assistant
-   itself never writes. An external CRUD demo is optional, not a rubric mandate.
-6. Stop MCP and submit another question. Show the explicit unavailable response,
-   then show ordinary catalogue browsing still works. There is no fallback to
-   direct API search inside the assistant.
+- `Show me kayaking activities in Sydney.`
+- `Find the Sydney Harbour sunrise kayak activity, then look up its full details and tell me its weekly schedule and booking notes.`
 
-Keep development review and testing artifacts outside the repository unless
-explicitly requested for a release submission. A deterministic model fixture
-proves protocol wiring and rendering but is not a live-model demo. Validate RAG
-and the shared agentic loop separately when implemented.
+Expand **Tools used** and **Returned tool data**. Verify actual search/detail calls
+and whether the answer accurately reflects those records. Card lookups use the
+ordinary backend and do not appear as MCP calls. A missing model-selected detail
+call is a model-quality failure, not a trigger for backend answer rewriting.
+Also exercise natural-language budgets/dates, clarification, cross-domain tools,
+ordinary catalogue actions and MCP outage/recovery. Use isolated test data for writes.
 
 ## Checks
 
 ```bash
 .venv/bin/pytest student-4/tests -q
+.venv/bin/pytest ai-services/ai-mode/tests -q
 .venv/bin/pytest ai-services/mcp-server/tests -q
-.venv/bin/ruff check student-4 ai-services/mcp-server
-.venv/bin/ruff format --check student-4 ai-services/mcp-server
+.venv/bin/ruff check student-4 ai-services/ai-mode ai-services/mcp-server
+.venv/bin/ruff format --check student-4 ai-services/ai-mode ai-services/mcp-server
 .venv/bin/mypy --config-file student-4/pyproject.toml student-4/backend/student4_backend_service student-4/database/student4_database_service student-4/frontend/student4_frontend_service student-4/tests/backend student-4/tests/database student-4/tests/frontend student-4/tests/e2e
 docker compose config --quiet
 ```
 
-The local MCP contract tests exercise real SDK protocol sessions using fake
-provider/model transports, including the full frontend/backend/MCP/card flow,
-without requiring host services.
-
-### Instruction separation and request quality
-
-The assistant sends its trusted prompt asset in AI-Mode's optional `system` field.
-The question, registered tool descriptions/schemas and observations stay in `prompt`;
-both fields share the existing character budget. This remains a one-shot workflow,
-with no retained conversation. The prompt asks for clarification when essential
-context is missing or constraints conflict, and explicitly refuses writes. Price
-filters compare listed prices; party budgets additionally require evaluating the
-returned pricing basis and party size. These are model instructions, not guarantees;
-backend read-only enforcement and activity provenance checks remain authoritative.
-
-### Deterministic eligibility checks
-
-Explicit party counts, AUD bounds and ISO dates are retained by the backend, not
-re-read from each model tool call. Ambiguous/unsupported expressions ask for
-clarification. MCP searches use safe listed-price bounds; retrieved candidates
-are checked with exact party-cost arithmetic, participant limits, accessibility
-and catalogue schedule overlap. The backend repeats checks after final ordinary backend detail
-reads and writes the verification text itself. See the public API document for
-supported grammar, default selected-trip values, and limits. External MCP clients
-share the improved catalogue word variants, but must enforce their own budgets
-and recommendation policy.
-
-### When the agent needs a detail tool
-
-Search returns summaries suitable for selecting activities. Full schedules,
-booking notes and accessibility notes are available through `activities_get`.
-The model can choose this tool when those fields are needed to answer a question;
-external clients retain both tools. Rendering a card itself does not require an
-MCP detail call. To exercise model-selected detail retrieval, try:
-
-> Find the Sydney Harbour sunrise kayak activity and tell me its full weekly schedule and any booking or accessibility notes.
-
-Expand **Tools used** to inspect search and detail calls. A simple kayaking search
-can return cards with only an MCP search call. Date-constrained recommendation
-workflows may also perform MCP detail reads for schedule verification.
-
-Tool choice remains model-driven. For an explicit detail-tool check with the seeded
-kayak activity, use:
-
-> Use activities_get for activity b5536559-88c6-5879-acb3-354630651c7a and tell me its booking notes.
-
-This should show an `activities_get` call and the booking notes, without requiring
-a card or a search first. The activity ID must exist in the local catalogue.
+Keep development evidence outside the repository. Protocol fakes establish wiring,
+not live-model answer quality. Do not reintroduce natural-language parsers, forced
+retrieval or authored answer replacement to improve showcase results.

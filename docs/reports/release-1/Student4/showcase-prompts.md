@@ -11,5 +11,5 @@
 Expand **Tools used** to check the actual MCP calls. The first prompt demonstrates
 `activities_search`; the model can also choose a detail lookup. The second should
 show `activities_search` and `activities_get`, with the schedule and booking notes
-visible in the answer. Requested details are verified by the backend through MCP
-if the model has not already fetched them.
+visible in the answer. The model must choose the detail call and describe its results. The backend
+does not add a detail call or rewrite the answer if the model misses it.

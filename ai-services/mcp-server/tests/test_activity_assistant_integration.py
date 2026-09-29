@@ -6,6 +6,10 @@ import json
 import httpx
 import pytest
 
+pytest.importorskip("ai_mode_service")
+from ai_mode_service.app import create_app as ai_app
+from ai_mode_service.config import Settings as AiSettings
+
 pytest.importorskip("student4_backend_service")
 pytest.importorskip("student4_frontend_service")
 from student4_backend_service.app import create_app as backend_app
@@ -129,17 +133,23 @@ def test_frontend_backend_real_mcp_session_and_card_resolution(needs_details):
                     {"type": "activity", "activity_id": ACTIVITY},
                 ],
             }
+        if action["type"] == "tool":
+            msg = {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": action["name"],
+                            "arguments": action["arguments"],
+                        }
+                    }
+                ],
+            }
+        else:
+            msg = {"role": "assistant", "content": json.dumps(action)}
         return httpx.Response(
-            200,
-            json={
-                "data": {
-                    "run_id": "model-test",
-                    "model": "deterministic-test",
-                    "provider": "test",
-                    "response": json.dumps(action),
-                    "done": True,
-                }
-            },
+            200, json={"model": "llama3.1:8b", "done": True, "message": msg}
         )
 
     async def scenario():
@@ -148,16 +158,19 @@ def test_frontend_backend_real_mcp_session_and_card_resolution(needs_details):
             httpx.MockTransport(provider_response),
         )
         mcp = create_app(create_server(Settings(), provider))
+        ai = ai_app(
+            AiSettings(mcp_url="http://localhost:8012/mcp"),
+            ollama_transport=httpx.MockTransport(model_response),
+            mcp_transport=httpx.ASGITransport(mcp),
+        )
         backend = backend_app(
             BackendSettings(
-                mcp_enabled=True,
-                mcp_url="http://localhost:8012/mcp",
+                assistant_enabled=True,
                 ai_mode_url="http://ai.test",
             ),
             database_transport=httpx.MockTransport(database_response),
             location_transport=httpx.MockTransport(location_response),
-            mcp_transport=httpx.ASGITransport(mcp),
-            ai_mode_transport=httpx.MockTransport(model_response),
+            ai_mode_transport=httpx.ASGITransport(ai),
         )
         frontend = frontend_app(
             FrontendSettings(backend_url="http://backend.test"),
@@ -165,6 +178,7 @@ def test_frontend_backend_real_mcp_session_and_card_resolution(needs_details):
         )
         async with (
             mcp.router.lifespan_context(mcp),
+            ai.router.lifespan_context(ai),
             backend.router.lifespan_context(backend),
             frontend.router.lifespan_context(frontend),
             httpx.AsyncClient(
@@ -186,14 +200,14 @@ def test_frontend_backend_real_mcp_session_and_card_resolution(needs_details):
         provider.close()
 
     asyncio.run(scenario())
-    assert len(model_calls) == (3 if needs_details else 2)
+    assert len(model_calls) == (4 if needs_details else 3)
     assert len(database_calls) == 1
-    assert len(json.dumps(model_calls[0]["schema"])) <= 8000
-    assert "activities_create" not in json.dumps(model_calls)
+    assert "activities_create" in json.dumps(model_calls[0]["tools"])
+    assert model_calls[-1]["format"]["type"] == "object"
     assert [request.method for request in provider_calls] == (
         ["QUERY", "GET"] if needs_details else ["QUERY"]
     )
-    assert json.loads(provider_calls[0].content)["price"] == {"max": "49.99"}
+    assert json.loads(provider_calls[0].content)["price"] == {"max": "50.00"}
     correlation = provider_calls[0].headers["X-Request-ID"]
     assert correlation.startswith("student4-agent-")
     assert all(

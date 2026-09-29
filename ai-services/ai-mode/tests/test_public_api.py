@@ -19,7 +19,7 @@ def success_generate_response(
         json={
             "model": model,
             "created_at": "2026-08-31T11:00:00Z",
-            "response": response_text,
+            "message": {"role": "assistant", "content": response_text},
             "done": True,
             "done_reason": "stop",
             "context": [1, 2, 3],
@@ -151,11 +151,11 @@ def test_generate_uses_non_stream_official_ollama_client_request_shape(
 
     ollama_request = ollama_api.generate_requests[0]
     assert ollama_request["model"] == "qwen2.5:0.5b"
-    assert ollama_request["prompt"] == "Return JSON only."
-    # Feature prompts are instructions, not preformatted model token templates.
-    assert ollama_request["raw"] is False
+    assert ollama_request["messages"] == [
+        {"role": "user", "content": "Return JSON only."}
+    ]
     assert ollama_request["stream"] is False
-    assert ollama_request["options"] == {"temperature": 0}
+    assert ollama_request["options"] == {"temperature": 0, "num_ctx": 32768}
     assert ollama_request["format"]["type"] == "object"
 
 
@@ -367,6 +367,7 @@ def test_generate_uses_requested_model_when_provider_model_is_untrusted(
             "provider": "ollama",
             "response": '{"suggestions":[]}',
             "done": True,
+            "tools": [],
         }
     }
     assert response.json()["data"]["run_id"].startswith("aimode_")
@@ -565,8 +566,14 @@ def test_generate_separates_system_instructions_from_request(
             json={"prompt": "untrusted request", "system": "trusted policy"},
         )
     assert response.status_code == 200
-    assert ollama_api.generate_requests[0]["system"] == "trusted policy"
-    assert ollama_api.generate_requests[0]["prompt"] == "untrusted request"
+    assert ollama_api.generate_requests[0]["messages"][0] == {
+        "role": "system",
+        "content": "trusted policy",
+    }
+    assert ollama_api.generate_requests[0]["messages"][1] == {
+        "role": "user",
+        "content": "untrusted request",
+    }
 
 
 @pytest.mark.parametrize("system", [" ", "s" * 80])
@@ -590,4 +597,21 @@ def test_generate_null_system_preserves_existing_callers(client_factory, ollama_
     with client_factory(ollama_handler=ollama_api.handle) as client:
         response = client.post("/generate", json={"prompt": "hello", "system": None})
     assert response.status_code == 200
-    assert ollama_api.generate_requests[0].get("system") is None
+    assert not any(
+        m["role"] == "system" for m in ollama_api.generate_requests[0]["messages"]
+    )
+
+
+def test_external_schema_reference_is_rejected_before_execution(
+    client_factory, ollama_api
+):
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate",
+            json={
+                "prompt": "hello",
+                "schema": {"$ref": "http://untrusted.test/schema"},
+            },
+        )
+    assert response.status_code == 422
+    assert not ollama_api.generate_requests

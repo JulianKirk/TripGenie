@@ -191,7 +191,7 @@ async def filters_for(
     schema = _schema(tuple(countries), tuple(cities))
     notes = NO_NOTES
     for attempt in range(1, settings.ai_max_attempts + 1):
-        answer = await ai.generate(
+        answer, used_tools = await ai.generate(
             render_prompt(question, countries, cities, notes), schema
         )
         try:
@@ -206,6 +206,8 @@ async def filters_for(
                 settings.ai_max_attempts,
                 reason,
             )
+            if used_tools:
+                break
             notes = (
                 "Your previous answer could not be used. Reason: "
                 f"{reason}. Start again and return only JSON matching the "

@@ -1,6 +1,9 @@
 # ADR 0003: Activity agent permissions and presentation over shared MCP
 
-Status: implemented on Student4/AddActivitiesServiceMcp; pending review/merge.
+Status: superseded by [ADR 0004](0004-shared-mcp-generation.md).
+
+This records the previous implementation; its allowlist, constraint parser and
+backend-authored final verification are removed by ADR 0004.
 
 The Release 1 rubric requires frontend MCP access through the feature backend,
 structured tool results, and defined tool boundaries. The team additionally wants

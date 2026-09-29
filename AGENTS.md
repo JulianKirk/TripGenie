@@ -59,31 +59,20 @@ These are the target requirements for every student feature. Do not assume
 that an existing implementation already satisfies them; identify gaps when
 working on the relevant slice.
 
-- Preserve each feature's existing functionality and AI-Mode integration.
-  The frontend UI accesses AI-Mode, MCP, and RAG through its own backend/API;
-  neither the browser nor the frontend service connects to these shared
-  services directly. Keep AI workflow orchestration in the feature backend.
-- Use the shared MCP server's registered tools for application-data reads in
-  the feature's MCP-enabled AI workflow. For a guided recommendation flow,
-  the backend uses AI-Mode to plan filters, calls MCP to retrieve authoritative
-  candidates, and uses AI-Mode to evaluate those results before returning
-  them to the frontend. MCP supplies tools and data; AI-Mode supplies model
-  inference. Autonomous model-selected tool calls are not required.
-  Presentation-only resolution of already-grounded activity IDs uses the owning
-  backend's normal activity lookup; it is not an AI retrieval fallback and does
-  not appear in the MCP tool trace. Full details needed by the agent still use MCP.
+- Preserve existing feature functionality. Frontends call their own backends;
+  feature backends supply prompts and presentation while shared AI-Mode owns
+  the model-directed MCP loop behind `/generate`.
+- Every `/generate` request discovers the full MCP tool catalogue. MCP owns
+  tool descriptions, schemas and public-API execution; AI-Mode owns inference,
+  protocol validation, execution limits and traces. Do not duplicate tool
+  definitions or natural-language request parsing in feature assistants.
 - MCP tools call the owning service's documented public data APIs, never its
-  database or AI orchestration endpoints. A tool may call the requesting
-  feature's ordinary public API, but must not call back into the workflow
-  that invoked it. Existing CRUD and ordinary browsing retain their normal
-  API paths.
-- Keep tool names, inputs, outputs, and access boundaries explicit and
-  validated. The shared MCP server may expose documented CRUD tools for
-  external clients; feature AI workflows must enforce their own allowed tool
-  set on the backend before execution. Student 4's frontend agent is strictly
-  read-only, even when write tools are advertised by MCP. Do not add arbitrary
-  HTTP execution or implicit writes. Recommendations must not save or change
-  itinerary selections without an explicit user action.
+  database or AI orchestration endpoints. Ordinary CRUD and browsing retain
+  their existing paths. Avoid callbacks into the generation workflow.
+- All advertised tools, including writes, are available to shared generation.
+  Trusted prompts instruct the model to write only when explicitly requested;
+  this is not a hard read-only authorization guarantee. Keep results and partial
+  execution visible. Never retry ambiguous writes automatically.
 - Every feature must expose a successful MCP interaction through its UI and
   backend/API and display the returned tool data. An AI narrative alone is
   not evidence that an MCP tool executed successfully. Surface tool failures

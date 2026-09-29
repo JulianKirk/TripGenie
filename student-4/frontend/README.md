@@ -14,7 +14,7 @@ call the database, shared location service, or itinerary service directly.
 - Add activities to a trip, reschedule them, and remove selections through
   Student 4's itinerary proxy.
 - Ask a single activity question, optionally select a trip, and inspect the
-  actual read-only MCP calls, authoritative activity cards, and itinerary actions.
+  actual shared MCP calls, authoritative activity cards, and itinerary actions.
   Each question starts fresh; no chat history is retained.
 - Progressive enhancement: the initial page and explicit search submission
   work without JavaScript; HTMX adds live fragment updates.

@@ -36,7 +36,6 @@ def create_app(
     location_transport: httpx.AsyncBaseTransport | None = None,
     itinerary_transport: httpx.AsyncBaseTransport | None = None,
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
-    mcp_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
 
@@ -98,7 +97,6 @@ def create_app(
             payload,
             settings,
             request.app.state.ai,
-            mcp_transport,
             resolve_activity=partial(get_activity, db=db, location=location),
         )
 

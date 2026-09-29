@@ -50,7 +50,8 @@ def test_index_offers_prompt_trip_context_and_immediate_progress(
     assert 'name="trip_id"' in text
     assert "Sydney Getaway" in text
     assert "Understanding your request" in text
-    assert "nothing is added to a trip" in text
+    assert "perform actions you request" in text
+    assert "read-only MCP tools" not in text
 
 
 def test_plan_fragment_shows_search_and_automatically_starts_evaluation(

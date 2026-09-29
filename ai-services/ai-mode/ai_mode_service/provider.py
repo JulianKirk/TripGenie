@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from ollama import AsyncClient, ResponseError
+from ollama import AsyncClient, Message, ResponseError
 from pydantic import ValidationError
 
 from .config import Settings
@@ -18,12 +18,6 @@ from .errors import (
     model_unavailable,
 )
 from .models import DependencyStatus
-
-
-@dataclass(slots=True)
-class ProviderGenerateResult:
-    model: str
-    response: str
 
 
 @dataclass(slots=True)
@@ -132,24 +126,22 @@ class OllamaProviderAdapter:
             ),
         )
 
-    async def generate(
+    async def chat(
         self,
         *,
         model: str,
-        prompt: str,
-        schema: dict[str, Any] | None,
-        system: str | None = None,
-    ) -> ProviderGenerateResult:
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        schema: dict[str, Any] | None = None,
+    ) -> Message:
         try:
-            payload = await self._client.generate(
+            payload = await self._client.chat(
                 model=model,
-                prompt=prompt,
-                system=system,
+                messages=messages,
+                tools=tools,
                 format=schema,
                 stream=False,
-                # Callers send instructions, not model-specific chat tokens.
-                raw=False,
-                options={"temperature": 0},
+                options={"temperature": 0, "num_ctx": self._settings.context_tokens},
             )
         except httpx.TimeoutException as exc:
             raise dependency_timeout(
@@ -206,8 +198,7 @@ class OllamaProviderAdapter:
                 ],
             ) from exc
 
-        response_text = payload.response
-        if payload.done is not True or response_text is None:
+        if payload.done is not True or payload.message is None:
             raise bad_gateway(
                 "The AI provider returned a malformed generate response.",
                 [
@@ -221,7 +212,9 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        response_bytes = len(response_text.encode("utf-8"))
+        response_bytes = len(
+            payload.message.model_dump_json(exclude_none=True).encode("utf-8")
+        )
         if response_bytes > self._settings.max_response_bytes:
             raise dependency_response_too_large(
                 (
@@ -239,10 +232,7 @@ class OllamaProviderAdapter:
                 ],
             )
 
-        return ProviderGenerateResult(
-            model=model,
-            response=response_text,
-        )
+        return payload.message
 
     async def embed(
         self,

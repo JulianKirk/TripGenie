@@ -317,3 +317,28 @@ def test_public_readiness_reports_unavailable_ai_mode(settings) -> None:
     dependency = ready.json()["data"]["dependencies"]["ai_mode"]
     assert dependency["status"] == "unavailable"
     assert dependency["code"] == "DEPENDENCY_UNAVAILABLE"
+
+
+def test_generation_decoder_accepts_shared_agent_trace():
+    from rag_service.models import AiGeneratePayload
+
+    payload = AiGeneratePayload.model_validate(
+        {
+            "run_id": "agent-1",
+            "correlation_id": "rag-1",
+            "model": "llama3.1:8b",
+            "provider": "ollama",
+            "done": True,
+            "response": '{"answer":"grounded"}',
+            "tools": [
+                {
+                    "tool": "activities_search",
+                    "arguments": {},
+                    "status": "success",
+                    "duration_ms": 1,
+                    "result": {"content": []},
+                }
+            ],
+        }
+    )
+    assert payload.response == '{"answer":"grounded"}'

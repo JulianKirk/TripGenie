@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -122,8 +123,33 @@ class Settings:
     max_embed_inputs: int = 32
     max_embed_input_chars: int = 12000
     max_embed_dimensions: int = 4096
+    mcp_url: str = "http://127.0.0.1:8012/mcp"
+    mcp_timeout_seconds: float = 15.0
+    agent_timeout_seconds: float = 180.0
+    agent_max_turns: int = 8
+    agent_max_calls: int = 16
+    agent_context_chars: int = 120000
+    agent_result_bytes: int = 32768
+    context_tokens: int = 32768
 
     def __post_init__(self) -> None:
+        self.mcp_url = _normalise_base_url(
+            self.mcp_url,
+            env_name="AI_MODE_MCP_URL",
+            default="http://127.0.0.1:8012/mcp",
+        )
+        for name in ("mcp_timeout_seconds", "agent_timeout_seconds"):
+            if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive and finite.")
+        for name in (
+            "agent_max_turns",
+            "agent_max_calls",
+            "agent_context_chars",
+            "agent_result_bytes",
+            "context_tokens",
+        ):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be positive.")
         self.max_prompt_chars = _validate_limit(
             self.max_prompt_chars,
             env_name="AI_MODE_MAX_PROMPT_CHARS",
@@ -184,6 +210,16 @@ class Settings:
             or "nomic-embed-text"
         )
         return cls(
+            mcp_url=os.getenv("AI_MODE_MCP_URL", "http://127.0.0.1:8012/mcp"),
+            mcp_timeout_seconds=float(os.getenv("AI_MODE_MCP_TIMEOUT_SECONDS", "15")),
+            agent_timeout_seconds=float(
+                os.getenv("AI_MODE_AGENT_TIMEOUT_SECONDS", "180")
+            ),
+            agent_max_turns=int(os.getenv("AI_MODE_AGENT_MAX_TURNS", "8")),
+            agent_max_calls=int(os.getenv("AI_MODE_AGENT_MAX_CALLS", "16")),
+            agent_context_chars=int(os.getenv("AI_MODE_AGENT_CONTEXT_CHARS", "120000")),
+            agent_result_bytes=int(os.getenv("AI_MODE_AGENT_RESULT_BYTES", "32768")),
+            context_tokens=int(os.getenv("AI_MODE_CONTEXT_TOKENS", "32768")),
             service_name=os.getenv("AI_MODE_SERVICE_NAME", "ai-mode").strip()
             or "ai-mode",
             ollama_base_url=_normalise_base_url(
