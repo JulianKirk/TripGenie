@@ -170,15 +170,42 @@ def test_complete_mcp_schemas_reach_ollama_on_every_tool_round():
             assert advertised[tool["name"]]["parameters"] == tool["inputSchema"]
 
 
-def test_unknown_tool_and_invalid_arguments_never_execute():
-    for name, arguments in [
-        ("invented", {"value": "x"}),
-        ("activities_delete", {"wrong": 1}),
-    ]:
-        response, _, mcp = run([message(name=name, arguments=arguments)])
-        assert response.status_code == 502
-        assert not mcp.calls
-        assert response.json()["tools"][0]["status"] == "rejected"
+def test_unknown_tool_never_executes():
+    response, _, mcp = run([message(name="invented", arguments={"value": "x"})])
+    assert response.status_code == 502
+    assert not mcp.calls
+    assert response.json()["tools"][0]["status"] == "rejected"
+
+
+def test_invalid_arguments_can_be_corrected_without_executing_invalid_call():
+    response, requests, mcp = run(
+        [
+            message(name="activities_search", arguments={"wrong": 1}),
+            message(name="activities_search", arguments={"value": "kayak"}),
+            message("Found a kayak activity"),
+        ]
+    )
+    assert response.status_code == 200, response.text
+    assert [call["arguments"] for call in mcp.calls] == [{"value": "kayak"}]
+    assert requests[1]["tools"] == requests[0]["tools"]
+    feedback = requests[1]["messages"][-1]
+    assert feedback["role"] == "tool"
+    assert "INVALID_ARGUMENTS" in feedback["content"]
+    assert "value" in feedback["content"]
+    assert [t["status"] for t in response.json()["data"]["tools"]] == [
+        "rejected",
+        "success",
+    ]
+
+
+def test_argument_correction_is_bounded_and_does_not_execute_invalid_writes():
+    response, requests, mcp = run(
+        [message(name="activities_delete", arguments={"wrong": 1}) for _ in range(2)]
+    )
+    assert response.status_code == 502
+    assert len(requests) == 2
+    assert not mcp.calls
+    assert all(t["status"] == "rejected" for t in response.json()["tools"])
 
 
 def test_partial_trace_survives_provider_failure_without_replaying_write():

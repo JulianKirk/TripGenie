@@ -57,12 +57,15 @@ models.
 
 ## Start the host services
 
-Start AI-Mode from `ai-services\ai-mode`:
+Start containerised AI-Mode from the repository root:
 
 ```powershell
-uv sync --extra dev
-uv run uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
+docker compose --env-file shared/configuration/.env.example up --build -d ai-mode
 ```
+
+Host RAG uses its loopback-published port. Start host MCP as described in the
+[activity assistant setup](../../student-4/docs/mcp-assistant.md); AI-Mode needs
+it for generation.
 
 Verify it can see both configured models:
 

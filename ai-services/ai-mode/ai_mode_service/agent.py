@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import timedelta
+from itertools import islice
 from time import monotonic
 from typing import Any
 
@@ -134,6 +135,7 @@ class Agent:
         messages.append({"role": "user", "content": payload.prompt})
         executed: set[str] = set()
         checked_without_tools = False
+        corrected_arguments = False
         for _ in range(self.settings.agent_max_turns):
             self._bound(messages, tools)
             reply = await self.provider.chat(
@@ -155,8 +157,9 @@ class Agent:
                         {
                             "role": "user",
                             "content": "Before finalising, check whether your answer "
-                            "actually fulfils the original request. If it needs "
-                            "application data, call the available tools now. An "
+                            "actually fulfils the original request. Use the context "
+                            "already supplied when sufficient. Only call tools if "
+                            "required information is missing from that context. An "
                             "introduction or promise to retrieve data is not an "
                             "answer. If clarification is needed, ask the question; "
                             "if no tools are needed, provide the complete answer.",
@@ -210,9 +213,6 @@ class Agent:
                 signature = json.dumps([name, arguments], sort_keys=True)
                 if (
                     tool is None
-                    or not Draft202012Validator(
-                        tool.inputSchema, format_checker=FormatChecker()
-                    ).is_valid(arguments)
                     or (
                         signature in executed
                         and not (tool.annotations and tool.annotations.readOnlyHint)
@@ -227,6 +227,40 @@ class Agent:
                         "The model requested an invalid, repeated "
                         "or excessive tool call."
                     )
+                errors = list(
+                    islice(
+                        Draft202012Validator(
+                            tool.inputSchema, format_checker=FormatChecker()
+                        ).iter_errors(arguments),
+                        3,
+                    )
+                )
+                if errors:
+                    entry.status, entry.error = "rejected", "INVALID_ARGUMENTS"
+                    if corrected_arguments:
+                        raise bad_gateway(
+                            "The model did not correct its invalid tool arguments."
+                        )
+                    corrected_arguments = True
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": name,
+                            "content": json.dumps(
+                                {
+                                    "error": "INVALID_ARGUMENTS",
+                                    "executed": False,
+                                    "details": [
+                                        error.message[:300] for error in errors
+                                    ],
+                                    "instruction": "Correct the arguments using the "
+                                    "advertised schema and actual values, not schema "
+                                    "definitions. Do not invent missing information.",
+                                }
+                            ),
+                        }
+                    )
+                    continue
                 executed.add(signature)
                 start = monotonic()
                 try:
