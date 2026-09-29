@@ -3,6 +3,7 @@
 import json
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from ai_mode_service.app import create_app
@@ -177,10 +178,16 @@ def test_unknown_tool_never_executes():
     assert response.json()["tools"][0]["status"] == "rejected"
 
 
-def test_invalid_arguments_can_be_corrected_without_executing_invalid_call():
+@pytest.mark.parametrize("failed_attempts", [1, 2, 3])
+def test_invalid_arguments_can_be_corrected_without_executing_invalid_call(
+    failed_attempts,
+):
     response, requests, mcp = run(
         [
-            message(name="activities_search", arguments={"wrong": 1}),
+            message(name="activities_search", arguments={"wrong": 1})
+            for _ in range(failed_attempts)
+        ]
+        + [
             message(name="activities_search", arguments={"value": "kayak"}),
             message("Found a kayak activity"),
         ]
@@ -193,17 +200,18 @@ def test_invalid_arguments_can_be_corrected_without_executing_invalid_call():
     assert "INVALID_ARGUMENTS" in feedback["content"]
     assert "value" in feedback["content"]
     assert [t["status"] for t in response.json()["data"]["tools"]] == [
-        "rejected",
+        *(["rejected"] * failed_attempts),
         "success",
     ]
 
 
 def test_argument_correction_is_bounded_and_does_not_execute_invalid_writes():
     response, requests, mcp = run(
-        [message(name="activities_delete", arguments={"wrong": 1}) for _ in range(2)]
+        [message(name="activities_delete", arguments={"wrong": 1}) for _ in range(4)]
     )
     assert response.status_code == 502
-    assert len(requests) == 2
+    assert len(requests) == 4
+    assert "three correction attempts" in response.json()["error"]["message"]
     assert not mcp.calls
     assert all(t["status"] == "rejected" for t in response.json()["tools"])
 

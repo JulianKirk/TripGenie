@@ -135,7 +135,7 @@ class Agent:
         messages.append({"role": "user", "content": payload.prompt})
         executed: set[str] = set()
         checked_without_tools = False
-        corrected_arguments = False
+        argument_corrections = 0
         for _ in range(self.settings.agent_max_turns):
             self._bound(messages, tools)
             reply = await self.provider.chat(
@@ -237,11 +237,12 @@ class Agent:
                 )
                 if errors:
                     entry.status, entry.error = "rejected", "INVALID_ARGUMENTS"
-                    if corrected_arguments:
+                    if argument_corrections >= 3:
                         raise bad_gateway(
-                            "The model did not correct its invalid tool arguments."
+                            "Tool calls failed after three correction attempts "
+                            "because the model kept supplying invalid arguments."
                         )
-                    corrected_arguments = True
+                    argument_corrections += 1
                     messages.append(
                         {
                             "role": "tool",
