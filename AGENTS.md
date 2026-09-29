@@ -98,8 +98,7 @@ working on the relevant slice.
   containerised frontend, backend/API, and database services, and configure
   backend connections to host-run services in Compose. Container localhost
   is not the host; use the documented host connection configuration.
-- Retain MCP and RAG integration but disable both modes during each student's
-  CI/CD execution. Test their contracts and failure handling with injected
+- Test MCP and RAG contracts and failure handling locally with injected
   transports or protocol fakes without requiring live host services.
 - Capture local evidence of a valid MCP tool result and a grounded RAG answer
   through every feature's UI and backend/API, plus insufficient-context

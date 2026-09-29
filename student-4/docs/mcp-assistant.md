@@ -104,9 +104,9 @@ and the shared agentic loop separately when implemented.
 docker compose config --quiet
 ```
 
-Student 4 CI explicitly disables runtime MCP and RAG modes. The separate MCP
-contract job tests real SDK protocol sessions using fake provider/model transports,
-including the full frontend/backend/MCP/card flow, without requiring host services.
+The local MCP contract tests exercise real SDK protocol sessions using fake
+provider/model transports, including the full frontend/backend/MCP/card flow,
+without requiring host services.
 
 ### Instruction separation and request quality
 

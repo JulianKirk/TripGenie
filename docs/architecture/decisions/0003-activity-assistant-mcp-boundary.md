@@ -70,6 +70,6 @@ Deployment places AI-Mode alongside MCP and RAG on the host; all five backends'
 Compose AI-Mode URLs and host mappings migrate together. Only Student 1 and Student 4
 public ports are newly published on loopback for trip/activity MCP tools. Databases
 remain private. Native Linux uses a restricted bridge interface for host-service
-access; DNS-rebinding protection includes the configured bind host. Student 4 CI
-disables runtime MCP/RAG while testing protocol behavior with deterministic
-transports. RAG UI and shared validation-loop implementation remain separate work.
+access; DNS-rebinding protection includes the configured bind host. Local MCP
+checks test protocol behavior with deterministic transports. RAG UI and shared
+validation-loop implementation remain separate work.

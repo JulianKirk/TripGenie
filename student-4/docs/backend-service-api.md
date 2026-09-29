@@ -193,7 +193,7 @@ is not certified for schedule, accessibility or booking suitability.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Packaged assistant instructions; markdown filename only. |
-| `MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant's MCP workflow. CI explicitly disables it. |
+| `MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant's MCP workflow. |
 | `MCP_URL` | `http://host.docker.internal:8012/mcp` | Fixed shared MCP endpoint; never model-controlled. |
 | `MCP_TIMEOUT` | `15` | Positive finite MCP request timeout in seconds. |
 | `AGENT_TIMEOUT` | `180` | Positive finite total deadline, including tool/card calls. |
