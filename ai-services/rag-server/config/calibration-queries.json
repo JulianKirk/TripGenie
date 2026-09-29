@@ -35,6 +35,51 @@
       "expect_insufficient_context": false
     },
     {
+      "case_id": "student-1-travel-day-trips",
+      "query": "What are good day trips from Melbourne?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-destination-guides"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-cherry-blossom",
+      "query": "When is cherry blossom season in Tokyo?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-seasons-and-events"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-pacing",
+      "query": "How many activities should I plan per day on a trip?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-itinerary-planning"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-tipping",
+      "query": "Should I tip at restaurants in Japan?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-budgeting-and-money"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-1-travel-flight-time",
+      "query": "How long is the flight from Sydney to Queenstown?",
+      "feature": "student-1",
+      "expected_source_ids": [
+        "travel-logistics-and-documents"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
       "case_id": "unsupported-live-weather",
       "query": "What is the live weather in Lisbon right now?",
       "feature": "student-1",
