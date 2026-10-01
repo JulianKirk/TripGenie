@@ -32,9 +32,9 @@ and a two-second timeout for each HTTP request. The probe prints every attempt
 and the elapsed time when the service responds, giving each workflow a
 consistent, non-agent startup/readiness check and an auditable Actions log.
 
-The Agentic Loop keeps its separate retry and endpoint-latency policy. Its
-deterministic checks remain additional coverage rather than the definition of
-this minimum baseline.
+The Agentic Loop is a local validation harness, not part of CI. It keeps its
+own retry and endpoint-latency policy, and its deterministic checks remain
+additional coverage rather than the definition of this minimum baseline.
 
 ---
 

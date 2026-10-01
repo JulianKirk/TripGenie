@@ -1,0 +1,21 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Implementation agent tool selections:
+{{IMPLEMENTATION_RECOMMENDATION}}
+
+Tool execution evidence (live MCP calls, direct backend comparisons, and each selection scored against the expected tool):
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review whether the MCP integration is grounded in the evidence: registered tools, structured envelopes, data matching the backends, rejected invalid input, and whether the tool selections match the expected tools and respect tool boundaries.
+
+Format:
+Strengths: <max 20 words>
+Risks: <max 25 words>
+Recommendations: <max 20 words>
+
+Output rules:
+- Return exactly three lines.
+- Maximum 65 words total.
+- Do not explain reasoning.

@@ -1,0 +1,23 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Implementation Recommendation:
+{{IMPLEMENTATION_RECOMMENDATION}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Cross-check the implementation recommendation against the evidence.
+
+Format, if the evidence does not support the recommendation:
+Risk: <one short sentence>
+Correction: <one short sentence>
+Retest: <one short sentence>
+
+Format, if the evidence supports it:
+Approval: <one short sentence naming the supporting evidence>
+
+Output rules:
+- Maximum 35 words total.
+- Do not explain reasoning.

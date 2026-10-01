@@ -1,0 +1,29 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Implementation Assessment:
+{{IMPLEMENTATION_RECOMMENDATION}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+First review the RAG output quality against the evidence, then evaluate the RAG architecture where the evidence supports it. Only raise risks tied to the evidence.
+
+Format:
+Risk: <one short sentence>
+Correction: <one short sentence>
+Retest: <one short sentence>
+Strengths: <one short sentence>
+Risks: <one short sentence>
+Recommendations: <one short sentence>
+
+If no output-quality risk is supported by the evidence, use:
+Risk: No evidence-backed risk identified.
+Correction: No correction required.
+Retest: Repeat validation after future changes.
+
+Output rules:
+- Return exactly six lines.
+- Maximum 80 words total.
+- Do not explain reasoning.

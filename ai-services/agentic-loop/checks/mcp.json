@@ -1,0 +1,46 @@
+{
+  "goal": "Validate the shared TripGenie MCP server: registered tools, structured results per student, data that matches each backend, and tool boundaries",
+  "_note": "Tool calls go to ${MCP_URL} (default http://127.0.0.1:8012/mcp). Direct backend reads use the MCP server's own MCP_STUDENT_n_URL variables and defaults.",
+  "tools": [
+    "trip_get_context", "trips_list_itinerary_items",
+    "accommodations_search", "accommodations_get", "accommodations_committed_costs",
+    "transport_search", "transport_get", "transport_compare", "transport_trip_costs",
+    "activities_search", "activities_create", "activities_update", "activities_delete", "activities_get", "activities_list_categories", "activities_committed_costs",
+    "budgets_list", "budgets_get_summary", "expenses_list"
+  ],
+  "steps": [
+    {"label": "student-5 budgets_list", "tool": "budgets_list", "arguments": {"limit": 5}, "source": "student-5",
+     "save": {"TRIP_ID": "data.budgets.0.trip_id", "BUDGET_ID": "data.budgets.0.budget_id"},
+     "compare": {"path": "${MCP_STUDENT_5_URL}/api/v1/budgets", "fields": {"data.budgets.0.budget_id": "data.0.budget_id", "data.budgets.0.total_budget": "data.0.total_budget"}}},
+    {"label": "student-5 budgets_get_summary", "tool": "budgets_get_summary", "arguments": {"budget_id": "${BUDGET_ID}"}, "source": "student-5"},
+    {"label": "student-1 trip_get_context", "tool": "trip_get_context", "arguments": {"trip_id": "${TRIP_ID}"}, "source": "student-1",
+     "compare": {"path": "${MCP_STUDENT_1_URL}/api/trips/${TRIP_ID}", "fields": {"data.id": "data.id", "data.status": "data.status"}}},
+    {"label": "student-2 accommodations_search", "tool": "accommodations_search", "arguments": {"limit": 5}, "source": "student-2",
+     "compare": {"path": "${MCP_STUDENT_2_URL}/accommodation?limit=5", "fields": {"data.items.0.id": "accommodations.0.id"}}},
+    {"label": "student-3 transport_search", "tool": "transport_search", "arguments": {"limit": 5}, "source": "student-3",
+     "compare": {"path": "${MCP_STUDENT_3_URL}/api/transport-options", "fields": {"data.items.0.id": "data.0.id"}}},
+    {"label": "student-4 activities_search", "tool": "activities_search", "arguments": {"limit": 5}, "source": "student-4",
+     "compare": {"path": "${MCP_STUDENT_4_URL}/activity?limit=5", "fields": {"data.items.0.id": "activities.0.id", "data.items.0.price": "activities.0.price"}}},
+    {"label": "student-4 activities_list_categories", "tool": "activities_list_categories", "source": "student-4"},
+    {"label": "budgets_list limit 0 (rejected)", "tool": "budgets_list", "arguments": {"limit": 0}, "error": "VALIDATION_ERROR"},
+    {"label": "accommodations_get malformed id (rejected)", "tool": "accommodations_get", "arguments": {"accommodation_id": "nope"}, "error": "VALIDATION_ERROR"},
+    {"label": "transport_get malformed id (rejected)", "tool": "transport_get", "arguments": {"transport_id": "nope"}, "error": "VALIDATION_ERROR"},
+    {"label": "unknown tool name (rejected)", "tool": "no_such_tool", "rejected": true}
+  ],
+  "_tool_selection_note": "Advisory. The implementation agent picks a tool for each request; the loop reports whether it matches, and a mismatch never fails the run.",
+  "tool_selection": [
+    {"request": "What total budget has been set for each of my trips?", "expected": "budgets_list"},
+    {"request": "Find somewhere to stay in Sydney, Australia.", "expected": "accommodations_search"},
+    {"request": "What kinds of activity categories does TripGenie offer?", "expected": "activities_list_categories"},
+    {"request": "Show me transport options from Sydney to Melbourne.", "expected": "transport_search"},
+    {"request": "List the expenses recorded for trip trip_2026_sydney_long_weekend.", "expected": "expenses_list"},
+    {"request": "How much have I committed to activities on trip trip_2026_sydney_long_weekend?", "expected": "activities_committed_costs"}
+  ],
+  "rules": [
+    "The loop only calls read tools; activities_create, activities_update and activities_delete are listed but never called, and writes whose outcome is unknown are never retried.",
+    "The server never reads a database or calls Ollama; it reaches each student only through that student's public backend.",
+    "IDs come only from provider responses; callers discover them with search or list tools.",
+    "Money is an exact decimal string, never a float; unknown or unavailable costs are errors, not zero.",
+    "Each tool returns an envelope with ok, data or error, correlation_id and the owning student as source."
+  ]
+}

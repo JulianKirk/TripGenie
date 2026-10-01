@@ -1,0 +1,13 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review the latest build-and-validate workflow run for each service using the live GitHub Actions evidence above, and identify ONE concrete pipeline improvement it supports.
+
+Output rules:
+- If the evidence does not support an improvement, write: No evidence-backed improvement identified.
+- Otherwise name the workflow, the improvement, and the evidence behind it.
+- Maximum 60 words.

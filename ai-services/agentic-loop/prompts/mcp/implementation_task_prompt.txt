@@ -1,0 +1,13 @@
+Tool catalogue (name: description), as the running MCP server advertises it:
+{{TOOL_CATALOGUE}}
+
+Requests:
+{{TOOL_REQUESTS}}
+
+Task:
+For each numbered request, select the single catalogue tool a client should call first to answer it.
+
+Output rules:
+- Return exactly one line per request, in the same order, and nothing else.
+- Use this format, keeping the request number:
+  <n>. Selected Tool: <tool name> | Reason: <max 25 words> | Expected Evidence: <max 20 words>

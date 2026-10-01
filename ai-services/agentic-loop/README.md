@@ -67,7 +67,7 @@ transitive dependencies. This lets its public catalogue flows resolve shared
 locations and reach the same service graph used by the integrated application,
 rather than reviewing an intentionally degraded three-container slice. Ollama
 remains host-managed; AI checks must accept its documented unavailable state
-when no model runtime is configured on the runner.
+when no model runtime is configured on the machine.
 
 ## Run it
 
@@ -83,61 +83,102 @@ backends while the loop runs. They remain private in the main Compose file.
 
 `--ci` skips the human-review prompt.
 
+Several services in one run -- the loop waits for each one's
+readiness itself, reports a service that never becomes ready as failed in its
+own section, and marks the rest skipped:
+
+```bash
+SERVICES="student-1 student-3" python agentic_loop.py --ci --mode services
+```
+
+## Modes
+
+`--mode {services,mcp,rag,ci}` picks what the collector observes. Run with no
+flag in a terminal and the loop shows a menu instead (`0` exits); `--ci` without
+`--mode` runs `services`, so existing invocations are unchanged. Every mode ends
+the same way: the two agents comment, and only the collector's checks decide
+the exit code.
+
+| Mode | Collector | Checks file |
+| --- | --- | --- |
+| `services` | HTTP checks against running backends | `checks/<service>.json` |
+| `mcp` | JSON-RPC tool calls to the host MCP server | `checks/mcp.json` |
+| `rag` | Calibration queries to the host RAG server | `checks/rag.json` -> `../rag-server/config/calibration-queries.json` |
+| `ci` | Latest `student-x-ci.yml` run per service via `gh` | `checks/ci.json` |
+
+**MCP** (`python -m tripgenie_mcp serve` plus the five backends, started with the agentic overlay): all 19 tools
+are listed (the three activity write tools are listed, never called); one valid read per student returns `ok: true`, `data` and the right
+`source`; IDs and amounts match the same backend read directly; `limit: 0`, a
+malformed ID and an unknown tool are rejected; each call repeats with the same
+data and finishes under 3 s. Steps chain with `save` like flows do. Direct
+backend reads use the MCP server's own `MCP_STUDENT_n_URL` variables and
+defaults (loopback ports 18001/9000/18003/18008/18005). Compose does not yet
+publish student 3 on 18003 -- the agentic overlay uses 8003 -- so set
+`MCP_STUDENT_3_URL=http://127.0.0.1:8003` for both processes until it does.
+
+**RAG** (AI-Mode plus `python -m rag_service serve` with a built index): every
+answerable calibration case returns an answer, a confidence category and its
+`expected_source_ids`; the unanswerable one returns insufficient context; a
+repeat returns the same citations and category; insufficient context comes back
+under 3 s and answers under 30 s. The cases live in the RAG server's own
+calibration file, so there is one list to maintain.
+
+**CI** (`gh auth login` first): for the current branch (`CI_BRANCH` overrides),
+the latest run of each service's workflow becomes a check -- `success` passes,
+any other conclusion fails, no run is a skip -- and its artifacts are downloaded
+to `reports/ci/<service>/`. Without `gh` the mode reports that and passes.
+
+| Variable | Default |
+| --- | --- |
+| `SERVICES` / `SKIPPED` | unset -- use `CHECKS_FILE`; `SKIPPED` is `service=reason;...` |
+| `MCP_URL` | `http://127.0.0.1:8012/mcp` |
+| `RAG_URL` | `http://127.0.0.1:8011` |
+| `CI_BRANCH` | the checked-out branch |
+
+Each mode has its own agent prompts in `prompts/<mode>/`, following the labs:
+`services` reviews endpoints and flows; `mcp` has the implementation agent pick
+a tool for each `tool_selection` request in `checks/mcp.json` (Lab 7) -- scored
+as advisory `NOTE` rows that never fail the run -- and the reviewer answers
+Strengths / Risks / Recommendations; `rag` reviews output quality and the
+architecture together (Lab 8); `ci` proposes one pipeline improvement and the
+reviewer approves it or raises a risk (Lab 5).
+
+Every run saves its report to `reports/<mode>-<UTC timestamp>.md` (git-ignored).
+Copy the ones the release needs into `docs/reports/release-*`.
+
 The two agents call Claude. Credentials come from the environment the way the
 `anthropic` SDK resolves them -- `ANTHROPIC_API_KEY`, or an `ant auth login`
 profile locally. The implementation agent defaults to `claude-sonnet-5` and the
 reviewer to `claude-opus-5`; the reviewer checks the recommendation, so it is
 the more capable of the two. Override either with `IMPLEMENTATION_MODEL` /
 `REVIEW_MODEL`. With no credentials the agent sections print "unavailable" and
-the run still passes or fails on the checks, so CI works either way (add
-`ANTHROPIC_API_KEY` to the repository secrets to turn them on).
+the run still passes or fails on the checks.
 
-## In CI
+## Local only
 
-`.github/workflows/agentic-ci.yml` runs on push and pull request as three jobs:
+The loop is not part of CI -- no workflow runs it or its unit tests. Run it on
+your machine, where the services, the host MCP and RAG servers, Ollama and
+your Claude credentials already are. A full Release 1 run:
 
-- **Loop unit tests** -- `pytest` on the loop itself. Always runs, starts no
-  containers, and is the reason a change to `agentic_loop.py` still gets tested
-  when every service below is skipped. One registry-contract test uses
-  `docker compose config`, which is available on the GitHub runner.
-- **Pick services** -- the gate. For each service it polls that service's own
-  build-and-validate workflow for this commit and decides whether the loop runs.
-- **One job per chosen service** -- the loop.
+```bash
+docker compose -f ../../docker-compose.yml -f docker-compose.agentic.yml up -d --build
+python agentic_loop.py --ci --mode services   # with SERVICES="shared student-1 ..." for all of them
+python agentic_loop.py --ci --mode mcp        # MCP server running
+python agentic_loop.py --ci --mode rag        # Ollama, AI-Mode, MCP and RAG running
+python agentic_loop.py --ci --mode ci         # gh auth login first
+pytest -q                                     # the loop's own tests
+```
 
-| That service's workflow | This service |
-| --- | --- |
-| passed | loop runs |
-| failed | skipped -- no point validating a build that did not pass |
-| never started (its path filters skipped the commit) | skipped -- the service did not change |
-| could not be read | loop runs ungated, rather than silently skipping validation |
-| still running after 30 minutes | loop runs ungated |
-
-The gate lists every workflow run for the commit in one call, so all six services
-share a single two minute wait for workflows to appear -- a commit that changes
-nothing clears the gate in about two minutes, not two minutes per service.
-
-So an ordinary commit runs the loop for the one or two services it touched, not
-all six, and the gate's verdict for every service is written to the run summary
-as a table. When nothing was selected the summary says so outright:
-"No services were changed - agentic loop skipped for all services."
-"Run workflow" ignores the gate and runs everything.
-
-One gap worth knowing: a change to the shared service does not trigger student 2's
-CI, so student 2's loop skips even though it calls the shared backend. Integration
-CI is what covers that direction.
+RAG answers need the MCP server as well: AI-Mode's `/generate` runs its tool
+loop against it, so start MCP before `--mode rag`.
 
 ## Where the findings go
 
-Both agents' output is written to the job's **Summary** page (via
-`GITHUB_STEP_SUMMARY`) as a check table plus the two agent sections -- not just
-buried in the log. Locally it prints to stdout; `--ci` skips the human-review
-prompt but not the printing.
-
-On a pull request the workflow posts that same report as a comment -- one per
-service, edited in place on later pushes rather than appended, so a busy pull
-request does not fill with tables. It posts whether the loop passed or failed,
-and says nothing at all when the commit is not on an open pull request.
+Each run prints PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT to stdout
+and saves the same check tables and agent sections to
+`reports/<mode>-<UTC timestamp>.md`. Without `--ci` it also asks for the human
+review decision.
 
 Findings are advisory. Only the deterministic checks set the exit code, so a
-broken or unauthenticated Claude call cannot fail the build -- and equally,
-cannot block it. Read the summary, don't just trust the green tick.
+broken or unauthenticated Claude call cannot fail a run -- and equally, cannot
+block it. Read the report, don't just trust the exit code.

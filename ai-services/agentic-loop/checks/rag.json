@@ -1,0 +1,10 @@
+{
+  "goal": "Validate the shared RAG server: grounded answers with the expected citations, the insufficient-context response, stable retrieval, and latency",
+  "calibration": "../rag-server/config/calibration-queries.json",
+  "rules": [
+    "Confidence is computed from retrieval scores only: high >= 0.75, medium >= 0.55, low >= 0.35, otherwise insufficient_context.",
+    "Below the minimum relevance score the server skips generation and returns the fixed insufficient-context answer.",
+    "Citations are resolved from indexed metadata, never from model output.",
+    "Answer wording comes from the model and may vary; citations and confidence must not."
+  ]
+}
