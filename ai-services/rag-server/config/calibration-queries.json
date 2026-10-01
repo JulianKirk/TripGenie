@@ -185,6 +185,40 @@
       "feature": "student-3",
       "expected_source_ids": [],
       "expect_insufficient_context": true
+    },
+    {
+      "case_id": "student-2-stay-cost",
+      "query": "How is the cost of a three night accommodation stay worked out?",
+      "feature": "student-2",
+      "expected_source_ids": [
+        "accommodation-pricing-and-costs"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-2-bunk-beds",
+      "query": "Which bed types can an accommodation listing offer?",
+      "feature": "student-2",
+      "expected_source_ids": [
+        "accommodation-choosing"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-2-stay-dates",
+      "query": "What happens if I add a stay to my trip without a check-in date?",
+      "feature": "student-2",
+      "expected_source_ids": [
+        "accommodation-stays-and-itineraries"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-2-unrelated",
+      "query": "How do I change the oil in a motorbike?",
+      "feature": "student-2",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
     }
   ]
 }

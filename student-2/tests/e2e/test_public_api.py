@@ -63,6 +63,7 @@ class TestHealth:
             # AI-Mode is deliberately not part of it, and says so rather than
             # dragging the whole report down to degraded.
             "ai_mode": "not_configured",
+            "rag": "not_configured",
         }
 
 

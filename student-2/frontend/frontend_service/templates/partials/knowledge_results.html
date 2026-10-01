@@ -1,0 +1,39 @@
+{#
+  One answer from the shared RAG server, through the backend. Three shapes:
+  could not ask (disabled or error), nothing relevant indexed (an honest
+  "not enough context", never the model's guess), or an answer with its
+  confidence and the sources it was drawn from.
+#}
+<div class="grounded">
+  {% if answer.status in ("disabled", "error") %}
+    <p class="error" role="alert">{{ answer.error }}</p>
+  {% elif answer.status == "insufficient_context" %}
+    <p class="grounded__insufficient" role="status">
+      <span class="badge badge--insufficient_context">Insufficient context</span>
+      The accommodation guide has nothing relevant to that question, so there is
+      no answer rather than a made-up one.
+    </p>
+  {% else %}
+    <p>
+      <span class="badge badge--{{ answer.confidence_category }}">
+        {{ answer.confidence_category|capitalize }} confidence
+      </span>
+    </p>
+    <p class="grounded__answer">{{ answer.answer }}</p>
+    <h3 class="grounded__heading">Sources</h3>
+    <ol class="citations">
+      {% for citation in answer.citations %}
+        <li>
+          <strong>{{ citation.title }}</strong> · {{ citation.section }}
+          <blockquote>{{ citation.excerpt }}</blockquote>
+          <code>{{ citation.path }}</code>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+  <p class="grounded__meta">
+    Request {{ answer.request_id }}
+    {% if answer.run_id %} · RAG run {{ answer.run_id }}{% endif %}
+    {% if answer.retrieval %} · {{ answer.retrieval.returned_chunks }} chunks retrieved{% endif %}
+  </p>
+</div>

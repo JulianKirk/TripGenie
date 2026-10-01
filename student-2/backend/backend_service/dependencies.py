@@ -10,6 +10,7 @@ from backend_service.ai_client import AiClient
 from backend_service.client import DatabaseClient
 from backend_service.itinerary_client import ItineraryClient
 from backend_service.location_client import LocationClient
+from backend_service.rag_client import RagClient
 
 
 def get_db(request: Request) -> DatabaseClient:
@@ -46,3 +47,12 @@ def get_ai(request: Request) -> AiClient:
 
 
 AiDep = Annotated[AiClient, Depends(get_ai)]
+
+
+def get_rag(request: Request) -> RagClient:
+    """The one shared-RAG client, built once in the app lifespan. Like the
+    AI-Mode one it exists even when switched off, and says so."""
+    return request.app.state.rag
+
+
+RagDep = Annotated[RagClient, Depends(get_rag)]

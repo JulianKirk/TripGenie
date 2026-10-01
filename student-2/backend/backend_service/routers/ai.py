@@ -14,12 +14,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from backend_service import ai_search
+from backend_service import ai_search, assistant, knowledge
+from backend_service.assistant import AssistantRequest, AssistantResponse
 from backend_service.dependencies import (  # noqa: TC001  (runtime)
     AiDep,
     DbDep,
     LocationDep,
+    RagDep,
 )
+from backend_service.knowledge import KnowledgeRequest, KnowledgeResponse
 from backend_service.routers.accommodation import search
 from backend_service.schemas import (
     AccommodationQueryRequest,
@@ -55,3 +58,21 @@ async def ai_accommodation_search(
         accommodations=found.accommodations,
         total=found.total,
     )
+
+
+@router.post("/knowledge", response_model=KnowledgeResponse)
+async def accommodation_knowledge(
+    body: KnowledgeRequest, rag: RagDep
+) -> KnowledgeResponse:
+    """A grounded answer from the shared RAG server, with its citations and
+    confidence -- or "insufficient_context". Always 200; see `knowledge.ask`."""
+    return await knowledge.ask(body.question, rag)
+
+
+@router.post("/assistant", response_model=AssistantResponse)
+async def accommodation_assistant(
+    body: AssistantRequest, ai: AiDep
+) -> AssistantResponse:
+    """The model answers by calling MCP tools through AI-Mode; the response
+    carries every tool call and the data it returned. Always 200."""
+    return await assistant.answer(body.question, ai)

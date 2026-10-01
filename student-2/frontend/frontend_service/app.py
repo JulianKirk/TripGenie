@@ -363,6 +363,39 @@ async def ai_search(request: Request):
     )
 
 
+async def _ask(request: Request, path: str, template: str):
+    """The guide and assistant boxes: one question in, the backend's answer
+    rendered as a partial. The backend always answers 200 with a `status`, so a
+    `BackendError` here means the backend itself could not be reached."""
+    fields = parse_qs((await request.body()).decode())
+    question = (fields.get("question") or [""])[0].strip()
+    if not question:
+        return render(request, "partials/error.html", {"error": "Type a question."})
+    try:
+        answer = await call(
+            request,
+            "POST",
+            path,
+            json={"question": question},
+            timeout=request.app.state.settings.ai_timeout,
+        )
+    except BackendError as exc:
+        return render(request, "partials/error.html", {"error": str(exc)})
+    return render(request, template, {"answer": answer, "question": question})
+
+
+@router.post(f"{PATH}/knowledge")
+async def knowledge(request: Request):
+    """A grounded answer from the shared RAG server, with its sources."""
+    return await _ask(request, f"{PATH}/knowledge", "partials/knowledge_results.html")
+
+
+@router.post(f"{PATH}/assistant")
+async def assistant(request: Request):
+    """The model's answer, and every MCP tool it called with the data returned."""
+    return await _ask(request, f"{PATH}/assistant", "partials/assistant_results.html")
+
+
 @router.get(f"{PATH}/{{accommodation_id:uuid}}")
 async def detail(request: Request, accommodation_id: UUID):
     """One accommodation in full, as the modal."""

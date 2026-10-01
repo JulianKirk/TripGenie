@@ -201,6 +201,11 @@ services:
       # cold model -- reached the page as "ai mode service unavailable" while
       # AI-Mode was still patiently waiting.
       AI_MODE_TIMEOUT: "100"
+      # Release 1 guide box: grounded answers from the host-run shared RAG
+      # server. Empty turns the box off; the assistant box (MCP tools) needs
+      # only AI_MODE_URL above, since AI-Mode runs the MCP loop.
+      RAG_URL: ${STUDENT2_BACKEND_RAG_URL:-http://host.docker.internal:8011}
+      RAG_TIMEOUT: "130"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

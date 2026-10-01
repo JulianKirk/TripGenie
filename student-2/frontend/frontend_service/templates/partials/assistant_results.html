@@ -1,0 +1,37 @@
+{#
+  The assistant's answer, then every MCP tool call AI-Mode made for it: the
+  tool, its arguments, and the data it returned. The calls are the evidence;
+  the reply alone is only the model's word. Calls made before a failure are
+  still listed.
+#}
+<div class="grounded">
+  {% if answer.status == "complete" %}
+    <p class="grounded__answer">{{ answer.reply }}</p>
+  {% else %}
+    <p class="error" role="alert">{{ answer.error }}</p>
+  {% endif %}
+  {% if answer.tools %}
+    <details class="tools" open>
+      <summary>Tools used · {{ answer.tools|length }} call{{ "" if answer.tools|length == 1 else "s" }}</summary>
+      <ol>
+        {% for call in answer.tools %}
+          <li>
+            <code>{{ call.tool }}</code>
+            <span class="badge badge--{{ call.status }}">{{ call.status }}</span>
+            {{ call.duration_ms }} ms{% if call.source %} · {{ call.source }}{% endif %}
+            <pre>{{ call.arguments|tojson(indent=2) }}</pre>
+            {% if call.error %}
+              <p class="error">Tool failed: {{ call.error }}</p>
+            {% elif call.data is not none %}
+              <p class="tools__label">Returned data</p>
+              <pre>{{ call.data|tojson(indent=2) }}</pre>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </details>
+  {% elif answer.status == "complete" %}
+    <p class="grounded__meta">No tools were called, so this reply is not backed by live data.</p>
+  {% endif %}
+  <p class="grounded__meta">Request {{ answer.request_id }}</p>
+</div>

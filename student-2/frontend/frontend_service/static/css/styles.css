@@ -316,3 +316,20 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
   .stay__pair { grid-template-columns: 1fr; }
   .results__table { display: block; overflow-x: auto; }
 }
+
+/* The guide (RAG) and assistant (MCP) answers. */
+.grounded { margin-top: 0.75rem; }
+.grounded__answer { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.grounded__heading { margin: 0.75rem 0 0.25rem; font-size: 0.95rem; }
+.grounded__meta { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.citations { margin: 0; padding-left: 1.25rem; }
+.citations li { margin-bottom: 0.5rem; }
+.citations blockquote { margin: 0.25rem 0; padding-left: 0.75rem; border-left: 3px solid var(--border); color: var(--muted); }
+.badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: #fff; background: var(--muted); }
+.badge--high, .badge--success { background: var(--available); }
+.badge--medium { background: var(--primary); }
+.badge--low, .badge--insufficient_context { background: var(--unavailable); }
+.badge--error, .badge--rejected { background: var(--sold_out); }
+.tools summary { cursor: pointer; font-weight: 600; }
+.tools pre { overflow-x: auto; max-height: 20rem; padding: 0.5rem; background: var(--page-bg); border: 1px solid var(--border); border-radius: 6px; font-size: 0.8rem; }
+.tools__label { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }

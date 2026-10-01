@@ -114,6 +114,24 @@
       "path": "ai-services/rag-server/knowledge/transport/planning-and-availability.md",
       "title": "Planning Transport and Availability",
       "feature": "student-3"
+    },
+    {
+      "source_id": "accommodation-choosing",
+      "path": "ai-services/rag-server/knowledge/accommodation/choosing-accommodation.md",
+      "title": "Choosing Accommodation",
+      "feature": "student-2"
+    },
+    {
+      "source_id": "accommodation-pricing-and-costs",
+      "path": "ai-services/rag-server/knowledge/accommodation/pricing-and-costs.md",
+      "title": "Accommodation Pricing and Trip Costs",
+      "feature": "student-2"
+    },
+    {
+      "source_id": "accommodation-stays-and-itineraries",
+      "path": "ai-services/rag-server/knowledge/accommodation/stays-and-itineraries.md",
+      "title": "Adding a Stay to a Trip",
+      "feature": "student-2"
     }
   ]
 }

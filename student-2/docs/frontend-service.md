@@ -32,7 +32,7 @@ so something has to render the rows. Two further constraints settle it:
 |-------------------|---------------------------------|------------------------------------------|
 | `BACKEND_URL`     | `http://student-2-backend:9000` | Base URL of the backend service          |
 | `BACKEND_TIMEOUT` | `5`                             | Seconds to wait on a backend call        |
-| `AI_TIMEOUT`      | `210`                           | Seconds to wait on the ask box alone, which waits on a model |
+| `AI_TIMEOUT`      | `210`                           | Seconds to wait on the ask, guide and assistant boxes, which wait on a model |
 
 ## Running it
 
@@ -52,6 +52,8 @@ These serve HTML, not an API — no other service is a caller.
 | `GET /accommodation`       | The results fragment: the table and the pager              |
 | `GET /accommodation/{id}`  | The details modal for one accommodation                    |
 | `POST /accommodation/ai-search` | The results fragment, plus the answer and the filter form out of band |
+| `POST /accommodation/knowledge` | The guide (RAG) answer fragment: confidence, answer and sources, or insufficient context |
+| `POST /accommodation/assistant` | The assistant (MCP) answer fragment: the reply and every tool call with its returned data |
 | `GET /accommodation/{id}/stay` | The Add-to-Trip form, as a second modal. Re-renders itself on every change to recompute the total |
 | `PUT /accommodation/{id}/itineraries/{itineraryId}` | Stores the stay from the form body |
 | `GET /accommodation/new`   | An empty create form, as a modal                           |
@@ -228,6 +230,28 @@ one template. It reads a `QueryParams` either way: the real one on a `GET`, and
 one built from the answer by `form_values()` -- the inverse of `query_body()`,
 over the same four field maps, so a filter's form name and message name are
 paired up in exactly one place.
+
+### The guide and assistant boxes (Release 1)
+
+Two more ask boxes under the first, each answering into its own
+`aria-live` region inside its form rather than into `#results` -- they answer a
+question, they do not search.
+
+- **Ask the accommodation guide (RAG)** posts to
+  [POST /accommodation/knowledge](./backend-service-api.md#post-accommodationknowledge)
+  and renders `partials/knowledge_results.html`: a confidence badge, the
+  grounded answer and its numbered sources (title, section, excerpt, path). With
+  nothing relevant indexed it shows an "Insufficient context" notice and no
+  answer at all, rather than the model's guess.
+- **Ask the assistant (MCP tools)** posts to
+  [POST /accommodation/assistant](./backend-service-api.md#post-accommodationassistant)
+  and renders `partials/assistant_results.html`: the reply, then "Tools used · N
+  calls" listing each tool, its status, arguments and returned data. A failed
+  tool says so; calls made before a failed run are still listed. A reply with no
+  tool calls says it is not backed by live data.
+
+Both answer `disabled` when their backend setting is unset (as in CI), and the
+rest of the page is unaffected.
 
 A blank ask is the unfiltered list, not an error, the same answer an empty
 search box gives. An AI failure renders in `partials/error.html` where the

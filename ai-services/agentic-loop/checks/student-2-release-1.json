@@ -1,0 +1,37 @@
+{
+  "goal": "Validate Student 2 Release 1 MCP and RAG integration: the shared MCP server's read-only accommodation tools, the shared RAG server's grounded and insufficient-context answers for feature student-2, and the Student 2 backend and frontend routes that use both",
+  "_note": "Local run only; needs host AI-Mode, RAG and MCP plus the Compose stack. Set BACKEND_URL=http://127.0.0.1:9000 FRONTEND_URL=http://127.0.0.1:9003 MCP_URL=http://127.0.0.1:8012 RAG_URL=http://127.0.0.1:8011 CHECKS_FILE=checks/student-2-release-1.json. All checks are read-only. The assistant check depends on the model choosing a tool, so a miss there is worth one retry before it is a failure.",
+  "checks": [
+    {"label": "MCP server /ready", "path": "${MCP_URL}/ready", "contains": ["tripgenie-mcp"]},
+    {"label": "MCP tools/list registers the Student 2 accommodation tools", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-list", "method": "tools/list"}, "contains": ["\"accommodations_search\"", "\"accommodations_get\"", "\"accommodations_committed_costs\""]},
+    {"label": "MCP accommodations_search by country and city", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-search", "method": "tools/call", "params": {"name": "accommodations_search", "arguments": {"country": "Australia", "city": "Sydney", "limit": 5}}}, "timeout": 40, "contains": ["\"ok\":true", "\"source\":\"student-2\"", "\"items\""]},
+    {"label": "MCP malformed accommodation id is a structured validation error", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-invalid", "method": "tools/call", "params": {"name": "accommodations_get", "arguments": {"accommodation_id": "not-a-uuid"}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
+    {"label": "RAG server /ready", "path": "${RAG_URL}/ready", "contains": ["\"status\":\"ready\""]},
+    {"label": "RAG relevant Student 2 query is grounded", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "How is the cost of a three night accommodation stay worked out?", "feature": "student-2", "top_k": 5, "correlation_id": "student2-loop-rag-1"}, "contains": ["\"insufficient_context\":false", "accommodation-pricing-and-costs"]},
+    {"label": "RAG unrelated Student 2 query is insufficient context", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "How do I change the oil in a motorbike?", "feature": "student-2", "top_k": 5, "correlation_id": "student2-loop-rag-2"}, "contains": ["\"insufficient_context\":true", "\"citations\":[]"]},
+    {"label": "Student 2 backend health reports RAG configured", "path": "${BACKEND_URL}/health", "contains": ["\"rag\":\"configured\""]},
+    {"label": "Student 2 backend knowledge route is grounded", "method": "POST", "path": "${BACKEND_URL}/accommodation/knowledge", "timeout": 150, "json": {"question": "What happens if I add a stay to my trip without a check-in date?"}, "contains": ["\"status\":\"answered\"", "\"confidence_category\"", "accommodation-stays-and-itineraries", "student2-rag-"]},
+    {"label": "Student 2 backend knowledge route abstains on an unrelated question", "method": "POST", "path": "${BACKEND_URL}/accommodation/knowledge", "timeout": 150, "json": {"question": "How do I change the oil in a motorbike?"}, "contains": ["\"status\":\"insufficient_context\"", "\"citations\":[]"]},
+    {"label": "Student 2 backend refuses a browser-chosen RAG feature", "method": "POST", "path": "${BACKEND_URL}/accommodation/knowledge", "json": {"question": "How is a stay priced?", "feature": "student-1"}, "status": 400},
+    {"label": "Student 2 backend assistant route returns an MCP tool trace", "method": "POST", "path": "${BACKEND_URL}/accommodation/assistant", "timeout": 210, "json": {"question": "What accommodation is there in Sydney, Australia?"}, "contains": ["\"status\":\"complete\"", "\"tool\":\"accommodations_", "\"source\":\"student-2\"", "student2-agent-"]},
+    {"label": "Student 2 frontend page has the guide and assistant boxes", "path": "${FRONTEND_URL}/", "contains": ["Ask the accommodation guide (RAG)", "Ask the assistant (MCP tools)"]}
+  ],
+  "rules": [
+    "Student 2 MCP tools are read-only: accommodations_search, accommodations_get and accommodations_committed_costs call only the Student 2 public API with GET or QUERY.",
+    "The assistant is model-directed: AI-Mode runs the MCP loop and the backend returns its tool trace; the trace, not the reply, is the evidence a tool ran.",
+    "RAG confidence is calculated by the RAG server from retrieval scores; an insufficient-context answer has no citations.",
+    "The browser sends only a question; the Student 2 backend fixes the RAG feature (student-2) and top_k."
+  ],
+  "flows": [
+    {
+      "name": "MCP search agrees with the backend",
+      "steps": [
+        {"label": "MCP accommodations_search in Australia", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-agree", "method": "tools/call", "params": {"name": "accommodations_search", "arguments": {"country": "Australia", "limit": 5}}}, "timeout": 40, "contains": ["\"ok\":true"], "save": {"MCP_FIRST": "result.structuredContent.data.items.0.id"}},
+        {"label": "Backend QUERY in Australia", "method": "QUERY", "path": "${BACKEND_URL}/accommodation", "json": {"accommodation": {"location_details": {"country": "Australia"}}, "limit": 5}, "contains": ["\"accommodations\""], "save": {"BACKEND_FIRST": "accommodations.0.id"}}
+      ],
+      "invariants": [
+        {"label": "MCP returns the same first listing as the backend", "expr": "MCP_FIRST == BACKEND_FIRST"}
+      ]
+    }
+  ]
+}

@@ -16,6 +16,9 @@ DEFAULT_LOCATION_TIMEOUT = 5.0
 # request but the person who typed the question.
 DEFAULT_AI_MODE_TIMEOUT = 30.0
 DEFAULT_AI_MAX_ATTEMPTS = 2
+# Retrieval plus a local model's grounded answer; the shared RAG server's own
+# generation budget sits under this.
+DEFAULT_RAG_TIMEOUT = 130.0
 
 
 @dataclass(slots=True)
@@ -46,6 +49,10 @@ class Settings:
     # One retry. The model gets a second go with the reason its first answer
     # was unusable; a third rarely changes the outcome and doubles the wait.
     ai_max_attempts: int = DEFAULT_AI_MAX_ATTEMPTS
+    # The shared host RAG server. Same convention as `ai_mode_url`: `None`
+    # switches the knowledge box off (as CI does) and nothing else changes.
+    rag_url: str | None = None
+    rag_timeout: float = DEFAULT_RAG_TIMEOUT
     service_name: str = "student-2-backend"
 
     def __post_init__(self) -> None:
@@ -83,4 +90,6 @@ class Settings:
             ai_max_attempts=int(
                 os.environ.get("AI_MAX_ATTEMPTS", DEFAULT_AI_MAX_ATTEMPTS)
             ),
+            rag_url=os.environ.get("RAG_URL") or None,
+            rag_timeout=float(os.environ.get("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)),
         )
