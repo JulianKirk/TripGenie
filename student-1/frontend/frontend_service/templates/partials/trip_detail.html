@@ -329,4 +329,8 @@
   </section>
 
   {% include "partials/ai_mode_panel.html" %}
+  {% with trip_id = trip.id %}
+    {% include "partials/rag_panel.html" %}
+    {% include "partials/mcp_panel.html" %}
+  {% endwith %}
 </article>

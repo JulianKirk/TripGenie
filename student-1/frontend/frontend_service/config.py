@@ -60,6 +60,12 @@ class Settings:
     backend_base_url: str
     backend_api_prefix: str = "/api"
     backend_timeout_seconds: float = 5.0
+    # Only the AI, RAG and MCP calls get these. Each must outlast the backend's
+    # own worst case: AI 2 attempts x 120 s = 240 s, RAG 130 s, MCP 5
+    # sequential tools x 40 s = 200 s.
+    ai_timeout_seconds: float = 250.0
+    rag_timeout_seconds: float = 150.0
+    mcp_timeout_seconds: float = 210.0
     service_name: str = "student-1-frontend"
     # Where a browser -- not this container -- reaches student 2's webpage. A
     # row on the trip page links there, so it has to be the address on the
@@ -94,6 +100,21 @@ class Settings:
                 os.getenv("STUDENT1_FRONTEND_BACKEND_TIMEOUT_SECONDS"),
                 env_name="STUDENT1_FRONTEND_BACKEND_TIMEOUT_SECONDS",
                 default=5.0,
+            ),
+            ai_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS",
+                default=250.0,
+            ),
+            rag_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS",
+                default=150.0,
+            ),
+            mcp_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS",
+                default=210.0,
             ),
             service_name=os.getenv(
                 "STUDENT1_FRONTEND_SERVICE_NAME",

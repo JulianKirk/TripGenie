@@ -1,0 +1,118 @@
+{% import "macros/forms.html" as forms %}
+
+{# Read-only option discovery. There is deliberately no save control here:
+   options are added through the existing trip sections. #}
+<section id="mcp-panel" class="mode-panel mode-panel--ai" aria-labelledby="mcp-heading">
+  <p class="section-eyebrow">AI mode · trip tools</p>
+  <h3 id="mcp-heading">Find options for this trip</h3>
+  <p>
+    Look up accommodation, activities, transport and budgets for this trip's destination through TripGenie's shared tools.
+    <strong>Nothing here is saved.</strong>
+    To keep an option, add it through the
+    <a href="#days-heading">itinerary</a>,
+    <a href="#accommodation-heading">accommodations</a>,
+    <a href="#activities-heading">activities</a> or
+    <a href="#transport-heading">transport</a> sections.
+  </p>
+
+  <form
+    class="form-grid"
+    action="{{ request.url_for('mcp_options', trip_id=trip_id) }}"
+    method="post"
+    hx-post="{{ request.url_for('mcp_options', trip_id=trip_id) }}"
+    hx-target="#mcp-panel"
+    hx-swap="outerHTML"
+    hx-indicator="#mcp-loading"
+    hx-disabled-elt="find button"
+    novalidate
+  >
+    {% set country_errors = mcp_errors_by_field.get('country') %}
+    <div class="form-field">
+      <label for="mcp-country">Country (optional)</label>
+      <input
+        id="mcp-country"
+        name="country"
+        type="text"
+        maxlength="100"
+        placeholder="Australia"
+        value="{{ mcp_country }}"
+        aria-describedby="mcp-country-hint{% if country_errors %} country-errors{% endif %}"
+        {% if country_errors %}aria-invalid="true"{% endif %}
+      >
+      <p id="mcp-country-hint" class="hint-copy">
+        Accommodation and activity searches need a country. Add one when the trip destination is just a city; otherwise those two searches are skipped.
+      </p>
+      {{ forms.field_errors('country', mcp_errors_by_field) }}
+    </div>
+
+    <div class="form-field form-field--actions">
+      <button class="button button--secondary" type="submit">Find trip options</button>
+    </div>
+  </form>
+
+  <div id="mcp-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
+    Looking up trip options — this usually takes a few seconds.
+  </div>
+
+  {% if mcp_error %}
+    {{ forms.panel_error(mcp_error, 'mcp-result-heading') }}
+  {% elif mcp_result %}
+    {% set tool_labels = {
+      "trip_get_context": "Trip details",
+      "accommodations_search": "Accommodation options",
+      "activities_search": "Activity options",
+      "transport_search": "Transport options",
+      "budgets_list": "Budgets",
+    } %}
+    {% set status_badges = {
+      "ok": ("OK", ""),
+      "error": ("Failed", "badge--danger"),
+      "skipped": ("Skipped", "badge--warning"),
+    } %}
+    <section class="panel panel--nested" aria-labelledby="mcp-result-heading">
+      <h4 id="mcp-result-heading" data-autofocus>
+        Options for {{ mcp_result.location.city }}{% if mcp_result.location.country %}, {{ mcp_result.location.country }}{% endif %}
+      </h4>
+      <p class="muted-copy" role="status" aria-live="polite">
+        {{ mcp_result.summary.ok }} succeeded · {{ mcp_result.summary.error }} failed · {{ mcp_result.summary.skipped }} skipped. Nothing was saved.
+      </p>
+      {% if mcp_result.summary.error %}
+        <p class="banner banner--error">Some lookups failed. Results from the others are still shown below.</p>
+      {% endif %}
+
+      <ul class="item-list">
+        {% for result in mcp_result.results %}
+          {% set badge_label, badge_class = status_badges[result.status] %}
+          <li class="item-card">
+            <div class="item-card__content">
+              <div class="badge-row">
+                <span class="badge {{ badge_class }}">{{ badge_label }}</span>
+              </div>
+              <h5>{{ tool_labels.get(result.tool, result.tool) }}</h5>
+              <p class="item-card__meta">
+                <code>{{ result.tool }}</code>
+                {% for key, value in result.arguments.items() %} · {{ key }}={{ 'not set' if value is none else (value|tojson if value is mapping else value) }}{% endfor %}
+              </p>
+              {% if result.status == 'ok' %}
+                <ul>
+                  {% for line in summarise_mcp_data(result.data) %}
+                    <li>{{ line }}</li>
+                  {% endfor %}
+                </ul>
+              {% elif result.status == 'error' %}
+                <p>
+                  <strong>{{ result.error.message if result.error else 'The tool failed.' }}</strong>
+                  {% if result.error %}(<code>{{ result.error.code }}</code>{% if result.error.retryable %}, can be retried{% endif %}){% endif %}
+                </p>
+              {% else %}
+                <p>{{ result.reason or 'This lookup was skipped.' }}</p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+
+      <p class="muted-copy">Correlation ID: {{ mcp_result.correlation_id }}</p>
+    </section>
+  {% endif %}
+</section>

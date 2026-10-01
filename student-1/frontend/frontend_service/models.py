@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, time
 from enum import Enum
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import (
     BaseModel,
@@ -326,6 +326,81 @@ class AiSuggestionsResponse(StrictModel):
     persisted: bool = False
     approval_required: bool = True
     suggestions: list[AiSuggestionDraft] = Field(default_factory=list, max_length=5)
+
+
+class RagCitation(StrictModel):
+    source_id: str
+    title: str
+    section: str
+    path: str
+    chunk_id: str
+    excerpt: str
+
+
+class RagRetrieval(StrictModel):
+    requested_top_k: int
+    returned_chunks: int
+    maximum_score: float | None
+
+
+class RagQueryResponse(StrictModel):
+    trip_id: TripIdentifier
+    answer: str
+    confidence_category: Literal["high", "medium", "low", "insufficient_context"]
+    insufficient_context: bool
+    citations: list[RagCitation]
+    retrieval: RagRetrieval
+    run_id: str
+    correlation_id: str
+
+    # Same rule as the backend: an inconsistent answer is malformed, so it is
+    # shown as an error rather than as a grounded answer.
+    @model_validator(mode="after")
+    def grounding_is_consistent(self) -> RagQueryResponse:
+        if self.insufficient_context:
+            if self.citations or self.confidence_category != "insufficient_context":
+                raise ValueError("insufficient context must have no citations")
+        elif not self.citations or self.confidence_category == "insufficient_context":
+            raise ValueError("a grounded answer needs citations and a confidence")
+        return self
+
+
+class McpToolError(StrictModel):
+    code: str
+    message: str
+    retryable: bool
+
+
+class McpToolResult(StrictModel):
+    tool: str
+    arguments: dict[str, Any]
+    status: Literal["ok", "error", "skipped"]
+    # Tool payloads are owned by the MCP server; the template summarises them
+    # defensively instead of pinning every tool's shape here.
+    data: dict[str, Any] | None = None
+    error: McpToolError | None = None
+    reason: str | None = None
+    correlation_id: str | None = None
+
+
+class McpLocation(StrictModel):
+    city: str
+    country: str | None
+
+
+class McpSummary(StrictModel):
+    ok: int
+    error: int
+    skipped: int
+
+
+class McpOptionsResponse(StrictModel):
+    trip_id: TripIdentifier
+    correlation_id: str
+    location: McpLocation
+    persisted: Literal[False]
+    results: list[McpToolResult]
+    summary: McpSummary
 
 
 class BackendDependencyPayload(StrictModel):

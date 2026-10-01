@@ -146,7 +146,7 @@ class OllamaProviderAdapter:
                     "model": model,
                     "messages": messages,
                     "tools": tools,
-                    "format": schema,
+                    "format": _grammar_safe(schema),
                     "stream": False,
                     "options": {
                         "temperature": 0,
@@ -397,3 +397,30 @@ def _extract_error_message(payload: object) -> str | None:
             return candidate
 
     return None
+
+
+# Measured on Ollama 0.x with llama.cpp grammars: maxLength 1000 compiles,
+# 2000 fails with "failed to parse grammar".
+GRAMMAR_MAX_LENGTH = 1000
+
+
+def _grammar_safe(value: Any) -> Any:
+    """Return a copy of an output schema that Ollama's grammar compiler accepts.
+
+    Ollama rejects \\d in a pattern and large maxLength values ("failed to
+    parse grammar"). Rewrite \\d as [0-9] and cap maxLength. Both only narrow
+    what the model may emit, and callers still validate replies against their
+    own schema, so valid output stays valid.
+    """
+    # ponytail: plain substring swap; a \\d inside a [...] class would break.
+    # Add a real regex rewrite if such a pattern ever appears.
+    if isinstance(value, dict):
+        safe = {key: _grammar_safe(item) for key, item in value.items()}
+        if isinstance(safe.get("pattern"), str):
+            safe["pattern"] = safe["pattern"].replace("\\d", "[0-9]")
+        if isinstance(safe.get("maxLength"), int):
+            safe["maxLength"] = min(safe["maxLength"], GRAMMAR_MAX_LENGTH)
+        return safe
+    if isinstance(value, list):
+        return [_grammar_safe(item) for item in value]
+    return value

@@ -182,6 +182,34 @@ def test_generate_uses_non_stream_native_ollama_request_shape(
     assert ollama_request["format"]["type"] == "object"
 
 
+def test_generate_sends_ollama_a_grammar_safe_schema_copy(
+    client_factory,
+    ollama_api,
+) -> None:
+    # Ollama answers HTTP 400 "failed to parse grammar" for \d patterns and
+    # maxLength 2000; Student 1's suggestion schema had both.
+    date = {"type": "string", "pattern": r"^\d{4}$"}
+    schema = {
+        "type": "object",
+        "properties": {
+            "d": date,
+            "n": {"anyOf": [{"type": "string", "maxLength": 2000}]},
+            "pattern": {"type": "string"},
+        },
+    }
+    with client_factory(ollama_handler=ollama_api.handle) as client:
+        response = client.post(
+            "/generate", json={"prompt": "Return JSON only.", "schema": schema}
+        )
+
+    assert response.status_code == 200, response.text
+    sent = ollama_api.generate_requests[0]["format"]["properties"]
+    assert sent["d"]["pattern"] == "^[0-9]{4}$"
+    assert sent["n"]["anyOf"][0]["maxLength"] == 1000
+    assert sent["pattern"] == {"type": "string"}
+    assert date["pattern"] == r"^\d{4}$"
+
+
 def test_embed_uses_approved_model_and_returns_dimension(
     client_factory,
     ollama_api,

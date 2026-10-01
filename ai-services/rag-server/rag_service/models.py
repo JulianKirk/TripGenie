@@ -38,6 +38,10 @@ class ErrorBody(StrictModel):
 
 
 class ErrorEnvelope(StrictModel):
+    # AI-Mode adds sibling fields (such as a tool trace) to some errors; keep
+    # the error itself strict but do not discard it because of them.
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
     error: ErrorBody
 
 

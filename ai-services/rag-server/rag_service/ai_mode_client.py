@@ -25,9 +25,9 @@ if TYPE_CHECKING:
     from .config import Settings
 
 GROUNDING_SYSTEM_PROMPT = (
-    "Use only supplied CONTEXT as evidence. Do not call MCP tools "
-    "to verify document rules. Cite supported answers; abstain "
-    "with citation_ids=[] when context cannot answer."
+    "Use only supplied CONTEXT as evidence. Answer in 1-4 full sentences, "
+    "never just yes or no. Cite supported answers; abstain with "
+    "citation_ids=[] when context cannot answer."
 )
 
 MALFORMED_EMBED_MESSAGE = "AI-Mode returned a malformed embedding response."
@@ -153,7 +153,7 @@ class AiModeClient:
         correlation_id: str,
     ) -> AiGeneratePayload:
         response = await self._request(
-            "/generate",
+            "/generate-plain",
             {
                 "prompt": prompt,
                 "system": GROUNDING_SYSTEM_PROMPT,

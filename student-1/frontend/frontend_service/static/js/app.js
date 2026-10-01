@@ -25,7 +25,12 @@ document.addEventListener("htmx:afterRequest", () => {
 });
 
 document.addEventListener("htmx:afterSwap", (event) => {
-  const target = event.detail.target;
+  // An outerHTML swap replaces the target itself, so event.detail.target is
+  // the detached old element; focus its replacement by id instead.
+  let target = event.detail.target;
+  if (target instanceof HTMLElement && !target.isConnected && target.id) {
+    target = document.getElementById(target.id);
+  }
   if (!(target instanceof HTMLElement)) {
     return;
   }

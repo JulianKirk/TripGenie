@@ -555,6 +555,29 @@ textarea {
   color: var(--text);
 }
 
+.badge--danger {
+  background: var(--error);
+  color: var(--danger-dark);
+}
+
+.badge--muted {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* Model answers keep their paragraph breaks. */
+.rag-answer {
+  white-space: pre-line;
+}
+
+.rag-excerpt {
+  margin: 0 0 0.6rem;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
 .stack-form {
   display: grid;
   gap: 1rem;

@@ -83,8 +83,8 @@ python -m pip install -e ".[dev]"
 python -m tripgenie_mcp serve
 ```
 
-Set `MCP_HOST` for a non-loopback binding. AI-Mode `/generate`, and so RAG
-answers, need MCP running.
+Set `MCP_HOST` for a non-loopback binding. AI-Mode `/generate` (feature MCP
+assistants) needs MCP running. RAG answers use `/generate-plain` and do not.
 
 ## 5. Docker Compose
 

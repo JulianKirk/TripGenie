@@ -7,3 +7,31 @@
     </ul>
   {% endif %}
 {%- endmacro %}
+
+{# Shared failure state for the RAG and MCP panels. Every code gets its own
+   headline so a disabled feature, a slow model and a broken response never
+   look alike -- and none of them looks like an empty success. #}
+{% macro panel_error(error, heading_id) -%}
+  {% set headlines = {
+    "RAG_DISABLED": "Knowledge base answers are not enabled in this environment.",
+    "MCP_DISABLED": "Tool-backed trip options are not enabled in this environment.",
+    "INDEX_NOT_READY": "The knowledge base index is not ready yet. Try again shortly.",
+    "DEPENDENCY_UNAVAILABLE": "The service behind this panel is unavailable right now.",
+    "DEPENDENCY_TIMEOUT": "The request timed out before an answer came back.",
+    "BAD_GATEWAY": "The service returned a response TripGenie could not read.",
+    "VALIDATION_ERROR": "Check the highlighted field and try again.",
+    "NOT_FOUND": "This trip could not be found.",
+  } %}
+  <div class="banner {% if error.code.endswith('_DISABLED') %}banner--info{% else %}banner--error{% endif %}" role="alert">
+    <p id="{{ heading_id }}" data-autofocus><strong>{{ headlines.get(error.code, "The request failed.") }}</strong></p>
+    <p>{{ error.message }}</p>
+    {% if error.details %}
+      <ul class="banner__list">
+        {% for detail in error.details %}
+          <li>{{ detail.field }}: {{ detail.issue }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <p class="muted-copy">Error code: <code>{{ error.code }}</code>. Trip and itinerary editing still works.</p>
+  </div>
+{%- endmacro %}

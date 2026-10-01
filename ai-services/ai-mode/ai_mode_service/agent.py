@@ -34,6 +34,20 @@ def _failure(exc: BaseException) -> ApiError:
     )
 
 
+def _final_text(content: str | None, schema: dict[str, Any] | None) -> str:
+    text = content or ""
+    if not text.strip():
+        raise bad_gateway("The model returned an empty final answer.")
+    if schema is not None:
+        try:
+            Draft202012Validator(schema).validate(json.loads(text))
+        except (ValueError, ValidationError, SchemaError) as exc:
+            raise bad_gateway(
+                "The model returned an invalid structured answer."
+            ) from exc
+    return text
+
+
 class Agent:
     def __init__(
         self,
@@ -78,6 +92,27 @@ class Agent:
             error = _failure(exc)
             error.tools = [entry.model_dump(mode="json") for entry in trace]
             raise error from exc
+
+    async def generate_plain(self, payload: GenerateRequest, model: str) -> str:
+        """One model call without MCP, for callers such as RAG that own context."""
+        messages = []
+        if payload.system:
+            messages.append({"role": "system", "content": payload.system})
+        messages.append({"role": "user", "content": payload.prompt})
+        try:
+            async with asyncio.timeout(self.settings.agent_timeout_seconds):
+                self._bound(messages, [])
+                reply = await self.provider.chat(
+                    model=model,
+                    messages=messages,
+                    tools=[],
+                    schema=payload.output_schema,
+                )
+        except Exception as exc:
+            raise _failure(exc) from exc
+        if reply.tool_calls:
+            raise bad_gateway("The model requested tools during plain generation.")
+        return _final_text(reply.content, payload.output_schema)
 
     def _bound(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -192,19 +227,7 @@ class Agent:
                         raise bad_gateway(
                             "The model requested tools during final answer formatting."
                         )
-                text = reply.content or ""
-                if not text.strip():
-                    raise bad_gateway("The model returned an empty final answer.")
-                if payload.output_schema is not None:
-                    try:
-                        Draft202012Validator(payload.output_schema).validate(
-                            json.loads(text)
-                        )
-                    except (ValueError, ValidationError, SchemaError) as exc:
-                        raise bad_gateway(
-                            "The model returned an invalid structured answer."
-                        ) from exc
-                return text
+                return _final_text(reply.content, payload.output_schema)
             for call in reply.tool_calls:
                 name, arguments = call.function.name, call.function.arguments
                 entry = ToolTrace(tool=name, arguments=arguments)

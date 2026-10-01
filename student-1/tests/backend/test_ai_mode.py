@@ -1490,6 +1490,26 @@ def test_ai_suggestions_honour_retry_upper_boundary(
             "MODEL_UNAVAILABLE",
             "Requested AI model is not available.",
         ),
+        (
+            # AI-Mode appends its MCP tool trace to errors (ADR 0004).
+            httpx.Response(
+                503,
+                json={
+                    "error": {
+                        "code": "DEPENDENCY_UNAVAILABLE",
+                        "message": "The AI provider could not generate a response.",
+                        "details": [
+                            {"field": "ai_mode", "issue": "provider returned HTTP 400"}
+                        ],
+                    },
+                    "tools": [{"name": "transport_search", "ok": False}],
+                },
+            ),
+            ai_settings(),
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+            "The AI provider could not generate a response.",
+        ),
     ],
 )
 def test_ai_suggestions_dependency_failures_are_explicit(
