@@ -178,7 +178,7 @@ def test_generate_uses_non_stream_native_ollama_request_shape(
         {"role": "user", "content": "Return JSON only."}
     ]
     assert ollama_request["stream"] is False
-    assert ollama_request["options"] == {"temperature": 0, "num_ctx": 32768}
+    assert ollama_request["options"] == {"temperature": 0, "num_ctx": 12288}
     assert ollama_request["format"]["type"] == "object"
 
 

@@ -30,13 +30,13 @@ Clients must not automatically retry a run that has executed tools.
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
 | `AI_MODE_MAX_EMBED_INPUTS` | `32` | Maximum texts accepted by one embedding request. |
 | `AI_MODE_MAX_EMBED_INPUT_CHARS` | `12000` | Maximum characters in each embedding input. |
-| `AI_MODE_CONTEXT_TOKENS` | `32768` | Native chat context window for the full tool catalogue and conversation. |
+| `AI_MODE_CONTEXT_TOKENS` | `12288` | Native chat context window for the full tool catalogue and conversation. Sized so an 8B model stays fully on an 8 GB GPU; a larger window spills onto the CPU and slows every request. |
 | `AI_MODE_MCP_URL` | `http://127.0.0.1:8012/mcp` | Host-run shared MCP endpoint. |
 | `AI_MODE_MCP_TIMEOUT_SECONDS` | `15` | MCP request timeout. |
 | `AI_MODE_AGENT_TIMEOUT_SECONDS` | `180` | Whole generation-run deadline. |
 | `AI_MODE_AGENT_MAX_TURNS` | `8` | Maximum tool-decision rounds, plus final schema formatting. |
 | `AI_MODE_AGENT_MAX_CALLS` | `16` | Maximum executed tool calls per run. |
-| `AI_MODE_AGENT_CONTEXT_CHARS` | `120000` | Bounded serialized conversation and full tool catalogue. |
+| `AI_MODE_AGENT_CONTEXT_CHARS` | `45000` | Bounded serialized conversation and full tool catalogue. |
 | `AI_MODE_AGENT_RESULT_BYTES` | `32768` | Maximum serialized result per tool call. |
 | `AI_MODE_MAX_EMBED_DIMENSIONS` | `4096` | Maximum accepted provider vector dimension. |
 
