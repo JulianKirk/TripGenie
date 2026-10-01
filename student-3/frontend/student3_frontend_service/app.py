@@ -787,7 +787,6 @@ def create_app(
             "destination": "",
             "limit": "5",
             "trip_id": "",
-            **{f"id_{slot}": "" for slot in range(1, MAX_COMPARE_SELECTION + 1)},
         }
 
     async def render_mcp(
@@ -795,6 +794,7 @@ def create_app(
         client: BackendApiClient,
         *,
         form: dict[str, str],
+        selected_ids: list[str] | None = None,
         action: str | None = None,
         result: McpToolResult | None = None,
         error: ApiError | None = None,
@@ -815,8 +815,8 @@ def create_app(
             error=error,
             error_hint=MCP_MESSAGES.get(error.code) if error else None,
             errors_by_field=error_details_by_field(error),
-            transport_options=transport_choices(options),
-            compare_slots=range(1, MAX_COMPARE_SELECTION + 1),
+            selected_ids=selected_ids or [],
+            compare_limit=MAX_COMPARE_SELECTION,
             search_limit_max=MAX_MCP_SEARCH_RESULTS,
             **ai_context(options, directory),
         )
@@ -837,10 +837,19 @@ def create_app(
         The browser picks an action and its inputs; which tool runs, and on
         which server, is decided by the backend.
         """
+        raw_form = await request.form()
         submitted = {
-            key: str(value).strip() for key, value in (await request.form()).items()
+            key: str(value).strip()
+            for key, value in raw_form.items()
+            if key != "ids"
         }
         form = empty_mcp_form() | submitted
+        # Checkboxes repeat the field, so read every value rather than the last.
+        selected_ids = [
+            value
+            for value in (str(item).strip() for item in raw_form.getlist("ids"))
+            if value
+        ]
         result: McpToolResult | None = None
         error: ApiError | None = None
         try:
@@ -856,12 +865,7 @@ def create_app(
                     payload["limit"] = int(limit) if limit.isdigit() else limit
                 result = await client.mcp_search(payload)
             elif action == "compare":
-                selected = [
-                    submitted[f"id_{slot}"]
-                    for slot in range(1, MAX_COMPARE_SELECTION + 1)
-                    if submitted.get(f"id_{slot}")
-                ]
-                result = await client.mcp_compare(selected)
+                result = await client.mcp_compare(selected_ids)
             elif action == "trip-costs":
                 trip_id = submitted.get("trip_id", "")
                 if TRIP_ID_PATTERN.fullmatch(trip_id) is None:
@@ -891,6 +895,7 @@ def create_app(
             request,
             client,
             form=form,
+            selected_ids=selected_ids,
             action=action if action in MCP_ACTIONS else None,
             result=result,
             error=error,
