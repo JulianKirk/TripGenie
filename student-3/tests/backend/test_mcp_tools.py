@@ -185,7 +185,7 @@ def disabled_client(
 def test_health_reports_mcp_disabled_by_default(disabled_client: TestClient) -> None:
     for path in ("/health", "/ready"):
         body = disabled_client.get(path).json()["data"]
-        assert body["integrations"] == {"mcp": "disabled"}
+        assert body["integrations"] == {"rag": "disabled", "mcp": "disabled"}
 
 
 def test_health_reports_mcp_enabled_without_contacting_it(
@@ -195,7 +195,10 @@ def test_health_reports_mcp_enabled_without_contacting_it(
     response = mcp_client.get("/ready")
 
     assert response.status_code == 200
-    assert response.json()["data"]["integrations"] == {"mcp": "enabled"}
+    assert response.json()["data"]["integrations"] == {
+        "rag": "disabled",
+        "mcp": "enabled",
+    }
     assert fake_mcp.calls == []
 
 

@@ -1,6 +1,6 @@
 {
-  "goal": "Validate Student 3 Release 1 MCP integration: the shared MCP server's read-only transport tools, their tool boundaries, and the Student 3 backend and frontend routes that call them",
-  "_note": "Local run only; needs the host-run MCP server plus the Compose stack. Set BACKEND_URL=http://127.0.0.1:18003 FRONTEND_URL=http://127.0.0.1:8093 MCP_URL=http://127.0.0.1:8012 CHECKS_FILE=checks/student-3-release-1.json. All checks are read-only.",
+  "goal": "Validate Student 3 Release 1 MCP and RAG integration: the shared MCP server's read-only transport tools and their boundaries, the shared RAG server's grounded and insufficient-context answers for feature student-3, and the Student 3 backend and frontend routes that call both",
+  "_note": "Local run only; needs host AI-Mode, RAG and MCP plus the Compose stack. Set BACKEND_URL=http://127.0.0.1:18003 FRONTEND_URL=http://127.0.0.1:8093 MCP_URL=http://127.0.0.1:8012 RAG_URL=http://127.0.0.1:8011 CHECKS_FILE=checks/student-3-release-1.json. All checks are read-only.",
   "checks": [
     {"label": "MCP server /ready", "path": "${MCP_URL}/ready", "contains": ["tripgenie-mcp"]},
     {"label": "MCP tools/list registers the Student 3 transport tools", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-list", "method": "tools/list"}, "contains": ["\"transport_search\"", "\"transport_get\"", "\"transport_compare\"", "\"transport_trip_costs\""]},
@@ -8,7 +8,13 @@
     {"label": "MCP transport_get for a seeded option", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-get", "method": "tools/call", "params": {"name": "transport_get", "arguments": {"transport_id": "transport_2026_qf401_mel_syd"}}}, "timeout": 40, "contains": ["\"ok\":true", "transport_2026_qf401_mel_syd", "\"pricing_basis\""]},
     {"label": "MCP malformed transport id is a structured validation error", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-invalid", "method": "tools/call", "params": {"name": "transport_get", "arguments": {"transport_id": "not-a-transport"}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
     {"label": "MCP compare rejects more than four ids", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-compare-limit", "method": "tools/call", "params": {"name": "transport_compare", "arguments": {"ids": ["transport_a01", "transport_b01", "transport_c01", "transport_d01", "transport_e01"]}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
-    {"label": "Student 3 backend health reports MCP enabled", "path": "${BACKEND_URL}/health", "contains": ["\"integrations\":{\"mcp\":\"enabled\"}"]},
+    {"label": "RAG server /ready", "path": "${RAG_URL}/ready", "contains": ["\"status\":\"ready\""]},
+    {"label": "RAG relevant Student 3 query is grounded", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "How is the estimated cost of a car rental worked out for four travellers?", "feature": "student-3", "top_k": 5, "correlation_id": "student3-loop-rag-1"}, "contains": ["\"insufficient_context\":false", "transport-pricing-and-costs"]},
+    {"label": "RAG unrelated Student 3 query is insufficient context", "method": "POST", "path": "${RAG_URL}/query", "timeout": 150, "json": {"query": "What is a good recipe for banana bread?", "feature": "student-3", "top_k": 5, "correlation_id": "student3-loop-rag-2"}, "contains": ["\"insufficient_context\":true", "\"citations\":[]"]},
+    {"label": "Student 3 backend RAG route round trip", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/rag-query", "timeout": 150, "json": {"question": "Why can't I add a sold out transport option to my trip?"}, "contains": ["\"insufficient_context\":false", "\"confidence_category\"", "transport-planning-and-availability", "student3-rag-"]},
+    {"label": "Student 3 backend refuses a browser-chosen RAG feature", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/rag-query", "json": {"question": "How is a car rental priced?", "feature": "student-1"}, "status": 422, "contains": ["VALIDATION_ERROR"]},
+    {"label": "Student 3 frontend transport guide page", "path": "${FRONTEND_URL}/guide", "contains": ["Ask how transport planning works"]},
+    {"label": "Student 3 backend health reports MCP and RAG enabled", "path": "${BACKEND_URL}/health", "contains": ["\"integrations\":{\"rag\":\"enabled\",\"mcp\":\"enabled\"}"]},
     {"label": "Student 3 backend MCP search route", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/search", "timeout": 60, "json": {"destination": "Sydney", "limit": 5}, "contains": ["\"tool\":\"transport_search\"", "\"status\":\"ok\"", "student3-mcp-", "\"persisted\":false"]},
     {"label": "Student 3 backend MCP compare route", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/compare", "timeout": 60, "json": {"ids": ["transport_2026_qf401_mel_syd"]}, "contains": ["\"tool\":\"transport_compare\"", "\"status\":\"ok\"", "transport_2026_qf401_mel_syd"]},
     {"label": "Student 3 backend refuses a browser-chosen tool", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/search", "json": {"tool": "activities_delete"}, "status": 422, "contains": ["VALIDATION_ERROR"]},
@@ -18,7 +24,9 @@
     "Student 3 MCP tools are read-only: transport_search, transport_get, transport_compare and transport_trip_costs call only the Student 3 public /api with GET.",
     "The browser picks an allow-listed action; the Student 3 backend fixes the tool name and validates every argument before calling MCP.",
     "A tool that ran and refused is a structured error result; an unreachable MCP server is a 503, never an empty success.",
-    "seats_remaining null means unknown, never zero."
+    "seats_remaining null means unknown, never zero.",
+    "RAG confidence is calculated by the RAG server from retrieval scores; an insufficient-context answer has no citations.",
+    "The browser sends only a question; the Student 3 backend fixes the RAG feature (student-3) and top_k."
   ],
   "flows": [
     {

@@ -22,6 +22,7 @@ from .models import (
     HealthResponse,
     ItinerarySelectionResponse,
     McpToolResult,
+    RagAnswer,
     TransportOptionRecord,
     TransportType,
     TripDirectory,
@@ -34,6 +35,32 @@ MAX_COMPARE_SELECTION = 4
 MAX_MCP_SEARCH_RESULTS = 20
 MCP_ACTIONS = ("search", "compare", "trip-costs")
 TRIP_ID_PATTERN = re.compile(r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
+MAX_RAG_QUESTION_CHARS = 2000
+# Plain-language guidance shown under the backend's own message.
+RAG_MESSAGES = {
+    "RAG_DISABLED": (
+        "The transport guide is switched off for this deployment. Browsing, "
+        "comparing and planning still work as normal."
+    ),
+    "INDEX_NOT_READY": (
+        "The shared knowledge index has not been built yet. Run "
+        "python -m rag_service ingest --rebuild on the host."
+    ),
+    "DEPENDENCY_UNAVAILABLE": (
+        "The shared RAG server, or the AI-Mode service behind it, is not "
+        "reachable. Start them on the host and try again."
+    ),
+    "DEPENDENCY_TIMEOUT": (
+        "The answer took too long. A local model can be slow on its first "
+        "question; try again."
+    ),
+    "BAD_GATEWAY": "The knowledge service sent back an answer that could not be used.",
+}
+CONFIDENCE_LABELS = {
+    "high": "High confidence",
+    "medium": "Medium confidence",
+    "low": "Low confidence - check the sources",
+}
 # Plain-language guidance shown under the backend's own message.
 MCP_MESSAGES = {
     "MCP_DISABLED": (
@@ -696,6 +723,60 @@ def create_app(
             error=error,
             recommendation=recommendation,
             **ai_context(options, directory),
+        )
+
+    # ------------------------------------------------------ RAG transport guide
+
+    async def render_guide(
+        request: Request,
+        client: BackendApiClient,
+        *,
+        question: str = "",
+        answer: RagAnswer | None = None,
+        error: ApiError | None = None,
+    ) -> Response:
+        options, list_error = await safe_list_options(client)
+        return render(
+            request,
+            "partials/rag_guide.html",
+            page_title="Transport guide",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=None,
+            filters={},
+            question=question,
+            answer=answer,
+            error=error,
+            error_hint=RAG_MESSAGES.get(error.code) if error else None,
+            errors_by_field=error_details_by_field(error),
+            confidence_labels=CONFIDENCE_LABELS,
+            question_max_chars=MAX_RAG_QUESTION_CHARS,
+        )
+
+    @app.get("/guide", name="rag_guide", response_model=None)
+    async def rag_guide(request: Request, client: ClientDep) -> Response:
+        return await render_guide(request, client)
+
+    @app.post("/guide", name="rag_ask", response_model=None)
+    async def rag_ask(request: Request, client: ClientDep) -> Response:
+        """Ask the shared RAG server a transport question through the backend.
+
+        Only the question is sent; the backend fixes the knowledge scope.
+        """
+        form = await request.form()
+        question = str(form.get("question") or "").strip()
+        answer: RagAnswer | None = None
+        error: ApiError | None = None
+        try:
+            answer = await client.rag_query(question)
+        except ApiError as exc:
+            error = exc
+        return await render_guide(
+            request,
+            client,
+            question=question,
+            answer=answer,
+            error=error,
         )
 
     # ------------------------------------------------------------ MCP tools

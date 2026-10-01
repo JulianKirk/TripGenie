@@ -4,7 +4,14 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 TransportIdentifier = Annotated[
     str,
@@ -192,6 +199,7 @@ class HealthIntegrations(StrictModel):
     a health check, so a stopped MCP server cannot make this service unready.
     """
 
+    rag: Literal["enabled", "disabled"]
     mcp: Literal["enabled", "disabled"]
 
 
@@ -538,3 +546,56 @@ class McpToolResponse(StrictModel):
     correlation_id: str
     duration_ms: int = Field(ge=0)
     persisted: Literal[False] = False
+
+
+# ---------------------------------------------------------------- Release 1 RAG
+
+# The shared RAG contract bounds a query to 2,000 characters.
+RagQuestion = Annotated[str, StringConstraints(min_length=1, max_length=2000)]
+
+
+class RagQueryRequest(StrictModel):
+    """Only the question: the backend fixes the feature scope and `top_k`."""
+
+    question: RagQuestion
+
+
+class RagCitation(LenientModel):
+    source_id: str
+    title: str
+    section: str
+    path: str
+    chunk_id: str
+    excerpt: str
+
+
+class RagRetrieval(LenientModel):
+    requested_top_k: int
+    returned_chunks: int
+    maximum_score: float | None
+
+
+class RagAnswer(LenientModel):
+    """A grounded answer from the shared RAG server, passed through unchanged.
+
+    Lenient because the RAG server owns this shape and may add fields. The
+    validator refuses an answer whose grounding contradicts itself: a grounded
+    answer with no citations, or an insufficient-context one that cites.
+    """
+
+    answer: str
+    confidence_category: Literal["high", "medium", "low", "insufficient_context"]
+    insufficient_context: bool
+    citations: list[RagCitation]
+    retrieval: RagRetrieval
+    run_id: str
+    correlation_id: str
+
+    @model_validator(mode="after")
+    def grounding_is_consistent(self) -> RagAnswer:
+        if self.insufficient_context:
+            if self.citations or self.confidence_category != "insufficient_context":
+                raise ValueError("insufficient context must have no citations")
+        elif not self.citations or self.confidence_category == "insufficient_context":
+            raise ValueError("a grounded answer needs citations and a confidence")
+        return self

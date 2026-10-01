@@ -90,6 +90,30 @@
       "path": "ai-services/rag-server/knowledge/activities/safety-and-preparation.md",
       "title": "Activity Safety and Preparation Guide",
       "feature": "student-4"
+    },
+    {
+      "source_id": "student-3-backend-service-api",
+      "path": "student-3/backend/README.md",
+      "title": "Student 3 Transport Backend API",
+      "feature": "student-3"
+    },
+    {
+      "source_id": "transport-choosing-transport",
+      "path": "ai-services/rag-server/knowledge/transport/choosing-transport.md",
+      "title": "Choosing Transport for a Trip",
+      "feature": "student-3"
+    },
+    {
+      "source_id": "transport-pricing-and-costs",
+      "path": "ai-services/rag-server/knowledge/transport/pricing-and-costs.md",
+      "title": "Transport Pricing and Cost Estimates",
+      "feature": "student-3"
+    },
+    {
+      "source_id": "transport-planning-and-availability",
+      "path": "ai-services/rag-server/knowledge/transport/planning-and-availability.md",
+      "title": "Planning Transport and Availability",
+      "feature": "student-3"
     }
   ]
 }

@@ -98,7 +98,7 @@ are running; an unreachable host service disables only the AI, RAG, or MCP
 feature. To turn Student 1's RAG or MCP client off explicitly, set
 `STUDENT1_BACKEND_RAG_ENABLED=false` or `STUDENT1_BACKEND_MCP_ENABLED=false`
 (Student 5 has matching `STUDENT5_BACKEND_*` flags, and Student 3 has
-`STUDENT3_BACKEND_MCP_ENABLED`).
+`STUDENT3_BACKEND_MCP_ENABLED` and `STUDENT3_BACKEND_RAG_ENABLED`).
 
 ## 6. Verify
 
