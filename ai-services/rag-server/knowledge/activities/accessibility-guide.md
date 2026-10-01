@@ -42,12 +42,14 @@ whether staff can assist.
 
 ## Activity accessibility: companion cards and concessions
 
-In Australia, people with disability who need a support person may hold a
-Companion Card, which many participating venues accept so that the companion
-attends free or at reduced cost. Many attractions also offer concession prices
-for seniors, students, and pension card holders. These arrangements are set by
-each venue, so check with the operator before booking; TripGenie's listed
-price does not include concessions.
+In Australia, people with disability who need a support person to take part
+may hold a Companion Card. At venues and activities that participate in the
+Companion Card scheme, the cardholder pays the normal price and their support
+person or carer usually attends free of charge, or sometimes at a reduced
+price. Not every operator participates, so show the card when booking and
+confirm with the operator first. Many attractions also offer concession prices
+for seniors, students, and pension card holders. TripGenie's listed price does
+not include companion tickets or concessions.
 
 ## Activity accessibility: planning tips for access needs
 

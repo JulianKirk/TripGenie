@@ -55,6 +55,10 @@ runbook's `llama3.1:8b` default for RAG. In local testing, `qwen2.5:7b` often
 shortened citation IDs (for example `5:93e5f2e83e2f` instead of
 `activities-booking-and-pricing:5:93e5f2e83e2f`). The shared server correctly
 rejects those answers as `BAD_GATEWAY`, so Student 4 shows "failed to answer".
+On an 8 GB GPU, start AI-Mode with `AI_MODE_CONTEXT_TOKENS=16384`. The
+default of 32768 pushes much of `llama3.1:8b` onto the CPU. In local testing
+that cut RAG answers from 40–120 seconds to 22–54 seconds, under the
+120-second RAG timeout.
 Then rebuild the index so that it includes the Student 4 sources, and serve
 RAG:
 
