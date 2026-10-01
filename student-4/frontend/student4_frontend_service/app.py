@@ -284,6 +284,7 @@ async def suggestion_ask(request: Request, client: ClientDep) -> Any:
     knowledge = str(form.get("mode", "")) == "knowledge"
     result: AssistantResponse | KnowledgeResponse | None = None
     error = None
+    error_status = None
     try:
         if knowledge:
             result = await client.ask_knowledge({"question": question})
@@ -294,7 +295,7 @@ async def suggestion_ask(request: Request, client: ClientDep) -> Any:
                 payload["trip_id"] = trip_id
             result = await client.ask_assistant(payload)
     except FrontendError as exc:
-        error = exc.detail
+        error, error_status = exc.detail, exc.status_code
     results_template = (
         "partials/knowledge_results.html"
         if knowledge
@@ -308,7 +309,12 @@ async def suggestion_ask(request: Request, client: ClientDep) -> Any:
     return TEMPLATES.TemplateResponse(
         request,
         template,
-        {"result": result, "error": error, "results_template": results_template},
+        {
+            "result": result,
+            "error": error,
+            "error_status": error_status,
+            "results_template": results_template,
+        },
     )
 
 

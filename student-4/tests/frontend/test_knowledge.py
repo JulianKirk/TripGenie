@@ -72,6 +72,7 @@ def test_panel_offers_mcp_and_rag_modes(backend: FakeBackend) -> None:
     assert "Activity tools (MCP)" in text
     assert "Activity guides (RAG)" in text
     assert "<strong>Maintains Release 0 functionality.</strong>" in text
+    assert "activity guides and Student 4 documentation" in text
 
 
 def test_knowledge_mode_renders_grounded_answer_with_citations(
@@ -157,6 +158,19 @@ def test_backend_outage_renders_safe_error(backend: FakeBackend) -> None:
 
     assert "Activity guides unavailable" in text
     assert "The activities service is unavailable." in text
+
+
+def test_rejected_question_is_not_reported_as_an_outage(backend: FakeBackend) -> None:
+    backend.overrides[KNOWLEDGE] = httpx.Response(
+        400,
+        json={"detail": [{"loc": ["body", "question"], "msg": "too short"}]},
+    )
+
+    text = ask(backend, {"mode": "knowledge", "question": "   "}).text
+
+    assert "Activity guides could not take that question" in text
+    assert "question: too short" in text
+    assert "Activity guides unavailable" not in text
 
 
 def test_plain_knowledge_form_returns_full_page(backend: FakeBackend) -> None:
