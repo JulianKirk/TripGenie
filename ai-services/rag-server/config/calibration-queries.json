@@ -114,8 +114,7 @@
       "query": "How is the total cost calculated for a per-person activity versus a flat-admission activity?",
       "feature": "student-4",
       "expected_source_ids": [
-        "activities-booking-and-pricing",
-        "student-4-object-model"
+        "activities-booking-and-pricing"
       ],
       "expect_insufficient_context": false
     },
@@ -124,8 +123,7 @@
       "query": "Does an unknown wheelchair accessibility value mean the activity is accessible?",
       "feature": "student-4",
       "expected_source_ids": [
-        "activities-accessibility",
-        "student-4-object-model"
+        "activities-accessibility"
       ],
       "expect_insufficient_context": false
     },
