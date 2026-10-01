@@ -281,6 +281,11 @@ td.actions-cell { display: table-cell; }
 .mcp-form h3 { margin: 0 0 0.5rem; font-size: 1rem; }
 .mcp-form h3 code { display: block; font-size: 0.75rem; color: var(--ink-muted); font-weight: normal; }
 .mcp-result { border-top: 1px solid var(--line); padding-top: 1rem; }
+/* Trip, transport and correlation ids have no spaces to wrap at, so without
+   this they run out of their grid cell into the next one. */
+.mcp-result .detail-grid > div { min-width: 0; }
+.mcp-result dd, .mcp-result code { overflow-wrap: anywhere; }
+.mcp-result__id { display: block; font-size: 0.75rem; font-weight: normal; color: var(--ink-muted); }
 .mcp-result__raw pre { max-height: 20rem; overflow: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
 
 /* Release 1 RAG transport guide */
@@ -292,3 +297,9 @@ td.actions-cell { display: table-cell; }
 .confidence--high { border-color: var(--ok); color: var(--ok); }
 .confidence--medium { border-color: var(--warning-line); color: #8a6416; }
 .confidence--low, .confidence--insufficient_context { border-color: var(--danger); color: var(--danger); }
+
+/* Release 1: the MCP calls behind an AI suggestion */
+.ai-tools { margin: 1rem 0; }
+.ai-tools__list { padding-left: 1.25rem; }
+.ai-tools__list p { margin: 0.2rem 0; }
+.ai-tools pre { max-height: 16rem; overflow: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }

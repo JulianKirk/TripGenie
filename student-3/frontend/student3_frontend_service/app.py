@@ -818,6 +818,8 @@ def create_app(
             selected_ids=selected_ids or [],
             compare_limit=MAX_COMPARE_SELECTION,
             search_limit_max=MAX_MCP_SEARCH_RESULTS,
+            # The tool result carries only a trip id; show the name with it.
+            trip_names={trip.id: trip.name for trip in directory.trips},
             **ai_context(options, directory),
         )
 

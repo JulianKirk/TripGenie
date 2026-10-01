@@ -249,6 +249,18 @@ class RecommendedTransport(LenientModel):
     option: TransportOptionRecord
 
 
+class ToolCallTrace(LenientModel):
+    """One MCP tool call the model made while drafting a recommendation."""
+
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    duration_ms: int = 0
+    error: str | None = None
+    transport_ids: list[str] = Field(default_factory=list)
+    result: dict[str, Any] | None = None
+
+
 class TransportRecommendation(LenientModel):
     """Draft AI advice. Advisory only: the traveller decides what to save."""
 
@@ -260,6 +272,8 @@ class TransportRecommendation(LenientModel):
     run_id: str
     model: str
     provider: str
+    tools: list[ToolCallTrace] = Field(default_factory=list)
+    unavailable_transport_ids: list[str] = Field(default_factory=list)
 
 
 class PlannedTransport(LenientModel):

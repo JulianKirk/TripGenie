@@ -37,10 +37,10 @@ therefore a plan state, not a carrier state:
 | `STUDENT3_BACKEND_VERIFY_TRIP_EXISTS` | `false` | Opt in to checking a trip exists before building an AI prompt for it. Selections are validated by Student 1 regardless. |
 | `STUDENT3_BACKEND_CURRENCY` | `AUD` | ISO 4217 currency for transport prices and estimates. |
 | `STUDENT3_BACKEND_AI_MODE_BASE_URL` | `http://ai-mode:8006` | Shared AI-Mode service. |
-| `STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `120` | Timeout for one generation. Deliberately above AI-Mode's own budget. |
-| `STUDENT3_BACKEND_AI_PROMPT_ASSET` | `transport_recommendations_v1.md` | Prompt template, versioned in `student3_backend_service/prompts/`. |
+| `STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `200` | Timeout for one generation, including the model's MCP tool calls. Deliberately above AI-Mode's own 180 s agent budget. |
+| `STUDENT3_BACKEND_AI_PROMPT_ASSET` | `transport_recommendations_v2.md` | System prompt, versioned in `student3_backend_service/prompts/`. |
 | `STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS` | `12000` | Prompt budget; a larger render returns `422`. |
-| `STUDENT3_BACKEND_AI_MAX_CANDIDATES` | `12` | Most options ever shown to the model. |
+| `STUDENT3_BACKEND_AI_MAX_CANDIDATES` | `12` | `limit` for the model's first `transport_search` (capped at the MCP maximum of 50). |
 | `STUDENT3_BACKEND_MCP_ENABLED` | `false` | Release 1 MCP lookups. Compose sets `true`; CI sets `false`. |
 | `STUDENT3_BACKEND_MCP_BASE_URL` | `http://127.0.0.1:8012/mcp` | Shared host-run MCP server. Compose uses `http://host.docker.internal:8012/mcp`. |
 | `STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS` | `40` | Timeout for one MCP tool call. |
@@ -105,42 +105,55 @@ never be shown a shorter comparison than it asked for.
 
 ### `POST /api/transport-options/recommendations`
 
-Advisory transport guidance from the shared AI-Mode service (which owns the
-boundary to Ollama). The request takes an optional `trip_id`, `origin` and
-`destination`, plus the traveller's `question`.
+Advisory transport guidance from the shared AI-Mode service. The request takes
+an optional `trip_id`, `origin` and `destination`, plus the traveller's
+`question`.
+
+**Model-directed MCP (Release 1).** The model looks transport up itself. Every
+AI-Mode `/generate` call offers it the shared MCP tool catalogue, and the
+versioned system prompt (`transport_recommendations_v2.md`) tells it to call
+`transport_search` first, `transport_trip_costs` when a trip is given, and
+`transport_get` / `transport_compare` for detail. No candidate list is
+pre-loaded into the prompt; the first search's arguments are spelled out so a
+small model does not have to guess its filters, and every call after that is
+the model's own choice.
 
 The response is a resolved draft, not raw model text: every suggestion comes
 back as the full stored option joined to the model's reason, alongside
-`advisory_only: true`, the `disclaimer`, and the `run_id`, `model` and
-`provider` that produced it, so a caller can always cite the run.
+`advisory_only: true`, the `disclaimer`, the `run_id`, `model` and `provider`,
+and `tools` — every MCP call the model made, with its arguments, status,
+duration, the transport ids it returned and its structured result — so a
+caller can see the evidence behind the advice, not just the advice.
 
 **This route writes nothing.** A suggestion becomes part of a trip only when a
-traveller adds it to a trip from the option's own page. That is the
-human approval step, and it is the reason the model can never put a journey in
+traveller adds it to a trip from the option's own page. That is the human
+approval step, and it is the reason the model can never put a journey in
 someone's itinerary by itself.
 
 The grounding guards, in the order they apply:
 
-1. **Bounded candidates.** Only actionable options are offered to the model —
-   never `sold_out` or `cancelled`, never zero seats remaining — cheapest first
-   and capped at `AI_MAX_CANDIDATES`, so a truncated list still holds the
-   options most likely to matter.
-2. **Prompt budget.** A render above `AI_PROMPT_MAX_CHARS` returns `422`
-   `PROMPT_BUDGET_EXCEEDED` rather than being silently truncated mid-fact.
+1. **Route pre-check.** If no plannable option matches the requested route,
+   the route returns `422` before any model run is spent.
+2. **Prompt budget.** A system prompt plus request above `AI_PROMPT_MAX_CHARS`
+   returns `422` `PROMPT_BUDGET_EXCEEDED`.
 3. **Schema-checked reply.** AI-Mode is asked for JSON matching this service's
-   own draft schema; an unfinished or malformed reply is `502`.
-4. **Resolution against the candidate list.** An id the model was not given is
-   `502` `BAD_GATEWAY` — a hallucinated identifier must never reach a
-   traveller. Duplicate suggestions are collapsed rather than failing the draft.
+   draft schema; an unfinished or malformed reply is `502`.
+4. **Tool-grounded ids.** A suggested id must have come back in a *successful*
+   Student 3 transport tool result in the same run. An id no tool returned —
+   invented, or merely remembered — is `502` `BAD_GATEWAY`.
+5. **Re-read and filtered.** Each grounded id is re-read from this service, so
+   the traveller sees the stored record. One that is now sold out, cancelled,
+   full or deleted is dropped and listed in `unavailable_transport_ids`.
+   Duplicates are collapsed. An empty suggestion list is the model honestly
+   saying nothing suitable was found, answered by its overview.
 
-The prompt itself is a versioned asset rather than a string in the code, so a
-wording change is reviewable in a diff. It forbids inventing ids, recommending
-unbookable options, recalculating `duration_minutes` (already offset-aware),
-and claiming to have booked, paid for or saved anything.
+The prompt forbids inventing ids, recommending unbookable options,
+recalculating `duration_minutes` (already offset-aware), calling any write
+tool, and claiming to have booked, paid for or saved anything.
 
-When AI-Mode is unreachable the route returns `503`; browsing, comparing and
-planning are unaffected, which is why the Compose dependency is
-`service_started` rather than `service_healthy`.
+When AI-Mode (or the MCP server it needs) is unreachable the route returns
+`503`; browsing, comparing and planning are unaffected, which is why the
+Compose dependency is `service_started` rather than `service_healthy`.
 
 ## Release 1 MCP
 

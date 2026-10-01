@@ -238,6 +238,11 @@ def test_trip_costs_shows_the_trip_total(
     text = _collapsed(response)
     assert "258.00 AUD" in text
     assert "Sydney &rarr; Melbourne" in text
+    # The trip's name is shown, with its id beneath it rather than instead.
+    assert (
+        '<dt>Trip</dt><dd> Sydney Long Weekend <span class="mcp-result__id">'
+        f"<code>{TRIP}</code></span>"
+    ) in text
 
 
 def test_trip_transport_page_links_to_the_mcp_cost_check(

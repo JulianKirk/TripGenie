@@ -1,8 +1,10 @@
-"""AI transport recommendations.
+"""AI transport recommendations, model-directed through the shared MCP tools.
 
 The model is advisory: these tests pin the guards that stop a generated reply
-being presented as if it were TripGenie data — the candidate list is bounded,
-an invented identifier is rejected, and nothing on this path writes.
+being presented as if it were TripGenie data. The model must look transport up
+itself through AI-Mode's MCP tool loop, a suggestion is accepted only when a
+successful transport tool returned it, each one is re-read from this service,
+and nothing on this path writes.
 """
 
 from __future__ import annotations
@@ -17,7 +19,6 @@ import pytest
 from conftest import (
     FakeItineraryApi,
     make_ai_error_transport,
-    make_ai_transport,
     make_ai_unreachable_transport,
 )
 from fastapi.testclient import TestClient
@@ -46,7 +47,52 @@ GOOD_DRAFT: dict[str, Any] = {
 }
 
 
-def ai_reply(draft: dict[str, Any], *, done: bool = True) -> httpx.Response:
+def tool_trace(
+    tool: str,
+    data: dict[str, Any],
+    *,
+    status: str = "success",
+    source: str = "student-3",
+    arguments: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """One entry of AI-Mode's `tools` trace, shaped as AI-Mode reports it."""
+    return {
+        "tool": tool,
+        "arguments": arguments if arguments is not None else {"limit": 12},
+        "status": status,
+        "duration_ms": 31,
+        "result": {
+            "content": [],
+            "structuredContent": {
+                "ok": status == "success",
+                "data": data,
+                "correlation_id": "mcp-test",
+                "source": source,
+            },
+            "isError": status != "success",
+        },
+        "error": None if status == "success" else "tool failed",
+    }
+
+
+def search_trace(*ids: str, **kwargs: Any) -> dict[str, Any]:
+    items = [{"id": transport_id, "price": "6.50"} for transport_id in ids]
+    return tool_trace(
+        "transport_search",
+        {"items": items, "count": len(items), "truncated": False},
+        **kwargs,
+    )
+
+
+SEARCH_CHEAPEST = search_trace(CHEAPEST_ID)
+
+
+def ai_reply(
+    draft: dict[str, Any],
+    tools: list[dict[str, Any]] | None = None,
+    *,
+    done: bool = True,
+) -> httpx.Response:
     return httpx.Response(
         200,
         json={
@@ -57,9 +103,17 @@ def ai_reply(draft: dict[str, Any], *, done: bool = True) -> httpx.Response:
                 "provider": "ollama",
                 "response": json.dumps(draft),
                 "done": done,
+                "tools": [SEARCH_CHEAPEST] if tools is None else tools,
             },
         },
     )
+
+
+def reply_with(
+    draft: dict[str, Any],
+    tools: list[dict[str, Any]] | None = None,
+) -> httpx.MockTransport:
+    return httpx.MockTransport(lambda _request: ai_reply(draft, tools))
 
 
 @contextmanager
@@ -92,8 +146,7 @@ def build_client(
 @contextmanager
 def capturing_client(
     database_transport: httpx.MockTransport,
-    draft: dict[str, Any],
-    itinerary_transport: httpx.BaseTransport | None = None,
+    draft: dict[str, Any] = GOOD_DRAFT,
     **overrides: Any,
 ) -> Iterator[tuple[TestClient, dict[str, Any]]]:
     """A client that records the request body sent to AI-Mode."""
@@ -106,7 +159,6 @@ def capturing_client(
     with build_client(
         database_transport,
         httpx.MockTransport(handler),
-        itinerary_transport,
         **overrides,
     ) as client:
         yield client, captured
@@ -119,7 +171,7 @@ def ai_client(
 ) -> Iterator[TestClient]:
     with build_client(
         database_transport,
-        make_ai_transport(GOOD_DRAFT),
+        reply_with(GOOD_DRAFT),
         itinerary_transport,
     ) as client:
         yield client
@@ -144,7 +196,6 @@ def test_recommendation_returns_a_resolved_draft(ai_client: TestClient) -> None:
     assert body["overview"].startswith("The Adelaide airport bus")
     assert len(body["recommended"]) == 1
     assert body["recommended"][0]["option"]["id"] == CHEAPEST_ID
-    assert body["recommended"][0]["option"]["price"] == 6.50
     assert body["considerations"] == ["Fares are tapped on board."]
 
 
@@ -164,16 +215,31 @@ def test_recommendation_is_marked_advisory(ai_client: TestClient) -> None:
     assert body["disclaimer"]
 
 
-def test_recommendation_resolves_ids_to_real_records(ai_client: TestClient) -> None:
-    """A suggestion comes back as the full option, not just an id.
+def test_suggestions_are_the_stored_records_not_the_tool_copy(
+    ai_client: TestClient,
+) -> None:
+    """The tool said $6.50 as text; the response carries the stored record.
 
-    The frontend must never have to trust an id it cannot render.
+    The frontend must never have to trust a figure only the model or a tool
+    result produced.
     """
-    body = _data(ai_client.post(RECOMMEND_PATH, json=ASK))
-    option = body["recommended"][0]["option"]
+    option = _data(ai_client.post(RECOMMEND_PATH, json=ASK))["recommended"][0]["option"]
 
+    assert option["price"] == 6.50
     for field in ("id", "duration_minutes", "seats_remaining", "availability_status"):
         assert field in option
+
+
+def test_the_tool_calls_are_returned_as_evidence(ai_client: TestClient) -> None:
+    (trace,) = _data(ai_client.post(RECOMMEND_PATH, json=ASK))["tools"]
+
+    assert trace["tool"] == "transport_search"
+    assert trace["status"] == "success"
+    assert trace["arguments"] == {"limit": 12}
+    assert trace["duration_ms"] == 31
+    assert trace["transport_ids"] == [CHEAPEST_ID]
+    assert trace["result"]["source"] == "student-3"
+    assert trace["result"]["data"]["count"] == 1
 
 
 # ------------------------------------------------------------------ no writes
@@ -201,26 +267,93 @@ def test_recommending_does_not_select_anything(
 def test_an_invented_transport_id_is_rejected(
     database_transport: httpx.MockTransport,
 ) -> None:
-    """A hallucinated id must never reach a traveller.
-
-    Resolving suggestions against the candidate list is the guard; without it a
-    made-up id would render as a broken link or an empty row.
-    """
+    """A hallucinated id must never reach a traveller."""
     draft = {
         **GOOD_DRAFT,
         "suggestions": [
-            {
-                "transport_id": "transport_does_not_exist",
-                "reason": "Invented by the model.",
-            },
+            {"transport_id": "transport_does_not_exist", "reason": "Invented."},
         ],
     }
-    with build_client(database_transport, make_ai_transport(draft)) as client:
+    with build_client(database_transport, reply_with(draft)) as client:
         response = client.post(RECOMMEND_PATH, json=ASK)
 
     assert response.status_code == 502
     assert _error(response)["code"] == "BAD_GATEWAY"
-    assert "unknown transport id" in _error(response)["details"][0]["issue"]
+    assert "ungrounded transport id" in _error(response)["details"][0]["issue"]
+
+
+def test_a_real_id_the_model_never_looked_up_is_rejected(
+    database_transport: httpx.MockTransport,
+) -> None:
+    """Existing in the catalogue is not enough: a tool must have returned it.
+
+    Otherwise the model could recite an id from training data or the prompt
+    and skip the lookup the traveller is being shown.
+    """
+    draft = {
+        **GOOD_DRAFT,
+        "suggestions": [{"transport_id": FLIGHT_ID, "reason": "Real but unseen."}],
+    }
+    with build_client(database_transport, reply_with(draft)) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
+
+    assert response.status_code == 502
+    assert FLIGHT_ID in _error(response)["details"][0]["issue"]
+
+
+@pytest.mark.parametrize(
+    "trace",
+    [
+        search_trace(CHEAPEST_ID, status="error"),
+        search_trace(CHEAPEST_ID, source="student-4"),
+        tool_trace("transport_search", {"unexpected": [CHEAPEST_ID]}),
+    ],
+    ids=["failed-call", "other-service", "unrecognised-shape"],
+)
+def test_only_successful_student_3_tool_results_ground_an_id(
+    database_transport: httpx.MockTransport,
+    trace: dict[str, Any],
+) -> None:
+    with build_client(database_transport, reply_with(GOOD_DRAFT, [trace])) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
+
+    assert response.status_code == 502
+
+
+def test_no_tool_calls_means_no_grounded_suggestion(
+    database_transport: httpx.MockTransport,
+) -> None:
+    with build_client(database_transport, reply_with(GOOD_DRAFT, [])) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
+
+    assert response.status_code == 502
+    assert "ungrounded" in _error(response)["details"][0]["issue"]
+
+
+@pytest.mark.parametrize(
+    "trace",
+    [
+        tool_trace("transport_get", {"id": CHEAPEST_ID, "price": "6.50"}),
+        tool_trace(
+            "transport_trip_costs",
+            {
+                "trip_id": "trip_2026_sydney_long_weekend",
+                "planned": [{"option": {"id": CHEAPEST_ID}, "entry": {}}],
+            },
+        ),
+        tool_trace("transport_compare", {"items": [{"id": CHEAPEST_ID}]}),
+    ],
+    ids=["get", "trip-costs", "compare"],
+)
+def test_every_transport_tool_can_ground_an_id(
+    database_transport: httpx.MockTransport,
+    trace: dict[str, Any],
+) -> None:
+    with build_client(database_transport, reply_with(GOOD_DRAFT, [trace])) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
+
+    assert response.status_code == 200, response.text
+    assert _data(response)["recommended"][0]["option"]["id"] == CHEAPEST_ID
 
 
 def test_a_duplicate_suggestion_is_collapsed(
@@ -234,7 +367,7 @@ def test_a_duplicate_suggestion_is_collapsed(
             {"transport_id": CHEAPEST_ID, "reason": "Still cheap."},
         ],
     }
-    with build_client(database_transport, make_ai_transport(draft)) as client:
+    with build_client(database_transport, reply_with(draft)) as client:
         body = _data(client.post(RECOMMEND_PATH, json=ASK))
 
     assert len(body["recommended"]) == 1
@@ -242,99 +375,146 @@ def test_a_duplicate_suggestion_is_collapsed(
 
 
 @pytest.mark.parametrize("excluded", [SOLD_OUT_ID, CANCELLED_ID])
-def test_unbookable_options_are_never_candidates(
+def test_an_unbookable_option_a_tool_returned_is_named_not_shown(
     database_transport: httpx.MockTransport,
     excluded: str,
 ) -> None:
-    """The model can only pick from what it is shown.
-
-    Naming an option that was filtered out therefore fails the same guard as an
-    invented id, which is the cheapest way to enforce the rule.
-    """
+    """A tool may return a sold-out option; the traveller must not be sold it."""
     draft = {
         **GOOD_DRAFT,
-        "suggestions": [{"transport_id": excluded, "reason": "Should not be."}],
+        "suggestions": [
+            {"transport_id": excluded, "reason": "Should not be shown."},
+            {"transport_id": CHEAPEST_ID, "reason": "Cheapest."},
+        ],
     }
-    with build_client(database_transport, make_ai_transport(draft)) as client:
+    tools = [search_trace(excluded, CHEAPEST_ID)]
+    with build_client(database_transport, reply_with(draft, tools)) as client:
+        body = _data(client.post(RECOMMEND_PATH, json=ASK))
+
+    assert [item["option"]["id"] for item in body["recommended"]] == [CHEAPEST_ID]
+    assert body["unavailable_transport_ids"] == [excluded]
+
+
+def test_only_unbookable_suggestions_is_a_bad_gateway(
+    database_transport: httpx.MockTransport,
+) -> None:
+    draft = {
+        **GOOD_DRAFT,
+        "suggestions": [{"transport_id": SOLD_OUT_ID, "reason": "Sold out."}],
+    }
+    tools = [search_trace(SOLD_OUT_ID)]
+    with build_client(database_transport, reply_with(draft, tools)) as client:
         response = client.post(RECOMMEND_PATH, json=ASK)
 
     assert response.status_code == 502
-    assert excluded in _error(response)["details"][0]["issue"]
+    assert "no suggestions could be resolved" in _error(response)["details"][0]["issue"]
 
 
-def test_the_prompt_grounds_the_model_in_candidate_ids(
+def test_a_grounded_option_since_deleted_is_named_not_shown(
     database_transport: httpx.MockTransport,
 ) -> None:
-    """Capture the outbound prompt and assert the grounding is real."""
-    with capturing_client(database_transport, GOOD_DRAFT) as (client, captured):
+    gone = "transport_gone_since_search"
+    draft = {
+        **GOOD_DRAFT,
+        "suggestions": [
+            {"transport_id": gone, "reason": "Was there a moment ago."},
+            {"transport_id": CHEAPEST_ID, "reason": "Cheapest."},
+        ],
+    }
+    tools = [search_trace(gone, CHEAPEST_ID)]
+    with build_client(database_transport, reply_with(draft, tools)) as client:
+        body = _data(client.post(RECOMMEND_PATH, json=ASK))
+
+    assert body["unavailable_transport_ids"] == [gone]
+    assert len(body["recommended"]) == 1
+
+
+# --------------------------------------------------------------------- prompt
+
+
+def test_the_model_is_told_to_use_the_tools_not_given_a_list(
+    database_transport: httpx.MockTransport,
+) -> None:
+    """Nothing from the catalogue is pre-loaded: the model has to fetch it."""
+    with capturing_client(database_transport) as (client, captured):
         assert client.post(RECOMMEND_PATH, json=ASK).status_code == 200
 
-    prompt = captured["prompt"]
-    assert "Only these transport ids may be recommended:" in prompt
-    assert CHEAPEST_ID in prompt
-    # Unbookable options are not even offered.
-    assert SOLD_OUT_ID not in prompt
-    assert CANCELLED_ID not in prompt
+    system = captured["system"]
+    assert "transport_search" in system
+    assert "transport_trip_costs" in system
+    assert "Never invent, alter or guess an id" in system
+    assert "are in AUD" in system
+    # No transport records travel in the request any more.
+    request_text = system + captured["prompt"]
+    for transport_id in (CHEAPEST_ID, FLIGHT_ID, SOLD_OUT_ID):
+        assert transport_id not in request_text
+    assert json.loads(captured["prompt"]) == ASK | {"first_search": {"limit": 12}}
     # The schema goes with the call so the provider returns the shape we parse.
     assert "suggestions" in json.dumps(captured["schema"])
     assert captured["correlation_id"].startswith("student3-transport-")
     assert captured["metadata"]["feature"] == "transport-recommendations"
 
 
-def test_the_candidate_list_is_capped(
+def test_the_request_fields_are_passed_as_data(
     database_transport: httpx.MockTransport,
 ) -> None:
-    """A bounded prompt is what keeps the request inside AI-Mode's limits."""
-    with capturing_client(
-        database_transport,
-        GOOD_DRAFT,
-        ai_max_candidates=2,
-    ) as (client, captured):
+    ask = ASK | {
+        "origin": "Sydney",
+        "destination": "Tokyo",
+        "trip_id": "trip_2026_sydney_long_weekend",
+    }
+    with capturing_client(database_transport) as (client, captured):
+        assert client.post(RECOMMEND_PATH, json=ask).status_code == 200
+
+    assert json.loads(captured["prompt"]) == {
+        "question": ASK["question"],
+        "first_search": {"limit": 12, "origin": "Sydney", "destination": "Tokyo"},
+        "trip_id": "trip_2026_sydney_long_weekend",
+    }
+
+
+def test_the_search_limit_never_exceeds_the_mcp_maximum(
+    database_transport: httpx.MockTransport,
+) -> None:
+    with capturing_client(database_transport, ai_max_candidates=80) as (
+        client,
+        captured,
+    ):
         assert client.post(RECOMMEND_PATH, json=ASK).status_code == 200
 
-    assert captured["metadata"]["candidates"] == "2"
-    # The key-facts block lists exactly the ids the model may name.
-    allowed = captured["prompt"].split(
-        "Only these transport ids may be recommended: ",
-    )[1].splitlines()[0]
-    assert len(allowed.split(", ")) == 2
+    assert json.loads(captured["prompt"])["first_search"]["limit"] == 50
 
 
-def test_the_prompt_states_the_currency(
+def test_an_oversized_prompt_is_refused_before_ai_mode(
     database_transport: httpx.MockTransport,
 ) -> None:
-    """Prices mean nothing without it, and Student 5 consumes the same figure."""
-    with capturing_client(database_transport, GOOD_DRAFT) as (client, captured):
-        assert client.post(RECOMMEND_PATH, json=ASK).status_code == 200
+    calls: list[httpx.Request] = []
 
-    assert "Currency: AUD" in captured["prompt"]
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return ai_reply(GOOD_DRAFT)
 
-
-def test_a_trip_adds_its_existing_selections_to_the_context(
-    database_transport: httpx.MockTransport,
-    itinerary_api: FakeItineraryApi,
-    itinerary_transport: httpx.MockTransport,
-) -> None:
-    """What is already on the trip is context the model should see.
-
-    The selections come from the itinerary service now, so this also pins the
-    read path: a prompt built without that call would silently lose the
-    traveller's existing plan.
-    """
-    trip_id = "trip_2026_sydney_long_weekend"
-    itinerary_api.pin(trip_id, FLIGHT_ID, travellers=2)
-
-    with capturing_client(
+    with build_client(
         database_transport,
-        GOOD_DRAFT,
-        itinerary_transport,
-    ) as (client, captured):
-        response = client.post(RECOMMEND_PATH, json=ASK | {"trip_id": trip_id})
-        assert response.status_code == 200, response.text
+        httpx.MockTransport(handler),
+        ai_prompt_max_chars=200,
+    ) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
 
-    assert trip_id in captured["prompt"]
-    assert "already_planned" in captured["prompt"]
-    assert FLIGHT_ID in captured["prompt"]
+    assert response.status_code == 422
+    assert _error(response)["code"] == "PROMPT_BUDGET_EXCEEDED"
+    assert calls == []
+
+
+def test_tool_calls_are_logged_without_their_data(
+    ai_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("INFO", logger="student3_backend_service.service"):
+        ai_client.post(RECOMMEND_PATH, json=ASK)
+
+    assert "tool_calls=transport_search:success" in caplog.text
+    assert "6.50" not in caplog.text
 
 
 # ----------------------------------------------------------- dependency faults
@@ -436,7 +616,7 @@ def test_a_malformed_trip_id_is_rejected(ai_client: TestClient) -> None:
 def test_a_route_with_no_available_option_is_a_validation_error(
     ai_client: TestClient,
 ) -> None:
-    """Better to say so plainly than to ask the model about an empty list."""
+    """Better to say so plainly than to spend a model run on an empty route."""
     response = ai_client.post(
         RECOMMEND_PATH,
         json=ASK | {"origin": "Nowhere", "destination": "Neverland"},
@@ -447,21 +627,36 @@ def test_a_route_with_no_available_option_is_a_validation_error(
     assert "no available option" in _error(response)["details"][0]["issue"]
 
 
-def test_a_route_filter_narrows_the_candidates(
+def test_a_route_of_only_unbookable_options_never_reaches_ai_mode(
     database_transport: httpx.MockTransport,
 ) -> None:
-    draft = {
-        **GOOD_DRAFT,
-        "suggestions": [
-            {"transport_id": "transport_2027_jl772_syd_hnd", "reason": "Only option."},
-        ],
-    }
-    with capturing_client(database_transport, draft) as (client, captured):
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return ai_reply(GOOD_DRAFT)
+
+    with build_client(database_transport, httpx.MockTransport(handler)) as client:
+        # Sydney to Singapore is seeded only as a sold-out flight.
         response = client.post(
             RECOMMEND_PATH,
-            json=ASK | {"origin": "Sydney", "destination": "Tokyo"},
+            json=ASK | {"origin": "Sydney", "destination": "Singapore"},
         )
-        assert response.status_code == 200, response.text
 
-    assert captured["metadata"]["candidates"] == "1"
-    assert CHEAPEST_ID not in captured["prompt"]
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_an_empty_draft_is_an_honest_no_match(
+    database_transport: httpx.MockTransport,
+) -> None:
+    """No suggestions means the model found nothing; that is an answer."""
+    draft = {**GOOD_DRAFT, "overview": "Nothing suitable was found.", "suggestions": []}
+    with build_client(database_transport, reply_with(draft)) as client:
+        response = client.post(RECOMMEND_PATH, json=ASK)
+
+    assert response.status_code == 200
+    body = _data(response)
+    assert body["overview"] == "Nothing suitable was found."
+    assert body["recommended"] == []
+    assert body["tools"]

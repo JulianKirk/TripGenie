@@ -98,7 +98,10 @@
           </div>
         {% elif result.action == "trip-costs" and result.data %}
           <dl class="detail-grid">
-            <div><dt>Trip</dt><dd>{{ result.data.trip_id }}</dd></div>
+            <div><dt>Trip</dt><dd>
+              {{ trip_names.get(result.data.trip_id, result.data.trip_id) }}
+              {% if result.data.trip_id in trip_names %}<span class="mcp-result__id"><code>{{ result.data.trip_id }}</code></span>{% endif %}
+            </dd></div>
             <div><dt>Planned entries</dt><dd>{{ result.data.entry_count }}</dd></div>
             <div><dt>Counting toward the trip</dt><dd>{{ result.data.active_entry_count }}</dd></div>
             <div><dt>Estimated total</dt><dd>{{ result.data.estimated_cost_total }} {{ result.data.currency }}</dd></div>

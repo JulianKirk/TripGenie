@@ -911,3 +911,20 @@ def test_deleting_a_held_option_replays_the_conflict(
 
     assert "CONFLICT" in flat
     assert "still hold it" in flat
+
+
+def test_the_draft_shows_the_mcp_tools_the_model_used(ai_client: TestClient) -> None:
+    """The tool calls are the evidence that the model looked transport up."""
+    response = _post(
+        ai_client,
+        "/suggestions",
+        {"trip_id": "", "origin": "", "destination": "", "question": "Cheapest?"},
+    )
+
+    text = " ".join(response.text.split())
+    assert "Tools used &middot; 1 MCP call" in text
+    assert "<code>transport_search</code>" in text
+    assert "<code>destination=Adelaide</code>" in text
+    assert "Returned 1 transport option." in text
+    assert "Returned tool data" in text
+    assert "shared TripGenie MCP transport tools" in text

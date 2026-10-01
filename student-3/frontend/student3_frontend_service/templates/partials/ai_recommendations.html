@@ -8,9 +8,10 @@
   </div>
 
   <p class="helper-copy">
-    Suggestions are drafted by a local language model from the transport options
-    already in TripGenie. They are <strong>advice only</strong> &mdash; nothing is
-    added to a trip until you choose to add it yourself.
+    Suggestions are drafted by a local language model that looks transport up
+    itself, using the shared TripGenie MCP transport tools. Only options a tool
+    actually returned can be suggested. They are <strong>advice only</strong>
+    &mdash; nothing is added to a trip until you choose to add it yourself.
   </p>
 
   {% if error %}
@@ -87,6 +88,47 @@
           {% endfor %}
         </ul>
       {% endif %}
+
+      {% if recommendation.unavailable_transport_ids %}
+        <p class="footnote">
+          Not shown because they can no longer be planned (sold out, cancelled,
+          full or removed):
+          {% for transport_id in recommendation.unavailable_transport_ids %}<code>{{ transport_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+        </p>
+      {% endif %}
+
+      <details class="ai-tools">
+        <summary>Tools used &middot; {{ recommendation.tools | length }} MCP call{{ "" if recommendation.tools | length == 1 else "s" }}</summary>
+        {% if recommendation.tools %}
+          <ol class="ai-tools__list">
+            {% for call in recommendation.tools %}
+              <li>
+                <p>
+                  <code>{{ call.tool }}</code>
+                  <span class="status {{ 'status--available' if call.status == 'success' else 'status--cancelled' }}">{{ call.status }}</span>
+                  <span class="ai-draft__meta">{{ call.duration_ms }} ms</span>
+                </p>
+                <p class="ai-draft__meta">
+                  Arguments:
+                  {% for key, value in call.arguments.items() %}<code>{{ key }}={{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}
+                </p>
+                {% if call.transport_ids %}
+                  <p class="ai-draft__meta">Returned {{ call.transport_ids | length }} transport option{{ "" if call.transport_ids | length == 1 else "s" }}.</p>
+                {% endif %}
+                {% if call.error %}<p class="ai-draft__meta">Error: {{ call.error }}</p>{% endif %}
+                {% if call.result %}
+                  <details>
+                    <summary>Returned tool data</summary>
+                    <pre>{{ call.result | tojson(indent=2) }}</pre>
+                  </details>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <p class="helper-copy">The model made no tool calls for this draft.</p>
+        {% endif %}
+      </details>
 
       <p class="footnote">{{ recommendation.disclaimer }}</p>
       <p class="footnote">

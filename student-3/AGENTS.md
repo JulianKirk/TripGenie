@@ -13,7 +13,9 @@ This file supplements the repository-level `AGENTS.md` for `student-3/`.
   Transport browsing and comparison must continue when Student 1 or AI-Mode is
   unavailable unless the requested operation intrinsically needs that service.
 - AI recommendations are advisory, use the packaged prompt asset, and may only
-  recommend authoritative transport records.
+  recommend authoritative transport records. The model finds them itself
+  through AI-Mode's MCP tool loop; a suggestion is accepted only if a
+  successful Student 3 transport tool returned its id in the same run.
 - Release 1 MCP lookups call the shared MCP server's read-only transport tools
   through allow-listed backend actions. Those tools read this backend back on
   `127.0.0.1:18003`, so MCP route handlers must stay synchronous (`def`).

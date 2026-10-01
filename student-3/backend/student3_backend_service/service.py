@@ -6,7 +6,12 @@ from typing import Any
 from uuid import uuid4
 
 from .ai_mode_client import AiModeClient
-from .ai_suggestions import build_prompt, resolve_draft, select_candidates
+from .ai_suggestions import (
+    build_prompt,
+    is_actionable,
+    resolve_draft,
+    summarise_tools,
+)
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import (
@@ -333,9 +338,11 @@ class BackendService:
     ) -> TransportRecommendationResponse:
         """Draft advice for a traveller. Advisory only, never saved here.
 
-        The whole flow is Plan (assemble a bounded candidate list) -> Act (one
-        AI-Mode call) -> Observe (validate the reply against the schema and the
-        candidates) -> Adapt (the traveller reviews and saves through the normal
+        Plan (a versioned system prompt plus the traveller's request) -> Act
+        (one AI-Mode `/generate` call, in which the model runs the shared MCP
+        transport tools itself) -> Observe (validate the reply against the
+        schema, accept only ids a transport tool returned, and re-read each
+        one here) -> Adapt (the traveller reviews and saves through the normal
         plan-entry route). Nothing on this path writes to the database.
         """
         if self._ai_client is None:
@@ -346,12 +353,14 @@ class BackendService:
                 details=[{"field": "ai_mode", "issue": "client is not configured"}],
             )
 
+        # A quick local check before spending a model run: when nothing on the
+        # requested route could be planned, say so plainly instead of asking
+        # the model to search an empty catalogue.
         options = self._client.list_transport_options(
             origin=payload.origin,
             destination=payload.destination,
         )
-        candidates = select_candidates(options, self._settings.ai_max_candidates)
-        if not candidates:
+        if not any(is_actionable(option) for option in options):
             raise validation_error(
                 "There are no bookable transport options to recommend from.",
                 [
@@ -365,30 +374,45 @@ class BackendService:
                 ],
             )
 
-        trip_plan = None
         if payload.trip_id is not None:
             self._ensure_trip_is_known(payload.trip_id)
-            trip_plan = self.trip_transport(payload.trip_id)
 
-        prompt = build_prompt(self._settings, payload, candidates, trip_plan)
+        system, prompt = build_prompt(self._settings, payload)
         correlation_id = f"student3-transport-{uuid4().hex[:16]}"
         generated = self._ai_client.generate_draft(
             prompt=prompt,
+            system=system,
             correlation_id=correlation_id,
             metadata={
                 "service": self._settings.service_name,
                 "feature": "transport-recommendations",
-                "candidates": str(len(candidates)),
             },
+        )
+        tools = summarise_tools(generated.tools)
+        logger.info(
+            "ai_recommendation correlation_id=%s run_id=%s tool_calls=%s",
+            correlation_id,
+            generated.run_id,
+            ",".join(f"{trace.tool}:{trace.status}" for trace in tools) or "none",
         )
 
         return resolve_draft(
             generated.draft,
-            candidates,
+            tools,
+            self._current_option,
             run_id=generated.run_id,
             model=generated.model,
             provider=generated.provider,
         )
+
+    def _current_option(self, transport_id: str) -> TransportOptionRecord | None:
+        """The stored record behind a suggestion, or None if it has gone."""
+        try:
+            return self.get_transport_option(transport_id)
+        except ApiError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
 
     def _ensure_trip_is_known(self, trip_id: str) -> None:
         """Reject a plan entry for a trip Student 1 says does not exist.
