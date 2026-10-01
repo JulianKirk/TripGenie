@@ -13,6 +13,7 @@ DEFAULT_ITINERARY_PREFIX = "/api"
 DEFAULT_ITINERARY_TIMEOUT = 5.0
 DEFAULT_AI_MODE_TIMEOUT = 100.0
 DEFAULT_AI_ASSISTANT_PROMPT_ASSET = "activity_assistant_v1.md"
+DEFAULT_RAG_TIMEOUT = 130.0
 
 
 @dataclass(slots=True)
@@ -29,15 +30,20 @@ class Settings:
     ai_assistant_prompt_asset: str = DEFAULT_AI_ASSISTANT_PROMPT_ASSET
     assistant_enabled: bool = False
     agent_timeout: float = 210.0
+    rag_url: str | None = None
+    rag_enabled: bool = False
+    rag_timeout: float = DEFAULT_RAG_TIMEOUT
     service_name: str = "student-4-backend"
 
     def __post_init__(self) -> None:
-        for name in ("agent_timeout",):
+        for name in ("agent_timeout", "rag_timeout"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 message = f"{name} must be positive and finite"
                 raise ValueError(message)
         if self.ai_mode_url is not None:
             self.ai_mode_url = self.ai_mode_url.strip().rstrip("/") or None
+        if self.rag_url is not None:
+            self.rag_url = self.rag_url.strip().rstrip("/") or None
         for name in ("ai_mode_timeout",):
             if getattr(self, name) <= 0:
                 message = f"{name} must be greater than zero"
@@ -45,15 +51,11 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        enabled = os.environ.get("AI_ASSISTANT_ENABLED", "false").lower()
-        if enabled not in {"true", "false", "1", "0"}:
-            message = "AI_ASSISTANT_ENABLED must be true or false"
-            raise ValueError(message)
         return cls(
             ai_assistant_prompt_asset=os.environ.get(
                 "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
             ),
-            assistant_enabled=enabled in {"true", "1"},
+            assistant_enabled=_flag("AI_ASSISTANT_ENABLED"),
             agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "210")),
             database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             db_timeout=float(os.environ.get("DB_TIMEOUT", DEFAULT_DB_TIMEOUT)),
@@ -72,4 +74,15 @@ class Settings:
             ai_mode_timeout=float(
                 os.environ.get("AI_MODE_TIMEOUT", DEFAULT_AI_MODE_TIMEOUT)
             ),
+            rag_url=os.environ.get("RAG_URL") or None,
+            rag_enabled=_flag("RAG_ENABLED"),
+            rag_timeout=float(os.environ.get("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)),
         )
+
+
+def _flag(name: str) -> bool:
+    value = os.environ.get(name, "false").lower()
+    if value not in {"true", "false", "1", "0"}:
+        message = f"{name} must be true or false"
+        raise ValueError(message)
+    return value in {"true", "1"}

@@ -55,6 +55,9 @@ return active activities only.
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
 | `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
 | `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
+| `RAG_URL` | unset | Shared host RAG server base URL. Compose sets `http://host.docker.internal:8011`; when unset, knowledge answers report a safe error. |
+| `RAG_ENABLED` | `false` standalone; `true` in Compose | Enable grounded activity-knowledge answers. |
+| `RAG_TIMEOUT` | `130` | Timeout in seconds for one RAG query, including grounded generation. |
 
 ### Publicly writable data
 
@@ -134,6 +137,59 @@ and CRUD workflows remain available independently.
 
 MCP URL and tool limits are configured on shared AI-Mode, not Student 4.
 See [setup and demonstration](mcp-assistant.md). No persistence schema changes.
+
+## RAG activity knowledge
+
+`POST /activity/knowledge` accepts `question` (1–500 characters, trimmed). The
+backend sends one `POST /query` to the shared host RAG server with
+`feature: "student-4"`, `top_k: 5` and its `request_id` as the correlation ID.
+The RAG server searches chunks tagged `student-4` plus `shared`; see
+[RAG knowledge](rag-knowledge.md) for the indexed sources. The browser cannot
+choose the feature scope, source paths, model or server URL.
+
+The route always returns `200` with a `KnowledgeResponse`:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `answered`, `insufficient_context`, `disabled` or `error`. |
+| `request_id` | `student4-rag-…` correlation ID sent to RAG. |
+| `answer` | Grounded answer, or the fixed insufficient-context answer. |
+| `confidence_category` | `high`, `medium`, `low` or `insufficient_context`; calculated by RAG from retrieval scores. |
+| `citations` | Index-resolved `source_id`, `path`, `title`, `section`, `chunk_id` and `excerpt`. Empty unless `answered`. |
+| `retrieval` | `requested_top_k`, `returned_chunks` and `maximum_score`. |
+| `run_id` | RAG run identifier. |
+| `error` | Safe message for `disabled` or `error`. |
+
+```json
+{
+  "status": "answered",
+  "request_id": "student4-rag-3f9a0c1b2d4e5f60",
+  "answer": "A per-person price is multiplied by the party size ...",
+  "confidence_category": "high",
+  "citations": [
+    {
+      "source_id": "activities-booking-and-pricing",
+      "path": "ai-services/rag-server/knowledge/activities/booking-and-pricing.md",
+      "title": "Activity Booking and Pricing Guide",
+      "section": "Activity pricing: per-person and flat-admission prices",
+      "chunk_id": "activities-booking-and-pricing:1:abc123def456",
+      "excerpt": "Activities are priced in one of two ways. ..."
+    }
+  ],
+  "retrieval": {"requested_top_k": 5, "returned_chunks": 5, "maximum_score": 0.84},
+  "run_id": "rag_01",
+  "error": null
+}
+```
+
+An RAG insufficient-context response, or an answer without citations, maps to
+`status: "insufficient_context"` with no citations. When `RAG_ENABLED` is false
+the server is never called and `status` is `disabled`. RAG `INDEX_NOT_READY`,
+`DEPENDENCY_UNAVAILABLE`, `DEPENDENCY_TIMEOUT` and `VALIDATION_ERROR`, transport
+failures and malformed or unsupported-schema responses map to `status: "error"`
+with a fixed safe message; upstream details are never exposed. Health and
+readiness do not depend on RAG, so catalogue, CRUD and itinerary workflows remain
+available when it is off or down.
 
 ## Trip context directory
 

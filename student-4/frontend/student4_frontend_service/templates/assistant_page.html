@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <main class="app-shell">
-  <section class="panel"><h2>Activity assistant</h2>{% include "partials/assistant_results.html" %}<p><a href="/">Ask another question or browse activities</a></p></section>
+  <section class="panel"><h2>Activity assistant</h2>{% include results_template %}<p><a href="/">Ask another question or browse activities</a></p></section>
   <div id="activity-dialog"></div>
 </main>
 {% endblock %}

@@ -385,6 +385,9 @@ services:
       AI_MODE_TIMEOUT: "${STUDENT4_BACKEND_AI_MODE_TIMEOUT:-100}"
       AI_ASSISTANT_ENABLED: "${STUDENT4_AI_ASSISTANT_ENABLED:-true}"
       AGENT_TIMEOUT: "${STUDENT4_AGENT_TIMEOUT:-210}"
+      RAG_URL: "${STUDENT4_BACKEND_RAG_URL:-http://host.docker.internal:8011}"
+      RAG_ENABLED: "${STUDENT4_BACKEND_RAG_ENABLED:-true}"
+      RAG_TIMEOUT: "${STUDENT4_BACKEND_RAG_TIMEOUT:-130}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

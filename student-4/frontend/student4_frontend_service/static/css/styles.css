@@ -83,3 +83,17 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 .assistant-tools summary { cursor: pointer; font-weight: 600; }
 .assistant-tools li { margin-block: 0.8rem; }
 .assistant-tools code, .assistant-tools pre { white-space: pre-wrap; }
+
+/* Assistant mode choice and grounded RAG answers. */
+.ai-mode { display: grid; gap: .5rem; margin: 0; padding: .75rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.ai-mode legend { padding-inline: .25rem; font-weight: 700; }
+.ai-mode__option { display: flex; gap: .6rem; align-items: flex-start; cursor: pointer; }
+.ai-mode__option input { margin-top: .35rem; }
+.ai-mode__option .field-hint { display: block; }
+.confidence { display: inline-block; padding: .15rem .55rem; border-radius: 999px; font: 700 .8rem var(--tg-font-ui, sans-serif); }
+.confidence--high { color: #fff; background: var(--accent-dark); }
+.confidence--medium { color: var(--ink); background: #cde8de; }
+.confidence--low, .confidence--insufficient_context { color: var(--ink); background: var(--tg-warning, #fff4d6); border: 1px solid #dfbd64; }
+.citations { padding-left: 1.25rem; overflow-wrap: anywhere; }
+.citations li { margin-block: .6rem; }
+.citations blockquote { margin: .35rem 0 0; padding-left: .75rem; color: var(--muted); border-left: 3px solid var(--line); }

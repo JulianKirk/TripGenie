@@ -39,6 +39,11 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve ordinary browsing/CRUD when shared generation is unavailable. Show the
   returned tool trace, including partial execution on failure, and never claim
   that no changes were saved when write tools may have executed.
+- The RAG activity-guides mode is a thin client of the shared host RAG `/query`
+  with the feature fixed to `student-4`. Display the RAG answer, confidence and
+  index-resolved citations as returned; never compute confidence, add citations
+  or answer without context in Student 4. Knowledge sources are listed in
+  `docs/rag-knowledge.md` and registered in the RAG server's `sources.json`.
 - Keep frontend query parsing and presentation in `query.py`, `forms.py`, and
   `presenters.py` rather than growing route handlers with duplicate logic.
 

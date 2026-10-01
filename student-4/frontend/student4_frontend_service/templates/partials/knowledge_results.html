@@ -1,0 +1,21 @@
+{% if error %}<div class="banner banner--error" role="alert"><strong>{{ 'Activity guides could not take that question' if error_status and 400 <= error_status < 500 else 'Activity guides unavailable' }}</strong><p>{{ error }}</p></div>{% endif %}
+{% if result %}
+<section class="ai-result knowledge-result" aria-label="Activity guides answer">
+  {% if result.status == 'disabled' or result.status == 'error' %}
+  <div class="banner {{ 'banner--warning' if result.status == 'disabled' else 'banner--error' }}" role="alert"><strong>{{ 'Activity guides disabled' if result.status == 'disabled' else 'Activity guides could not answer' }}</strong><p>{{ result.error }}</p>{% if result.status == 'error' %}<p>Activity browsing and the catalogue remain available.</p>{% endif %}</div>
+  {% elif result.status == 'insufficient_context' %}
+  <p><span class="confidence confidence--insufficient_context">Confidence: Insufficient context</span></p>
+  <div class="banner banner--warning" role="status"><strong>Not enough indexed context</strong><p>{{ result.answer }}</p><p>Try asking about activity booking, pricing, accessibility, safety, or what to bring.</p></div>
+  {% else %}
+  <p><span class="confidence confidence--{{ result.confidence_category }}">Confidence: {{ result.confidence_category|title }}</span></p>
+  <p class="assistant-text">{{ result.answer }}</p>
+  <h3>Sources</h3>
+  <ol class="citations">
+    {% for citation in result.citations %}
+    <li><strong>{{ citation.title }}</strong> · {{ citation.section }}<div class="field-hint"><code>{{ citation.path }}</code></div><blockquote>{{ citation.excerpt }}</blockquote></li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  <p class="field-hint">Request: <code>{{ result.request_id }}</code>{% if result.run_id %} · RAG run <code>{{ result.run_id }}</code>{% endif %}{% if result.retrieval %} · {{ result.retrieval.returned_chunks }} of {{ result.retrieval.requested_top_k }} chunks retrieved{% if result.retrieval.maximum_score is not none %}, top score {{ '%.2f'|format(result.retrieval.maximum_score) }}{% endif %}{% endif %}</p>
+</section>
+{% endif %}
