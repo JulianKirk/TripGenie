@@ -168,21 +168,23 @@ def test_search_shows_the_structured_tool_result(
     assert "student3-mcp-" in text
 
 
-def test_compare_sends_only_the_chosen_options(
+def test_compare_offers_a_checkbox_list_not_dropdowns(
+    mcp_client: TestClient,
+) -> None:
+    text = _collapsed(mcp_client.get("/tools"))
+
+    assert "Choose up to 4 options" in text
+    assert 'type="checkbox" name="ids" value="transport_' in text
+    assert 'name="id_1"' not in text
+
+
+def test_compare_sends_every_ticked_option(
     mcp_client: TestClient,
     fake_mcp: FakeMcp,
 ) -> None:
-    listed = mcp_client.get("/tools").text
-    assert 'name="id_1"' in listed
-
     response = mcp_client.post(
         "/tools/compare",
-        data={
-            "id_1": "transport_mcp_flight",
-            "id_2": "",
-            "id_3": "transport_mcp_coach",
-            "id_4": "",
-        },
+        data={"ids": ["transport_mcp_flight", "transport_mcp_coach"]},
     )
 
     assert response.status_code == 200
@@ -190,6 +192,39 @@ def test_compare_sends_only_the_chosen_options(
         ("transport_compare", {"ids": ["transport_mcp_flight", "transport_mcp_coach"]}),
     ]
     assert "<code>transport_compare</code>" in response.text
+
+
+def test_compare_keeps_the_ticked_options_after_running(
+    mcp_client: TestClient,
+) -> None:
+    listed = _collapsed(mcp_client.get("/tools"))
+    first = listed.split('name="ids" value="', 1)[1].split('"', 1)[0]
+
+    response = mcp_client.post("/tools/compare", data={"ids": [first]})
+
+    assert f'value="{first}" checked' in _collapsed(response)
+
+
+def test_compare_with_nothing_ticked_is_refused_before_mcp(
+    mcp_client: TestClient,
+    fake_mcp: FakeMcp,
+) -> None:
+    response = mcp_client.post("/tools/compare", data={})
+
+    assert "VALIDATION_ERROR" in response.text
+    assert fake_mcp.calls == []
+
+
+def test_compare_with_more_than_four_ticked_is_refused_before_mcp(
+    mcp_client: TestClient,
+    fake_mcp: FakeMcp,
+) -> None:
+    ids = [f"transport_mcp_{name}" for name in ("a1", "b1", "c1", "d1", "e1")]
+
+    response = mcp_client.post("/tools/compare", data={"ids": ids})
+
+    assert "VALIDATION_ERROR" in response.text
+    assert fake_mcp.calls == []
 
 
 def test_trip_costs_shows_the_trip_total(

@@ -25,9 +25,29 @@
 
     <form class="mcp-form" method="post" action="{{ request.url_for('mcp_run', action='compare') }}">
       <h3>Compare options <code>transport_compare</code></h3>
-      {% for slot in compare_slots %}
-        {{ forms.select_field("id_" ~ slot, "Option " ~ slot ~ (" (optional)" if slot > 1 else ""), transport_options, form.get("id_" ~ slot, ""), {}) }}
-      {% endfor %}
+      <fieldset>
+        <legend>Choose up to {{ compare_limit }} options</legend>
+        {% if options %}
+          <ul class="checkbox-list">
+            {% for option in options %}
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    name="ids"
+                    value="{{ option.id }}"
+                    {% if option.id in selected_ids %}checked{% endif %}
+                  >
+                  {{ option.origin }} &rarr; {{ option.destination }}
+                  <span class="checkbox-list__meta">{{ option.type_label }} · {{ option.provider }} · ${{ '%.2f' | format(option.price) }}</span>
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty-copy">No transport options available to compare.</p>
+        {% endif %}
+      </fieldset>
       {% if action == "compare" %}{{ forms.field_errors("ids", errors_by_field) }}{% endif %}
       <p class="actions"><button class="button button--primary" type="submit">Run comparison</button></p>
     </form>
