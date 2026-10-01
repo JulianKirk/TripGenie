@@ -188,6 +188,31 @@ STUB_AI_DRAFT = {
     "disclaimer": "Advisory only. Review before adding to your trip.",
 }
 
+# The MCP call AI-Mode reports making while drafting; it is what grounds the
+# suggested id.
+STUB_AI_TOOLS = [
+    {
+        "tool": "transport_search",
+        "arguments": {"destination": "Adelaide", "limit": 12},
+        "status": "success",
+        "duration_ms": 42,
+        "result": {
+            "structuredContent": {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {"id": "transport_2027_adl_metro_bus", "price": "6.50"},
+                    ],
+                    "count": 1,
+                    "truncated": False,
+                },
+                "source": "student-3",
+            },
+        },
+        "error": None,
+    },
+]
+
 
 @pytest.fixture
 def ai_transport() -> httpx.MockTransport:
@@ -204,6 +229,7 @@ def ai_transport() -> httpx.MockTransport:
                     "provider": "ollama",
                     "response": json.dumps(STUB_AI_DRAFT),
                     "done": True,
+                    "tools": STUB_AI_TOOLS,
                 },
             },
         )

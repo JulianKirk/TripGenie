@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 DEFAULT_DB_BASE_URL = "http://student-3-database:8004"
 DEFAULT_TRIPS_BASE_URL = "http://student-1-backend:8001"
 DEFAULT_AI_MODE_BASE_URL = "http://ai-mode:8006"
-DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v1.md"
+DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v2.md"
 DEFAULT_MCP_BASE_URL = "http://127.0.0.1:8012/mcp"
 DEFAULT_RAG_BASE_URL = "http://127.0.0.1:8011"
 
@@ -99,10 +99,11 @@ class Settings:
     # AI-Mode is the shared boundary in front of Ollama. This service renders
     # its own prompt, validates the reply, and keeps saving on the human side.
     ai_mode_base_url: str = DEFAULT_AI_MODE_BASE_URL
-    # Above AI-Mode's own AI_MODE_TIMEOUT_SECONDS (90 in compose) so that a
-    # slow generation surfaces as AI-Mode's own error rather than as this
+    # Above AI-Mode's own agent budget (AI_MODE_AGENT_TIMEOUT_SECONDS, 180 by
+    # default): the model now runs MCP tool calls before it answers, and a
+    # slow run should surface as AI-Mode's own error rather than as this
     # service giving up on a call that was still going to succeed.
-    ai_mode_timeout_seconds: float = 120.0
+    ai_mode_timeout_seconds: float = 200.0
     ai_prompt_asset: str = DEFAULT_AI_PROMPT_ASSET
     # AI-Mode enforces its own prompt ceiling; budget below it so an oversized
     # prompt is refused here with a domain error rather than upstream.
@@ -175,7 +176,7 @@ class Settings:
             ai_mode_timeout_seconds=_parse_timeout(
                 os.getenv("STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_BACKEND_AI_MODE_TIMEOUT_SECONDS",
-                default=120.0,
+                default=200.0,
             ),
             ai_prompt_asset=os.getenv(
                 "STUDENT3_BACKEND_AI_PROMPT_ASSET",

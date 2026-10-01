@@ -407,8 +407,8 @@ class TransportSuggestion(StrictModel):
         str,
         Field(
             description=(
-                "The id of one candidate transport option, copied exactly from "
-                "the supplied candidates. Never invent an id."
+                "The id of one transport option, copied exactly from a "
+                "successful transport tool result. Never invent an id."
             ),
         ),
     ]
@@ -417,8 +417,8 @@ class TransportSuggestion(StrictModel):
         StringConstraints(min_length=1, max_length=240),
         Field(
             description=(
-                "Why this option suits the request, quoting exact supplied "
-                "duration, price or seat figures."
+                "Why this option suits the request, quoting exact duration, "
+                "price or seat figures from the tool results."
             ),
         ),
     ]
@@ -432,20 +432,26 @@ class TransportRecommendationDraft(StrictModel):
         StringConstraints(min_length=1, max_length=400),
         Field(
             description=(
-                "A concise direct answer quoting at least one exact supplied "
-                "figure, and stating any uncertainty honestly."
+                "A concise direct answer quoting at least one exact figure from "
+                "the tool results, and stating any uncertainty honestly."
             ),
         ),
     ]
+    # Empty when no transport tool returned a usable option: an honest "none
+    # found" beats a placeholder id the model was forced to invent.
     suggestions: list[TransportSuggestion] = Field(
-        min_length=1,
+        default_factory=list,
         max_length=MAX_AI_RECOMMENDATIONS,
+        description=(
+            "Every found option that fits the question, best first. Empty only "
+            "when no transport tool returned a usable option."
+        ),
     )
     considerations: list[
         Annotated[
             str,
             StringConstraints(min_length=1, max_length=180),
-            Field(description="One trade-off supported by the supplied context."),
+            Field(description="One trade-off supported by the tool results."),
         ]
     ] = Field(default_factory=list, max_length=MAX_AI_RECOMMENDATIONS)
     disclaimer: Annotated[str, StringConstraints(min_length=1, max_length=200)]
@@ -456,6 +462,23 @@ class RecommendedTransport(StrictModel):
 
     reason: str
     option: TransportOptionRecord
+
+
+class ToolCallTrace(StrictModel):
+    """One MCP tool call the model made while drafting, as AI-Mode reported it.
+
+    `transport_ids` are the Student 3 records that call returned; only those
+    may back a suggestion. `result` is the tool's structured content, kept so
+    a traveller can see the evidence rather than the model's summary of it.
+    """
+
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["success", "error", "rejected"]
+    duration_ms: int = Field(default=0, ge=0)
+    error: str | None = None
+    transport_ids: list[str] = Field(default_factory=list)
+    result: dict[str, Any] | None = None
 
 
 class TransportRecommendationResponse(StrictModel):
@@ -469,6 +492,11 @@ class TransportRecommendationResponse(StrictModel):
     run_id: str
     model: str
     provider: str
+    # Release 1: the model looked transport up itself through the shared MCP
+    # tools. Every call is listed, and suggestions it found that can no longer
+    # be planned (sold out, cancelled, full) are named rather than shown.
+    tools: list[ToolCallTrace] = Field(default_factory=list)
+    unavailable_transport_ids: list[str] = Field(default_factory=list)
 
 
 class PlannedTransport(StrictModel):

@@ -33,7 +33,7 @@ Plan states are shown in the traveller's language rather than raw enum values:
 | `STUDENT3_FRONTEND_BACKEND_BASE_URL` | `http://student-3-backend:8003` | Student 3 backend API. |
 | `STUDENT3_FRONTEND_BACKEND_API_PREFIX` | `/api` | Backend API prefix. |
 | `STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS` | `5` | Timeout for frontend-to-backend calls. |
-| `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `150` | Timeout for the AI suggestion route only. |
+| `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `210` | Timeout for the AI suggestion route only; outlasts the backend's 200 s budget. |
 | `STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS` | `60` | Timeout for the MCP tools page only; outlasts the backend's 40 s MCP budget. |
 | `STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS` | `150` | Timeout for the transport guide only; outlasts the backend's 130 s RAG budget. |
 | `STUDENT3_FRONTEND_SERVICE_NAME` | `student-3-frontend` | Name reported by health endpoints. |
@@ -105,8 +105,8 @@ Trips are no longer a form field at all — see the panel above.
 ## AI suggestions
 
 `/suggestions` asks the backend for advisory guidance drafted by a local model
-from options already in TripGenie. The screen is built so a traveller can never
-mistake advice for stored data:
+that looks transport up itself through the shared MCP transport tools. The
+screen is built so a traveller can never mistake advice for stored data:
 
 - The draft panel is tagged **advisory only** and states that nothing has been
   saved, naming the model, provider and run id that produced it.
@@ -115,6 +115,11 @@ mistake advice for stored data:
   transport stays a deliberate human act.
 - Suggestions render as the real option records, so every figure shown is the
   stored one rather than something the model wrote.
+- **Tools used · N MCP calls** lists every tool call the model made, with its
+  status, arguments, duration, how many transport options it returned and the
+  returned tool data, so the evidence behind the advice is on screen.
+- Suggestions the tools returned that can no longer be planned are named, not
+  shown; a draft with no suggestions shows the model's "nothing found" answer.
 - When AI-Mode is unavailable the error renders in the panel with the form
   intact and the shell navigable; every other screen is unaffected.
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
@@ -30,6 +30,8 @@ class _GenerateData(BaseModel):
     provider: str = "ollama"
     response: str
     done: bool = True
+    # The model-directed MCP calls AI-Mode made for this run, in order.
+    tools: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class _GenerateEnvelope(BaseModel):
@@ -47,14 +49,16 @@ class GeneratedDraft(BaseModel):
     run_id: str
     model: str
     provider: str
+    tools: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AiModeClient:
     """Client for the shared AI-Mode service.
 
-    AI-Mode owns the boundary to Ollama and nothing else: this service renders
-    its own prompt, validates the reply against its own schema, and keeps human
-    approval and persistence on this side of the call.
+    AI-Mode owns the boundary to Ollama and the model-directed MCP tool loop:
+    every `/generate` call offers the model the shared tool catalogue. This
+    service writes its own prompt, validates the reply and the tool evidence
+    against its own rules, and keeps human approval and persistence here.
     """
 
     def __init__(
@@ -77,6 +81,7 @@ class AiModeClient:
         self,
         *,
         prompt: str,
+        system: str,
         correlation_id: str,
         metadata: dict[str, str],
     ) -> GeneratedDraft:
@@ -85,6 +90,7 @@ class AiModeClient:
                 "/generate",
                 json={
                     "prompt": prompt,
+                    "system": system,
                     # AI-Mode passes the schema to the provider so the reply is
                     # JSON shaped like the draft this service expects.
                     "schema": TransportRecommendationDraft.model_json_schema(),
@@ -141,6 +147,7 @@ class AiModeClient:
             run_id=generated.run_id,
             model=generated.model,
             provider=generated.provider,
+            tools=generated.tools,
         )
 
     @staticmethod

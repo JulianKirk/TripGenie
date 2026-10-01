@@ -52,10 +52,10 @@ class Settings:
     backend_api_prefix: str = "/api"
     backend_timeout_seconds: float = 5.0
     # Only the AI suggestion route waits this long. It has to clear the
-    # backend's own AI budget, which in turn clears AI-Mode's 90s: a local
-    # 8b model answering a cold prompt spends ~11s loading off disk before
-    # it starts generating.
-    ai_timeout_seconds: float = 150.0
+    # backend's own 200 s AI budget, which in turn clears AI-Mode's agent
+    # budget: the model now runs MCP tool calls before it answers, and a
+    # local 8b model spends ~11s loading off disk on a cold prompt.
+    ai_timeout_seconds: float = 210.0
     # MCP lookups clear the backend's own 40s MCP budget, so a slow tool
     # surfaces as the backend's error rather than this side giving up first.
     mcp_timeout_seconds: float = 60.0
@@ -84,7 +84,7 @@ class Settings:
             ai_timeout_seconds=_parse_timeout(
                 os.getenv("STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS",
-                default=150.0,
+                default=210.0,
             ),
             mcp_timeout_seconds=_parse_timeout(
                 os.getenv("STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS"),
