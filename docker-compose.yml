@@ -72,6 +72,9 @@ services:
       STUDENT1_BACKEND_DB_API_BASE_URL: http://student-1-database:8002
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
       STUDENT1_BACKEND_AI_MODE_BASE_URL: http://host.docker.internal:8006
+      # AI-Mode's /generate runs the MCP tool loop on a local 8b model; 15 s
+      # (the code default) timed out every live request.
+      STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS: "120"
       STUDENT1_BACKEND_ACTIVITY_API_BASE_URL: http://student-4-backend:8008
       STUDENT1_BACKEND_TRANSPORT_API_BASE_URL: http://student-3-backend:8003
       STUDENT1_BACKEND_RAG_ENABLED: "${STUDENT1_BACKEND_RAG_ENABLED:-true}"
@@ -110,6 +113,12 @@ services:
       # A browser address, not a compose one: the trip page links out to
       # student 2's webpage, and that link is followed on the user's machine.
       STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
+      # Only the AI, RAG and MCP panels wait this long. Each outlasts the
+      # backend's own worst case: AI 2 attempts x 120 s = 240 s, RAG 130 s,
+      # MCP 5 sequential tools x 40 s = 200 s.
+      STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS: "250"
+      STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
+      STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"
     ports:
       - "8081:8081"
     depends_on:
