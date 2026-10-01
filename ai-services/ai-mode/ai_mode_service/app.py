@@ -20,7 +20,6 @@ from .models import (
     GenerateRequest,
     GenerateResponsePayload,
     HealthResponse,
-    PlainGenerateResponsePayload,
 )
 from .provider import OllamaProviderAdapter
 from .service import VALIDATION_ERROR_MESSAGE, AiModeService
@@ -141,16 +140,14 @@ def create_app(
     ) -> dict[str, object]:
         return envelope((await service.generate(payload)).model_dump(mode="json"))
 
-    @app.post(
-        "/generate-plain", response_model=DataEnvelope[PlainGenerateResponsePayload]
-    )
+    @app.post("/generate-plain", response_model=DataEnvelope[GenerateResponsePayload])
     async def generate_plain(
         payload: GenerateRequest,
         service: Annotated[AiModeService, Depends(get_service)],
     ) -> dict[str, object]:
-        """Single model call without MCP tools; the response has no `tools` field."""
+        """Single model call without MCP tools; `tools` is always empty."""
         generated = await service.generate(payload, use_tools=False)
-        return envelope(generated.model_dump(mode="json", exclude={"tools"}))
+        return envelope(generated.model_dump(mode="json"))
 
     @app.post("/embed", response_model=DataEnvelope[EmbedResponsePayload])
     async def embed(

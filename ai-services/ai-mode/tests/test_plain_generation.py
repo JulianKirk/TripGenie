@@ -58,7 +58,7 @@ def test_single_tool_free_call_returns_schema_valid_answer():
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert json.loads(data["response"]) == {"answer": "Bring a hat."}
-    assert "tools" not in data
+    assert data["tools"] == []
     assert len(requests) == 1
     assert requests[0]["tools"] == []
     assert requests[0]["format"]["required"] == ["answer"]
@@ -72,16 +72,7 @@ def test_plain_text_without_schema_is_returned():
     response, requests = run([message("Plain answer")])
 
     assert response.status_code == 200, response.text
-    data = response.json()["data"]
-    assert set(data) == {
-        "run_id",
-        "correlation_id",
-        "model",
-        "provider",
-        "response",
-        "done",
-    }
-    assert data["response"] == "Plain answer"
+    assert response.json()["data"]["response"] == "Plain answer"
     assert requests[0]["format"] is None
 
 

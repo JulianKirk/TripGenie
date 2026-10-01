@@ -143,7 +143,7 @@ time for several inference rounds (Student 4 defaults to 210 seconds).
 
 Accepts the same request body as `/generate` and returns the same response
 envelope, but makes exactly one model call with no tools. It never contacts MCP,
-does not need MCP running, and its response has no `tools` field. When `schema` is
+does not need MCP running, and always returns `"tools": []`. When `schema` is
 supplied, that call is grammar-constrained to the schema and the answer is
 validated against it. Use it when the caller already owns the context, as
 the shared RAG server does for grounded answers. A model tool request, an empty
