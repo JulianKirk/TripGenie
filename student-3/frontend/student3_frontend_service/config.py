@@ -59,6 +59,8 @@ class Settings:
     # MCP lookups clear the backend's own 40s MCP budget, so a slow tool
     # surfaces as the backend's error rather than this side giving up first.
     mcp_timeout_seconds: float = 60.0
+    # The transport guide (RAG) only; clears the backend's 130 s RAG budget.
+    rag_timeout_seconds: float = 150.0
     service_name: str = "student-3-frontend"
 
     @classmethod
@@ -88,6 +90,11 @@ class Settings:
                 os.getenv("STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS",
                 default=60.0,
+            ),
+            rag_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS",
+                default=150.0,
             ),
             service_name=os.getenv(
                 "STUDENT3_FRONTEND_SERVICE_NAME",

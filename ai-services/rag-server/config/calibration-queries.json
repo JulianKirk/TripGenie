@@ -151,6 +151,40 @@
       "feature": "student-4",
       "expected_source_ids": [],
       "expect_insufficient_context": true
+    },
+    {
+      "case_id": "student-3-car-rental-cost",
+      "query": "How is the estimated cost of a car rental worked out for four travellers?",
+      "feature": "student-3",
+      "expected_source_ids": [
+        "transport-pricing-and-costs"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-3-sold-out",
+      "query": "Why can't I add a sold out transport option to my trip?",
+      "feature": "student-3",
+      "expected_source_ids": [
+        "transport-planning-and-availability"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-3-cancelled-total",
+      "query": "Does a cancelled transport selection count toward the trip transport total?",
+      "feature": "student-3",
+      "expected_source_ids": [
+        "transport-pricing-and-costs"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-3-unrelated",
+      "query": "What is a good recipe for banana bread?",
+      "feature": "student-3",
+      "expected_source_ids": [],
+      "expect_insufficient_context": true
     }
   ]
 }

@@ -31,6 +31,7 @@ from .models import (
     McpSearchRequest,
     McpToolResponse,
     PlannedTransport,
+    RagQueryRequest,
     TransportOptionCreate,
     TransportOptionRecord,
     TransportOptionUpdate,
@@ -41,6 +42,7 @@ from .models import (
     TripTransportPin,
     TripTransportSummary,
 )
+from .rag_client import RagClient
 from .transport_rules import (
     active_plan_cost_total,
     count_active_plan_entries,
@@ -63,13 +65,17 @@ _DB_OK_DETAIL = "Database API responded successfully."
 logger = logging.getLogger(__name__)
 
 
-def _mcp_disabled() -> ApiError:
+def _disabled(code: str, field: str, name: str) -> ApiError:
     return ApiError(
         status_code=503,
-        code="MCP_DISABLED",
-        message="The MCP tool server is disabled in this environment.",
-        details=[{"field": "mcp", "issue": "disabled by configuration"}],
+        code=code,
+        message=f"{name} is disabled in this environment.",
+        details=[{"field": field, "issue": "disabled by configuration"}],
     )
+
+
+def _mcp_disabled() -> ApiError:
+    return _disabled("MCP_DISABLED", "mcp", "The MCP tool server")
 
 
 class BackendService:
@@ -86,12 +92,14 @@ class BackendService:
         trips_client: TripsApiClient | None = None,
         ai_client: AiModeClient | None = None,
         mcp_client: McpClient | None = None,
+        rag_client: RagClient | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._trips_client = trips_client
         self._ai_client = ai_client
         self._mcp_client = mcp_client
+        self._rag_client = rag_client
 
     # ------------------------------------------------------------------ health
 
@@ -119,6 +127,7 @@ class BackendService:
 
     def _integrations(self) -> HealthIntegrations:
         return HealthIntegrations(
+            rag="enabled" if self._settings.rag_enabled else "disabled",
             mcp="enabled" if self._settings.mcp_enabled else "disabled",
         )
 
@@ -550,6 +559,30 @@ class BackendService:
     ) -> ItinerarySelectionResponse:
         self._itinerary().remove_trip_transport(trip_id, transport_id)
         return self.itinerary_selections(transport_id)
+
+    # ------------------------------------------------------- RAG knowledge
+
+    def rag_query(self, payload: RagQueryRequest) -> dict[str, object]:
+        """A grounded answer about transport planning from the shared RAG server.
+
+        The feature scope and `top_k` are fixed in the client, so a caller can
+        only ask a question. The answer, citations and confidence come back
+        exactly as the RAG server produced them; an insufficient-context reply
+        is a normal 200 with no answer text worth showing and no citations.
+        """
+        if not self._settings.rag_enabled or self._rag_client is None:
+            raise _disabled("RAG_DISABLED", "rag", "The transport knowledge assistant")
+
+        correlation_id = f"student3-rag-{uuid4().hex[:12]}"
+        answer = self._rag_client.query(payload.question, correlation_id)
+        # Identifiers and outcome only: the question and answer stay out of logs.
+        logger.info(
+            "rag_query correlation_id=%s confidence=%s citations=%s",
+            correlation_id,
+            answer.confidence_category,
+            len(answer.citations),
+        )
+        return answer.model_dump(mode="json")
 
     # -------------------------------------------------------------- MCP tools
 

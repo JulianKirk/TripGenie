@@ -35,6 +35,7 @@ Plan states are shown in the traveller's language rather than raw enum values:
 | `STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS` | `5` | Timeout for frontend-to-backend calls. |
 | `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `150` | Timeout for the AI suggestion route only. |
 | `STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS` | `60` | Timeout for the MCP tools page only; outlasts the backend's 40 s MCP budget. |
+| `STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS` | `150` | Timeout for the transport guide only; outlasts the backend's 130 s RAG budget. |
 | `STUDENT3_FRONTEND_SERVICE_NAME` | `student-3-frontend` | Name reported by health endpoints. |
 
 ## Ports
@@ -56,6 +57,7 @@ Student 3.
 | `POST /options/{id}/itineraries` | Add this option to a trip |
 | `POST /options/{id}/itineraries/{tripId}/remove` | Remove it from a trip |
 | `GET,POST /suggestions` | Ask for AI transport suggestions. Saves nothing |
+| `GET,POST /guide` | Release 1 transport guide: grounded RAG answers with sources. Saves nothing |
 | `GET /tools`, `POST /tools/{action}` | Release 1 MCP lookups (`search`, `compare`, `trip-costs`). Saves nothing |
 | `GET /health` | Service status plus the backend dependency. Always `200`. |
 | `GET /ready` | `200` when the backend is reachable, `503` otherwise. |
@@ -134,6 +136,17 @@ id, a readable table of what came back, and the raw structured result under
 narrative. A tool that ran and refused shows its own error code; the MCP server
 being disabled or unreachable shows the backend's error with a plain-language
 hint, and every other screen keeps working.
+
+## Transport guide
+
+`/guide` sends one question through this feature's backend to the shared RAG
+server. A grounded answer shows the answer text, a confidence badge (high,
+medium, or "low — check the sources"), each cited source with its title,
+section, excerpt and repository path, and the chunks used, run id and
+correlation id. When the knowledge base does not cover the question the page
+says **Not enough context** and shows no answer or sources. A disabled or
+unreachable RAG server shows the backend's error with a plain-language hint;
+the rest of the feature keeps working.
 
 ## Design notes
 

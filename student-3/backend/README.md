@@ -44,6 +44,9 @@ therefore a plan state, not a carrier state:
 | `STUDENT3_BACKEND_MCP_ENABLED` | `false` | Release 1 MCP lookups. Compose sets `true`; CI sets `false`. |
 | `STUDENT3_BACKEND_MCP_BASE_URL` | `http://127.0.0.1:8012/mcp` | Shared host-run MCP server. Compose uses `http://host.docker.internal:8012/mcp`. |
 | `STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS` | `40` | Timeout for one MCP tool call. |
+| `STUDENT3_BACKEND_RAG_ENABLED` | `false` | Release 1 transport guide. Compose sets `true`; CI sets `false`. |
+| `STUDENT3_BACKEND_RAG_BASE_URL` | `http://127.0.0.1:8011` | Shared host-run RAG server. Compose uses `http://host.docker.internal:8011`. |
+| `STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | Timeout for one RAG query, covering retrieval and grounded generation. |
 
 ## API surface
 
@@ -66,6 +69,7 @@ Responses wrap payloads in a `data` envelope; failures use the shared
 | `GET` | `/api/trip-directory` | Trips available for selection, read through from Student 1. |
 | `GET` | `/api/trips/{tripId}/transport` | **Composed view** — everything planned for one trip. |
 | `POST` | `/api/transport-options/recommendations` | **AI mode** — advisory transport suggestions. Writes nothing. |
+| `POST` | `/api/transport-options/rag-query` | **RAG** — grounded transport guidance from the shared RAG server. Writes nothing. |
 | `POST` | `/api/transport-options/mcp/search` | **MCP** — `transport_search` through the shared MCP server. Writes nothing. |
 | `POST` | `/api/transport-options/mcp/compare` | **MCP** — `transport_compare`. Writes nothing. |
 | `POST` | `/api/trips/{tripId}/transport/mcp` | **MCP** — `transport_trip_costs`. Writes nothing. |
@@ -179,13 +183,53 @@ MCP server being unreachable is `503 DEPENDENCY_UNAVAILABLE`, too slow is `504`,
 and an unusable reply is `502`. When disabled, every route is
 `503 MCP_DISABLED` — never an empty success — while browsing, comparing and
 planning carry on. `/health` and `/ready` report
-`"integrations": {"mcp": "enabled" | "disabled"}` from configuration only; they
-never contact the MCP server.
+`"integrations": {"rag": "enabled" | "disabled", "mcp": "enabled" | "disabled"}`
+from configuration only; they never contact the MCP or RAG server.
 
 The handlers are synchronous on purpose. The MCP tools read this same service
 back through `127.0.0.1:18003`, so the worker waiting on MCP must not block the
 event loop that answers that call. Logs carry the correlation id, tool, status
 and duration, never tool payloads.
+
+## Release 1 RAG
+
+`POST /api/transport-options/rag-query` takes only `{"question": "..."}` (1–2000
+characters) and sends it to the **shared** host-run RAG server's `/query` with
+`feature: "student-3"` and `top_k: 5` fixed here, so a caller can never widen
+the knowledge scope. The answer is passed through unchanged:
+
+```json
+{"data": {"answer": "A cancelled transport selection does not count ...",
+  "confidence_category": "high", "insufficient_context": false,
+  "citations": [{"source_id": "transport-pricing-and-costs",
+    "title": "Transport Pricing and Cost Estimates",
+    "section": "Transport costs: the trip transport total",
+    "path": "ai-services/rag-server/knowledge/transport/pricing-and-costs.md",
+    "chunk_id": "...", "excerpt": "..."}],
+  "retrieval": {"requested_top_k": 5, "returned_chunks": 3, "maximum_score": 0.83},
+  "run_id": "...", "correlation_id": "student3-rag-3f2a9c1b7d4e"}}
+```
+
+Confidence is decided by the RAG server from retrieval scores (`high` ≥ 0.8,
+`medium` ≥ 0.7, `low` ≥ 0.5). When nothing relevant is retrieved the answer is
+still `200`, with `insufficient_context: true`, confidence
+`insufficient_context` and no citations, rather than an unsupported answer. A
+reply that contradicts itself — grounded with no citations, or insufficient
+with citations — or has an unknown `schema_version` is refused as `502`.
+
+The RAG server's own `503 INDEX_NOT_READY` / `DEPENDENCY_UNAVAILABLE` and
+`504 DEPENDENCY_TIMEOUT` pass through so the UI can say why there is no answer;
+anything else is `502`. When disabled the route is `503 RAG_DISABLED`. The
+question and answer are never logged, only the correlation id, confidence and
+citation count.
+
+The Student 3 knowledge sources, tagged `student-3` in
+`ai-services/rag-server/config/sources.json`, are this README and three curated
+guides under `ai-services/rag-server/knowledge/transport/`: choosing transport,
+pricing and cost estimates, and planning and availability. Each guide section
+fits one retrieval chunk. Calibration cases for them are in
+`config/calibration-queries.json`; rebuild the index with
+`python -m rag_service ingest --rebuild` after changing any of them.
 
 ## Business rules owned here
 
@@ -237,8 +281,10 @@ the catalogue. Two things that used to live there have moved:
 | `422 VALIDATION_ERROR` | Field or business-rule validation failure. |
 | `422 PROMPT_BUDGET_EXCEEDED` | Too much transport context for one AI request. |
 | `502 BAD_GATEWAY` | Database service, AI-Mode, or the MCP server returned something unusable. |
-| `503 DEPENDENCY_UNAVAILABLE` | Database service, AI-Mode, or the MCP server unreachable. |
+| `503 DEPENDENCY_UNAVAILABLE` | Database service, AI-Mode, the MCP server, or the RAG server unreachable. |
 | `503 MCP_DISABLED` | MCP lookups are switched off in this environment. |
+| `503 RAG_DISABLED` | The transport guide is switched off in this environment. |
+| `503 INDEX_NOT_READY` | The shared RAG index has not been built. |
 | `504 DEPENDENCY_TIMEOUT` | Database service or the MCP server too slow. |
 
 ## Local checks

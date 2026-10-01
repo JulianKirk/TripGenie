@@ -1,0 +1,75 @@
+{% import "macros/forms.html" as forms %}
+<section class="panel" aria-labelledby="rag-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">Transport guide</p>
+      <h2 id="rag-heading">Ask how transport planning works</h2>
+    </div>
+  </div>
+
+  <p class="helper-copy">
+    Answers come from the shared TripGenie knowledge base, retrieved by the
+    shared RAG server and written only from what it finds. Every answer cites
+    its sources and says how confident it is. If the knowledge base does not
+    cover a question, you are told so instead of being given a guess.
+  </p>
+
+  <form method="post" action="{{ request.url_for('rag_ask') }}">
+    <p class="field">
+      <label for="question">Your question</label>
+      <textarea id="question" name="question" rows="3" maxlength="{{ question_max_chars }}">{{ question }}</textarea>
+      <span class="field__hint">For example: how is the cost of a car rental estimated, or why can't I add a sold-out option to my trip?</span>
+      {{ forms.field_errors("question", errors_by_field) }}
+    </p>
+    <p class="actions">
+      <button class="button button--primary" type="submit">Ask the guide</button>
+    </p>
+  </form>
+
+  <div aria-live="polite">
+    {% if error %}
+      <div class="banner banner--error" role="alert">
+        <p><strong>{{ error.code }}</strong></p>
+        <p>{{ error.message }}</p>
+        {% if error_hint %}<p>{{ error_hint }}</p>{% endif %}
+      </div>
+    {% endif %}
+
+    {% if answer and answer.insufficient_context %}
+      <article class="rag-answer" aria-labelledby="rag-answer-heading">
+        <div class="panel__header panel__header--compact">
+          <h3 id="rag-answer-heading">Not enough context</h3>
+          <span class="confidence confidence--insufficient_context">insufficient context</span>
+        </div>
+        <div class="banner banner--warning" role="status">
+          <p>The knowledge base does not cover this question, so no answer was generated.</p>
+          <p>Try asking about transport types, pricing, availability, capacity or planning transport for a trip.</p>
+        </div>
+        <p class="footnote">Run <code>{{ answer.run_id }}</code> · correlation <code>{{ answer.correlation_id }}</code></p>
+      </article>
+    {% elif answer %}
+      <article class="rag-answer" aria-labelledby="rag-answer-heading">
+        <div class="panel__header panel__header--compact">
+          <h3 id="rag-answer-heading">Grounded answer</h3>
+          <span class="confidence confidence--{{ answer.confidence_category }}">{{ confidence_labels.get(answer.confidence_category, answer.confidence_category) }}</span>
+        </div>
+        <p class="rag-answer__text">{{ answer.answer }}</p>
+
+        <h4>Sources</h4>
+        <ol class="rag-sources">
+          {% for citation in answer.citations %}
+            <li>
+              <p><strong>{{ citation.title }}</strong> &mdash; {{ citation.section }}</p>
+              <blockquote>{{ citation.excerpt }}</blockquote>
+              <p class="footnote"><code>{{ citation.path }}</code></p>
+            </li>
+          {% endfor %}
+        </ol>
+        <p class="footnote">
+          {{ answer.retrieval.returned_chunks }} of {{ answer.retrieval.requested_top_k }} chunks used
+          · run <code>{{ answer.run_id }}</code> · correlation <code>{{ answer.correlation_id }}</code>
+        </p>
+      </article>
+    {% endif %}
+  </div>
+</section>

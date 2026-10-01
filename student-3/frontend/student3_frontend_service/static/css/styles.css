@@ -276,3 +276,13 @@ td.actions-cell { display: table-cell; }
 .mcp-form h3 code { display: block; font-size: 0.75rem; color: var(--ink-muted); font-weight: normal; }
 .mcp-result { border-top: 1px solid var(--line); padding-top: 1rem; }
 .mcp-result__raw pre { max-height: 20rem; overflow: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
+
+/* Release 1 RAG transport guide */
+.rag-answer { border-top: 1px solid var(--line); padding-top: 1rem; }
+.rag-answer__text { white-space: pre-line; }
+.rag-sources { padding-left: 1.25rem; }
+.rag-sources blockquote { margin: 0.25rem 0; padding-left: 0.75rem; border-left: 3px solid var(--line); color: var(--ink-muted); }
+.confidence { border: 1px solid var(--line); border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.8rem; }
+.confidence--high { border-color: var(--ok); color: var(--ok); }
+.confidence--medium { border-color: var(--warning-line); color: #8a6416; }
+.confidence--low, .confidence--insufficient_context { border-color: var(--danger); color: var(--danger); }

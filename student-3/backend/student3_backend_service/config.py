@@ -9,6 +9,7 @@ DEFAULT_TRIPS_BASE_URL = "http://student-1-backend:8001"
 DEFAULT_AI_MODE_BASE_URL = "http://ai-mode:8006"
 DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v1.md"
 DEFAULT_MCP_BASE_URL = "http://127.0.0.1:8012/mcp"
+DEFAULT_RAG_BASE_URL = "http://127.0.0.1:8011"
 
 
 def _parse_timeout(value: str | None, *, env_name: str, default: float) -> float:
@@ -112,6 +113,11 @@ class Settings:
     mcp_enabled: bool = False
     mcp_base_url: str = DEFAULT_MCP_BASE_URL
     mcp_timeout_seconds: float = 40.0
+    # Release 1 host-run RAG server, off unless Compose turns it on. The
+    # timeout covers retrieval plus AI-Mode's grounded generation.
+    rag_enabled: bool = False
+    rag_base_url: str = DEFAULT_RAG_BASE_URL
+    rag_timeout_seconds: float = 130.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -199,5 +205,19 @@ class Settings:
                 os.getenv("STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS",
                 default=40.0,
+            ),
+            rag_enabled=_parse_bool(
+                os.getenv("STUDENT3_BACKEND_RAG_ENABLED"),
+                default=False,
+            ),
+            rag_base_url=_normalise_base_url(
+                os.getenv("STUDENT3_BACKEND_RAG_BASE_URL"),
+                env_name="STUDENT3_BACKEND_RAG_BASE_URL",
+                default=DEFAULT_RAG_BASE_URL,
+            ),
+            rag_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS",
+                default=130.0,
             ),
         )

@@ -14,6 +14,7 @@ from .models import (
     ErrorEnvelope,
     ItinerarySelectionResponse,
     McpToolResult,
+    RagAnswer,
     TransportOptionRecord,
     TransportRecommendation,
     TripDirectory,
@@ -46,6 +47,7 @@ class BackendApiClient:
         self._api_prefix = settings.backend_api_prefix
         self._ai_timeout_seconds = settings.ai_timeout_seconds
         self._mcp_timeout_seconds = settings.mcp_timeout_seconds
+        self._rag_timeout_seconds = settings.rag_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -231,6 +233,19 @@ class BackendApiClient:
             malformed_message=(
                 "Backend API returned a malformed recommendation response."
             ),
+        )
+        return envelope.data
+
+    async def rag_query(self, question: str) -> RagAnswer:
+        """A grounded answer from the shared RAG server, via the backend."""
+        envelope = await self._request_model(
+            "POST",
+            f"{self._api_prefix}/transport-options/rag-query",
+            json={"question": question},
+            timeout=self._rag_timeout_seconds,
+            expected_statuses={200},
+            response_type=DataEnvelope[RagAnswer],
+            malformed_message="Backend API returned a malformed knowledge answer.",
         )
         return envelope.data
 

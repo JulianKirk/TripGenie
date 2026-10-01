@@ -230,11 +230,12 @@ def _build_backend(
     trips_transport: httpx.BaseTransport | None,
     ai_transport: httpx.BaseTransport | None = None,
     mcp_transport: httpx.BaseTransport | None = None,
+    rag_transport: httpx.BaseTransport | None = None,
 ) -> Iterator[object]:
     """The real backend, backed by the real database, both seeded.
 
-    MCP is enabled only when a fake MCP server is supplied, matching the
-    default-off setting every other test runs with.
+    MCP and RAG are each enabled only when a fake server is supplied,
+    matching the default-off settings every other test runs with.
     """
     database_app = create_database_app(DatabaseSettings(sqlite_path=database_path))
     with TestClient(database_app) as database_client:
@@ -262,11 +263,13 @@ def _build_backend(
             BackendSettings(
                 database_api_base_url=DATABASE_BASE_URL,
                 mcp_enabled=mcp_transport is not None,
+                rag_enabled=rag_transport is not None,
             ),
             transport=httpx.MockTransport(relay),
             trips_transport=trips_transport,
             ai_transport=ai_transport,
             mcp_transport=mcp_transport,
+            rag_transport=rag_transport,
         )
         # Entering the backend TestClient runs its lifespan, which builds the
         # service the ASGITransport requests will look for on app.state.

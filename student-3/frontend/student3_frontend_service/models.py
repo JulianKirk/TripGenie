@@ -304,3 +304,30 @@ class McpToolResult(LenientModel):
         """Rows for the search and compare tools, which share one shape."""
         rows = (self.data or {}).get("items")
         return rows if isinstance(rows, list) else []
+
+
+class RagCitation(LenientModel):
+    source_id: str
+    title: str
+    section: str
+    path: str
+    chunk_id: str
+    excerpt: str
+
+
+class RagRetrieval(LenientModel):
+    requested_top_k: int = 0
+    returned_chunks: int = 0
+    maximum_score: float | None = None
+
+
+class RagAnswer(LenientModel):
+    """A grounded transport answer, as the backend passes it through."""
+
+    answer: str
+    confidence_category: str
+    insufficient_context: bool
+    citations: list[RagCitation] = Field(default_factory=list)
+    retrieval: RagRetrieval = Field(default_factory=RagRetrieval)
+    run_id: str
+    correlation_id: str

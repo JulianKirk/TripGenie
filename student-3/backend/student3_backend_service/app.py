@@ -28,6 +28,8 @@ from .models import (
     McpCompareRequest,
     McpSearchRequest,
     McpToolResponse,
+    RagAnswer,
+    RagQueryRequest,
     TransportIdentifier,
     TransportOptionCreate,
     TransportOptionRecord,
@@ -39,6 +41,7 @@ from .models import (
     TripIdentifier,
     TripTransportSummary,
 )
+from .rag_client import RagClient
 from .service import BackendService
 from .trips_client import TripsApiClient
 
@@ -322,6 +325,7 @@ def create_app(
     trips_transport: httpx.BaseTransport | None = None,
     ai_transport: httpx.BaseTransport | None = None,
     mcp_transport: httpx.BaseTransport | None = None,
+    rag_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -331,16 +335,19 @@ def create_app(
         trips_client = TripsApiClient(app_settings, transport=trips_transport)
         ai_client = AiModeClient(app_settings, transport=ai_transport)
         mcp_client = McpClient(app_settings, transport=mcp_transport)
+        rag_client = RagClient(app_settings, transport=rag_transport)
         app.state.database_client = client
         app.state.trips_client = trips_client
         app.state.ai_client = ai_client
         app.state.mcp_client = mcp_client
+        app.state.rag_client = rag_client
         app.state.backend_service = BackendService(
             app_settings,
             client,
             trips_client,
             ai_client,
             mcp_client,
+            rag_client,
         )
         try:
             yield
@@ -349,6 +356,7 @@ def create_app(
             trips_client.close()
             ai_client.close()
             mcp_client.close()
+            rag_client.close()
 
     app = FastAPI(
         title="TripGenie Student 3 Transport API",
@@ -474,6 +482,22 @@ def create_app(
         saves through the normal plan-entry route if they want it.
         """
         return envelope(service.recommend_transport(payload))
+
+    @router.post(
+        "/transport-options/rag-query",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[RagAnswer],
+    )
+    def rag_query(
+        payload: RagQueryRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Grounded transport guidance from the shared RAG server.
+
+        Sync like the MCP routes below, so a slow generation holds a
+        threadpool worker rather than the event loop.
+        """
+        return envelope(service.rag_query(payload))
 
     # Release 1 MCP. Sync handlers on purpose: they block a threadpool worker,
     # not the event loop. The shared transport tools read this same service's
