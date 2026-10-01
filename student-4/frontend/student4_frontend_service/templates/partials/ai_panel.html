@@ -1,17 +1,22 @@
 <section class="panel ai-panel" aria-labelledby="ai-suggestions-heading">
   <div class="panel-heading">
     <div>
-      <p class="eyebrow">MCP activity assistant</p>
+      <p class="eyebrow">MCP tools and RAG knowledge</p>
       <h2 id="ai-suggestions-heading">AI activity assistant</h2>
     </div>
     <span class="pill">Advisory only</span>
   </div>
-  <p class="field-hint">Describe what would suit you. Ask about activities, compare options, or explore your selected trip. The assistant uses shared MCP tools and shows their results. It can perform actions you request; review the tool results to see what changed. Each question starts fresh.</p>
   <form method="post" action="/suggestions/ask" hx-post="/suggestions/ask" hx-target="#ai-suggestions" hx-swap="innerHTML" hx-indicator="#ai-understanding" hx-disabled-elt="find button[type=submit]">
-    <label class="field" for="ai-question">What would you like to do?
+    <fieldset class="ai-mode">
+      <legend>How should the assistant answer?</legend>
+      <label class="ai-mode__option"><input type="radio" name="mode" value="tools" checked> <span><strong>Activity tools (MCP)</strong><span class="field-hint">Describe what would suit you. Ask about activities, compare options, or explore your selected trip. The assistant uses shared MCP tools and shows their results. It can perform actions you request; review the tool results to see what changed.</span></span></label>
+      <label class="ai-mode__option"><input type="radio" name="mode" value="knowledge"> <span><strong>Activity guides (RAG)</strong><span class="field-hint">Ask about booking, pricing, accessibility, safety, or what to bring. Answers come only from indexed TripGenie activity guides and list their sources and a confidence level.</span></span></label>
+    </fieldset>
+    <p class="field-hint">Each question starts fresh.</p>
+    <label class="field" for="ai-question">What would you like to know or do?
       <textarea id="ai-question" name="question" maxlength="500" required placeholder="Something outdoors, accessible, and relaxed for our first morning"></textarea>
     </label>
-    <label class="field" for="ai-trip">Trip context (optional)
+    <label class="field" for="ai-trip">Trip context (optional, activity tools only)
       <select id="ai-trip" name="trip_id" {% if not trip_directory.available %}disabled{% endif %}>
         <option value="">No trip selected</option>
         {% for trip in trip_directory.trips %}<option value="{{ trip.id }}">{{ trip.name }} — {{ trip.destination }}, {{ trip.start_date }} to {{ trip.end_date }}</option>{% endfor %}
@@ -19,7 +24,7 @@
       {% if not trip_directory.available %}<span class="field-hint">Trips are temporarily unavailable; suggestions can still use your prompt.</span>{% endif %}
     </label>
     <button class="button button--primary" type="submit">Ask the assistant</button>
-    <span id="ai-understanding" class="htmx-indicator ai-working" role="status">Understanding your request and consulting MCP tools…</span>
+    <span id="ai-understanding" class="htmx-indicator ai-working" role="status">Understanding your request and consulting MCP tools or activity guides…</span>
   </form>
   <div id="ai-suggestions" class="ai-suggestions" aria-live="polite"></div>
 </section>

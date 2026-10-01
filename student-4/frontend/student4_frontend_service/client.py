@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from .assistant_models import AssistantResponse
 from .errors import FrontendError
+from .knowledge_models import KnowledgeResponse
 from .models import (
     ActivityDetail,
     ActivityPage,
@@ -157,6 +158,16 @@ class BackendClient:
             "POST",
             "/activity/assistant",
             AssistantResponse,
+            {200},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
+    async def ask_knowledge(self, body: dict[str, object]) -> KnowledgeResponse:
+        return await self._request(
+            "POST",
+            "/activity/knowledge",
+            KnowledgeResponse,
             {200},
             json=body,
             request_timeout=self._settings.ai_timeout,

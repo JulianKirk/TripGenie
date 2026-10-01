@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 
     import httpx
 
+    from .assistant_models import AssistantResponse
+    from .knowledge_models import KnowledgeResponse
     from .models import ActivityPage, CategoryList
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -278,23 +280,35 @@ async def results(request: Request, client: ClientDep) -> Any:
 @router.post("/suggestions/ask")
 async def suggestion_ask(request: Request, client: ClientDep) -> Any:
     form = await request.form()
-    payload: dict[str, object] = {"question": str(form.get("question", "")).strip()}
-    trip_id = str(form.get("trip_id", "")).strip()
-    if trip_id:
-        payload["trip_id"] = trip_id
-    result = None
+    question = str(form.get("question", "")).strip()
+    knowledge = str(form.get("mode", "")) == "knowledge"
+    result: AssistantResponse | KnowledgeResponse | None = None
     error = None
     try:
-        result = await client.ask_assistant(payload)
+        if knowledge:
+            result = await client.ask_knowledge({"question": question})
+        else:
+            payload: dict[str, object] = {"question": question}
+            trip_id = str(form.get("trip_id", "")).strip()
+            if trip_id:
+                payload["trip_id"] = trip_id
+            result = await client.ask_assistant(payload)
     except FrontendError as exc:
         error = exc.detail
+    results_template = (
+        "partials/knowledge_results.html"
+        if knowledge
+        else "partials/assistant_results.html"
+    )
     template = (
-        "partials/assistant_results.html"
+        results_template
         if request.headers.get("HX-Request") == "true"
         else "assistant_page.html"
     )
     return TEMPLATES.TemplateResponse(
-        request, template, {"result": result, "error": error}
+        request,
+        template,
+        {"result": result, "error": error, "results_template": results_template},
     )
 
 

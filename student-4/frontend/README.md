@@ -16,6 +16,8 @@ call the database, shared location service, or itinerary service directly.
 - Ask a single activity question, optionally select a trip, and inspect the
   actual shared MCP calls, authoritative activity cards, and itinerary actions.
   Each question starts fresh; no chat history is retained.
+- Switch the same panel to activity guides (RAG) for grounded answers with a
+  confidence category and source citations, or an insufficient-context notice.
 - Progressive enhancement: the initial page and explicit search submission
   work without JavaScript; HTMX adds live fragment updates.
 - Degraded health and safe HTML error states when the backend is unavailable.
@@ -26,7 +28,7 @@ call the database, shared location service, or itinerary service directly.
 |---|---|---|
 | `BACKEND_URL` | `http://student-4-backend:8008` | Student 4 backend base URL. |
 | `BACKEND_TIMEOUT` | `5` | Positive request timeout in seconds. |
-| `AI_TIMEOUT` | `210` | Positive timeout for AI planning and evaluation calls only. |
+| `AI_TIMEOUT` | `210` | Positive timeout for MCP assistant and RAG knowledge calls only. |
 
 ## Run locally
 
@@ -68,7 +70,7 @@ which previously occupied port 8084.
 | `DELETE /activity/{id}/itineraries/{trip_id}` | Remove selection. |
 | `GET /health` | Frontend and backend status. |
 | `GET /ready` | Readiness status; returns `503` until the backend is ready. |
-| `POST /suggestions/ask` | Run the one-shot MCP activity assistant and render its execution trace. |
+| `POST /suggestions/ask` | Run the one-shot MCP activity assistant and render its execution trace, or with `mode=knowledge` render a grounded RAG answer with citations. |
 
 Backend validation remains authoritative. Browser forms are translated into
 allow-listed structured payloads; no arbitrary browser JSON is forwarded.
@@ -86,4 +88,5 @@ docker build -f student-4/frontend/Dockerfile \
 ```
 
 The AI panel uses `/suggestions/ask`. The old plan/evaluate flow has been removed.
-See [MCP assistant setup](../docs/mcp-assistant.md).
+See [MCP assistant setup](../docs/mcp-assistant.md) and
+[RAG knowledge](../docs/rag-knowledge.md).

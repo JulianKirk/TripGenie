@@ -92,6 +92,14 @@ def test_host_ai_services_stay_out_of_compose() -> None:
     assert backend["environment"]["AI_ASSISTANT_ENABLED"] == "true"
 
 
+def test_student_4_backend_reaches_host_rag() -> None:
+    environment = compose_services()["student-4-backend"]["environment"]
+
+    assert environment["RAG_URL"] == "http://host.docker.internal:8011"
+    assert environment["RAG_ENABLED"] == "true"
+    assert float(environment["RAG_TIMEOUT"]) > 0
+
+
 def test_agentic_overlay_preserves_single_activity_backend_binding() -> None:
     services = compose_services(agentic=True)
     ports = services["student-4-backend"]["ports"]

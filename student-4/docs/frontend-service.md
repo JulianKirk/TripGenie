@@ -68,7 +68,7 @@ These routes return pages or fragments, not a public JSON API.
 | `DELETE /manage/activity/{id}` | Permanently delete an activity aggregate. |
 | `GET /health` | Frontend and backend health JSON. |
 | `GET /ready` | Readiness JSON; returns `503` until the backend is ready. |
-| `POST /suggestions/ask` | Submit a question and optional trip to the shared MCP assistant. |
+| `POST /suggestions/ask` | Submit a question to the shared MCP assistant (`mode=tools`, default, with optional trip) or to the RAG activity guides (`mode=knowledge`). |
 
 `GET /health` returns `200` with `status: "degraded"` when the backend cannot be
 reached, matching the other frontend services.
@@ -103,3 +103,14 @@ The assistant can execute requested actions through advertised write tools; the 
 therefore does not promise that nothing has been saved. Ordinary activity and
 itinerary actions remain available. Loading state and full-page form fallback are
 preserved. See [setup](mcp-assistant.md).
+
+## RAG activity guides
+
+The same panel offers an **Activity guides (RAG)** mode. With `mode=knowledge`,
+`POST /suggestions/ask` sends only the question to backend `/activity/knowledge`
+and renders `partials/knowledge_results.html`: a confidence badge, the escaped
+grounded answer, and a numbered **Sources** list with each citation's title,
+section, repository path and excerpt, plus request, RAG run and retrieval
+details. Insufficient context, disabled RAG and failures render explicit
+banners without sources, and state that browsing remains available. The trip
+picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).

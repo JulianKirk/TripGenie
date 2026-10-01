@@ -141,6 +141,12 @@ jobs:
   compose:
     name: Validate Student 4 Compose Integration
     runs-on: ubuntu-latest
+    # The host-only MCP assistant (via AI-Mode) and RAG knowledge integrations
+    # stay configured in Compose but are switched off in CI; no host services
+    # or models exist on the runner.
+    env:
+      STUDENT4_AI_ASSISTANT_ENABLED: "false"
+      STUDENT4_BACKEND_RAG_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - name: Validate the shared Compose configuration
@@ -159,6 +165,28 @@ jobs:
             --contains '"status":"ready"' \
             http://127.0.0.1:8084/ready
           curl --fail --silent --show-error http://127.0.0.1:8084/ > /dev/null
+      - name: Verify MCP and RAG are disabled
+        run: |
+          docker compose exec -T student-4-backend env \
+            | grep -E '^(AI_ASSISTANT_ENABLED|RAG_ENABLED|AI_MODE_URL|RAG_URL)=' \
+            | sort
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"What should I bring kayaking?"}' \
+            http://127.0.0.1:18008/activity/knowledge \
+            | python -c "import json, sys; r = json.load(sys.stdin); print('backend RAG route:', r['status']); assert r['status'] == 'disabled'"
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"Find kayaking in Sydney"}' \
+            http://127.0.0.1:18008/activity/assistant \
+            | python -c "import json, sys; r = json.load(sys.stdin); print('backend MCP assistant:', r['error']); assert r['status'] == 'error' and 'disabled' in r['error']"
+          curl --fail --silent --show-error \
+            -H 'HX-Request: true' \
+            --data-urlencode 'mode=knowledge' \
+            --data-urlencode 'question=What should I bring kayaking?' \
+            http://127.0.0.1:8084/suggestions/ask \
+            | grep -q 'Activity guides disabled'
+          echo 'Frontend knowledge mode shows the disabled state.'
       - name: Compose logs on failure
         if: failure()
         run: |
