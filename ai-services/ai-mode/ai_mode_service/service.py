@@ -59,7 +59,9 @@ class AiModeService:
             ),
         )
 
-    async def generate(self, payload: GenerateRequest) -> GenerateResponsePayload:
+    async def generate(
+        self, payload: GenerateRequest, *, use_tools: bool = True
+    ) -> GenerateResponsePayload:
         self._validate_payload_bounds(payload)
         resolved_model = self._resolve_model(payload.model)
         run_id = f"aimode_{uuid4().hex[:12]}"
@@ -77,9 +79,13 @@ class AiModeService:
         )
 
         try:
-            response, tools = await self._agent.generate(
-                payload, resolved_model, correlation_id
-            )
+            if use_tools:
+                response, tools = await self._agent.generate(
+                    payload, resolved_model, correlation_id
+                )
+            else:
+                response = await self._agent.generate_plain(payload, resolved_model)
+                tools = []
         except ApiError as exc:
             _log_stage(
                 "failure",

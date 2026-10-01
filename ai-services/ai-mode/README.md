@@ -138,6 +138,18 @@ baseline; `/generate` reports MCP availability at request time.
 
 Use a generation model that supports native tool calls. Allow enough consumer HTTP
 time for several inference rounds (Student 4 defaults to 210 seconds).
+
+### `POST /generate-plain`
+
+Accepts the same request body as `/generate` and returns the same response
+envelope, but makes exactly one model call with no tools. It never contacts MCP,
+does not need MCP running, and always returns `"tools": []`. When `schema` is
+supplied, that call is grammar-constrained to the schema and the answer is
+validated against it. Use it when the caller already owns the context, as
+the shared RAG server does for grounded answers. A model tool request, an empty
+answer or a schema-invalid answer returns `502 BAD_GATEWAY`. A provider timeout
+returns `504 DEPENDENCY_TIMEOUT`, and plain-generation errors carry no `tools`
+trace.
 The complete MCP schemas are sent on every tool-capable round. Health checks and
 embeddings retain the existing SDK methods. Native chat uses the pinned SDK's
 lower-level `_request` helper because its high-level `chat()` tool serializer drops

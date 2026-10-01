@@ -27,7 +27,7 @@ sequenceDiagram
     alt relevance below threshold
         RAG-->>API: Insufficient-context response
     else relevant context
-        RAG->>AI: POST /generate with retrieved chunks
+        RAG->>AI: POST /generate-plain with retrieved chunks (no MCP tools)
         AI->>LLM: Bounded grounded generation
         LLM-->>AI: Answer and selected chunk IDs
         AI-->>RAG: Generated JSON
@@ -74,6 +74,12 @@ Response:
 AI-Mode validates the model allowlist, input count and length, returned vector
 count, consistent dimension, finite values, provider timeout, and missing
 model errors. Chat and embedding model allowlists remain separate.
+
+Grounded generation calls AI-Mode `/generate-plain`, never `/generate`. It is a
+single schema-constrained model call with no MCP tools, so answers can rely only
+on the retrieved CONTEXT and RAG does not depend on MCP. AI-Mode errors keep
+their status and code (an AI-Mode timeout remains `504 DEPENDENCY_TIMEOUT`)
+even when AI-Mode adds sibling fields to the error envelope.
 
 ## 3. Source manifest and ingestion
 

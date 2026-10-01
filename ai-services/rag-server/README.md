@@ -23,11 +23,12 @@ must remain operational when this process is disabled, stopped, or not ready.
 Consumer backends own their own enable flag, base URL, timeout, and public
 error mapping.
 
-Shared AI-Mode `/generate` now has access to all MCP tools and returns an additive
-tool trace; the RAG decoder accepts it. Citation IDs are still validated against
-retrieved context. Tool results do not become source citations automatically.
-Generation requires host MCP; embedding/indexing does not. RAG supplies a trusted
-system instruction to use only retrieved CONTEXT, without calling MCP for facts.
+Grounded answers use AI-Mode `/generate-plain`: one model call with no MCP
+tools, so the answer can rely only on the retrieved CONTEXT, and neither
+embedding nor generation needs host MCP. Citation IDs are still validated against
+the retrieved context. AI-Mode error envelopes that carry extra fields, such as
+a tool trace, keep their original status and code; an AI-Mode timeout, for
+example, stays `504 DEPENDENCY_TIMEOUT`.
 
 ## Prerequisites
 
@@ -59,8 +60,8 @@ models.
 ## Start the host services
 
 Start Ollama, host AI-Mode, and host MCP as described in the
-[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md);
-AI-Mode needs MCP for generation.
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md).
+RAG does not need MCP; feature MCP assistants do.
 
 Verify it can see both configured models:
 
