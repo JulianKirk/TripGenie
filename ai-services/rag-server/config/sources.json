@@ -54,6 +54,42 @@
       "path": "ai-services/rag-server/knowledge/travel/logistics-and-documents.md",
       "title": "Travel Logistics and Documents",
       "feature": "student-1"
+    },
+    {
+      "source_id": "student-4-object-model",
+      "path": "student-4/docs/object-model.md",
+      "title": "Student 4 Activities Object Model",
+      "feature": "student-4"
+    },
+    {
+      "source_id": "student-4-backend-service-api",
+      "path": "student-4/docs/backend-service-api.md",
+      "title": "Student 4 Activities Backend API",
+      "feature": "student-4"
+    },
+    {
+      "source_id": "activities-choosing-activities",
+      "path": "ai-services/rag-server/knowledge/activities/choosing-activities.md",
+      "title": "Choosing Activities and Attractions",
+      "feature": "student-4"
+    },
+    {
+      "source_id": "activities-booking-and-pricing",
+      "path": "ai-services/rag-server/knowledge/activities/booking-and-pricing.md",
+      "title": "Activity Booking and Pricing Guide",
+      "feature": "student-4"
+    },
+    {
+      "source_id": "activities-accessibility",
+      "path": "ai-services/rag-server/knowledge/activities/accessibility-guide.md",
+      "title": "Activity Accessibility Guide",
+      "feature": "student-4"
+    },
+    {
+      "source_id": "activities-safety-and-preparation",
+      "path": "ai-services/rag-server/knowledge/activities/safety-and-preparation.md",
+      "title": "Activity Safety and Preparation Guide",
+      "feature": "student-4"
     }
   ]
 }
