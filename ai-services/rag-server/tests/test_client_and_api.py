@@ -55,7 +55,7 @@ def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
             return httpx.Response(200, json=_embed_response())
         payload = json.loads(request.content)
         assert payload["prompt"] == "prompt"
-        assert "Do not call MCP tools" in payload["system"]
+        assert request.url.path == "/generate-plain"
         assert "CONTEXT" in payload["system"]
         return httpx.Response(
             200,
@@ -150,6 +150,33 @@ def test_ai_mode_client_maps_timeout_and_structured_error(settings) -> None:
     assert unavailable.value.retryable is True
 
 
+def test_ai_mode_timeout_with_tool_trace_is_still_a_timeout(settings) -> None:
+    client = AiModeClient(
+        settings,
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                504,
+                json={
+                    "error": {
+                        "code": "DEPENDENCY_TIMEOUT",
+                        "message": "The AI provider did not respond in time.",
+                        "retryable": True,
+                        "details": [],
+                    },
+                    "tools": [{"tool": "activities_search", "status": "success"}],
+                },
+            )
+        ),
+    )
+    with pytest.raises(ApiError) as raised:
+        asyncio.run(client.generate("prompt", {}, correlation_id="query-1"))
+    asyncio.run(client.close())
+
+    assert raised.value.status_code == 504
+    assert raised.value.code == "DEPENDENCY_TIMEOUT"
+    assert raised.value.retryable is True
+
+
 def test_ai_mode_client_rejects_incomplete_generation(settings) -> None:
     client = AiModeClient(
         settings,
@@ -238,7 +265,7 @@ def test_public_health_ready_and_grounded_query_contract(settings) -> None:
     )[0]
 
     def grounded_handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path != "/generate":
+        if request.url.path != "/generate-plain":
             return handler(request)
         return httpx.Response(
             200,
