@@ -71,6 +71,7 @@ def test_panel_offers_mcp_and_rag_modes(backend: FakeBackend) -> None:
     assert 'name="mode" value="knowledge"' in text
     assert "Activity tools (MCP)" in text
     assert "Activity guides (RAG)" in text
+    assert "<strong>Maintains Release 0 functionality.</strong>" in text
 
 
 def test_knowledge_mode_renders_grounded_answer_with_citations(

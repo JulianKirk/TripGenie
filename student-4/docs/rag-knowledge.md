@@ -9,7 +9,7 @@ context to answer.
 
 ```text
 Browser ─▶ Student 4 frontend ─▶ Student 4 backend ─▶ host RAG :8011 ─▶ host AI-Mode :8006 ─▶ Ollama
-           POST /suggestions/ask   POST /activity/knowledge   POST /query      /embed, /generate
+           POST /suggestions/ask   POST /activity/knowledge   POST /query      /embed, /generate-plain
            (mode=knowledge)        (feature fixed to student-4)
 ```
 
@@ -48,17 +48,18 @@ one unrelated question that should return insufficient context.
 
 ## Local run
 
-Start Ollama, AI-Mode and MCP with the
-[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md).
-RAG generation goes through AI-Mode `/generate`, which needs MCP. Use the
-runbook's `llama3.1:8b` default for RAG. In local testing, `qwen2.5:7b` often
+Start Ollama and AI-Mode with the
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md),
+plus MCP for the Activity tools mode. RAG generation uses AI-Mode
+`/generate-plain`: one model call with no MCP tools, so RAG works even when
+MCP is stopped. Use the runbook's `llama3.1:8b` default for RAG. In local testing, `qwen2.5:7b` often
 shortened citation IDs (for example `5:93e5f2e83e2f` instead of
 `activities-booking-and-pricing:5:93e5f2e83e2f`). The shared server correctly
 rejects those answers as `BAD_GATEWAY`, so Student 4 shows "failed to answer".
 On an 8 GB GPU, start AI-Mode with `AI_MODE_CONTEXT_TOKENS=16384`. The
-default of 32768 pushes much of `llama3.1:8b` onto the CPU. In local testing
-that cut RAG answers from 40–120 seconds to 22–54 seconds, under the
-120-second RAG timeout.
+default of 32768 pushes much of `llama3.1:8b` onto the CPU. With this setting,
+RAG answers took 2–10 seconds in local testing, and the Activity tools (MCP)
+mode took 30–60 seconds.
 Then rebuild the index so that it includes the Student 4 sources, and serve
 RAG:
 
