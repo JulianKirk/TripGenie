@@ -34,6 +34,7 @@ Plan states are shown in the traveller's language rather than raw enum values:
 | `STUDENT3_FRONTEND_BACKEND_API_PREFIX` | `/api` | Backend API prefix. |
 | `STUDENT3_FRONTEND_BACKEND_TIMEOUT_SECONDS` | `5` | Timeout for frontend-to-backend calls. |
 | `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `150` | Timeout for the AI suggestion route only. |
+| `STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS` | `60` | Timeout for the MCP tools page only; outlasts the backend's 40 s MCP budget. |
 | `STUDENT3_FRONTEND_SERVICE_NAME` | `student-3-frontend` | Name reported by health endpoints. |
 
 ## Ports
@@ -55,6 +56,7 @@ Student 3.
 | `POST /options/{id}/itineraries` | Add this option to a trip |
 | `POST /options/{id}/itineraries/{tripId}/remove` | Remove it from a trip |
 | `GET,POST /suggestions` | Ask for AI transport suggestions. Saves nothing |
+| `GET /tools`, `POST /tools/{action}` | Release 1 MCP lookups (`search`, `compare`, `trip-costs`). Saves nothing |
 | `GET /health` | Service status plus the backend dependency. Always `200`. |
 | `GET /ready` | `200` when the backend is reachable, `503` otherwise. |
 
@@ -116,6 +118,22 @@ mistake advice for stored data:
 
 Only this route gets the long timeout, because a local model answering a cold
 prompt takes far longer than the few seconds that is generous elsewhere.
+
+## MCP tools
+
+`/tools` runs one read-only transport tool on the shared MCP server through this
+feature's backend, which picks the tool and validates every input. Three forms
+map to the three backend actions: **search routes** (`transport_search`),
+**compare options** (`transport_compare`, up to four) and **trip transport
+costs** (`transport_trip_costs`). The trip transport page also has a
+**Check costs via MCP** button for its trip.
+
+Each result shows the tool's status, name, arguments, duration and correlation
+id, a readable table of what came back, and the raw structured result under
+**Structured tool result**, so the evidence is the tool's data rather than a
+narrative. A tool that ran and refused shows its own error code; the MCP server
+being disabled or unreachable shows the backend's error with a plain-language
+hint, and every other screen keeps working.
 
 ## Design notes
 

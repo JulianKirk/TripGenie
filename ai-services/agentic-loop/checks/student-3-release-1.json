@@ -1,0 +1,38 @@
+{
+  "goal": "Validate Student 3 Release 1 MCP integration: the shared MCP server's read-only transport tools, their tool boundaries, and the Student 3 backend and frontend routes that call them",
+  "_note": "Local run only; needs the host-run MCP server plus the Compose stack. Set BACKEND_URL=http://127.0.0.1:18003 FRONTEND_URL=http://127.0.0.1:8093 MCP_URL=http://127.0.0.1:8012 CHECKS_FILE=checks/student-3-release-1.json. All checks are read-only.",
+  "checks": [
+    {"label": "MCP server /ready", "path": "${MCP_URL}/ready", "contains": ["tripgenie-mcp"]},
+    {"label": "MCP tools/list registers the Student 3 transport tools", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-list", "method": "tools/list"}, "contains": ["\"transport_search\"", "\"transport_get\"", "\"transport_compare\"", "\"transport_trip_costs\""]},
+    {"label": "MCP transport_search by destination", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-search", "method": "tools/call", "params": {"name": "transport_search", "arguments": {"destination": "Sydney", "limit": 5}}}, "timeout": 40, "contains": ["\"ok\":true", "\"source\":\"student-3\"", "\"items\""]},
+    {"label": "MCP transport_get for a seeded option", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-get", "method": "tools/call", "params": {"name": "transport_get", "arguments": {"transport_id": "transport_2026_qf401_mel_syd"}}}, "timeout": 40, "contains": ["\"ok\":true", "transport_2026_qf401_mel_syd", "\"pricing_basis\""]},
+    {"label": "MCP malformed transport id is a structured validation error", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-invalid", "method": "tools/call", "params": {"name": "transport_get", "arguments": {"transport_id": "not-a-transport"}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
+    {"label": "MCP compare rejects more than four ids", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-compare-limit", "method": "tools/call", "params": {"name": "transport_compare", "arguments": {"ids": ["transport_a01", "transport_b01", "transport_c01", "transport_d01", "transport_e01"]}}}, "contains": ["\"isError\":true", "VALIDATION_ERROR"]},
+    {"label": "Student 3 backend health reports MCP enabled", "path": "${BACKEND_URL}/health", "contains": ["\"integrations\":{\"mcp\":\"enabled\"}"]},
+    {"label": "Student 3 backend MCP search route", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/search", "timeout": 60, "json": {"destination": "Sydney", "limit": 5}, "contains": ["\"tool\":\"transport_search\"", "\"status\":\"ok\"", "student3-mcp-", "\"persisted\":false"]},
+    {"label": "Student 3 backend MCP compare route", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/compare", "timeout": 60, "json": {"ids": ["transport_2026_qf401_mel_syd"]}, "contains": ["\"tool\":\"transport_compare\"", "\"status\":\"ok\"", "transport_2026_qf401_mel_syd"]},
+    {"label": "Student 3 backend refuses a browser-chosen tool", "method": "POST", "path": "${BACKEND_URL}/api/transport-options/mcp/search", "json": {"tool": "activities_delete"}, "status": 422, "contains": ["VALIDATION_ERROR"]},
+    {"label": "Student 3 frontend MCP tools page", "path": "${FRONTEND_URL}/tools", "contains": ["transport_search", "transport_compare", "transport_trip_costs"]}
+  ],
+  "rules": [
+    "Student 3 MCP tools are read-only: transport_search, transport_get, transport_compare and transport_trip_costs call only the Student 3 public /api with GET.",
+    "The browser picks an allow-listed action; the Student 3 backend fixes the tool name and validates every argument before calling MCP.",
+    "A tool that ran and refused is a structured error result; an unreachable MCP server is a 503, never an empty success.",
+    "seats_remaining null means unknown, never zero."
+  ],
+  "flows": [
+    {
+      "name": "MCP trip costs agree with the backend",
+      "steps": [
+        {"label": "MCP transport_trip_costs for the seeded trip", "method": "POST", "path": "${MCP_URL}/mcp", "headers": {"Accept": "application/json, text/event-stream"}, "json": {"jsonrpc": "2.0", "id": "loop-costs", "method": "tools/call", "params": {"name": "transport_trip_costs", "arguments": {"trip_id": "trip_2026_hobart_weekend_escape"}}}, "timeout": 40, "contains": ["\"ok\":true"], "save": {"MCP_TOTAL": "result.structuredContent.data.estimated_cost_total", "MCP_ACTIVE": "result.structuredContent.data.active_entry_count"}},
+        {"label": "Backend MCP trip-costs route", "method": "POST", "path": "${BACKEND_URL}/api/trips/trip_2026_hobart_weekend_escape/transport/mcp", "timeout": 60, "contains": ["\"tool\":\"transport_trip_costs\"", "\"status\":\"ok\""], "save": {"ROUTE_TOTAL": "data.data.estimated_cost_total"}},
+        {"label": "Backend composed trip transport", "path": "${BACKEND_URL}/api/trips/trip_2026_hobart_weekend_escape/transport", "contains": ["estimated_cost_total"], "save": {"BACKEND_TOTAL": "data.estimated_cost_total", "BACKEND_ACTIVE": "data.active_entry_count"}}
+      ],
+      "invariants": [
+        {"label": "MCP estimated_cost_total equals the backend's composed view", "expr": "abs(float(MCP_TOTAL) - float(BACKEND_TOTAL)) < 0.01"},
+        {"label": "the backend MCP route returns the same total", "expr": "abs(float(ROUTE_TOTAL) - float(BACKEND_TOTAL)) < 0.01"},
+        {"label": "MCP active entry count equals the backend's", "expr": "MCP_ACTIVE == BACKEND_ACTIVE"}
+      ]
+    }
+  ]
+}

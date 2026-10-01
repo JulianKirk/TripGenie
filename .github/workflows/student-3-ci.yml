@@ -110,6 +110,12 @@ jobs:
   compose:
     name: Validate Student 3 Compose Integration
     runs-on: ubuntu-latest
+    # The MCP integration stays in the image and the Compose wiring, but no
+    # host-run MCP server exists on a runner, so CI switches it off and then
+    # proves the switch took effect. Shell environment overrides the
+    # Compose default of true.
+    env:
+      STUDENT3_BACKEND_MCP_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - name: Validate the shared Compose configuration
@@ -145,6 +151,13 @@ jobs:
             exit 1
           fi
           echo "Home page link and published port agree on ${port}."
+      - name: Verify MCP is disabled
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:18003/health             | python -c "import json, sys; i = json.load(sys.stdin)['data']['integrations']; print('backend integrations:', i); assert i == {'mcp': 'disabled'}"
+          curl --silent --show-error -X POST -H 'Content-Type: application/json'             -d '{"destination": "Melbourne"}'             http://127.0.0.1:18003/api/transport-options/mcp/search             | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend MCP route:', e['code']); assert e['code'] == 'MCP_DISABLED'"
+          port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
+          curl --fail --silent --show-error -X POST             --data-urlencode 'destination=Melbourne'             "http://127.0.0.1:${port}/tools/search" | grep -q 'disabled in this environment'
+          echo 'Frontend MCP tools page shows the disabled state.'
       - name: Compose logs on failure
         if: failure()
         run: docker compose logs --no-color

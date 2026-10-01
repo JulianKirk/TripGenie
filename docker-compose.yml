@@ -258,6 +258,8 @@ services:
       # The AI suggestion route only; every other backend call keeps the
       # short timeout above.
       STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS:-150}"
+      # The MCP tools page only; outlasts the backend's 40 s MCP budget.
+      STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS:-60}"
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
@@ -301,6 +303,11 @@ services:
       STUDENT3_BACKEND_AI_PROMPT_ASSET: "${STUDENT3_BACKEND_AI_PROMPT_ASSET:-transport_recommendations_v1.md}"
       STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS: "${STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS:-12000}"
       STUDENT3_BACKEND_AI_MAX_CANDIDATES: "${STUDENT3_BACKEND_AI_MAX_CANDIDATES:-12}"
+      # Release 1 shared MCP server, run on the host like AI-Mode. Its
+      # transport tools call back into this service through 127.0.0.1:18003.
+      STUDENT3_BACKEND_MCP_ENABLED: "${STUDENT3_BACKEND_MCP_ENABLED:-true}"
+      STUDENT3_BACKEND_MCP_BASE_URL: http://host.docker.internal:8012/mcp
+      STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS: "40"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

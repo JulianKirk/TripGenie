@@ -41,6 +41,9 @@ therefore a plan state, not a carrier state:
 | `STUDENT3_BACKEND_AI_PROMPT_ASSET` | `transport_recommendations_v1.md` | Prompt template, versioned in `student3_backend_service/prompts/`. |
 | `STUDENT3_BACKEND_AI_PROMPT_MAX_CHARS` | `12000` | Prompt budget; a larger render returns `422`. |
 | `STUDENT3_BACKEND_AI_MAX_CANDIDATES` | `12` | Most options ever shown to the model. |
+| `STUDENT3_BACKEND_MCP_ENABLED` | `false` | Release 1 MCP lookups. Compose sets `true`; CI sets `false`. |
+| `STUDENT3_BACKEND_MCP_BASE_URL` | `http://127.0.0.1:8012/mcp` | Shared host-run MCP server. Compose uses `http://host.docker.internal:8012/mcp`. |
+| `STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS` | `40` | Timeout for one MCP tool call. |
 
 ## API surface
 
@@ -63,6 +66,9 @@ Responses wrap payloads in a `data` envelope; failures use the shared
 | `GET` | `/api/trip-directory` | Trips available for selection, read through from Student 1. |
 | `GET` | `/api/trips/{tripId}/transport` | **Composed view** — everything planned for one trip. |
 | `POST` | `/api/transport-options/recommendations` | **AI mode** — advisory transport suggestions. Writes nothing. |
+| `POST` | `/api/transport-options/mcp/search` | **MCP** — `transport_search` through the shared MCP server. Writes nothing. |
+| `POST` | `/api/transport-options/mcp/compare` | **MCP** — `transport_compare`. Writes nothing. |
+| `POST` | `/api/trips/{tripId}/transport/mcp` | **MCP** — `transport_trip_costs`. Writes nothing. |
 
 ### Filters
 
@@ -132,6 +138,55 @@ When AI-Mode is unreachable the route returns `503`; browsing, comparing and
 planning are unaffected, which is why the Compose dependency is
 `service_started` rather than `service_healthy`.
 
+## Release 1 MCP
+
+Transport lookups through the **shared** host-run MCP server
+(`ai-services/mcp-server`), which owns the tool definitions. This service calls
+it over JSON-RPC `tools/call` on its streamable-HTTP endpoint; the browser
+never reaches MCP directly.
+
+| Route | Tool | Request body |
+| --- | --- | --- |
+| `POST /api/transport-options/mcp/search` | `transport_search` | `{origin?, destination?, limit?}` — `limit` 1–20, default 5 |
+| `POST /api/transport-options/mcp/compare` | `transport_compare` | `{ids}` — 1–4 distinct transport ids |
+| `POST /api/trips/{tripId}/transport/mcp` | `transport_trip_costs` | none |
+
+Each returns one structured result:
+
+```json
+{"data": {"action": "search", "tool": "transport_search",
+  "arguments": {"limit": 5, "destination": "Sydney"},
+  "status": "ok", "data": {"items": [...], "count": 1, "truncated": false},
+  "error": null, "correlation_id": "student3-mcp-3f2a9c1b7d4e",
+  "duration_ms": 24, "persisted": false}}
+```
+
+Tool boundaries, in the order they apply:
+
+1. **Allow-listed actions.** The caller picks a route, never a tool name, server
+   URL or extra argument; unknown body fields and query parameters are refused.
+2. **Validated before the call.** Ids must match the transport and trip patterns,
+   filters are 1–255 characters and comparisons are 1–4 distinct ids, so a bad
+   request is a `422` and never reaches MCP.
+3. **Read-only tools only.** All four transport tools `GET` this service's public
+   `/api`; `persisted` is always `false`.
+4. **Bounded results.** A tool result over 32 KB, or one that does not match the
+   `{ok, data}` envelope, is `502`.
+
+A tool that ran and refused (an unknown trip, say) is `200` with
+`status: "error"` and the tool's own `error.code`, so the UI can show why. The
+MCP server being unreachable is `503 DEPENDENCY_UNAVAILABLE`, too slow is `504`,
+and an unusable reply is `502`. When disabled, every route is
+`503 MCP_DISABLED` — never an empty success — while browsing, comparing and
+planning carry on. `/health` and `/ready` report
+`"integrations": {"mcp": "enabled" | "disabled"}` from configuration only; they
+never contact the MCP server.
+
+The handlers are synchronous on purpose. The MCP tools read this same service
+back through `127.0.0.1:18003`, so the worker waiting on MCP must not block the
+event loop that answers that call. Logs carry the correlation id, tool, status
+and duration, never tool payloads.
+
 ## Business rules owned here
 
 - **Route sanity.** `origin` must differ from `destination`, checked case-insensitively.
@@ -181,9 +236,10 @@ the catalogue. Two things that used to live there have moved:
 | `409 CONFLICT` | Duplicate id, capacity exceeded, or an unusable option selected. |
 | `422 VALIDATION_ERROR` | Field or business-rule validation failure. |
 | `422 PROMPT_BUDGET_EXCEEDED` | Too much transport context for one AI request. |
-| `502 BAD_GATEWAY` | Database service, or AI-Mode, returned something unusable. |
-| `503 DEPENDENCY_UNAVAILABLE` | Database service, or AI-Mode, unreachable. |
-| `504 DEPENDENCY_TIMEOUT` | Database service too slow. |
+| `502 BAD_GATEWAY` | Database service, AI-Mode, or the MCP server returned something unusable. |
+| `503 DEPENDENCY_UNAVAILABLE` | Database service, AI-Mode, or the MCP server unreachable. |
+| `503 MCP_DISABLED` | MCP lookups are switched off in this environment. |
+| `504 DEPENDENCY_TIMEOUT` | Database service or the MCP server too slow. |
 
 ## Local checks
 

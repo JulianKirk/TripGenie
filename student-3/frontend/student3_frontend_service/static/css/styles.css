@@ -268,3 +268,11 @@ td.actions-cell { display: table-cell; }
 .itinerary-add__travellers { display: grid; gap: 0.15rem; font-size: 0.75rem; color: var(--ink-muted); }
 .itinerary-add__travellers input { width: 5rem; padding: 0.35rem 0.4rem; border: 1px solid var(--line); border-radius: var(--radius); }
 .button--link { border: 0; background: none; color: var(--accent); padding: 0; cursor: pointer; text-decoration: underline; }
+
+/* Release 1 MCP tools */
+.mcp-forms { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 0 0 1rem; }
+.mcp-form { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 1rem; }
+.mcp-form h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.mcp-form h3 code { display: block; font-size: 0.75rem; color: var(--ink-muted); font-weight: normal; }
+.mcp-result { border-top: 1px solid var(--line); padding-top: 1rem; }
+.mcp-result__raw pre { max-height: 20rem; overflow: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
