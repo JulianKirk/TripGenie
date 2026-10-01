@@ -1,21 +1,35 @@
 from __future__ import annotations
 
+import logging
+import time
+from typing import Any
 from uuid import uuid4
 
 from .ai_mode_client import AiModeClient
 from .ai_suggestions import build_prompt, resolve_draft, select_candidates
 from .client import DatabaseApiClient
 from .config import Settings
-from .errors import ApiError, dependency_unavailable, validation_error
+from .errors import (
+    ApiError,
+    bad_gateway,
+    dependency_timeout,
+    dependency_unavailable,
+    validation_error,
+)
+from .mcp_client import McpCallError, McpClient
 from .models import (
     AvailabilityStatus,
     DeleteResponse,
     DependencyStatus,
     HealthDependencies,
+    HealthIntegrations,
     HealthResponse,
     ItinerarySelection,
     ItinerarySelectionRequest,
     ItinerarySelectionResponse,
+    McpCompareRequest,
+    McpSearchRequest,
+    McpToolResponse,
     PlannedTransport,
     TransportOptionCreate,
     TransportOptionRecord,
@@ -46,6 +60,17 @@ from .trips_client import TripsApiClient
 
 _DB_OK_DETAIL = "Database API responded successfully."
 
+logger = logging.getLogger(__name__)
+
+
+def _mcp_disabled() -> ApiError:
+    return ApiError(
+        status_code=503,
+        code="MCP_DISABLED",
+        message="The MCP tool server is disabled in this environment.",
+        details=[{"field": "mcp", "issue": "disabled by configuration"}],
+    )
+
 
 class BackendService:
     """Business rules for the Student 3 public API.
@@ -60,11 +85,13 @@ class BackendService:
         client: DatabaseApiClient,
         trips_client: TripsApiClient | None = None,
         ai_client: AiModeClient | None = None,
+        mcp_client: McpClient | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._trips_client = trips_client
         self._ai_client = ai_client
+        self._mcp_client = mcp_client
 
     # ------------------------------------------------------------------ health
 
@@ -74,6 +101,7 @@ class BackendService:
             status="ok" if database.status == "ok" else "degraded",
             service=self._settings.service_name,
             dependencies=HealthDependencies(database=database),
+            integrations=self._integrations(),
         )
 
     def ready(self) -> tuple[int, HealthResponse]:
@@ -85,7 +113,13 @@ class BackendService:
                 status="ok" if is_ready else "unavailable",
                 service=self._settings.service_name,
                 dependencies=HealthDependencies(database=database),
+                integrations=self._integrations(),
             ),
+        )
+
+    def _integrations(self) -> HealthIntegrations:
+        return HealthIntegrations(
+            mcp="enabled" if self._settings.mcp_enabled else "disabled",
         )
 
     def _probe_database(self) -> DependencyStatus:
@@ -516,3 +550,98 @@ class BackendService:
     ) -> ItinerarySelectionResponse:
         self._itinerary().remove_trip_transport(trip_id, transport_id)
         return self.itinerary_selections(transport_id)
+
+    # -------------------------------------------------------------- MCP tools
+
+    def mcp_search(self, payload: McpSearchRequest) -> dict[str, object]:
+        arguments: dict[str, Any] = {"limit": payload.limit}
+        if payload.origin is not None:
+            arguments["origin"] = payload.origin
+        if payload.destination is not None:
+            arguments["destination"] = payload.destination
+        return self._run_mcp_tool("search", "transport_search", arguments)
+
+    def mcp_compare(self, payload: McpCompareRequest) -> dict[str, object]:
+        return self._run_mcp_tool(
+            "compare",
+            "transport_compare",
+            {"ids": list(payload.ids)},
+        )
+
+    def mcp_trip_costs(self, trip_id: str) -> dict[str, object]:
+        return self._run_mcp_tool(
+            "trip-costs",
+            "transport_trip_costs",
+            {"trip_id": trip_id},
+        )
+
+    def _run_mcp_tool(
+        self,
+        action: str,
+        tool: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, object]:
+        """Run one allow-listed, read-only transport tool on the shared server.
+
+        The caller picks an action, never a tool name or a server URL, and the
+        arguments are validated here before anything leaves this service. A
+        tool that ran and refused is returned as a structured error result so
+        the traveller sees why; the MCP server itself being unreachable or
+        answering nonsense is an outage, raised through the usual error types.
+        """
+        if not self._settings.mcp_enabled or self._mcp_client is None:
+            raise _mcp_disabled()
+
+        correlation_id = f"student3-mcp-{uuid4().hex[:12]}"
+        started = time.perf_counter()
+        try:
+            envelope = self._mcp_client.call_tool(tool, arguments, correlation_id)
+        except McpCallError as exc:
+            self._raise_for_mcp_outage(exc, tool)
+            result = McpToolResponse(
+                action=action,
+                tool=tool,
+                arguments=arguments,
+                status="error",
+                error={
+                    "code": exc.code,
+                    "message": exc.message,
+                    "retryable": exc.retryable,
+                },
+                correlation_id=correlation_id,
+                duration_ms=_elapsed_ms(started),
+            )
+        else:
+            result = McpToolResponse(
+                action=action,
+                tool=tool,
+                arguments=arguments,
+                status="ok",
+                data=envelope["data"],
+                correlation_id=str(envelope.get("correlation_id") or correlation_id),
+                duration_ms=_elapsed_ms(started),
+            )
+
+        # Identifiers and outcome only: tool payloads stay out of the logs.
+        logger.info(
+            "mcp_tool correlation_id=%s tool=%s status=%s duration_ms=%s",
+            result.correlation_id,
+            tool,
+            result.status,
+            result.duration_ms,
+        )
+        return result.model_dump(mode="json")
+
+    @staticmethod
+    def _raise_for_mcp_outage(exc: McpCallError, tool: str) -> None:
+        details = [{"field": "mcp", "issue": f"{tool}: {exc.code}"}]
+        if exc.code == "DEPENDENCY_TIMEOUT":
+            raise dependency_timeout(exc.message, details) from exc
+        if exc.code == "DEPENDENCY_UNAVAILABLE":
+            raise dependency_unavailable(exc.message, details) from exc
+        if exc.code == "BAD_GATEWAY":
+            raise bad_gateway(exc.message, details) from exc
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(int((time.perf_counter() - started) * 1000), 0)

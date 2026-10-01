@@ -14,6 +14,9 @@ This file supplements the repository-level `AGENTS.md` for `student-3/`.
   unavailable unless the requested operation intrinsically needs that service.
 - AI recommendations are advisory, use the packaged prompt asset, and may only
   recommend authoritative transport records.
+- Release 1 MCP lookups call the shared MCP server's read-only transport tools
+  through allow-listed backend actions. Those tools read this backend back on
+  `127.0.0.1:18003`, so MCP route handlers must stay synchronous (`def`).
 - Read the README in each layer before changing its behavior or contract.
 
 ## Development and verification

@@ -13,6 +13,9 @@
     <a class="sidebar-nav__ai" href="{{ request.url_for('ai_form') }}">
       <span aria-hidden="true">&#9733;</span> AI suggestions
     </a>
+    <a class="sidebar-nav__ai" href="{{ request.url_for('mcp_tools') }}">
+      <span aria-hidden="true">&#9881;</span> MCP tools
+    </a>
   </nav>
 
   {% if option_list_error %}

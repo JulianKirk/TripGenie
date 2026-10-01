@@ -1,0 +1,139 @@
+{% import "macros/forms.html" as forms %}
+<section class="panel" aria-labelledby="mcp-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">MCP tools</p>
+      <h2 id="mcp-heading">Look up transport through the shared MCP server</h2>
+    </div>
+  </div>
+
+  <p class="helper-copy">
+    Each lookup asks this feature's backend to run one registered, read-only
+    transport tool on the shared TripGenie MCP server, and shows the
+    structured result it returns. <strong>Nothing is saved</strong> &mdash;
+    add an option to a trip from its own page when you are ready.
+  </p>
+
+  <div class="mcp-forms">
+    <form class="mcp-form" method="post" action="{{ request.url_for('mcp_run', action='search') }}">
+      <h3>Search routes <code>transport_search</code></h3>
+      {{ forms.text_field("origin", "From (optional)", form.get("origin", ""), errors_by_field if action == "search" else {}) }}
+      {{ forms.text_field("destination", "To (optional)", form.get("destination", ""), errors_by_field if action == "search" else {}) }}
+      {{ forms.number_field("limit", "Results", form.get("limit", "5"), errors_by_field if action == "search" else {}, min="1", max=search_limit_max) }}
+      <p class="actions"><button class="button button--primary" type="submit">Run search</button></p>
+    </form>
+
+    <form class="mcp-form" method="post" action="{{ request.url_for('mcp_run', action='compare') }}">
+      <h3>Compare options <code>transport_compare</code></h3>
+      {% for slot in compare_slots %}
+        {{ forms.select_field("id_" ~ slot, "Option " ~ slot ~ (" (optional)" if slot > 1 else ""), transport_options, form.get("id_" ~ slot, ""), {}) }}
+      {% endfor %}
+      {% if action == "compare" %}{{ forms.field_errors("ids", errors_by_field) }}{% endif %}
+      <p class="actions"><button class="button button--primary" type="submit">Run comparison</button></p>
+    </form>
+
+    <form class="mcp-form" method="post" action="{{ request.url_for('mcp_run', action='trip-costs') }}">
+      <h3>Trip transport costs <code>transport_trip_costs</code></h3>
+      {{ forms.select_or_text_field("trip_id", "Trip", trip_options, form.get("trip_id", ""), errors_by_field if action == "trip-costs" else {}, trips_available, trips_unavailable_hint) }}
+      <p class="actions"><button class="button button--primary" type="submit">Read trip costs</button></p>
+    </form>
+  </div>
+
+  <div aria-live="polite">
+    {% if error %}
+      <div class="banner banner--error" role="alert">
+        <p><strong>{{ error.code }}</strong></p>
+        <p>{{ error.message }}</p>
+        {% if error_hint %}<p>{{ error_hint }}</p>{% endif %}
+        {% if error.details %}
+          <ul class="field-errors">
+            {% for detail in error.details %}
+              <li>{{ detail.field }}: {{ detail.issue }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if result %}
+      <article class="mcp-result" aria-labelledby="mcp-result-heading">
+        <div class="panel__header panel__header--compact">
+          <h3 id="mcp-result-heading">Tool result</h3>
+          <span class="status {{ 'status--available' if result.is_ok else 'status--cancelled' }}">{{ result.status }}</span>
+        </div>
+
+        <dl class="detail-grid">
+          <div><dt>Tool</dt><dd><code>{{ result.tool }}</code></dd></div>
+          <div><dt>Arguments</dt><dd>
+            {% for key, value in result.arguments.items() %}<code>{{ key }}={{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}
+          </dd></div>
+          <div><dt>Duration</dt><dd>{{ result.duration_ms }} ms</dd></div>
+          <div><dt>Correlation ID</dt><dd><code>{{ result.correlation_id }}</code></dd></div>
+        </dl>
+
+        {% if not result.is_ok and result.error %}
+          <div class="banner banner--warning" role="status">
+            <p><strong>The tool ran and refused: {{ result.error.code }}</strong></p>
+            <p>{{ result.error.message }}</p>
+          </div>
+        {% elif result.action == "trip-costs" and result.data %}
+          <dl class="detail-grid">
+            <div><dt>Trip</dt><dd>{{ result.data.trip_id }}</dd></div>
+            <div><dt>Planned entries</dt><dd>{{ result.data.entry_count }}</dd></div>
+            <div><dt>Counting toward the trip</dt><dd>{{ result.data.active_entry_count }}</dd></div>
+            <div><dt>Estimated total</dt><dd>{{ result.data.estimated_cost_total }} {{ result.data.currency }}</dd></div>
+          </dl>
+          {% if result.data.planned %}
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th scope="col">Route</th><th scope="col">Provider</th><th scope="col">Travellers</th><th scope="col">Plan state</th><th scope="col">Estimated cost</th></tr></thead>
+                <tbody>
+                  {% for planned in result.data.planned %}
+                    <tr>
+                      <th scope="row">{{ planned.option.origin }} &rarr; {{ planned.option.destination }}</th>
+                      <td>{{ planned.option.provider }}</td>
+                      <td>{{ planned.entry.traveller_count }}</td>
+                      <td>{{ planned.entry.plan_status }}</td>
+                      <td>{{ planned.estimated_cost }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="helper-copy">This trip has no transport planned yet.</p>
+          {% endif %}
+        {% elif result.is_ok %}
+          {% if result.items %}
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th scope="col">Route</th><th scope="col">Type</th><th scope="col">Provider</th><th scope="col">Departs</th><th scope="col">Price</th><th scope="col">Seats left</th></tr></thead>
+                <tbody>
+                  {% for item in result.items %}
+                    <tr>
+                      <th scope="row"><a href="{{ request.url_for('view_option', transport_id=item.id) }}">{{ item.origin }} &rarr; {{ item.destination }}</a></th>
+                      <td>{{ item.type }}</td>
+                      <td>{{ item.provider }}</td>
+                      <td>{{ item.departure_time }}</td>
+                      <td>${{ item.price }} {{ item.pricing_basis | replace("_", " ") }}</td>
+                      <td>{{ "unknown" if item.seats_remaining is none else item.seats_remaining }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% if result.data.truncated %}<p class="footnote">More options matched; raise the result count to see them.</p>{% endif %}
+          {% else %}
+            <p class="helper-copy">The tool ran successfully and found no matching transport.</p>
+          {% endif %}
+        {% endif %}
+
+        <details class="mcp-result__raw">
+          <summary>Structured tool result</summary>
+          <pre>{{ (result.data if result.is_ok else result.error.model_dump()) | tojson(indent=2) }}</pre>
+        </details>
+        <p class="footnote">Read-only lookup &mdash; nothing was saved.</p>
+      </article>
+    {% endif %}
+  </div>
+</section>

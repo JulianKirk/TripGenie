@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -185,10 +185,21 @@ class HealthDependencies(StrictModel):
     database: DependencyStatus
 
 
+class HealthIntegrations(StrictModel):
+    """Which optional Release 1 integrations this deployment has switched on.
+
+    Configuration, not a probe: the host-run servers are never contacted from
+    a health check, so a stopped MCP server cannot make this service unready.
+    """
+
+    mcp: Literal["enabled", "disabled"]
+
+
 class HealthResponse(StrictModel):
     status: str
     service: str
     dependencies: HealthDependencies
+    integrations: HealthIntegrations
 
 
 class TransportOptionFields(StrictModel):
@@ -472,3 +483,58 @@ class TripTransportSummary(StrictModel):
     active_entry_count: int = Field(ge=0)
     estimated_cost_total: Price
     planned: list[PlannedTransport]
+
+
+# ---------------------------------------------------------------- Release 1 MCP
+
+MAX_MCP_SEARCH_RESULTS = 20
+
+
+class McpSearchRequest(StrictModel):
+    """Route filters for the shared `transport_search` tool."""
+
+    origin: ShortText | None = None
+    destination: ShortText | None = None
+    limit: int = Field(default=5, ge=1, le=MAX_MCP_SEARCH_RESULTS)
+
+
+class McpCompareRequest(StrictModel):
+    """Transport ids for the shared `transport_compare` tool."""
+
+    ids: list[TransportIdentifier] = Field(
+        min_length=1,
+        max_length=MAX_COMPARE_SELECTION,
+    )
+
+    @field_validator("ids")
+    @classmethod
+    def validate_distinct_ids(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("must not contain duplicate transport ids")
+        return value
+
+
+class McpToolError(StrictModel):
+    code: str
+    message: str
+    retryable: bool
+
+
+class McpToolResponse(StrictModel):
+    """One shared MCP tool call, as a traveller-facing structured result.
+
+    `status` separates a tool that ran and refused (a bad id, an unknown
+    trip) from an outage, which is an HTTP error instead. `persisted` is
+    always false: every transport tool is read-only, and nothing a lookup
+    returns is saved until the traveller adds it through the ordinary routes.
+    """
+
+    action: Literal["search", "compare", "trip-costs"]
+    tool: str
+    arguments: dict[str, Any]
+    status: Literal["ok", "error"]
+    data: dict[str, Any] | None = None
+    error: McpToolError | None = None
+    correlation_id: str
+    duration_ms: int = Field(ge=0)
+    persisted: Literal[False] = False

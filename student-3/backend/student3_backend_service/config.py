@@ -8,6 +8,7 @@ DEFAULT_DB_BASE_URL = "http://student-3-database:8004"
 DEFAULT_TRIPS_BASE_URL = "http://student-1-backend:8001"
 DEFAULT_AI_MODE_BASE_URL = "http://ai-mode:8006"
 DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v1.md"
+DEFAULT_MCP_BASE_URL = "http://127.0.0.1:8012/mcp"
 
 
 def _parse_timeout(value: str | None, *, env_name: str, default: float) -> float:
@@ -106,6 +107,11 @@ class Settings:
     # prompt is refused here with a domain error rather than upstream.
     ai_prompt_max_chars: int = 12000
     ai_max_candidates: int = 12
+    # Release 1 host-run MCP server. Off unless Compose turns it on, so unit
+    # tests and CI never reach for a server that is not there.
+    mcp_enabled: bool = False
+    mcp_base_url: str = DEFAULT_MCP_BASE_URL
+    mcp_timeout_seconds: float = 40.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -179,5 +185,19 @@ class Settings:
                 os.getenv("STUDENT3_BACKEND_AI_MAX_CANDIDATES"),
                 env_name="STUDENT3_BACKEND_AI_MAX_CANDIDATES",
                 default=12,
+            ),
+            mcp_enabled=_parse_bool(
+                os.getenv("STUDENT3_BACKEND_MCP_ENABLED"),
+                default=False,
+            ),
+            mcp_base_url=_normalise_base_url(
+                os.getenv("STUDENT3_BACKEND_MCP_BASE_URL"),
+                env_name="STUDENT3_BACKEND_MCP_BASE_URL",
+                default=DEFAULT_MCP_BASE_URL,
+            ),
+            mcp_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_BACKEND_MCP_TIMEOUT_SECONDS",
+                default=40.0,
             ),
         )

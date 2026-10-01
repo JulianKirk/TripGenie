@@ -13,6 +13,7 @@ from .models import (
     DeleteResponse,
     ErrorEnvelope,
     ItinerarySelectionResponse,
+    McpToolResult,
     TransportOptionRecord,
     TransportRecommendation,
     TripDirectory,
@@ -44,6 +45,7 @@ class BackendApiClient:
     ) -> None:
         self._api_prefix = settings.backend_api_prefix
         self._ai_timeout_seconds = settings.ai_timeout_seconds
+        self._mcp_timeout_seconds = settings.mcp_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -229,6 +231,42 @@ class BackendApiClient:
             malformed_message=(
                 "Backend API returned a malformed recommendation response."
             ),
+        )
+        return envelope.data
+
+    async def mcp_search(self, payload: dict[str, object]) -> McpToolResult:
+        return await self._mcp(
+            f"{self._api_prefix}/transport-options/mcp/search",
+            payload,
+        )
+
+    async def mcp_compare(self, transport_ids: list[str]) -> McpToolResult:
+        return await self._mcp(
+            f"{self._api_prefix}/transport-options/mcp/compare",
+            {"ids": transport_ids},
+        )
+
+    async def mcp_trip_costs(self, trip_id: str) -> McpToolResult:
+        return await self._mcp(f"{self._api_prefix}/trips/{trip_id}/transport/mcp")
+
+    async def _mcp(
+        self,
+        path: str,
+        payload: dict[str, object] | None = None,
+    ) -> McpToolResult:
+        """One shared MCP tool call through this feature's backend.
+
+        A tool that ran and refused comes back as a 200 result with an error
+        status; only the MCP server being disabled or unreachable raises.
+        """
+        envelope = await self._request_model(
+            "POST",
+            path,
+            json=payload,
+            timeout=self._mcp_timeout_seconds,
+            expected_statuses={200},
+            response_type=DataEnvelope[McpToolResult],
+            malformed_message="Backend API returned a malformed MCP tool result.",
         )
         return envelope.data
 

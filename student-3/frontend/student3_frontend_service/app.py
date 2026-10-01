@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -20,6 +21,7 @@ from .models import (
     FrontendHealthDependencies,
     HealthResponse,
     ItinerarySelectionResponse,
+    McpToolResult,
     TransportOptionRecord,
     TransportType,
     TripDirectory,
@@ -29,6 +31,22 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(PACKAGE_ROOT / "templates"))
 
 MAX_COMPARE_SELECTION = 4
+MAX_MCP_SEARCH_RESULTS = 20
+MCP_ACTIONS = ("search", "compare", "trip-costs")
+TRIP_ID_PATTERN = re.compile(r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
+# Plain-language guidance shown under the backend's own message.
+MCP_MESSAGES = {
+    "MCP_DISABLED": (
+        "MCP tools are switched off for this deployment. Browsing, comparing "
+        "and planning still work as normal."
+    ),
+    "DEPENDENCY_UNAVAILABLE": (
+        "The shared MCP server is not reachable. Start it on the host "
+        "(python -m tripgenie_mcp serve) and try again."
+    ),
+    "DEPENDENCY_TIMEOUT": "The shared MCP server took too long to answer.",
+    "BAD_GATEWAY": "The shared MCP server sent back a result that could not be used.",
+}
 
 TYPE_OPTIONS = [
     (item.value, item.value.replace("_", " ").title()) for item in TransportType
@@ -678,6 +696,123 @@ def create_app(
             error=error,
             recommendation=recommendation,
             **ai_context(options, directory),
+        )
+
+    # ------------------------------------------------------------ MCP tools
+
+    def empty_mcp_form() -> dict[str, str]:
+        return {
+            "origin": "",
+            "destination": "",
+            "limit": "5",
+            "trip_id": "",
+            **{f"id_{slot}": "" for slot in range(1, MAX_COMPARE_SELECTION + 1)},
+        }
+
+    async def render_mcp(
+        request: Request,
+        client: BackendApiClient,
+        *,
+        form: dict[str, str],
+        action: str | None = None,
+        result: McpToolResult | None = None,
+        error: ApiError | None = None,
+    ) -> Response:
+        options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
+        return render(
+            request,
+            "partials/mcp_tools.html",
+            page_title="MCP transport tools",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=None,
+            filters={},
+            form=form,
+            action=action,
+            result=result,
+            error=error,
+            error_hint=MCP_MESSAGES.get(error.code) if error else None,
+            errors_by_field=error_details_by_field(error),
+            transport_options=transport_choices(options),
+            compare_slots=range(1, MAX_COMPARE_SELECTION + 1),
+            search_limit_max=MAX_MCP_SEARCH_RESULTS,
+            **ai_context(options, directory),
+        )
+
+    @app.get("/tools", name="mcp_tools", response_model=None)
+    async def mcp_tools(
+        request: Request,
+        client: ClientDep,
+        trip_id: Annotated[str | None, Query()] = None,
+    ) -> Response:
+        form = empty_mcp_form() | {"trip_id": (trip_id or "").strip()}
+        return await render_mcp(request, client, form=form)
+
+    @app.post("/tools/{action}", name="mcp_run", response_model=None)
+    async def mcp_run(request: Request, action: str, client: ClientDep) -> Response:
+        """Run one allow-listed MCP lookup through this feature's backend.
+
+        The browser picks an action and its inputs; which tool runs, and on
+        which server, is decided by the backend.
+        """
+        submitted = {
+            key: str(value).strip() for key, value in (await request.form()).items()
+        }
+        form = empty_mcp_form() | submitted
+        result: McpToolResult | None = None
+        error: ApiError | None = None
+        try:
+            if action == "search":
+                payload: dict[str, object] = {
+                    name: submitted[name]
+                    for name in ("origin", "destination")
+                    if submitted.get(name)
+                }
+                limit = submitted.get("limit", "")
+                if limit:
+                    # Non-numeric text is forwarded so the backend reports it.
+                    payload["limit"] = int(limit) if limit.isdigit() else limit
+                result = await client.mcp_search(payload)
+            elif action == "compare":
+                selected = [
+                    submitted[f"id_{slot}"]
+                    for slot in range(1, MAX_COMPARE_SELECTION + 1)
+                    if submitted.get(f"id_{slot}")
+                ]
+                result = await client.mcp_compare(selected)
+            elif action == "trip-costs":
+                trip_id = submitted.get("trip_id", "")
+                if TRIP_ID_PATTERN.fullmatch(trip_id) is None:
+                    raise ApiError(
+                        status_code=422,
+                        code="VALIDATION_ERROR",
+                        message="Choose a trip to read its transport costs.",
+                        details=[{"field": "trip_id", "issue": "select a trip"}],
+                    )
+                result = await client.mcp_trip_costs(trip_id)
+            else:
+                raise ApiError(
+                    status_code=404,
+                    code="NOT_FOUND",
+                    message=f"Unknown MCP action '{action}'.",
+                    details=[
+                        {
+                            "field": "action",
+                            "issue": f"must be one of: {', '.join(MCP_ACTIONS)}",
+                        },
+                    ],
+                )
+        except ApiError as exc:
+            error = exc
+
+        return await render_mcp(
+            request,
+            client,
+            form=form,
+            action=action if action in MCP_ACTIONS else None,
+            result=result,
+            error=error,
         )
 
     # ------------------------------------------------------------ option CRUD

@@ -4,7 +4,13 @@
       <p class="section-eyebrow">Trip plan</p>
       <h2 id="trip-heading">Transport for {{ summary.trip_id }}</h2>
     </div>
-    <a class="button button--primary" href="{{ request.url_for('browse') }}">Browse transport</a>
+    <div class="actions">
+      <form method="post" action="{{ request.url_for('mcp_run', action='trip-costs') }}">
+        <input type="hidden" name="trip_id" value="{{ summary.trip_id }}">
+        <button class="button" type="submit">Check costs via MCP</button>
+      </form>
+      <a class="button button--primary" href="{{ request.url_for('browse') }}">Browse transport</a>
+    </div>
   </div>
 
   <dl class="detail-grid">

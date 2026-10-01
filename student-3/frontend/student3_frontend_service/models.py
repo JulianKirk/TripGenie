@@ -8,7 +8,7 @@ at the boundary instead of blowing up inside a template.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -274,3 +274,33 @@ class TripTransportSummary(LenientModel):
     active_entry_count: int
     estimated_cost_total: float
     planned: list[PlannedTransport]
+
+
+class McpToolError(LenientModel):
+    code: str
+    message: str
+    retryable: bool = False
+
+
+class McpToolResult(LenientModel):
+    """One shared MCP tool call, as the backend reports it. Never persisted."""
+
+    action: str
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    data: dict[str, Any] | None = None
+    error: McpToolError | None = None
+    correlation_id: str
+    duration_ms: int = 0
+    persisted: bool = False
+
+    @property
+    def is_ok(self) -> bool:
+        return self.status == "ok"
+
+    @property
+    def items(self) -> list[dict[str, Any]]:
+        """Rows for the search and compare tools, which share one shape."""
+        rows = (self.data or {}).get("items")
+        return rows if isinstance(rows, list) else []

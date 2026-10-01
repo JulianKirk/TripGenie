@@ -14,6 +14,7 @@ from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import VALIDATION_ERROR_MESSAGE, ApiError, bad_request, validation_error
+from .mcp_client import McpClient
 from .models import (
     AvailabilityStatus,
     DataEnvelope,
@@ -24,6 +25,9 @@ from .models import (
     HealthResponse,
     ItinerarySelectionRequest,
     ItinerarySelectionResponse,
+    McpCompareRequest,
+    McpSearchRequest,
+    McpToolResponse,
     TransportIdentifier,
     TransportOptionCreate,
     TransportOptionRecord,
@@ -317,6 +321,7 @@ def create_app(
     transport: httpx.BaseTransport | None = None,
     trips_transport: httpx.BaseTransport | None = None,
     ai_transport: httpx.BaseTransport | None = None,
+    mcp_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -325,14 +330,17 @@ def create_app(
         client = DatabaseApiClient(app_settings, transport=transport)
         trips_client = TripsApiClient(app_settings, transport=trips_transport)
         ai_client = AiModeClient(app_settings, transport=ai_transport)
+        mcp_client = McpClient(app_settings, transport=mcp_transport)
         app.state.database_client = client
         app.state.trips_client = trips_client
         app.state.ai_client = ai_client
+        app.state.mcp_client = mcp_client
         app.state.backend_service = BackendService(
             app_settings,
             client,
             trips_client,
             ai_client,
+            mcp_client,
         )
         try:
             yield
@@ -340,6 +348,7 @@ def create_app(
             client.close()
             trips_client.close()
             ai_client.close()
+            mcp_client.close()
 
     app = FastAPI(
         title="TripGenie Student 3 Transport API",
@@ -465,6 +474,47 @@ def create_app(
         saves through the normal plan-entry route if they want it.
         """
         return envelope(service.recommend_transport(payload))
+
+    # Release 1 MCP. Sync handlers on purpose: they block a threadpool worker,
+    # not the event loop. The shared transport tools read this same service's
+    # public /api routes, so while one worker waits on MCP another has to be
+    # free to answer the server's call back in -- an async handler waiting on
+    # a blocking client here would deadlock against itself.
+    @router.post(
+        "/transport-options/mcp/search",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[McpToolResponse],
+    )
+    def mcp_search(
+        payload: McpSearchRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Search transport through the shared MCP `transport_search` tool."""
+        return envelope(service.mcp_search(payload))
+
+    @router.post(
+        "/transport-options/mcp/compare",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[McpToolResponse],
+    )
+    def mcp_compare(
+        payload: McpCompareRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Compare up to four options through the shared `transport_compare`."""
+        return envelope(service.mcp_compare(payload))
+
+    @router.post(
+        "/trips/{trip_id}/transport/mcp",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[McpToolResponse],
+    )
+    def mcp_trip_costs(
+        trip_id: TripIdentifier,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Read a trip's priced transport through `transport_trip_costs`."""
+        return envelope(service.mcp_trip_costs(trip_id))
 
     @router.post(
         "/transport-options",
