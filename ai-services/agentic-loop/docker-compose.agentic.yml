@@ -1,4 +1,4 @@
-# CI-only overlay for the agentic loop. Internal-only backends that the loop
+# Local overlay for the agentic loop. Internal-only backends that the loop
 # probes directly need a published port for the duration of the run and nowhere
 # else.
 #

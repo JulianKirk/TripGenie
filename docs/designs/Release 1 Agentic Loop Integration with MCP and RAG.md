@@ -26,31 +26,24 @@ AGENTIC LOOP
 Choose a validation mode:
 ```
 
-`--ci` (non-interactive) keeps working and defaults to `services`, so the existing workflow is unchanged.
+`--ci` (non-interactive) skips the menu and the human review and defaults to `services`.
 
 ## Fetching CI results automatically
 
-Lab 5 downloads the CI artifact by hand. The `ci` mode does it with the `gh` CLI, which `agentic-ci.yml` already uses to read workflow runs:
+Lab 5 downloads the CI artifact by hand. The `ci` mode does it with the `gh` CLI:
 
 ```bash
 gh run list --workflow student-1-ci.yml --branch <branch> --limit 1 --json databaseId,conclusion,headSha
 gh run download <run-id> --dir reports/ci/student-1
 ```
 
-The collector turns each run's conclusion and artifacts into evidence for the agents. Locally this uses the developer's `gh auth login`; in Actions it uses `GITHUB_TOKEN`. If `gh` is unavailable, the mode reports that instead of failing the other modes.
+The collector turns each run's conclusion and artifacts into evidence for the agents. It uses the developer's `gh auth login`. If `gh` is unavailable, the mode reports that instead of failing the other modes.
 
-## Single CI run
+## Local only
 
-`agentic-ci.yml` currently runs one GitHub matrix job per service (`student-1`, `student-2`, ...), each with its own report and PR comment. This changes to **one `agentic-loop` job** that does the per-service selection internally:
+The agentic loop runs on the developer's machine, not in GitHub Actions; the former `agentic-ci.yml` workflow has been removed. Every mode needs things CI does not have or should not need: the integrated services, the host MCP and RAG servers, Ollama with the approved models, and Claude credentials. Student CI workflows keep MCP and RAG disabled, so a student build never needs a model.
 
-1. **Pick services** (a step, not a job): the existing gate runs unchanged and outputs the services to validate, i.e. those whose `student-x-ci.yml` passed for this commit. A manual run picks all of them.
-2. **Start** only those services, in one command: `docker compose -f docker-compose.yml -f ai-services/agentic-loop/docker-compose.agentic.yml up -d --build <compose targets>`.
-3. **Run** `python agentic_loop.py --ci --mode services` with `SERVICES="student-1 student-3"`. The loop iterates over those entries in `services.json`, runs each one's `checks/*.json`, and marks the rest as skipped.
-4. **Report once**: one check table with a section per service (including skipped ones and why), one implementation-agent and review-agent pass over the combined evidence, and one step summary and PR comment.
-
-A service that doesn't become ready is reported as failed in its own section; the rest still run. Any failed check fails the job. The `Loop unit tests` job stays separate.
-
-MCP and RAG stay disabled in each student's own `student-x-ci.yml`, so a student build never needs a model. The agentic loop job is where they are switched on: after the services run it starts the MCP server (per-student reads limited to the services started above), then Ollama with `qwen2.5:0.5b` and `nomic-embed-text`, AI-Mode and the RAG server, and runs `--mode mcp` and `--mode rag`. All three reports go into the same PR comment. The `ci` mode stays local, since this job is already the CI view.
+Services mode can still validate several services in one run: `SERVICES="student-1 student-3" python agentic_loop.py --ci --mode services` iterates those entries in `services.json`, waits for each to become ready, runs its `checks/*.json`, and marks the rest skipped. A service that doesn't become ready is reported as failed in its own section; the rest still run. The result is one report with a section per service and one implementation-agent and review-agent pass over the combined evidence, saved under `reports/`.
 
 ## Testing with the Agentic Loop
 

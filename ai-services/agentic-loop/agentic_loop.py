@@ -412,8 +412,8 @@ def observe_mcp(plan):
         missing, extra = sorted(expected - names), sorted(names - expected)
         results = [("tools/list", f"FAIL: missing {missing}, unexpected {extra}")]
 
-    # In CI only the services that passed their own build are started, so a read
-    # from any other student would fail for a reason that is not the MCP server.
+    # With SERVICES set, only those backends were started, so a read from any
+    # other student would fail for a reason that is not the MCP server.
     started = os.getenv("SERVICES")
     values = {}
     for step in plan["steps"]:
@@ -626,8 +626,8 @@ def call_model(model, system_prompt, user_prompt, max_tokens):
         text = "\n".join(b.text for b in response.content if b.type == "text").strip()
         return text or "No response generated."
     except Exception as exc:  # noqa: BLE001 - a missing key is evidence, not a crash
-        # No credentials in CI by default. The loop still reports the
-        # deterministic evidence, which is the half that gates the build.
+        # No credentials, no agents. The loop still reports the deterministic
+        # evidence, which is the half that decides the exit code.
         return f"{model} unavailable ({exc})"
 
 
@@ -697,16 +697,11 @@ def render_report(mode, plan, sections, recommendation, review, failures):
 
 
 def write_report(mode, report):
-    """Keep every run for the release write-up, and put it on the GitHub Actions
-    summary page too -- nobody reads a job log, they do read the summary tab."""
+    """Keep every run for the release write-up."""
     REPORTS.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = REPORTS / f"{mode}-{stamp}.md"
     path.write_text(report, encoding="utf-8")
-    summary = os.getenv("GITHUB_STEP_SUMMARY")
-    if summary:
-        with Path(summary).open("a", encoding="utf-8") as handle:
-            handle.write(report)
     return path
 
 
@@ -725,10 +720,12 @@ def choose_mode():
 
 
 def pick_mode(argv, interactive):
-    """--mode wins; a terminal with no flag gets the menu; anything else runs
-    services, so the existing `--ci` workflow is unchanged."""
+    """--mode wins; a terminal with no flag gets the menu; anything else
+    (a pipe, or --ci for a non-interactive run) runs services."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--ci", action="store_true", help="non-interactive run")
+    parser.add_argument(
+        "--ci", action="store_true", help="non-interactive: no menu, no human review"
+    )
     parser.add_argument("--mode", choices=MODES)
     args = parser.parse_args(argv)
     if args.mode:

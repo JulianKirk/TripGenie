@@ -67,7 +67,7 @@ transitive dependencies. This lets its public catalogue flows resolve shared
 locations and reach the same service graph used by the integrated application,
 rather than reviewing an intentionally degraded three-container slice. Ollama
 remains host-managed; AI checks must accept its documented unavailable state
-when no model runtime is configured on the runner.
+when no model runtime is configured on the machine.
 
 ## Run it
 
@@ -83,7 +83,7 @@ backends while the loop runs. They remain private in the main Compose file.
 
 `--ci` skips the human-review prompt.
 
-Several services at once, the way CI runs them -- the loop waits for each one's
+Several services in one run -- the loop waits for each one's
 readiness itself, reports a service that never becomes ready as failed in its
 own section, and marks the rest skipped:
 
@@ -152,69 +152,33 @@ profile locally. The implementation agent defaults to `claude-sonnet-5` and the
 reviewer to `claude-opus-5`; the reviewer checks the recommendation, so it is
 the more capable of the two. Override either with `IMPLEMENTATION_MODEL` /
 `REVIEW_MODEL`. With no credentials the agent sections print "unavailable" and
-the run still passes or fails on the checks, so CI works either way (add
-`ANTHROPIC_API_KEY` to the repository secrets to turn them on).
+the run still passes or fails on the checks.
 
-## In CI
+## Local only
 
-`.github/workflows/agentic-ci.yml` runs on push and pull request as two jobs.
-It runs the `services`, `mcp` and `rag` modes; `ci` stays local. MCP and RAG
-are switched on only here -- each student's own CI keeps them disabled so a
-student build never needs a model.
+The loop is not part of CI -- no workflow runs it or its unit tests. Run it on
+your machine, where the services, the host MCP and RAG servers, Ollama and
+your Claude credentials already are. A full Release 1 run:
 
-- **Loop unit tests** -- `pytest` on the loop itself. Always runs, starts no
-  containers, and is the reason a change to `agentic_loop.py` still gets tested
-  when every service below is skipped. One registry-contract test uses
-  `docker compose config`, which is available on the GitHub runner.
-- **Agentic loop** -- one job. Its first step is the gate: for each service it
-  polls that service's own build-and-validate workflow for this commit and
-  decides whether the loop runs. Compose then starts only the chosen services
-  in one command, and the loop runs with `SERVICES` set to them and `SKIPPED`
-  carrying the gate's reason for the rest. Any failed check fails the job.
-  Then it starts the MCP server on the runner and runs `--mode mcp`, with the
-  per-student reads limited to the services just started (tool registration
-  and the validation probes always run). Finally it starts Ollama from the
-  official image with `qwen2.5:0.5b` and `nomic-embed-text`, AI-Mode from
-  Compose, builds the RAG index, starts the RAG server and runs `--mode rag`.
-  RAG answers need the MCP server too: AI-Mode's `/generate` runs its tool
-  loop against it, so locally start MCP before running `--mode rag`.
-  MCP and RAG run even when no service was selected, and a change under
-  `ai-services/ai-mode`, `mcp-server` or `rag-server` triggers the workflow.
+```bash
+docker compose -f ../../docker-compose.yml -f docker-compose.agentic.yml up -d --build
+python agentic_loop.py --ci --mode services   # with SERVICES="shared student-1 ..." for all of them
+python agentic_loop.py --ci --mode mcp        # MCP server running
+python agentic_loop.py --ci --mode rag        # Ollama, AI-Mode, MCP and RAG running
+python agentic_loop.py --ci --mode ci         # gh auth login first
+pytest -q                                     # the loop's own tests
+```
 
-| That service's workflow | This service |
-| --- | --- |
-| passed | loop runs |
-| failed | skipped -- no point validating a build that did not pass |
-| never started (its path filters skipped the commit) | skipped -- the service did not change |
-| could not be read | loop runs ungated, rather than silently skipping validation |
-| still running after 30 minutes | loop runs ungated |
-
-The gate lists every workflow run for the commit in one call, so all six services
-share a single two minute wait for workflows to appear -- a commit that changes
-nothing clears the gate in about two minutes, not two minutes per service.
-
-So an ordinary commit runs the loop for the one or two services it touched, not
-all six, and the gate's verdict for every service is written to the run summary
-as a table. When nothing was selected the summary says so outright:
-"No services were changed - agentic loop skipped for all services."
-"Run workflow" ignores the gate and runs everything.
-
-One gap worth knowing: a change to the shared service does not trigger student 2's
-CI, so student 2's loop skips even though it calls the shared backend. Integration
-CI is what covers that direction.
+RAG answers need the MCP server as well: AI-Mode's `/generate` runs its tool
+loop against it, so start MCP before `--mode rag`.
 
 ## Where the findings go
 
-Both agents' output is written to the job's **Summary** page (via
-`GITHUB_STEP_SUMMARY`) as a check table plus the two agent sections -- not just
-buried in the log. Locally it prints to stdout; `--ci` skips the human-review
-prompt but not the printing.
-
-On a pull request the workflow posts the services, MCP and RAG reports as one
-comment, edited in place on later pushes rather than appended, so a busy pull
-request does not fill with tables. It posts whether the loop passed or failed,
-and says nothing at all when the commit is not on an open pull request.
+Each run prints PLAN -> ACT -> OBSERVE -> AGENTS -> HUMAN -> ADAPT to stdout
+and saves the same check tables and agent sections to
+`reports/<mode>-<UTC timestamp>.md`. Without `--ci` it also asks for the human
+review decision.
 
 Findings are advisory. Only the deterministic checks set the exit code, so a
-broken or unauthenticated Claude call cannot fail the build -- and equally,
-cannot block it. Read the summary, don't just trust the green tick.
+broken or unauthenticated Claude call cannot fail a run -- and equally, cannot
+block it. Read the report, don't just trust the exit code.
