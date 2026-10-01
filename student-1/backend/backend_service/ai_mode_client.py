@@ -321,6 +321,10 @@ class AiModeClient:
                 "AI-Mode service returned a malformed error response.",
             )
             try:
+                # AI-Mode adds a top-level "tools" trace to errors (ADR 0004);
+                # only the error member is part of the contract consumed here.
+                if isinstance(payload, dict):
+                    payload = {"error": payload.get("error")}
                 envelope = ErrorEnvelope.model_validate(payload)
             except ValidationError as exc:
                 raise bad_gateway(
