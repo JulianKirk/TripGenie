@@ -18,7 +18,10 @@ from .config import Settings
 from .dependencies import DbDep, LocationDep  # noqa: TC001 (FastAPI runtime)
 from .itinerary_client import ItineraryClient
 from .itinerary_routes import router as itinerary_router
+from .knowledge import ask as ask_knowledge
+from .knowledge_models import KnowledgeRequest, KnowledgeResponse
 from .location_client import LocationClient
+from .rag_client import RagClient
 from .schemas import HealthResponse
 
 if TYPE_CHECKING:
@@ -34,6 +37,7 @@ def create_app(
     location_transport: httpx.AsyncBaseTransport | None = None,
     itinerary_transport: httpx.AsyncBaseTransport | None = None,
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
+    rag_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
 
@@ -44,11 +48,13 @@ def create_app(
         app.state.location = LocationClient(settings, transport=location_transport)
         app.state.itinerary = ItineraryClient(settings, transport=itinerary_transport)
         app.state.ai = AiModeClient(settings, transport=ai_mode_transport)
+        app.state.rag = RagClient(settings, transport=rag_transport)
         yield
         await app.state.db.aclose()
         await app.state.location.aclose()
         await app.state.itinerary.aclose()
         await app.state.ai.aclose()
+        await app.state.rag.aclose()
 
     app = FastAPI(title="Activities and Attractions Backend Service", lifespan=lifespan)
     errors.register(app)
@@ -97,6 +103,12 @@ def create_app(
             request.app.state.ai,
             resolve_activity=partial(get_activity, db=db, location=location),
         )
+
+    @app.post("/activity/knowledge", response_model=KnowledgeResponse)
+    async def knowledge(
+        payload: KnowledgeRequest, request: Request
+    ) -> KnowledgeResponse:
+        return await ask_knowledge(payload, settings, request.app.state.rag)
 
     app.include_router(itinerary_router)
     app.include_router(activity_router)
