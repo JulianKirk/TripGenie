@@ -163,13 +163,16 @@ class ToolTrace(StrictModel):
     error: str | None = None
 
 
-class GenerateResponsePayload(StrictModel):
+class PlainGenerateResponsePayload(StrictModel):
     run_id: ShortText
     correlation_id: CorrelationId
     model: ModelName
     provider: ShortText = "ollama"
     response: str
     done: bool = True
+
+
+class GenerateResponsePayload(PlainGenerateResponsePayload):
     tools: list[ToolTrace] = Field(default_factory=list)
 
 
