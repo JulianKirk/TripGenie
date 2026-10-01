@@ -91,7 +91,7 @@
               <h5>{{ tool_labels.get(result.tool, result.tool) }}</h5>
               <p class="item-card__meta">
                 <code>{{ result.tool }}</code>
-                {% for key, value in result.arguments.items() %} · {{ key }}={{ value|tojson if value is mapping else value }}{% endfor %}
+                {% for key, value in result.arguments.items() %} · {{ key }}={{ 'not set' if value is none else (value|tojson if value is mapping else value) }}{% endfor %}
               </p>
               {% if result.status == 'ok' %}
                 <ul>

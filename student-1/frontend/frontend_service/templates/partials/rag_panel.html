@@ -32,7 +32,7 @@
         aria-describedby="rag-question-hint{% if question_errors %} question-errors{% endif %}"
         {% if question_errors %}aria-invalid="true"{% endif %}
       >{{ rag_question }}</textarea>
-      <p id="rag-question-hint" class="hint-copy">Up to 2,000 characters, for example “What limits apply to itinerary items?”</p>
+      <p id="rag-question-hint" class="hint-copy">Up to 2,000 characters, for example “When is cherry blossom season in Tokyo?”</p>
       {{ forms.field_errors('question', rag_errors_by_field) }}
     </div>
 
