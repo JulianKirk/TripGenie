@@ -33,14 +33,37 @@
           hx-swap="innerHTML"
           hx-indicator="#asking">
       <label for="ask-query">AI Assisted Search</label>
-      {# Release 1 mode. Default fills the filters below; MCP lets the model
-         look up live listings with the shared MCP tools and shows each call
-         and the data it returned. RAG is the knowledge base card below. #}
+      {# Release 1 modes. Each radio shows its own description (CSS :has(),
+         no script): Default fills the filters below; RAG answers from the
+         accommodation knowledge base with sources and a confidence level; MCP
+         lets the model look up live listings with the shared MCP tools and
+         shows each call and the data it returned. #}
       <fieldset class="ask__modes">
         <legend class="visually-hidden">Answer with</legend>
         <label><input type="radio" name="mode" value="search" checked> Default</label>
+        <label><input type="radio" name="mode" value="rag"> RAG <span class="ask__hint">knowledge base</span></label>
         <label><input type="radio" name="mode" value="mcp"> MCP <span class="ask__hint">live data, with tool calls</span></label>
       </fieldset>
+      <p class="ai-notice ask__desc ask__desc--search">
+        Describe what you are after in plain English. The AI turns it into the
+        filters below and runs the search, so you can see and adjust what it
+        understood. For example: “good accommodation around japan under 100 a night”.
+      </p>
+      <p class="ai-notice ask__desc ask__desc--rag">
+        Ask how accommodation works in TripGenie: types, rooms and beds, prices
+        and trip costs, or adding a stay to a trip. Answers come only from
+        TripGenie's accommodation guides and always list their sources, with a
+        confidence level. If the guides do not cover the question, it says so
+        instead of guessing. For example: “how is the cost of a three night stay
+        worked out?”
+      </p>
+      <p class="ai-notice ask__desc ask__desc--mcp">
+        Ask about real listings or a trip's accommodation costs. The assistant
+        looks them up live with TripGenie's MCP tools and shows each tool call,
+        the arguments it chose and the data it returned, so you can check its
+        answer. For example: “search accommodations with country Australia and
+        city Sydney”.
+      </p>
       <div class="ask__row">
         <input id="ask-query" name="query" type="search" autocomplete="off"
                maxlength="500"
@@ -59,9 +82,6 @@
     {# The answer to the question, filled in out of band by the ask box and
        blanked by an ordinary search. #}
     {% include "partials/ai_answer.html" %}
-
-    {# Release 1: grounded answers from the shared RAG server, as its own card. #}
-    {% include "partials/knowledge_panel.html" %}
 
     {% include "partials/filters.html" %}
 

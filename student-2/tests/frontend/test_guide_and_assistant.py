@@ -1,8 +1,7 @@
-"""The knowledge base card (RAG) and the ask box's MCP mode: the backend
-answers 200 with a `status`, and these render each shape -- citations and
-confidence, an honest insufficient context, and every tool call with the data
-it returned. MCP answers land in #ai-answer, leaving the results list alone;
-the knowledge base redraws its own card."""
+"""The ask box's RAG and MCP modes: the backend answers 200 with a `status`,
+and these render each shape -- citations and confidence, an honest
+insufficient context, and every tool call with the data it returned -- into
+#ai-answer, leaving the results list alone."""
 
 from __future__ import annotations
 
@@ -58,17 +57,13 @@ COMPLETE = {
 }
 
 
+MODES = {KNOWLEDGE: "rag", ASSISTANT: "mcp"}
+
+
 def ask(client, path, question="How is a stay priced?"):
-    """The knowledge base card for backend `path` KNOWLEDGE, the ask box in MCP
-    mode for ASSISTANT."""
-    if path == KNOWLEDGE:
-        response = client.post(KNOWLEDGE, content=f"question={question}")
-        # The card swaps itself; it never retargets the ask box's answer.
-        assert "HX-Retarget" not in response.headers
-        assert 'id="knowledge-panel"' in response.text
-        return response
+    """The ask box, posted in the mode that calls backend `path`."""
     response = client.post(
-        "/accommodation/ai-search", content=f"query={question}&mode=mcp"
+        "/accommodation/ai-search", content=f"query={question}&mode={MODES[path]}"
     )
     # Every RAG/MCP answer lands under the box, never over the results.
     assert response.headers["HX-Retarget"] == "#ai-answer"
@@ -206,18 +201,21 @@ def test_a_blank_question_never_reaches_the_backend(client, backend, path):
     assert backend.asked == []
 
 
-def test_the_page_has_the_mcp_mode_and_the_knowledge_base(client):
+def test_the_ask_box_offers_three_modes_each_with_its_description(client):
     html = client.get("/").text
     assert 'name="mode" value="search" checked' in html
+    assert 'name="mode" value="rag"' in html
     assert 'name="mode" value="mcp"' in html
-    assert 'name="mode" value="rag"' not in html
-    assert "Ask the accommodation knowledge base" in html
+    for mode in ("search", "rag", "mcp"):
+        assert f"ask__desc--{mode}" in html
+    assert "always list their sources" in html
+    assert "shows each tool call" in html
 
 
-def test_the_knowledge_base_keeps_the_question_in_its_redrawn_card(client, backend):
+def test_a_rag_answer_reports_how_much_context_it_used(client, backend):
     backend.answers[KNOWLEDGE] = ANSWERED
     html = ask(client, KNOWLEDGE).text
-    assert 'value="How is a stay priced?"' in html
+    assert "AI mode · knowledge base" in html
     assert "3 of 5 chunks used" in html
 
 

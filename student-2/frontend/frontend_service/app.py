@@ -87,9 +87,10 @@ CHANGED = "accommodations-changed"
 STAY_FIELDS = ("check_in", "check_in_time", "check_out", "check_out_time")
 PAGE_SIZES = (10, 20, 50, 100)
 # The ask box's radio buttons. "search" (the default) is the filter search
-# below; "mcp" sends the question to the model with the shared MCP tools,
-# through this service's backend. RAG has its own knowledge base card.
+# below; "rag" asks the shared RAG server's knowledge base and "mcp" the model
+# with the shared MCP tools, both through this service's backend.
 ASK_MODES = {
+    "rag": (f"{PATH}/knowledge", "partials/knowledge_results.html"),
     "mcp": (f"{PATH}/assistant", "partials/assistant_results.html"),
 }
 DEFAULT_LIMIT = 20
@@ -331,7 +332,7 @@ async def ai_search(request: Request):
     same filters.
 
     A blank ask is the unfiltered list, not an error -- the same answer an empty
-    search box gives. The MCP mode goes to `_ask` instead.
+    search box gives. The RAG and MCP modes go to `_ask` instead.
     """
     # ponytail: `parse_qs` rather than `request.form()` or a FastAPI
     # `Form(...)` parameter. Both of those need python-multipart -- a whole
@@ -374,7 +375,7 @@ async def ai_search(request: Request):
 
 
 async def _ask(request: Request, question: str, path: str, template: str):
-    """The ask box in MCP mode: the backend's answer as a partial, put
+    """The ask box in RAG or MCP mode: the backend's answer as a partial, put
     under the box in #ai-answer rather than over the results -- it answers the
     question, it is not a search. The backend always answers 200 with a
     `status`, so a `BackendError` here means the backend could not be reached.
@@ -399,29 +400,6 @@ async def _ask(request: Request, question: str, path: str, template: str):
     response.headers["HX-Retarget"] = "#ai-answer"
     response.headers["HX-Reswap"] = "innerHTML"
     return response
-
-
-@router.post(f"{PATH}/knowledge")
-async def knowledge(request: Request):
-    """The knowledge base card, redrawn with a grounded answer from the shared
-    RAG server -- its confidence and sources, or "not enough information"."""
-    fields = parse_qs((await request.body()).decode())
-    question = (fields.get("question") or [""])[0].strip()
-    context: dict[str, Any] = {"question": question}
-    if not question:
-        context["knowledge_error"] = "Type a question."
-    else:
-        try:
-            context["answer"] = await call(
-                request,
-                "POST",
-                f"{PATH}/knowledge",
-                json={"question": question},
-                timeout=request.app.state.settings.ai_timeout,
-            )
-        except BackendError as exc:
-            context["knowledge_error"] = str(exc)
-    return render(request, "partials/knowledge_panel.html", context)
 
 
 @router.get(f"{PATH}/{{accommodation_id:uuid}}")

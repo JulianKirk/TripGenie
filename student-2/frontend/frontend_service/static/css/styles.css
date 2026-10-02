@@ -339,5 +339,8 @@ input:disabled { background: var(--page-bg); color: var(--muted); }
 .ask__modes { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0 0 0.5rem; padding: 0; border: 0; }
 .ask__modes label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; font-weight: 400; }
 .ask__hint { color: var(--muted); font-size: 0.85rem; }
-.knowledge__title { margin: 0.25rem 0 0.5rem; font-size: 1.15rem; }
-.knowledge form label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+/* Only the selected mode's description shows. */
+.ask__desc { display: none; }
+.ask:has(input[name="mode"][value="search"]:checked) .ask__desc--search,
+.ask:has(input[name="mode"][value="rag"]:checked) .ask__desc--rag,
+.ask:has(input[name="mode"][value="mcp"]:checked) .ask__desc--mcp { display: block; }
