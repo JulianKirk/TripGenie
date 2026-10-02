@@ -8,7 +8,7 @@
      Student 1's feature stylesheet is intentionally loaded after it. #}
   <link rel="stylesheet" href="http://localhost:8080/theme.css">
   <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
-  <script src="{{ request.url_for('static', path='js/htmx.min.js') }}" defer></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <script src="{{ request.url_for('static', path='js/app.js') }}" defer></script>
 </head>
 <body>

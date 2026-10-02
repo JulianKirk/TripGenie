@@ -376,9 +376,12 @@ textarea {
   resize: vertical;
 }
 
+/* The opaque accent ring and surface separator avoid low-contrast alpha
+   blending while keeping focus visible beside light and dark components. */
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--primary) 55%, transparent);
-  outline-offset: 2px;
+  outline: 3px solid var(--tg-accent, #0f766e);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--tg-surface, #fff);
 }
 
 [aria-invalid="true"] {
