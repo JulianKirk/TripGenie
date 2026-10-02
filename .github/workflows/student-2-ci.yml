@@ -10,6 +10,8 @@ on:
       # The ask box calls the shared AI-Mode service; its contract is what the
       # backend's fake in tests/backend is a copy of.
       - 'ai-services/ai-mode/**'
+      # The guide box's corpus and /query contract live with the RAG server.
+      - 'ai-services/rag-server/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - 'scripts/ci/wait_for_http.py'
@@ -23,6 +25,8 @@ on:
       # The ask box calls the shared AI-Mode service; its contract is what the
       # backend's fake in tests/backend is a copy of.
       - 'ai-services/ai-mode/**'
+      # The guide box's corpus and /query contract live with the RAG server.
+      - 'ai-services/rag-server/**'
       - 'ruff.toml'
       - 'docker-compose.yml'
       - 'scripts/ci/wait_for_http.py'
@@ -69,7 +73,11 @@ jobs:
         # with a 200 -- that is the documented behaviour and what is under test
         # here: the service itself starts and serves.
         run: |
-          docker run -d --name student-2-backend -p 9000:9000 student-2-backend
+          # MCP and RAG stay disabled in CI: AI_MODE_URL (which the MCP
+          # assistant rides on) and RAG_URL are empty, so both boxes answer
+          # "disabled" and nothing reaches for a host service.
+          docker run -d --name student-2-backend -p 9000:9000 \
+            -e AI_MODE_URL= -e RAG_URL= student-2-backend
           if ! python scripts/ci/wait_for_http.py \
             --label "student 2 backend" \
             http://localhost:9000/health; then

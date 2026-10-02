@@ -10,6 +10,8 @@
   - [GET /accommodation](#get-accommodation)
   - [QUERY /accommodation](#query-accommodation)
   - [POST /accommodation/ai-search](#post-accommodationai-search)
+  - [POST /accommodation/knowledge](#post-accommodationknowledge)
+  - [POST /accommodation/assistant](#post-accommodationassistant)
   - [POST /accommodation](#post-accommodation)
   - [PUT /accommodation/{id}](#put-accommodationid)
   - [DELETE /accommodation/{id}](#delete-accommodationid)
@@ -108,6 +110,8 @@ published beyond it.
 | `AI_MODE_URL`  | *(unset)*                        | Base URL of the [shared AI-Mode service](../../ai-services/ai-mode/README.md). Unset switches the ask box off |
 | `AI_MODE_TIMEOUT` | `30`                          | Seconds to wait on an AI-Mode call -- a local model is slower than a database |
 | `AI_MAX_ATTEMPTS` | `2`                           | How many times the model may be asked before giving up |
+| `RAG_URL`      | *(unset)*                        | Base URL of the shared RAG server. Unset or empty switches [the knowledge box](#post-accommodationknowledge) off |
+| `RAG_TIMEOUT`  | `130`                            | Seconds to wait on a RAG `/query` -- retrieval plus a grounded model answer |
 
 ### Running it
 
@@ -185,7 +189,8 @@ curl -X GET "http://localhost:9000/health"
   "service": "student-2-backend",
   "database": "ok",
   "location": "ok",
-  "ai_mode": "ok"
+  "ai_mode": "ok",
+  "rag": "configured"
 }
 ```
 
@@ -205,6 +210,9 @@ They are reported separately because they break differently: without its
 database this service serves nothing, without the shared service it serves rows
 that cannot say where they are, and without AI-Mode it serves everything except
 [the ask box](#post-accommodationai-search).
+
+`rag` is `"configured"` or `"not_configured"` from `RAG_URL` alone. It is never
+probed and never makes the service degraded: the knowledge box is an extra.
 
 ### Error Responses
 
@@ -592,6 +600,133 @@ calls Ollama with `raw=True` and no chat template, so the model is completing
 text rather than following orders -- and it must not end on whitespace, since
 AI-Mode strips that and a prompt ending on a blank line comes back as `{ }`.
 Both of those are written down in `backend_service/ai_search.py`.
+
+## POST /accommodation/knowledge
+
+Release 1. A question answered from the shared RAG server's indexed guides,
+scoped to `feature: "student-2"` (the accommodation guides under
+`ai-services/rag-server/knowledge/accommodation/`, plus the shared sources).
+The RAG server owns retrieval, the confidence category and the citations; this
+endpoint relays them.
+
+Every outcome is a `200` with a `status`, so a caller draws one shape:
+
+| `status` | Meaning |
+|---|---|
+| `answered` | A grounded `answer`, its `confidence_category` (`high`, `medium`, `low`) and at least one citation |
+| `insufficient_context` | Nothing relevant is indexed. `answer` is the server's fixed abstention, and there are no citations. A grounded answer with no citations is reported this way too |
+| `disabled` | `RAG_URL` is unset; nothing was sent |
+| `error` | The RAG server was unreachable, timed out, not ready, or answered malformed; `error` says which |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `question` | string | Yes | 1–500 characters after trimming |
+
+### Example Request
+
+```bash
+curl -X POST "http://localhost:9000/accommodation/knowledge" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How is the cost of a three night stay worked out?"}'
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "status": "answered",
+  "request_id": "student2-rag-5f0c2a9b1d3e4f60",
+  "answer": "A stay costs the price per night multiplied by the number of nights...",
+  "confidence_category": "high",
+  "citations": [
+    {
+      "source_id": "accommodation-pricing-and-costs",
+      "path": "ai-services/rag-server/knowledge/accommodation/pricing-and-costs.md",
+      "title": "Accommodation Pricing and Trip Costs",
+      "section": "Accommodation costs: the cost of one stay",
+      "chunk_id": "accommodation-pricing-and-costs:0003",
+      "excerpt": "The cost of a stay is the price per night multiplied by the number of nights..."
+    }
+  ],
+  "retrieval": {"requested_top_k": 5, "returned_chunks": 5, "maximum_score": 0.86},
+  "run_id": "rag-run-...",
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Description |
+|---|---|
+| 400 | `question` missing, blank or over 500 characters |
+
+## POST /accommodation/assistant
+
+Release 1. A question answered by the model **calling MCP tools**. AI-Mode
+`/generate` runs the tool loop over the shared MCP server's whole catalogue,
+which includes this service's `accommodations_search`, `accommodations_get` and
+`accommodations_committed_costs` (each calls this service's public API). This
+endpoint supplies the system prompt (`prompts/accommodation_assistant_v1.md`,
+read-only by instruction) and returns AI-Mode's tool trace alongside the reply,
+so a caller can see each call, its arguments and the data it returned. The
+trace, not the reply, is the evidence a tool ran.
+
+Needs only `AI_MODE_URL`; the MCP server is configured on AI-Mode. Every outcome
+is a `200`:
+
+| `status` | Meaning |
+|---|---|
+| `complete` | `reply` is the model's text; `tools` lists every call |
+| `error` | The run failed; `error` says why, and `tools` still lists the calls made before it |
+| `disabled` | `AI_MODE_URL` is unset; nothing was sent |
+
+Each `tools` entry is `tool`, `arguments`, `status` (`success`, `error`,
+`rejected`), `duration_ms`, `source` (the owning feature), `data` (the MCP
+envelope's `data` on success) and `error` (`CODE message` on failure).
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `question` | string | Yes | 1–500 characters after trimming |
+
+### Example Request
+
+```bash
+curl -X POST "http://localhost:9000/accommodation/assistant" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What accommodation is there in Sydney, Australia?"}'
+```
+
+### Example Response `200 OK`
+
+```json
+{
+  "status": "complete",
+  "request_id": "student2-agent-2b7e9c41a0d84f13",
+  "reply": "Harbour View Hotel in Sydney is 320.00 a night...",
+  "tools": [
+    {
+      "tool": "accommodations_search",
+      "arguments": {"country": "Australia", "city": "Sydney", "limit": 5},
+      "status": "success",
+      "duration_ms": 41,
+      "source": "student-2",
+      "data": {"items": [{"id": "3f1c8b52-...", "name": "Harbour View Hotel", "price_per_night": "320.00"}], "count": 1, "truncated": false},
+      "error": null
+    }
+  ],
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Description |
+|---|---|
+| 400 | `question` missing, blank or over 500 characters |
 
 ## POST /accommodation
 

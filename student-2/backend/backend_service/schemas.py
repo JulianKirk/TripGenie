@@ -277,3 +277,4 @@ class HealthResponse(BaseModel):
     # "not_configured" when the ask box is switched off, which is a healthy
     # answer -- see routers/health.py.
     ai_mode: str
+    rag: str

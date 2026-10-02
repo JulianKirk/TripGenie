@@ -1,0 +1,99 @@
+{#
+  The assistant's answer, then every MCP tool call AI-Mode made for it: the
+  tool, its arguments, and the data it returned. The calls are the evidence;
+  the reply alone is only the model's word. Calls made before a failure are
+  still listed.
+
+  Same layout as Student 3's MCP page: the accommodation tools' data as a
+  readable table, and the raw tool result underneath for anyone checking it.
+  A tool from another feature gets the raw result only.
+#}
+<div class="grounded">
+  <p class="masthead__eyebrow">AI mode · MCP tools</p>
+  {% if answer.status == "complete" %}
+    <p class="grounded__answer">{{ answer.reply }}</p>
+  {% else %}
+    <p class="error" role="alert">{{ answer.error }}</p>
+  {% endif %}
+  {% if answer.tools %}
+    <details class="tools" open>
+      <summary>Tools used · {{ answer.tools|length }} call{{ "" if answer.tools|length == 1 else "s" }}</summary>
+      <ol>
+        {% for call in answer.tools %}
+          {% set data = call.data %}
+          <li class="tools__call">
+            <code>{{ call.tool }}</code>
+            <span class="badge badge--{{ call.status }}">{{ call.status }}</span>
+            {{ call.duration_ms }} ms{% if call.source %} · {{ call.source }}{% endif %}
+            <p class="tools__label">Arguments:
+              {% for key, value in call.arguments.items() %}<code>{{ key }}={{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}
+            </p>
+
+            {% if call.error %}
+              <p class="error">Tool failed: {{ call.error }}</p>
+            {% elif call.tool == "accommodations_search" and data %}
+              {% if data["items"] %}
+                <table class="results__table tools__table">
+                  <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Location</th><th scope="col">Per night</th><th scope="col">Availability</th></tr></thead>
+                  <tbody>
+                    {% for item in data["items"] %}
+                      <tr>
+                        <th scope="row"><a class="link" href="{{ request.url_for('index') }}?accommodation={{ item.id }}">{{ item.name }}</a></th>
+                        <td>{{ item.type }}</td>
+                        <td>{{ (item.location_details or {}).city|title }}, {{ (item.location_details or {}).country|title }}</td>
+                        <td>{{ item.price_per_night }}</td>
+                        <td>{{ (item.availability_status or "")|replace("_", " ") }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% if data.truncated %}<p class="tools__label">More matches exist than the tool's limit returned.</p>{% endif %}
+              {% else %}
+                <p class="tools__label">The search ran and found no accommodation.</p>
+              {% endif %}
+            {% elif call.tool == "accommodations_get" and data %}
+              <table class="results__table tools__table">
+                <tbody>
+                  <tr><th scope="row">Name</th><td><a class="link" href="{{ request.url_for('index') }}?accommodation={{ data.id }}">{{ data.name }}</a></td></tr>
+                  <tr><th scope="row">Type</th><td>{{ data.type }}</td></tr>
+                  <tr><th scope="row">Location</th><td>{{ (data.location_details or {}).city|title }}, {{ (data.location_details or {}).country|title }}</td></tr>
+                  <tr><th scope="row">Per night</th><td>{{ data.price_per_night }}</td></tr>
+                  <tr><th scope="row">Rating</th><td>{{ data.rating if data.rating is not none else "—" }}</td></tr>
+                  <tr><th scope="row">Availability</th><td>{{ (data.availability_status or "")|replace("_", " ") }}</td></tr>
+                  <tr><th scope="row">Amenities</th><td>{{ (data.amenities or ["—"])|join(", ") }}</td></tr>
+                  {% if data.room_details %}
+                    <tr><th scope="row">Rooms</th><td>{{ data.room_details.room_count }} rooms, {{ data.room_details.bed_count }} beds ({{ (data.room_details.bed_types or [])|join(", ")|replace("_", " ") }})</td></tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            {% elif call.tool == "accommodations_committed_costs" and data %}
+              {% if data["items"] %}
+                <table class="results__table tools__table">
+                  <thead><tr><th scope="col">Stay</th><th scope="col">Amount</th></tr></thead>
+                  <tbody>
+                    {% for item in data["items"] %}
+                      <tr><th scope="row">{{ item.description }}</th><td>{{ item.amount }} {{ item.currency }}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot><tr><th scope="row">Committed total</th><td>{{ data.committed_cost_total }} {{ data.currency }}</td></tr></tfoot>
+                </table>
+              {% else %}
+                <p class="tools__label">This trip has no accommodation committed yet ({{ data.committed_cost_total }} {{ data.currency }}).</p>
+              {% endif %}
+            {% endif %}
+
+            {% if data is not none %}
+              <details class="tools__raw">
+                <summary>Raw tool result</summary>
+                <pre>{{ data|tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </details>
+  {% elif answer.status == "complete" %}
+    <p class="grounded__meta">No tools were called, so this reply is not backed by live data.</p>
+  {% endif %}
+  <p class="grounded__meta">Request {{ answer.request_id }}</p>
+</div>

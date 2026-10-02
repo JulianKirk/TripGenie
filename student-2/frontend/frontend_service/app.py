@@ -86,6 +86,13 @@ CHANGED = "accommodations-changed"
 # The stay fields the form posts, in the order the backend documents them.
 STAY_FIELDS = ("check_in", "check_in_time", "check_out", "check_out_time")
 PAGE_SIZES = (10, 20, 50, 100)
+# The ask box's radio buttons. "search" (the default) is the filter search
+# below; "rag" asks the shared RAG server's knowledge base and "mcp" the model
+# with the shared MCP tools, both through this service's backend.
+ASK_MODES = {
+    "rag": (f"{PATH}/knowledge", "partials/knowledge_results.html"),
+    "mcp": (f"{PATH}/assistant", "partials/assistant_results.html"),
+}
 DEFAULT_LIMIT = 20
 
 
@@ -319,12 +326,13 @@ async def results(request: Request):
 
 @router.post(f"{PATH}/ai-search")
 async def ai_search(request: Request):
-    """A question in English. The backend turns it into filters and runs the
-    ordinary search; this renders the rows, says how the question was read, and
-    sends the filter form back out of band carrying the same filters.
+    """A question in English. In the default mode the backend turns it into
+    filters and runs the ordinary search; this renders the rows, says how the
+    question was read, and sends the filter form back out of band carrying the
+    same filters.
 
     A blank ask is the unfiltered list, not an error -- the same answer an empty
-    search box gives.
+    search box gives. The RAG and MCP modes go to `_ask` instead.
     """
     # ponytail: `parse_qs` rather than `request.form()` or a FastAPI
     # `Form(...)` parameter. Both of those need python-multipart -- a whole
@@ -332,6 +340,9 @@ async def ai_search(request: Request):
     # multipart. Switch to `Form(...)` if a file upload ever lands here.
     fields = parse_qs((await request.body()).decode())
     question = (fields.get("query") or [""])[0].strip()
+    mode = (fields.get("mode") or ["search"])[0]
+    if mode in ASK_MODES:
+        return await _ask(request, question, *ASK_MODES[mode])
     if not question:
         return await results(request)
     try:
@@ -361,6 +372,34 @@ async def ai_search(request: Request):
             "reply": found["reply"],
         },
     )
+
+
+async def _ask(request: Request, question: str, path: str, template: str):
+    """The ask box in RAG or MCP mode: the backend's answer as a partial, put
+    under the box in #ai-answer rather than over the results -- it answers the
+    question, it is not a search. The backend always answers 200 with a
+    `status`, so a `BackendError` here means the backend could not be reached.
+    """
+    if not question:
+        response = render(request, "partials/error.html", {"error": "Type a question."})
+    else:
+        try:
+            answer = await call(
+                request,
+                "POST",
+                path,
+                json={"question": question},
+                timeout=request.app.state.settings.ai_timeout,
+            )
+        except BackendError as exc:
+            response = render(request, "partials/error.html", {"error": str(exc)})
+        else:
+            response = render(request, template, {"answer": answer})
+    # The form targets #results for the default search; these modes redirect
+    # the swap so the result list stays as it was.
+    response.headers["HX-Retarget"] = "#ai-answer"
+    response.headers["HX-Reswap"] = "innerHTML"
+    return response
 
 
 @router.get(f"{PATH}/{{accommodation_id:uuid}}")

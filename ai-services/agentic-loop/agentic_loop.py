@@ -474,7 +474,8 @@ def rag_query(case):
     if response.status_code != 200:
         message = f"HTTP {response.status_code}: {response.text[:200]}"
         raise RuntimeError(message)
-    return response.json(), elapsed
+    # The RAG server wraps every answer in {"data": ...} (release-1-rag-contract).
+    return response.json()["data"], elapsed
 
 
 def grounding(case, body):
@@ -502,8 +503,11 @@ def observe_rag(plan):
         return [("GET /ready", f"FAIL: HTTP {ready.status_code} {ready.text[:200]}")]
 
     results = [("GET /ready", "OK: HTTP 200")]
-    for case in plan["cases"]:
+    cases = plan["cases"]
+    for number, case in enumerate(cases, 1):
         label = case["case_id"]
+        # Each case is two model answers; say so, or a long run looks hung.
+        print(f"  [{number}/{len(cases)}] {label}", flush=True)
         try:
             first, elapsed = rag_query(case)
             second, _ = rag_query(case)

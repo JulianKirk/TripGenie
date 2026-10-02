@@ -106,6 +106,10 @@ class FakeBackend:
         self.ai_question: str | None = None
         self.ai_timeout: float | None = None
         self.ai_response: httpx.Response | None = None
+        # The guide (RAG) and assistant (MCP) boxes: path -> canned answer, and
+        # every (path, body, read timeout) they sent.
+        self.asked: list[tuple[str, dict, float]] = []
+        self.answers: dict[str, dict] = {}
         self.itineraries = [dict(itinerary) for itinerary in ITINERARIES]
         self.itinerary_calls: list[tuple[str, str]] = []
         self.itinerary_bodies: list[dict] = []
@@ -129,6 +133,15 @@ class FakeBackend:
     def handle(self, request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/ai-search"):
             return self._ai_search(request)
+        if request.url.path in self.answers:
+            self.asked.append(
+                (
+                    request.url.path,
+                    json.loads(request.content),
+                    request.extensions["timeout"]["read"],
+                )
+            )
+            return httpx.Response(200, json=self.answers[request.url.path])
         if request.method == "QUERY":
             self.body = json.loads(request.content)
         if "/itineraries" in request.url.path:

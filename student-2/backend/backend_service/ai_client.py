@@ -29,6 +29,17 @@ UNAVAILABLE = "ai mode service unavailable"
 NOT_CONFIGURED = "not_configured"
 UNREACHABLE = "unreachable"
 BAD_RESPONSE = "bad response from ai mode service"
+# AI-Mode caps one MCP agent run at 180s; give it that plus the network.
+AGENT_TIMEOUT = 200.0
+
+
+class AssistError(HTTPException):
+    """An AI-Mode failure that still carries the tool calls made before it, so
+    the page can show what ran rather than only that something broke."""
+
+    def __init__(self, status_code: int, detail: str, tools: list[Any]) -> None:
+        super().__init__(status_code, detail)
+        self.tools = tools
 
 
 class AiClient:
@@ -90,6 +101,53 @@ class AiClient:
         if not isinstance(answer, str):
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
         return answer, bool(_unwrap(body).get("tools"))
+
+    async def assist(
+        self, prompt: str, system: str, correlation_id: str
+    ) -> tuple[str, list[Any]]:
+        """A free-text MCP agent run: the reply and AI-Mode's tool-call trace.
+
+        Not `request()`: an AI-Mode error body carries the partial trace at the
+        top level, and that helper discards error bodies.
+        """
+        if self._client is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "ai mode is not configured"
+            )
+        try:
+            response = await self._client.post(
+                "/generate",
+                json={
+                    "prompt": prompt,
+                    "system": system,
+                    "correlation_id": correlation_id,
+                },
+                timeout=AGENT_TIMEOUT,
+            )
+            body = response.json()
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, UNAVAILABLE
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE) from exc
+        if response.is_error:
+            error = body.get("error") if isinstance(body, dict) else None
+            message = error.get("message") if isinstance(error, dict) else None
+            tools = body.get("tools") if isinstance(body, dict) else None
+            raise AssistError(
+                # A timeout or outage keeps its status; anything else is 502.
+                response.status_code
+                if response.status_code in {503, 504}
+                else status.HTTP_502_BAD_GATEWAY,
+                str(message or BAD_RESPONSE),
+                tools if isinstance(tools, list) else [],
+            )
+        data = _unwrap(body)
+        answer, tools = data.get("response"), data.get("tools") or []
+        if not isinstance(answer, str) or not isinstance(tools, list):
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, BAD_RESPONSE)
+        return answer, tools
 
 
 def _unwrap(body: Any) -> dict[str, Any]:

@@ -15,6 +15,11 @@ This file supplements the repository-level `AGENTS.md` for `student-2/`.
 - AI search goes through AI-Mode and must resolve generated filters against the
   real accommodation catalogue. It must not invent records or save a stay
   without an explicit user action.
+- Release 1: `POST /accommodation/knowledge` relays the shared RAG server
+  (`feature: "student-2"`, corpus in `ai-services/rag-server/knowledge/accommodation/`),
+  and `POST /accommodation/assistant` shows AI-Mode's MCP tool trace; the page
+  reaches both through the ask box's RAG and MCP radio modes. Both are
+  off when `RAG_URL` / `AI_MODE_URL` is unset, as in CI.
 - Keep `docs/backend-service-api.md`, `docs/database-service-api.md`, and
   `docs/frontend-service.md` synchronized with implementation changes.
 
