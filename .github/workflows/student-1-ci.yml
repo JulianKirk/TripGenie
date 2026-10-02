@@ -5,6 +5,7 @@ on:
     paths:
       - 'student-1/**'
       - 'ai-services/ai-mode/**'
+      - 'ai-services/rag-server/**'
       - 'docs/architecture/student-1-*.md'
       - 'docs/reports/release-0/student-1-release-0-plan.md'
       - 'shared/configuration/**'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'student-1/**'
       - 'ai-services/ai-mode/**'
+      - 'ai-services/rag-server/**'
       - 'docs/architecture/student-1-*.md'
       - 'docs/reports/release-0/student-1-release-0-plan.md'
       - 'shared/configuration/**'
@@ -26,6 +28,14 @@ on:
       - 'ruff.toml'
       - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
+
+# Release 1 keeps the RAG and MCP integrations in the code but CI never reaches
+# a host service: both are switched off here and the compose job proves it.
+# AI-Mode has no switch; its compose URL points at the host and nothing in CI
+# calls it.
+env:
+  STUDENT1_BACKEND_RAG_ENABLED: "false"
+  STUDENT1_BACKEND_MCP_ENABLED: "false"
 
 jobs:
   database:
@@ -116,6 +126,31 @@ jobs:
       - name: Build Student 1 frontend image
         run: docker build -f student-1/frontend/Dockerfile student-1
 
+  rag-server:
+    name: Validate Shared RAG Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install RAG server dependencies
+        working-directory: ai-services/rag-server
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Run RAG server syntax checks
+        working-directory: ai-services/rag-server
+        run: python -m compileall rag_service tests
+      - name: Run RAG server Ruff checks
+        working-directory: ai-services/rag-server
+        run: python -m ruff check rag_service tests
+      # Fake embeddings and generation: no Ollama, no model download.
+      - name: Run RAG server pytest suite
+        working-directory: ai-services/rag-server
+        run: python -m pytest
+
   compose:
     name: Validate Student 1 Compose Readiness
     runs-on: ubuntu-latest
@@ -123,6 +158,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate the shared Compose configuration
         run: docker compose config --quiet
+      - name: Reject host-only AI services in Compose
+        run: |
+          if docker compose config --services | grep -E 'ai-mode|mcp|rag|ollama|agentic'; then
+            echo "::error::AI-Mode, MCP, RAG, Ollama and the agentic loop must stay host services, not Compose services."
+            exit 1
+          fi
+          echo 'No host-only AI service is defined in Compose.'
       - name: Start the Student 1 slice
         run: |
           docker compose up -d --build --no-deps \
@@ -133,6 +175,23 @@ jobs:
             --label "student 1 compose frontend" \
             --contains '"status":"ok"' \
             http://127.0.0.1:8081/ready
+      - name: Verify MCP and RAG are disabled
+        run: |
+          docker compose exec -T student-1-backend env \
+            | grep -E '^STUDENT1_BACKEND_(RAG|MCP)_ENABLED='
+          trip=http://127.0.0.1:18001/api/trips/trip_2026_melbourne_food_trail
+          check() {
+            status=$(curl --silent --show-error -o body.json -w '%{http_code}' \
+              -X POST -H 'Content-Type: application/json' -d "$2" "$trip/$1")
+            code=$(python -c "import json; print(json.load(open('body.json'))['error']['code'])" 2>/dev/null || true)
+            echo "backend $1: HTTP $status $code"
+            if [ "$status" != 503 ] || [ "$code" != "$3" ]; then
+              echo "::error::$1 should answer 503 $3 while disabled."
+              exit 1
+            fi
+          }
+          check rag-query '{"question":"x"}' RAG_DISABLED
+          check mcp-options '{}' MCP_DISABLED
       - name: Compose logs on failure
         if: failure()
         run: |
