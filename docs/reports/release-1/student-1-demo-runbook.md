@@ -5,14 +5,22 @@ Aaditya Rai, on camera or narrating his own screen.
 
 ## Before recording (10 minutes ahead)
 
+Timings below were measured on `main` @ `65404c9` (includes #150, tool-free
+RAG generation) with `llama3.1:8b` on a laptop GPU.
+
 1. Start Ollama, AI-Mode, RAG and MCP on the host, then Compose, per the
-   [host services runbook](local-host-services-runbook.md). Confirm
-   `curl 127.0.0.1:8006/health`, `:8011/ready`, `:8012/health` and
-   `127.0.0.1:18001/health` all return healthy.
-2. Warm the models so the first answer is not a cold load:
-   `curl -s -X POST 127.0.0.1:8011/query -H 'content-type: application/json' -d '{"query":"What are good day trips from Melbourne?","feature":"student-1"}'`
-   and one AI suggestion request (see [05](evidence/student-1/05-backend-api-rag-mcp-ai.md)).
-   `ollama ps` should list `llama3.1:8b` and `nomic-embed-text`.
+   [host services runbook](local-host-services-runbook.md). Run
+   `python -m rag_service ingest --rebuild` after pulling, because other
+   features add knowledge sources. Confirm `curl 127.0.0.1:8006/health`,
+   `:8011/ready`, `:8012/health` and `127.0.0.1:18001/health` all return
+   healthy.
+2. Warm and pin the chat model at AI-Mode's context size, so the first answer
+   is not a 10-15 s cold load:
+   `curl -s 127.0.0.1:11434/api/generate -d '{"model":"llama3.1:8b","keep_alive":"60m","options":{"num_ctx":32768}}'`.
+   Then run the grounded RAG query from the script once. `ollama ps` should
+   list `llama3.1:8b` (context 32768) and `nomic-embed-text`. Each AI request
+   resets Ollama's idle timer to 5 minutes, so after a longer pause between
+   takes, ask one RAG question again first.
 3. Open `http://localhost:8081/trips/trip_2026_melbourne_food_trail` and
    **hard refresh** (Cmd+Shift+R / Ctrl+Shift+R) so the current `app.js` loads.
 4. Have one terminal ready in `ai-services/mcp-server` with the host venv.
@@ -23,15 +31,22 @@ Aaditya Rai, on camera or narrating his own screen.
 | Time | Action | Say |
 | --- | --- | --- |
 | 0:00-0:15 | Trip page for Melbourne Food Trail | "I own Trip & Itinerary and built the shared RAG server. Release 0 CRUD is unchanged: these trips and items still come from my database service." |
-| 0:15-0:35 | Terminal: `python -m tripgenie_mcp call trip_get_context '{"trip_id":"trip_2026_melbourne_food_trail"}'` | "MCP runs on the host, outside Compose. It exposes the feature APIs as typed, read-only tools; here it returns my trip through my public API." |
-| 0:35-0:55 | Trip options panel, country "Australia", **Find trip options** | "My backend calls five read-only tools: trip, accommodation, activity, transport and budget data from all five features. Each card shows the tool and arguments. Nothing is saved." |
-| 0:55-1:30 | Knowledge-base panel: "What are good day trips from Melbourne?" (30-70 s; narrate during the wait) | "The backend calls the host RAG server, which embeds the question through AI-Mode, searches my feature's documents plus shared ones, and only then generates. The confidence comes from the retrieval score, and every citation must be one of the chunks that were retrieved." |
-| 1:30-1:50 | Ask "How do I bake sourdough bread?" | "When nothing relevant is retrieved, generation is skipped and it says so rather than guessing." |
-| 1:50-2:00 | Close | "Compose runs only feature containers; CI runs with MCP and RAG disabled; evidence is in our Release 1 register." |
+| 0:15-0:30 | Terminal: `python -m tripgenie_mcp call trip_get_context '{"trip_id":"trip_2026_melbourne_food_trail"}'` (about 1 s) | "MCP runs on the host, outside Compose. It exposes the feature APIs as typed, read-only tools; here it returns my trip through my public API." |
+| 0:30-0:45 | Terminal: `curl -s -X POST 127.0.0.1:8011/query -H 'content-type: application/json' -d '{"query":"What are good day trips from Melbourne?","feature":"student-1"}'` (about 11 s warm) | "This is the RAG server called directly on localhost: the answer, its confidence category and the citations it is grounded in." |
+| 0:45-1:00 | Trip options panel, country "Australia", **Find trip options** (under 1 s) | "My backend calls five read-only tools: trip, accommodation, activity, transport and budget data from all five features. Each card shows the tool and arguments. Nothing is saved." |
+| 1:00-1:30 | Knowledge-base panel: "What are good day trips from Melbourne?" (about 16 s; narrate during the wait, then point at the citation card) | "The backend calls the host RAG server, which embeds the question through AI-Mode, searches my feature's documents plus shared ones, and only then generates. The confidence comes from the retrieval score, and every citation must be one of the chunks that were retrieved." |
+| 1:30-1:45 | Ask "How do I bake sourdough bread?" (about 1 s) | "When nothing relevant is retrieved, generation is skipped and it says so rather than guessing." |
+| 1:45-2:00 | Close | "Compose runs only feature containers; CI runs with MCP and RAG disabled; evidence is in our Release 1 register." |
 
-If the grounded answer is still loading at 1:20, cut to the pre-recorded
+If the grounded answer is still loading at 1:25, cut to the pre-recorded
 take or the [screenshot](evidence/student-1/screenshots/02-rag-grounded.png)
 and say so; do not present a screenshot as live.
+
+Keep Release 0 AI suggestions out of this segment: they take about 76 s and
+the `llama3.1:8b` drafts are thin. If the group wants them shown, start the
+request before the segment and cut to the result. The terminal RAG step
+covers the brief's "local terminal validation of the MCP and RAG servers";
+agree with the group so it is shown once in the video, not by every member.
 
 ## Q&A preparation
 
