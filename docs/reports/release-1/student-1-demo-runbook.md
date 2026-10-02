@@ -30,15 +30,20 @@ RAG generation) with `llama3.1:8b` on a laptop GPU.
 
 | Time | Action | Say |
 | --- | --- | --- |
-| 0:00-0:15 | Trip page for Melbourne Food Trail | "I own Trip & Itinerary and built the shared RAG server. Release 0 CRUD is unchanged: these trips and items still come from my database service." |
-| 0:15-0:30 | Terminal: `python -m tripgenie_mcp call trip_get_context '{"trip_id":"trip_2026_melbourne_food_trail"}'` (about 1 s) | "MCP runs on the host, outside Compose. It exposes the feature APIs as typed, read-only tools; here it returns my trip through my public API." |
-| 0:30-0:45 | Terminal: `curl -s -X POST 127.0.0.1:8011/query -H 'content-type: application/json' -d '{"query":"What are good day trips from Melbourne?","feature":"student-1"}'` (about 11 s warm) | "This is the RAG server called directly on localhost: the answer, its confidence category and the citations it is grounded in." |
-| 0:45-1:00 | Trip options panel, country "Australia", **Find trip options** (under 1 s) | "My backend calls five read-only tools: trip, accommodation, activity, transport and budget data from all five features. Each card shows the tool and arguments. Nothing is saved." |
-| 1:00-1:30 | Knowledge-base panel: "What are good day trips from Melbourne?" (about 16 s; narrate during the wait, then point at the citation card) | "The backend calls the host RAG server, which embeds the question through AI-Mode, searches my feature's documents plus shared ones, and only then generates. The confidence comes from the retrieval score, and every citation must be one of the chunks that were retrieved." |
-| 1:30-1:45 | Ask "How do I bake sourdough bread?" (about 1 s) | "When nothing relevant is retrieved, generation is skipped and it says so rather than guessing." |
-| 1:45-2:00 | Close | "Compose runs only feature containers; CI runs with MCP and RAG disabled; evidence is in our Release 1 register." |
+| 0:00-0:10 | Trip page for Melbourne Food Trail | "I own Trip & Itinerary and built the shared RAG server. Release 0 CRUD is unchanged: these trips and items still come from my database service." |
+| 0:10-0:25 | **MCP, terminal:** `python -m tripgenie_mcp call trip_get_context '{"trip_id":"trip_2026_melbourne_food_trail"}'` (about 1 s) | "MCP runs on the host, outside Compose. It exposes the feature APIs as typed, read-only tools; here it returns my trip through my public API." |
+| 0:25-0:50 | **MCP, website:** scroll to **Find options for this trip**, type country "Australia", click **Find trip options** (under 1 s). Point at the first card's `trip_get_context`, then the accommodation, activity, transport and budget cards, then "5 succeeded · 0 failed · 0 skipped. Nothing was saved." | "This is the same MCP server, now used from my website. The page calls my backend, and my backend calls the shared MCP server, which runs the registered tools: the same `trip_get_context` I just ran in the terminal, plus tools owned by Students 2 to 5. Each card shows the tool name, the arguments my backend sent and the structured result. It's read-only: nothing is saved, and options are added through the normal itinerary forms." |
+| 0:50-1:05 | **RAG, terminal:** `curl -s -X POST 127.0.0.1:8011/query -H 'content-type: application/json' -d '{"query":"What are good day trips from Melbourne?","feature":"student-1"}'` (about 11 s warm) | "This is the RAG server called directly on localhost: the answer, its confidence category and the citations it is grounded in." |
+| 1:05-1:35 | **RAG, website:** knowledge-base panel, "What are good day trips from Melbourne?" (about 16 s; narrate during the wait, then point at the confidence badge and citation card) | "The backend calls the host RAG server, which embeds the question through AI-Mode, searches my feature's documents plus shared ones, and only then generates. The confidence comes from the retrieval score, and every citation must be one of the chunks that were retrieved." |
+| 1:35-1:48 | Ask "How do I bake sourdough bread?" (about 1 s) | "When nothing relevant is retrieved, generation is skipped and it says so rather than guessing." |
+| 1:48-2:00 | Close | "Compose runs only feature containers; CI runs with MCP and RAG disabled; evidence is in our Release 1 register." |
 
-If the grounded answer is still loading at 1:25, cut to the pre-recorded
+The trip-options panel is labelled "AI mode · trip tools" on screen, so say
+"MCP" out loud when it appears; the tool names on each card (`trip_get_context`,
+`accommodations_search`, `activities_search`, `transport_search`,
+`budgets_list`) are the visible proof that the website is using MCP.
+
+If the grounded answer is still loading at 1:30, cut to the pre-recorded
 take or the [screenshot](evidence/student-1/screenshots/02-rag-grounded.png)
 and say so; do not present a screenshot as live.
 
