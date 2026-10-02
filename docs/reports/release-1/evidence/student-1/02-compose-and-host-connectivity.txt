@@ -1,0 +1,67 @@
+# Captured: 2026-10-02T02:48:00Z (UTC), Compose project wt-132, commit aec615c
+Note: student-1..student-5 are one-shot alpine aggregate targets (command: true) used to start a feature stack; they exit immediately and are not runtime services.
+## $ docker compose --env-file shared/configuration/.env.example config --services
+shared-backend
+shared-database
+shared-ui
+student-1
+student-1-backend
+student-1-database
+student-1-frontend
+student-2
+student-2-backend
+student-2-database
+student-2-frontend
+student-3
+student-3-backend
+student-3-database
+student-3-frontend
+student-4
+student-4-backend
+student-4-database
+student-4-frontend
+student-5
+student-5-backend
+student-5-database
+student-5-frontend
+
+## Check: no AI-Mode / MCP / RAG / Ollama / agentic service in Compose
+PASS: none found (23 services: feature + shared-portal containers only)
+
+## $ docker compose ... ps --format '{{.Service}} {{.State}} {{.Status}}'
+shared-backend	running	Up 23 hours
+shared-database	running	Up 23 hours
+shared-ui	running	Up 23 hours
+student-1-backend	running	Up 23 hours (healthy)
+student-1-database	running	Up 23 hours (healthy)
+student-1-frontend	running	Up 23 hours (healthy)
+student-2-backend	running	Up 23 hours
+student-2-database	running	Up 23 hours
+student-2-frontend	running	Up 23 hours
+student-3-backend	running	Up 23 hours (healthy)
+student-3-database	running	Up 23 hours (healthy)
+student-3-frontend	running	Up 23 hours (healthy)
+student-4-backend	running	Up 23 hours (healthy)
+student-4-database	running	Up 23 hours (healthy)
+student-4-frontend	running	Up 23 hours (healthy)
+student-5-backend	running	Up 23 hours (healthy)
+student-5-database	running	Up 23 hours (healthy)
+student-5-frontend	running	Up 23 hours (healthy)
+
+## Student 1 backend host-service settings (container env)
+STUDENT1_BACKEND_AI_MODE_BASE_URL=http://host.docker.internal:8006
+STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS=120
+STUDENT1_BACKEND_MCP_BASE_URL=http://host.docker.internal:8012/mcp
+STUDENT1_BACKEND_MCP_ENABLED=true
+STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS=40
+STUDENT1_BACKEND_RAG_BASE_URL=http://host.docker.internal:8011
+STUDENT1_BACKEND_RAG_ENABLED=true
+STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS=130
+
+## Container -> host connectivity from student-1-backend
+$ docker compose ... exec -T student-1-backend python -c "...urlopen('http://host.docker.internal:8006/health')..."
+HTTP 200 ok ai-mode
+$ docker compose ... exec -T student-1-backend python -c "...urlopen('http://host.docker.internal:8011/health')..."
+HTTP 200 ok rag-server
+$ docker compose ... exec -T student-1-backend python -c "...urlopen('http://host.docker.internal:8012/health')..."
+HTTP 200 healthy tripgenie-mcp
