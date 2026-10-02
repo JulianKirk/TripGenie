@@ -1,0 +1,89 @@
+{#
+  The knowledge base: questions answered from the shared RAG server, through
+  this service's backend. Its own card, like Student 1's, separate from the ask
+  box -- that one searches listings, this one answers from TripGenie's
+  accommodation guides. The form swaps only this section (outerHTML).
+
+  Three answer shapes: could not ask (disabled or error), nothing relevant
+  indexed (an honest "not enough information", never the model's guess), or an
+  answer with its confidence and the sources it was drawn from.
+#}
+<section id="knowledge-panel" class="ask knowledge" aria-labelledby="knowledge-heading">
+  <p class="masthead__eyebrow">AI mode · knowledge base</p>
+  <h2 id="knowledge-heading" class="knowledge__title">Ask the accommodation knowledge base</h2>
+  <p class="ai-notice">
+    Ask how accommodation works in TripGenie: types, rooms and beds, prices and
+    trip costs, or adding a stay to a trip. Answers come only from TripGenie's
+    accommodation guides and always list their sources. If the guides do not
+    cover the question, it says so instead of guessing.
+  </p>
+
+  <form hx-post="{{ request.url_for('knowledge') }}"
+        hx-target="#knowledge-panel"
+        hx-swap="outerHTML"
+        hx-indicator="#knowledge-loading"
+        hx-disabled-elt="find button">
+    <label for="knowledge-question">Question</label>
+    <div class="ask__row">
+      <input id="knowledge-question" name="question" type="search"
+             autocomplete="off" maxlength="500" required
+             value="{{ question or '' }}"
+             placeholder="how is the cost of a three night stay worked out?">
+      <button class="button button--primary" type="submit">Ask the knowledge base</button>
+    </div>
+  </form>
+  <div id="knowledge-loading" class="htmx-indicator asking" role="status">
+    <span class="asking__label">Searching the knowledge base…</span>
+    <span class="asking__track"><span class="asking__bar"></span></span>
+  </div>
+
+  <div aria-live="polite">
+    {% if knowledge_error %}
+      <p class="error" role="alert">{{ knowledge_error }}</p>
+    {% elif answer and answer.status in ("disabled", "error") %}
+      <p class="error" role="alert">{{ answer.error }}</p>
+    {% elif answer and answer.status == "insufficient_context" %}
+      <div class="grounded">
+        <p><span class="badge badge--insufficient_context">Insufficient context</span></p>
+        <h3 class="grounded__heading">Not enough information to answer</h3>
+        <p>
+          The knowledge base does not cover this question well enough, so no
+          answer is shown. Try asking about accommodation types, prices, trip
+          costs or adding a stay to a trip.
+        </p>
+      </div>
+    {% elif answer %}
+      {% set labels = {
+        "high": "High confidence",
+        "medium": "Medium confidence",
+        "low": "Low confidence — check the sources",
+      } %}
+      <div class="grounded">
+        <p>
+          <span class="badge badge--{{ answer.confidence_category }}">
+            {{ labels.get(answer.confidence_category, answer.confidence_category) }}
+          </span>
+        </p>
+        <h3 class="grounded__heading">Answer</h3>
+        <p class="grounded__answer">{{ answer.answer }}</p>
+        <h3 class="grounded__heading">Sources</h3>
+        <ol class="citations">
+          {% for citation in answer.citations %}
+            <li>
+              <strong>{{ citation.title }}</strong> · {{ citation.section }}
+              <blockquote>{{ citation.excerpt }}</blockquote>
+              Source: <code>{{ citation.path }}</code>
+            </li>
+          {% endfor %}
+        </ol>
+      </div>
+    {% endif %}
+    {% if answer %}
+      <p class="grounded__meta">
+        Request {{ answer.request_id }}
+        {% if answer.retrieval %} · {{ answer.retrieval.returned_chunks }} of {{ answer.retrieval.requested_top_k }} chunks used{% endif %}
+        {% if answer.run_id %} · RAG run {{ answer.run_id }}{% endif %}
+      </p>
+    {% endif %}
+  </div>
+</section>

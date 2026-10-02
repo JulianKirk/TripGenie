@@ -51,9 +51,8 @@ These serve HTML, not an API — no other service is a caller.
 | `GET /`                    | The whole page, results already rendered. `?accommodation=<id>` opens that one's modal with the page |
 | `GET /accommodation`       | The results fragment: the table and the pager              |
 | `GET /accommodation/{id}`  | The details modal for one accommodation                    |
-| `POST /accommodation/ai-search` | The results fragment, plus the answer and the filter form out of band |
-| `POST /accommodation/knowledge` | The guide (RAG) answer fragment: confidence, answer and sources, or insufficient context |
-| `POST /accommodation/assistant` | The assistant (MCP) answer fragment: the reply and every tool call with its returned data |
+| `POST /accommodation/ai-search` | `mode=search` (default): the results fragment, plus the answer and the filter form out of band. `mode=mcp`: the MCP answer fragment, retargeted into `#ai-answer` |
+| `POST /accommodation/knowledge` | The knowledge base card (RAG), redrawn with its answer: confidence, answer and sources, or insufficient context |
 | `GET /accommodation/{id}/stay` | The Add-to-Trip form, as a second modal. Re-renders itself on every change to recompute the total |
 | `PUT /accommodation/{id}/itineraries/{itineraryId}` | Stores the stay from the form body |
 | `GET /accommodation/new`   | An empty create form, as a modal                           |
@@ -231,24 +230,38 @@ one built from the answer by `form_values()` -- the inverse of `query_body()`,
 over the same four field maps, so a filter's form name and message name are
 paired up in exactly one place.
 
-### The guide and assistant boxes (Release 1)
+### The ask box's MCP mode (Release 1)
 
-Two more ask boxes under the first, each answering into its own
-`aria-live` region inside its form rather than into `#results` -- they answer a
-question, they do not search.
+Two radio buttons above the ask box's input pick what the question is sent
+to. **Default** is the filter search above. **MCP** answers the question
+rather than searching, so its fragment comes back with
+`HX-Retarget: #ai-answer` and `HX-Reswap: innerHTML`: it lands under the box
+and the results list stays as it was. The next ordinary search blanks
+`#ai-answer` out of band as usual.
 
-- **Ask the accommodation guide (RAG)** posts to
-  [POST /accommodation/knowledge](./backend-service-api.md#post-accommodationknowledge)
-  and renders `partials/knowledge_results.html`: a confidence badge, the
-  grounded answer and its numbered sources (title, section, excerpt, path). With
-  nothing relevant indexed it shows an "Insufficient context" notice and no
-  answer at all, rather than the model's guess.
-- **Ask the assistant (MCP tools)** posts to
-  [POST /accommodation/assistant](./backend-service-api.md#post-accommodationassistant)
-  and renders `partials/assistant_results.html`: the reply, then "Tools used · N
-  calls" listing each tool, its status, arguments and returned data. A failed
-  tool says so; calls made before a failed run are still listed. A reply with no
-  tool calls says it is not backed by live data.
+MCP posts to
+[POST /accommodation/assistant](./backend-service-api.md#post-accommodationassistant)
+and renders `partials/assistant_results.html`: the reply, then "Tools used · N
+calls" listing each tool, its status and arguments. As on Student 3's MCP page,
+the accommodation tools' data is a readable table (search results linking to
+their modal, one listing's details, or a trip's committed stays and total),
+with the raw tool result in a collapsed "Raw tool result" under it; another
+feature's tool shows the raw result only. A failed tool says so; calls made
+before a failed run are still listed. A reply with no tool calls says it is not
+backed by live data.
+
+### The knowledge base (Release 1, RAG)
+
+Its own card under the ask box, like Student 1's knowledge base panel:
+`partials/knowledge_panel.html`. Its form posts the question to this service's
+`POST /accommodation/knowledge`, which calls
+[the backend's](./backend-service-api.md#post-accommodationknowledge) and
+redraws the whole card (`hx-swap="outerHTML"`) with the question kept in the
+input. An answer shows a confidence badge ("Low confidence — check the
+sources" for low), the grounded answer and its numbered sources (title,
+section, excerpt, path), then how many chunks were used and the RAG run id.
+With nothing relevant indexed it shows "Not enough information to answer" and
+no answer at all, rather than the model's guess.
 
 Both answer `disabled` when their backend setting is unset (as in CI), and the
 rest of the page is unaffected.

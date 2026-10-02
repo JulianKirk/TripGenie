@@ -14,7 +14,7 @@
     {"label": "Student 2 backend knowledge route abstains on an unrelated question", "method": "POST", "path": "${BACKEND_URL}/accommodation/knowledge", "timeout": 150, "json": {"question": "How do I change the oil in a motorbike?"}, "contains": ["\"status\":\"insufficient_context\"", "\"citations\":[]"]},
     {"label": "Student 2 backend refuses a browser-chosen RAG feature", "method": "POST", "path": "${BACKEND_URL}/accommodation/knowledge", "json": {"question": "How is a stay priced?", "feature": "student-1"}, "status": 400},
     {"label": "Student 2 backend assistant route returns an MCP tool trace", "method": "POST", "path": "${BACKEND_URL}/accommodation/assistant", "timeout": 210, "json": {"question": "What accommodation is there in Sydney, Australia?"}, "contains": ["\"status\":\"complete\"", "\"tool\":\"accommodations_", "\"source\":\"student-2\"", "student2-agent-"]},
-    {"label": "Student 2 frontend page has the guide and assistant boxes", "path": "${FRONTEND_URL}/", "contains": ["Ask the accommodation guide (RAG)", "Ask the assistant (MCP tools)"]}
+    {"label": "Student 2 frontend has the knowledge base and the MCP mode", "path": "${FRONTEND_URL}/", "contains": ["Ask the accommodation knowledge base", "name=\"mode\" value=\"mcp\""]}
   ],
   "rules": [
     "Student 2 MCP tools are read-only: accommodations_search, accommodations_get and accommodations_committed_costs call only the Student 2 public API with GET or QUERY.",

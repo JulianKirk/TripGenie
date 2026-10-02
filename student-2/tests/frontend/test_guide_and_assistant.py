@@ -1,6 +1,8 @@
-"""The guide (RAG) and assistant (MCP) boxes: the backend answers 200 with a
-`status`, and these render each shape -- citations and confidence, an honest
-insufficient context, and every tool call with the data it returned."""
+"""The knowledge base card (RAG) and the ask box's MCP mode: the backend
+answers 200 with a `status`, and these render each shape -- citations and
+confidence, an honest insufficient context, and every tool call with the data
+it returned. MCP answers land in #ai-answer, leaving the results list alone;
+the knowledge base redraws its own card."""
 
 from __future__ import annotations
 
@@ -36,7 +38,20 @@ COMPLETE = {
             "status": "success",
             "duration_ms": 40,
             "source": "student-2",
-            "data": {"items": [{"name": "Harbour View Hotel"}], "count": 1},
+            "data": {
+                "items": [
+                    {
+                        "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+                        "name": "Harbour View Hotel",
+                        "type": "hotel",
+                        "price_per_night": "320.00",
+                        "availability_status": "available",
+                        "location_details": {"country": "australia", "city": "sydney"},
+                    }
+                ],
+                "count": 1,
+                "truncated": False,
+            },
             "error": None,
         }
     ],
@@ -44,7 +59,21 @@ COMPLETE = {
 
 
 def ask(client, path, question="How is a stay priced?"):
-    return client.post(path, content=f"question={question}")
+    """The knowledge base card for backend `path` KNOWLEDGE, the ask box in MCP
+    mode for ASSISTANT."""
+    if path == KNOWLEDGE:
+        response = client.post(KNOWLEDGE, content=f"question={question}")
+        # The card swaps itself; it never retargets the ask box's answer.
+        assert "HX-Retarget" not in response.headers
+        assert 'id="knowledge-panel"' in response.text
+        return response
+    response = client.post(
+        "/accommodation/ai-search", content=f"query={question}&mode=mcp"
+    )
+    # Every RAG/MCP answer lands under the box, never over the results.
+    assert response.headers["HX-Retarget"] == "#ai-answer"
+    assert response.headers["HX-Reswap"] == "innerHTML"
+    return response
 
 
 def test_a_grounded_answer_shows_confidence_and_sources(client, backend):
@@ -90,8 +119,70 @@ def test_tool_calls_and_their_data_are_shown(client, backend):
     assert "Harbour View Hotel is 320 a night." in html
     assert "Tools used · 1 call" in html
     assert "accommodations_search" in html
-    assert "Returned data" in html
-    assert "Harbour View Hotel" in html.split("Returned data")[1]
+    # A readable table of the tool's rows, each linking to its modal...
+    table = html.split("<table")[1].split("</table>")[0]
+    assert "Harbour View Hotel" in table
+    assert "?accommodation=3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11" in table
+    assert "320.00" in table
+    assert "Sydney, Australia" in table
+    # ...and the raw tool result under it, as evidence the tool returned it.
+    raw = html.split("Raw tool result")[1]
+    assert '"truncated": false' in raw
+
+
+def tool_answer(tool, data):
+    call = dict(COMPLETE["tools"][0], tool=tool, arguments={}, data=data)
+    return {**COMPLETE, "tools": [call]}
+
+
+def test_a_single_listing_is_shown_as_its_details(client, backend):
+    backend.answers[ASSISTANT] = tool_answer(
+        "accommodations_get",
+        {
+            "id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+            "name": "Harbour View Hotel",
+            "type": "hotel",
+            "price_per_night": "320.00",
+            "rating": 4.6,
+            "amenities": ["wifi", "pool"],
+            "availability_status": "available",
+            "location_details": {"country": "australia", "city": "sydney"},
+            "room_details": {"room_count": 1, "bed_count": 1, "bed_types": ["king"]},
+        },
+    )
+    html = ask(client, ASSISTANT).text
+    assert "wifi, pool" in html
+    assert "1 rooms, 1 beds (king)" in html
+    assert "Raw tool result" in html
+
+
+def test_committed_costs_are_shown_with_their_total(client, backend):
+    backend.answers[ASSISTANT] = tool_answer(
+        "accommodations_committed_costs",
+        {
+            "committed_cost_total": "960.00",
+            "currency": "AUD",
+            "items": [
+                {
+                    "item_id": "3f1c8b52-8f8e-4a3d-9f2e-0b7c1d9a4e11",
+                    "description": "Harbour View Hotel",
+                    "status": "planned",
+                    "amount": "960.00",
+                    "currency": "AUD",
+                }
+            ],
+        },
+    )
+    html = ask(client, ASSISTANT).text
+    assert "Committed total" in html
+    assert "960.00 AUD" in html
+
+
+def test_another_features_tool_gets_the_raw_result_only(client, backend):
+    backend.answers[ASSISTANT] = tool_answer("budgets_list", {"items": []})
+    html = ask(client, ASSISTANT).text
+    assert "<table" not in html
+    assert "Raw tool result" in html
 
 
 def test_a_failed_tool_is_shown_as_failed(client, backend):
@@ -115,7 +206,25 @@ def test_a_blank_question_never_reaches_the_backend(client, backend, path):
     assert backend.asked == []
 
 
-def test_the_page_has_both_boxes(client):
+def test_the_page_has_the_mcp_mode_and_the_knowledge_base(client):
     html = client.get("/").text
-    assert 'for="guide-question"' in html
-    assert 'for="assistant-question"' in html
+    assert 'name="mode" value="search" checked' in html
+    assert 'name="mode" value="mcp"' in html
+    assert 'name="mode" value="rag"' not in html
+    assert "Ask the accommodation knowledge base" in html
+
+
+def test_the_knowledge_base_keeps_the_question_in_its_redrawn_card(client, backend):
+    backend.answers[KNOWLEDGE] = ANSWERED
+    html = ask(client, KNOWLEDGE).text
+    assert 'value="How is a stay priced?"' in html
+    assert "3 of 5 chunks used" in html
+
+
+def test_the_default_mode_is_still_the_filter_search(client, backend):
+    response = client.post(
+        "/accommodation/ai-search", content="query=japan&mode=search"
+    )
+    assert "HX-Retarget" not in response.headers
+    assert backend.ai_question == "japan"
+    assert backend.asked == []

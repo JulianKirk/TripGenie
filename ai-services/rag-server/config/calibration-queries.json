@@ -214,6 +214,24 @@
       "expect_insufficient_context": false
     },
     {
+      "case_id": "student-2-budget",
+      "query": "How does the budget use the cost of accommodation on my trip?",
+      "feature": "student-2",
+      "expected_source_ids": [
+        "accommodation-pricing-and-costs"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
+      "case_id": "student-2-trips-down",
+      "query": "Can I still search accommodation when the trips service is unavailable?",
+      "feature": "student-2",
+      "expected_source_ids": [
+        "accommodation-stays-and-itineraries"
+      ],
+      "expect_insufficient_context": false
+    },
+    {
       "case_id": "student-2-unrelated",
       "query": "How do I change the oil in a motorbike?",
       "feature": "student-2",

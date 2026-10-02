@@ -36,3 +36,12 @@ trip. It lists each stay with the listing name and its amount, followed by
 the total and the currency. The TripGenie budget feature reads this total as
 the trip's committed accommodation spending, so the budget and the
 accommodation page agree on the figure.
+
+## Accommodation costs: how the budget uses accommodation costs
+
+The TripGenie budget feature reads a trip's committed accommodation cost from
+the accommodation feature, with its currency, and counts it as committed
+accommodation spending against the trip's budget. Because the figure is
+worked out from the stays currently on the trip, adding or removing a stay
+changes what the budget shows the next time it reads the trip. The amounts
+remain planning estimates for the budget, not payments made to a property.

@@ -33,6 +33,14 @@
           hx-swap="innerHTML"
           hx-indicator="#asking">
       <label for="ask-query">AI Assisted Search</label>
+      {# Release 1 mode. Default fills the filters below; MCP lets the model
+         look up live listings with the shared MCP tools and shows each call
+         and the data it returned. RAG is the knowledge base card below. #}
+      <fieldset class="ask__modes">
+        <legend class="visually-hidden">Answer with</legend>
+        <label><input type="radio" name="mode" value="search" checked> Default</label>
+        <label><input type="radio" name="mode" value="mcp"> MCP <span class="ask__hint">live data, with tool calls</span></label>
+      </fieldset>
       <div class="ask__row">
         <input id="ask-query" name="query" type="search" autocomplete="off"
                maxlength="500"
@@ -48,44 +56,12 @@
       </div>
     </form>
 
-    {# Release 1: the guide asks the shared RAG server, the assistant lets the
-       model call the shared MCP tools. Both go through this service's backend
-       and answer in their own region, leaving the results list alone. #}
-    {% for box in (
-      {"id": "guide", "route": "knowledge",
-       "label": "Ask the accommodation guide (RAG)",
-       "hint": "how is the cost of a three night stay worked out?",
-       "help": "Answers from TripGenie's accommodation guides, with a confidence level and the sources used."},
-      {"id": "assistant", "route": "assistant",
-       "label": "Ask the assistant (MCP tools)",
-       "hint": "what accommodation is there in Sydney, Australia?",
-       "help": "The assistant looks up live listings with MCP tools and shows each call and the data it returned."},
-    ) %}
-    <form class="ask"
-          hx-post="{{ request.url_for(box.route) }}"
-          hx-target="#{{ box.id }}-answer"
-          hx-swap="innerHTML"
-          hx-indicator="#{{ box.id }}-asking">
-      <label for="{{ box.id }}-question">{{ box.label }}</label>
-      <p class="ai-notice" id="{{ box.id }}-help">{{ box.help }}</p>
-      <div class="ask__row">
-        <input id="{{ box.id }}-question" name="question" type="search"
-               autocomplete="off" maxlength="500" required
-               aria-describedby="{{ box.id }}-help"
-               placeholder="{{ box.hint }}">
-        <button class="button button--primary" type="submit">Ask</button>
-      </div>
-      <div id="{{ box.id }}-asking" class="htmx-indicator asking" role="status">
-        <span class="asking__label">Thinking…</span>
-        <span class="asking__track"><span class="asking__bar"></span></span>
-      </div>
-      <div id="{{ box.id }}-answer" aria-live="polite"></div>
-    </form>
-    {% endfor %}
-
     {# The answer to the question, filled in out of band by the ask box and
        blanked by an ordinary search. #}
     {% include "partials/ai_answer.html" %}
+
+    {# Release 1: grounded answers from the shared RAG server, as its own card. #}
+    {% include "partials/knowledge_panel.html" %}
 
     {% include "partials/filters.html" %}
 

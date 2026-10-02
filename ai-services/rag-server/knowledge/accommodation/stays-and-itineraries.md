@@ -31,3 +31,13 @@ it from the itinerary and also removes its amount from the trip's committed
 accommodation cost, because that cost is worked out from the stays currently
 on the trip. Deleting or editing a listing in the catalogue is a separate
 action from removing a stay.
+
+## Stays: when the trips service is unavailable
+
+Searching, filtering and opening accommodation listings, and adding or
+editing listings, keep working when the trips service is unavailable, because
+the catalogue is stored by the accommodation feature itself. Anything that
+needs a trip does not: the Add to Trip form cannot list trips or save a
+stay, and a trip's committed accommodation cost cannot be worked out. These
+show an "itinerary service unavailable" message rather than an empty or
+wrong result, so try again once the trips service is back.
