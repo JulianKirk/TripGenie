@@ -527,6 +527,20 @@ def test_rag_flags_missing_citations_and_unstable_retrieval(monkeypatch):
     assert outcomes["grounded repeated"].startswith("FAIL")
 
 
+def test_rag_query_unwraps_the_servers_data_envelope(monkeypatch):
+    class Reply:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"data": rag_body("high", ["doc-a"])}
+
+    monkeypatch.setattr(loop.requests, "post", lambda *_a, **_k: Reply())
+    body, _elapsed = loop.rag_query(RAG_CASES[0])
+    assert body["confidence_category"] == "high"
+    assert loop.grounding(RAG_CASES[0], body).startswith("OK")
+
+
 def test_rag_mode_reads_the_rag_servers_calibration_cases():
     plan = loop.load_plan("checks/rag.json")
     cases = json.loads((loop.HERE / plan["calibration"]).read_text())["cases"]

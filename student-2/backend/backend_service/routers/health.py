@@ -10,6 +10,7 @@ from backend_service.dependencies import (  # noqa: TC001  (runtime)
     AiDep,
     DbDep,
     LocationDep,
+    RagDep,
 )
 from backend_service.schemas import HealthResponse
 
@@ -31,7 +32,7 @@ async def _status(health) -> str:
 
 @router.get("/health", response_model=HealthResponse)
 async def health(
-    request: Request, db: DbDep, location: LocationDep, ai: AiDep
+    request: Request, db: DbDep, location: LocationDep, ai: AiDep, rag: RagDep
 ) -> HealthResponse:
     database = await _status(db.health)
     # Reported separately: without its data this service serves nothing, and
@@ -48,4 +49,7 @@ async def health(
         database=database,
         location=shared,
         ai_mode=ai_mode,
+        # Config only, never probed: the knowledge box is an extra, and a slow
+        # RAG server must not make this service look unhealthy.
+        rag="configured" if rag.configured else NOT_CONFIGURED,
     )

@@ -1,0 +1,49 @@
+{#
+  The ask box in RAG mode: one answer from the shared RAG server's knowledge
+  base, through this service's backend, put in #ai-answer. Same presentation
+  as Student 1's knowledge base. Three shapes: could not ask (disabled or
+  error), nothing relevant indexed (an honest "not enough information", never
+  the model's guess), or an answer with its confidence and its sources.
+#}
+<div class="grounded">
+  <p class="masthead__eyebrow">AI mode · knowledge base</p>
+  {% if answer.status in ("disabled", "error") %}
+    <p class="error" role="alert">{{ answer.error }}</p>
+  {% elif answer.status == "insufficient_context" %}
+    <p><span class="badge badge--insufficient_context">Insufficient context</span></p>
+    <h3 class="grounded__heading">Not enough information to answer</h3>
+    <p>
+      The knowledge base does not cover this question well enough, so no answer
+      is shown. Try asking about accommodation types, prices, trip costs or
+      adding a stay to a trip.
+    </p>
+  {% else %}
+    {% set labels = {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence — check the sources",
+    } %}
+    <p>
+      <span class="badge badge--{{ answer.confidence_category }}">
+        {{ labels.get(answer.confidence_category, answer.confidence_category) }}
+      </span>
+    </p>
+    <h3 class="grounded__heading">Answer</h3>
+    <p class="grounded__answer">{{ answer.answer }}</p>
+    <h3 class="grounded__heading">Sources</h3>
+    <ol class="citations">
+      {% for citation in answer.citations %}
+        <li>
+          <strong>{{ citation.title }}</strong> · {{ citation.section }}
+          <blockquote>{{ citation.excerpt }}</blockquote>
+          Source: <code>{{ citation.path }}</code>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+  <p class="grounded__meta">
+    Request {{ answer.request_id }}
+    {% if answer.retrieval %} · {{ answer.retrieval.returned_chunks }} of {{ answer.retrieval.requested_top_k }} chunks used{% endif %}
+    {% if answer.run_id %} · RAG run {{ answer.run_id }}{% endif %}
+  </p>
+</div>
