@@ -44,55 +44,70 @@ additional coverage rather than the definition of this minimum baseline.
 TripGenie/
 ├── .github/
 │   └── workflows/
-│       ├── student-1-ci.yml
-│       ├── student-2-ci.yml
-│       ├── student-3-ci.yml
-│       ├── student-4-ci.yml
-│       ├── student-5-ci.yml
+│       ├── student-1-ci.yml … student-5-ci.yml
 │       ├── shared-ci.yml
+│       ├── ai-mode-ci.yml
+│       ├── non-functional-ci.yml
+│       ├── workflow-policy-ci.yml
+│       ├── graphify-update.yml
 │       └── cloud-deployment.yml
+├── AGENTS.md               # repository-wide agent and contributor rules
 ├── README.md
 ├── .gitignore
-├── docker-compose.yml
+├── ruff.toml               # shared lint and format policy
+├── docker-compose.yml      # containerised feature services only
 ├── docs/
 │   ├── architecture/
+│   │   └── decisions/      # architecture decision records
+│   ├── designs/
 │   └── reports/
 │       ├── release-0/
 │       ├── release-1/
 │       └── release-2/
-├── shared/
+├── graphify-out/           # generated knowledge graph; do not hand-edit
+├── shared/                 # country, city and currency reference data, landing page
 │   ├── shared-service.md
+│   ├── pyproject.toml
 │   ├── backend/
 │   ├── database/
 │   ├── docs/
 │   ├── tests/
 │   ├── frontend/
+│   │   ├── Dockerfile
 │   │   ├── index.html
-│   │   ├── css/
-│   │   ├── js/
-│   │   └── assets/
+│   │   └── theme.css
 │   └── configuration/
-├── student-1/
+│       └── .env.example
+├── student-1/              # same layout for student-2 … student-5
+│   ├── AGENTS.md
+│   ├── pyproject.toml
 │   ├── frontend/
 │   ├── backend/
 │   ├── database/
-│   ├── tests/
-│   └── Dockerfile
+│   └── tests/
 ├── student-2/
 ├── student-3/
 ├── student-4/
 ├── student-5/
-├── ai-services/
-│   ├── ai-mode/            # shared: the only service that talks to Ollama
-│   ├── agentic-loop/
-│   ├── mcp-server/
-│   ├── rag-server/
-│   └── multi-agent-server/
-└── scripts/
-    ├── build/
-    ├── test/
-    └── deploy/
+├── ai-services/            # host-run, never Compose services
+│   ├── ai-mode/            # the only service that talks to Ollama
+│   ├── mcp-server/         # shared MCP tools over public feature APIs
+│   ├── rag-server/         # shared retrieval and grounded responses
+│   ├── agentic-loop/       # local validation harness, incl. MCP and RAG modes
+│   └── multi-agent-server/ # placeholder
+├── scripts/
+│   ├── run-app.sh          # starts Compose plus the host AI services
+│   ├── ci/
+│   ├── test/
+│   └── deploy/
+└── tests/
+    └── ci/                 # tests for shared CI scripts
 ```
+
+Students 1–3 build from a single `Dockerfile` in their slice root. Students 4
+and 5 keep one `Dockerfile` in each of `frontend/`, `backend/` and
+`database/`. Some slices also include a `docs/` folder for API and
+object-model documentation.
 
 ---
 
