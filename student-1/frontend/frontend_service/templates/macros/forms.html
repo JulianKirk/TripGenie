@@ -14,7 +14,9 @@
 {% macro panel_error(error, heading_id) -%}
   {% set headlines = {
     "RAG_DISABLED": "Knowledge base answers are not enabled in this environment.",
-    "MCP_DISABLED": "Tool-backed trip options are not enabled in this environment.",
+    "MCP_DISABLED": "The MCP trip assistant is not enabled in this environment.",
+    "MCP_TOOLS_NOT_USED": "The AI assistant answered without using any trip tools, so its answer was not shown. Try again.",
+    "AI_OUTPUT_INVALID": "The AI assistant's answer was not in the expected format. Try again.",
     "INDEX_NOT_READY": "The knowledge base index is not ready yet. Try again shortly.",
     "DEPENDENCY_UNAVAILABLE": "The service behind this panel is unavailable right now.",
     "DEPENDENCY_TIMEOUT": "The request timed out before an answer came back.",

@@ -177,9 +177,11 @@ def mcp_panel_context(
     country: str = "",
     error: ApiError | None = None,
     result: McpOptionsResponse | None = None,
+    request_text: str = "",
 ) -> dict[str, object]:
     return {
         "mcp_country": country,
+        "mcp_request": request_text,
         "mcp_error": error,
         "mcp_errors_by_field": error_details_by_field(error),
         "mcp_result": result,
@@ -1494,17 +1496,22 @@ def create_app(
         request: Request,
         client: BackendApiClient = Depends(get_backend_client),
     ) -> Response:
-        values = await read_form_values(request, ("country",))
+        values = await read_form_values(request, ("country", "request"))
         try:
             result = await client.mcp_options(
                 trip_id,
                 normalise_optional_text(values["country"]),
+                normalise_optional_text(values["request"]),
             )
         except ApiError as exc:
-            context = mcp_panel_context(values["country"], error=exc)
+            context = mcp_panel_context(
+                values["country"], error=exc, request_text=values["request"]
+            )
             status_code = exc.status_code
         else:
-            context = mcp_panel_context(values["country"], result=result)
+            context = mcp_panel_context(
+                values["country"], result=result, request_text=values["request"]
+            )
             status_code = 200
         return await render_feature_panel(
             request,

@@ -1,12 +1,13 @@
 {% import "macros/forms.html" as forms %}
 
-{# Read-only option discovery. There is deliberately no save control here:
-   options are added through the existing trip sections. #}
+{# The AI assistant chooses and calls the shared MCP tools through AI-Mode;
+   this panel shows its answer and every tool call it made. There is
+   deliberately no save control: options are added through the trip sections. #}
 <section id="mcp-panel" class="mode-panel mode-panel--ai" aria-labelledby="mcp-heading">
-  <p class="section-eyebrow">AI mode · trip tools</p>
-  <h3 id="mcp-heading">Find options for this trip</h3>
+  <p class="section-eyebrow">AI mode · MCP tools</p>
+  <h3 id="mcp-heading">Ask the trip assistant</h3>
   <p>
-    Look up accommodation, activities, transport and budgets for this trip's destination through TripGenie's shared tools.
+    The AI assistant looks up accommodation, activities, transport and budgets for this trip by calling TripGenie's shared MCP tools itself, and shows you each call it made.
     <strong>Nothing here is saved.</strong>
     To keep an option, add it through the
     <a href="#days-heading">itinerary</a>,
@@ -26,6 +27,24 @@
     hx-disabled-elt="find button"
     novalidate
   >
+    {% set request_errors = mcp_errors_by_field.get('request') %}
+    <div class="form-field form-field--full">
+      <label for="mcp-request">What should the assistant look for? (optional)</label>
+      <textarea
+        id="mcp-request"
+        name="request"
+        rows="2"
+        maxlength="500"
+        placeholder="Find a mid-range stay and a food activity"
+        aria-describedby="mcp-request-hint{% if request_errors %} request-errors{% endif %}"
+        {% if request_errors %}aria-invalid="true"{% endif %}
+      >{{ mcp_request }}</textarea>
+      <p id="mcp-request-hint" class="hint-copy">
+        Up to 500 characters. Leave blank to look for accommodation, activities and transport and check the budget.
+      </p>
+      {{ forms.field_errors('request', mcp_errors_by_field) }}
+    </div>
+
     {% set country_errors = mcp_errors_by_field.get('country') %}
     <div class="form-field">
       <label for="mcp-country">Country (optional)</label>
@@ -40,79 +59,99 @@
         {% if country_errors %}aria-invalid="true"{% endif %}
       >
       <p id="mcp-country-hint" class="hint-copy">
-        Accommodation and activity searches need a country. Add one when the trip destination is just a city; otherwise those two searches are skipped.
+        Accommodation and activity searches need a country. Add one when the trip destination is just a city; otherwise the assistant skips those two searches.
       </p>
       {{ forms.field_errors('country', mcp_errors_by_field) }}
     </div>
 
     <div class="form-field form-field--actions">
-      <button class="button button--secondary" type="submit">Find trip options</button>
+      <button class="button button--secondary" type="submit">Ask the trip assistant</button>
     </div>
   </form>
 
   <div id="mcp-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
-    Looking up trip options — this usually takes a few seconds.
+    The AI assistant is choosing and calling trip tools — this can take up to a minute with a local model.
   </div>
 
   {% if mcp_error %}
     {{ forms.panel_error(mcp_error, 'mcp-result-heading') }}
   {% elif mcp_result %}
-    {% set tool_labels = {
-      "trip_get_context": "Trip details",
-      "accommodations_search": "Accommodation options",
-      "activities_search": "Activity options",
-      "transport_search": "Transport options",
-      "budgets_list": "Budgets",
-    } %}
     {% set status_badges = {
-      "ok": ("OK", ""),
-      "error": ("Failed", "badge--danger"),
-      "skipped": ("Skipped", "badge--warning"),
+      "success": ("Success", ""),
+      "error": ("Error", "badge--danger"),
+      "rejected": ("Rejected", "badge--warning"),
     } %}
     <section class="panel panel--nested" aria-labelledby="mcp-result-heading">
       <h4 id="mcp-result-heading" data-autofocus>
-        Options for {{ mcp_result.location.city }}{% if mcp_result.location.country %}, {{ mcp_result.location.country }}{% endif %}
+        Trip assistant for {{ mcp_result.location.city }}{% if mcp_result.location.country %}, {{ mcp_result.location.country }}{% endif %}
       </h4>
-      <p class="muted-copy" role="status" aria-live="polite">
-        {{ mcp_result.summary.ok }} succeeded · {{ mcp_result.summary.error }} failed · {{ mcp_result.summary.skipped }} skipped. Nothing was saved.
-      </p>
-      {% if mcp_result.summary.error %}
-        <p class="banner banner--error">Some lookups failed. Results from the others are still shown below.</p>
+      <p>{{ mcp_result.summary }}</p>
+
+      {% if mcp_result.write_tools_called %}
+        <p class="banner banner--error" role="alert">
+          Warning: the assistant called a tool that can change data
+          ({% for name in mcp_result.write_tools_called %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}).
+          It was told not to. Check the activities catalogue.
+        </p>
+      {% endif %}
+      {% if mcp_result.ungrounded_dropped %}
+        <p class="banner banner--info">
+          {{ mcp_result.ungrounded_dropped }} suggested option(s) were hidden because no tool returned them.
+        </p>
       {% endif %}
 
-      <ul class="item-list">
-        {% for result in mcp_result.results %}
-          {% set badge_label, badge_class = status_badges[result.status] %}
+      <h5>Options</h5>
+      {% if mcp_result.options %}
+        <ul class="item-list">
+          {% for option in mcp_result.options %}
+            <li class="item-card">
+              <div class="item-card__content">
+                <div class="badge-row">
+                  <span class="badge badge--muted">{{ option.category|capitalize }}</span>
+                  {% if not option.grounded %}<span class="badge badge--warning">not verified against tool results</span>{% endif %}
+                </div>
+                <p><strong>{{ option.name }}</strong>{% if option.detail %} — {{ option.detail }}{% endif %}</p>
+                {% if option.source_tool %}<p class="item-card__meta">From <code>{{ option.source_tool }}</code></p>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted-copy">The assistant did not list any options.</p>
+      {% endif %}
+
+      <h5>Tools the AI called</h5>
+      <p class="muted-copy" role="status" aria-live="polite">
+        {{ mcp_result.tool_summary.success }} succeeded · {{ mcp_result.tool_summary.error }} failed · {{ mcp_result.tool_summary.rejected }} rejected. Nothing was saved.
+      </p>
+      <ol class="item-list">
+        {% for call in mcp_result.tools %}
+          {% set badge_label, badge_class = status_badges[call.status] %}
           <li class="item-card">
             <div class="item-card__content">
               <div class="badge-row">
                 <span class="badge {{ badge_class }}">{{ badge_label }}</span>
+                <span class="muted-copy">{{ call.duration_ms }} ms</span>
               </div>
-              <h5>{{ tool_labels.get(result.tool, result.tool) }}</h5>
               <p class="item-card__meta">
-                <code>{{ result.tool }}</code>
-                {% for key, value in result.arguments.items() %} · {{ key }}={{ 'not set' if value is none else (value|tojson if value is mapping else value) }}{% endfor %}
+                <code>{{ call.tool }}</code>
+                {% for key, value in call.arguments.items() %} · {{ key }}={{ 'not set' if value is none else (value|tojson if (value is mapping or (value is iterable and value is not string)) else value) }}{% endfor %}
               </p>
-              {% if result.status == 'ok' %}
+              {% if call.status == 'success' %}
                 <ul>
-                  {% for line in summarise_mcp_data(result.data) %}
+                  {% for line in summarise_mcp_data(call.data) %}
                     <li>{{ line }}</li>
                   {% endfor %}
                 </ul>
-              {% elif result.status == 'error' %}
-                <p>
-                  <strong>{{ result.error.message if result.error else 'The tool failed.' }}</strong>
-                  {% if result.error %}(<code>{{ result.error.code }}</code>{% if result.error.retryable %}, can be retried{% endif %}){% endif %}
-                </p>
               {% else %}
-                <p>{{ result.reason or 'This lookup was skipped.' }}</p>
+                <p><strong>{{ call.error or 'The tool call did not succeed.' }}</strong></p>
               {% endif %}
             </div>
           </li>
         {% endfor %}
-      </ul>
+      </ol>
 
-      <p class="muted-copy">Correlation ID: {{ mcp_result.correlation_id }}</p>
+      <p class="muted-copy">Model: {{ mcp_result.model }} · Run ID: {{ mcp_result.run_id }} · Correlation ID: {{ mcp_result.correlation_id }}</p>
     </section>
   {% endif %}
 </section>

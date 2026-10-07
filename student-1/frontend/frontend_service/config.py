@@ -61,8 +61,8 @@ class Settings:
     backend_api_prefix: str = "/api"
     backend_timeout_seconds: float = 5.0
     # Only the AI, RAG and MCP calls get these. Each must outlast the backend's
-    # own worst case: AI 2 attempts x 120 s = 240 s, RAG 130 s, MCP 5
-    # sequential tools x 40 s = 200 s.
+    # own worst case: AI 2 attempts x 120 s = 240 s, RAG 130 s, MCP
+    # assistant 200 s (one AI-Mode tool run, retry included).
     ai_timeout_seconds: float = 250.0
     rag_timeout_seconds: float = 150.0
     mcp_timeout_seconds: float = 210.0
