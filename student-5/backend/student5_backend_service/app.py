@@ -17,7 +17,6 @@ from .ai_mode_client import AiModeClient
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError
-from .mcp_client import McpClient
 from .models import (
     BudgetAnalysisRequest,
     BudgetCreate,
@@ -77,7 +76,6 @@ def create_app(
     activity_transport: httpx.BaseTransport | None = None,
     ai_mode_transport: httpx.BaseTransport | None = None,
     rag_transport: httpx.BaseTransport | None = None,
-    mcp_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     database = DatabaseApiClient(settings, transport=database_transport)
@@ -87,7 +85,6 @@ def create_app(
     activities = ActivityApiClient(settings, transport=activity_transport)
     ai_mode = AiModeClient(settings, transport=ai_mode_transport)
     rag = RagClient(settings, transport=rag_transport)
-    mcp = McpClient(settings, transport=mcp_transport)
     service = BackendService(
         database,
         trips,
@@ -97,7 +94,6 @@ def create_app(
         ai_mode,
         settings,
         rag,
-        mcp,
     )
 
     @asynccontextmanager
@@ -110,7 +106,6 @@ def create_app(
         activities.close()
         ai_mode.close()
         rag.close()
-        mcp.close()
 
     app = FastAPI(title="TripGenie Student 5 Backend", lifespan=lifespan)
 

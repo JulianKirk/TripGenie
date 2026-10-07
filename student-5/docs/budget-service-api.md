@@ -116,30 +116,45 @@ unchanged.
 ### `POST /budgets/{budget_id}/mcp/{action}`
 
 No request body. `action` must be one of the allowlisted keys below. The
-backend confirms the budget exists before calling MCP, builds the tool
-arguments server-side, and calls the shared MCP server's `tools/call` over MCP
-Streamable HTTP (JSON-RPC 2.0, stateless, JSON responses).
+backend confirms the budget exists, then submits a natural-language request
+(plus the budget and trip IDs) and the trusted `budget_tools_v1.md` system
+prompt to the shared AI-Mode `/generate` endpoint. AI-Mode discovers the MCP
+tool catalogue, the model decides which tools to call, and AI-Mode returns the
+executed tool calls in `tools`. The backend never calls the MCP server directly.
 
-| Action | MCP tool | Arguments |
-| --- | --- | --- |
-| `budget-summary` | `budgets_get_summary` | `{"budget_id": <path budget>}` |
-| `expenses` | `expenses_list` | `{"trip_id": <budget trip>, "limit": 20}` |
+| Action | Request sent to the model |
+| --- | --- |
+| `budget-summary` | Get the spending summary for this budget. |
+| `expenses` | List the 20 most recent expenses for this trip. |
 
 ```json
 {
   "data": {
     "action": "budget-summary",
-    "tool": "budgets_get_summary",
     "correlation_id": "student5-mcp-9b1e4c2d6a7f",
-    "duration_ms": 412,
-    "result": {"budget_id": "5ad9845c-a7d1-5688-b06a-63e92bed4345", "currency": "AUD", "remaining_budget": "2375.00"}
+    "duration_ms": 18412,
+    "run_id": "aimode_01",
+    "model": "llama3.1:8b",
+    "provider": "ollama",
+    "answer": "The remaining budget is AUD 2375.00.",
+    "tools": [
+      {
+        "tool": "budgets_get_summary",
+        "arguments": {"budget_id": "5ad9845c-a7d1-5688-b06a-63e92bed4345"},
+        "status": "success",
+        "duration_ms": 412,
+        "result": {"structuredContent": {"ok": true, "data": {"currency": "AUD", "remaining_budget": "2375.00"}}, "isError": false},
+        "error": null
+      }
+    ]
   }
 }
 ```
 
-`result` is the tool's `data` object (the full summary for `budget-summary`;
-`expenses`, `count`, and `truncated` for `expenses`). Results over 32 KB are
-rejected.
+`tools` is the AI-Mode execution trace. `status` is `success`, `error`, or
+`rejected`; failed and rejected calls are returned, not hidden. An empty
+`tools` list means the model called no tool, and the UI says so rather than
+treating `answer` as evidence.
 
 ### Student 5 tools on the shared MCP server
 
@@ -159,14 +174,11 @@ read-only GET calls to this API.
 | RAG or MCP disabled by configuration (no outbound call) | 503 | `RAG_DISABLED` / `MCP_DISABLED` |
 | Empty or over-long question; unknown MCP action; malformed UUID | 422 | `VALIDATION_ERROR` |
 | Budget not found (before any MCP call) | 404 | `NOT_FOUND` |
-| RAG or MCP connection refused | 503 | `DEPENDENCY_UNAVAILABLE` (field `rag` or `mcp`) |
-| RAG or MCP client timeout | 504 | `DEPENDENCY_TIMEOUT` |
+| RAG connection refused, or AI-Mode unreachable for MCP actions | 503 | `DEPENDENCY_UNAVAILABLE` (field `rag` or `ai_mode`) |
+| RAG or AI-Mode client timeout | 504 | `DEPENDENCY_TIMEOUT` |
 | RAG `INDEX_NOT_READY` / `DEPENDENCY_UNAVAILABLE` | 503 | upstream code preserved |
 | RAG `DEPENDENCY_TIMEOUT` | 504 | upstream code preserved |
-| RAG other error, schema mismatch, or broken invariant | 502 | `INVALID_DEPENDENCY_RESPONSE` |
-| MCP tool not registered | 503 | `DEPENDENCY_UNAVAILABLE` (issue `tool not registered`) |
-| MCP tool returned a structured error | 502 | `MCP_TOOL_ERROR` (tool error code in `details[0].issue`) |
-| MCP result malformed or over 32 KB | 502 | `INVALID_DEPENDENCY_RESPONSE` |
+| RAG other error, AI-Mode schema mismatch, or broken invariant | 502 | `INVALID_DEPENDENCY_RESPONSE` |
 
 Logs for RAG and MCP calls contain only the correlation ID, action, outcome, and
 duration; never the question, answer, excerpts, or tool payloads.
@@ -181,18 +193,16 @@ duration; never the question, answer, excerpts, or tool payloads.
 | `STUDENT5_BACKEND_RAG_BASE_URL` | `http://host.docker.internal:8011` | same |
 | `STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS` | `130` (connect 3) | `130` |
 | `STUDENT5_BACKEND_MCP_ENABLED` | `false` | `${STUDENT5_BACKEND_MCP_ENABLED:-true}` |
-| `STUDENT5_BACKEND_MCP_BASE_URL` | `http://host.docker.internal:8012/mcp` | same |
-| `STUDENT5_BACKEND_MCP_TIMEOUT_SECONDS` | `40` (connect 3) | `40` |
 | `STUDENT5_BACKEND_HOST_PORT` (Compose only) | n/a | `127.0.0.1:${STUDENT5_BACKEND_HOST_PORT:-18005}:8005` |
 | `STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS` | `120` | `230` |
 | `STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS` | `150` | `150` |
-| `STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS` | `60` | `60` |
+| `STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS` | `230` | `230` |
 
 Timeouts are ordered so the outer caller always waits longer than the inner
 one: frontend 230 s > backend 200 s > AI-Mode's 180 s MCP tool-loop deadline
 for AI analysis, frontend 150 s > backend 130 s > RAG 120 s for RAG, and
-frontend 60 s > backend 40 s > MCP provider calls (30 s) for MCP.
+frontend 230 s > backend 200 s > AI-Mode's 180 s tool-loop deadline for MCP actions.
 
 Since ADR 0004, AI-Mode `/generate` discovers the shared MCP catalogue on every
-request, so AI analysis also needs the host MCP server. Its additive `tools`
-trace is ignored by the budget analysis client.
+request, so both MCP actions and AI analysis need the host MCP server. The
+budget analysis client ignores the `tools` trace; MCP actions return it.

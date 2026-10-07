@@ -410,19 +410,43 @@ RAG_ANSWER = {
     "run_id": "rag_01",
     "correlation_id": "student5-rag-0123456789ab",
 }
-MCP_SUMMARY = {
-    "action": "budget-summary",
-    "tool": "budgets_get_summary",
-    "correlation_id": "student5-mcp-0123456789ab",
-    "duration_ms": 412,
-    "result": SUMMARY
+
+
+def mcp_result(action: str, tool: str, data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": action,
+        "correlation_id": "student5-mcp-0123456789ab",
+        "duration_ms": 412,
+        "run_id": "aimode_1",
+        "model": "llama3.1:8b",
+        "provider": "ollama",
+        "answer": "Here is the result.",
+        "tools": [
+            {
+                "tool": tool,
+                "arguments": {"budget_id": BUDGET_ID},
+                "status": "success",
+                "duration_ms": 40,
+                "result": {
+                    "structuredContent": {"ok": True, "data": data},
+                    "isError": False,
+                },
+            }
+        ],
+    }
+
+
+MCP_SUMMARY = mcp_result(
+    "budget-summary",
+    "budgets_get_summary",
+    SUMMARY
     | {
         "budget_id": BUDGET_ID,
         "trip_id": "trip-7",
         "unconverted_expense_count": 0,
         "category_totals": {"food": "75.00"},
     },
-}
+)
 
 
 def error_body(code: str, message: str, details=None) -> dict[str, Any]:
@@ -573,6 +597,8 @@ def test_mcp_summary_result_is_readable_and_structured() -> None:
     assert "<code>budgets_get_summary</code>" in result.text
     assert "student5-mcp-0123456789ab" in result.text
     assert "412 ms" in result.text
+    assert "llama3.1:8b via ollama" in result.text
+    assert "Here is the result." in result.text
     assert "AUD 1625.00" in result.text
     assert "<strong>Accommodation</strong>: unavailable" in result.text
     assert "<strong>Transport</strong>: available (AUD 300.00)" in result.text
@@ -580,13 +606,11 @@ def test_mcp_summary_result_is_readable_and_structured() -> None:
 
 
 def test_mcp_expenses_result_renders_table() -> None:
-    data = {
-        "action": "expenses",
-        "tool": "expenses_list",
-        "correlation_id": "student5-mcp-0123456789ab",
-        "duration_ms": 9,
-        "result": {"expenses": [EXPENSE], "count": 1, "truncated": True},
-    }
+    data = mcp_result(
+        "expenses",
+        "expenses_list",
+        {"expenses": [EXPENSE], "count": 1, "truncated": True},
+    )
     handler, _ = with_route(f"/api/v1/budgets/{BUDGET_ID}/mcp/expenses", {"data": data})
     with make_client(handler) as client:
         result = client.post(
@@ -613,15 +637,8 @@ def test_mcp_without_javascript_renders_full_detail_page() -> None:
     ("status_code", "code", "details", "message"),
     [
         (503, "MCP_DISABLED", [], "MCP tools are disabled in this environment."),
-        (503, "DEPENDENCY_UNAVAILABLE", [], "shared MCP server is currently"),
-        (
-            503,
-            "DEPENDENCY_UNAVAILABLE",
-            [{"field": "mcp", "issue": "tool not registered"}],
-            "not registered on the shared MCP server",
-        ),
+        (503, "DEPENDENCY_UNAVAILABLE", [], "MCP tool server is unavailable"),
         (504, "DEPENDENCY_TIMEOUT", [], "took too long to respond"),
-        (502, "MCP_TOOL_ERROR", [], "reported an error: raw backend text"),
         (502, "INVALID_DEPENDENCY_RESPONSE", [], "returned an unusable result"),
         (404, "NOT_FOUND", [], "raw backend text"),
     ],
@@ -645,9 +662,12 @@ def test_mcp_failure_states_are_distinct(
 
 
 def test_mcp_structured_result_is_escaped() -> None:
-    hostile = MCP_SUMMARY | {
-        "result": MCP_SUMMARY["result"] | {"trip_id": "<script>x</script>"}
-    }
+    hostile = mcp_result(
+        "budget-summary",
+        "budgets_get_summary",
+        MCP_SUMMARY["tools"][0]["result"]["structuredContent"]["data"]
+        | {"trip_id": "<script>x</script>"},
+    )
     handler, _ = with_route(
         f"/api/v1/budgets/{BUDGET_ID}/mcp/budget-summary", {"data": hostile}
     )

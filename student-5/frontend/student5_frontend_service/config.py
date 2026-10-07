@@ -20,7 +20,7 @@ class Settings:
     backend_base_url: str = "http://student-5-backend:8005"
     ai_analysis_timeout_seconds: float = 120.0
     rag_timeout_seconds: float = 150.0
-    mcp_timeout_seconds: float = 60.0
+    mcp_timeout_seconds: float = 230.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -39,5 +39,7 @@ class Settings:
             rag_timeout_seconds=_timeout(
                 "STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS", 150.0
             ),
-            mcp_timeout_seconds=_timeout("STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS", 60.0),
+            mcp_timeout_seconds=_timeout(
+                "STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS", 230.0
+            ),
         )

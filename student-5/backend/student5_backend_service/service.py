@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Callable
 from datetime import date
+from importlib import resources
 from time import perf_counter
-from typing import Any
 from uuid import UUID, uuid4
 
 from .accommodation_client import AccommodationApiClient
@@ -15,7 +15,6 @@ from .calculations import calculate_summary
 from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_gateway, date_outside_trip
-from .mcp_client import McpClient
 from .models import (
     BudgetAnalysisRequest,
     BudgetAnalysisResponse,
@@ -38,16 +37,11 @@ from .trips_client import TripsApiClient
 
 logger = logging.getLogger(__name__)
 
-MCP_ACTIONS: dict[str, tuple[str, Callable[[BudgetRecord], dict[str, Any]]]] = {
-    "budget-summary": (
-        "budgets_get_summary",
-        lambda budget: {"budget_id": str(budget.budget_id)},
-    ),
-    "expenses": (
-        "expenses_list",
-        lambda budget: {"trip_id": budget.trip_id, "limit": 20},
-    ),
+MCP_ACTIONS = {
+    "budget-summary": "Get the spending summary for this budget.",
+    "expenses": "List the 20 most recent expenses for this trip.",
 }
+MCP_SYSTEM_PROMPT_ASSET = "budget_tools_v1.md"
 
 
 def _disabled(code: str, field: str, name: str) -> ApiError:
@@ -70,7 +64,6 @@ class BackendService:
         ai_mode: AiModeClient,
         settings: Settings,
         rag: RagClient,
-        mcp: McpClient,
     ) -> None:
         self.database = database
         self.trips = trips
@@ -80,7 +73,6 @@ class BackendService:
         self.ai_mode = ai_mode
         self.settings = settings
         self.rag = rag
-        self.mcp = mcp
 
     def ready(self) -> bool:
         return self.database.ready()
@@ -122,13 +114,32 @@ class BackendService:
                 "The MCP action is not supported.",
                 [{"field": "action", "issue": f"must be one of {sorted(MCP_ACTIONS)}"}],
             )
-        tool, build_arguments = MCP_ACTIONS[action]
         budget = self.database.get_budget(budget_id)
         correlation_id = f"student5-mcp-{uuid4().hex[:12]}"
+        system = (
+            resources.files("student5_backend_service")
+            .joinpath("prompts", MCP_SYSTEM_PROMPT_ASSET)
+            .read_text(encoding="utf-8")
+        )
+        prompt = json.dumps(
+            {
+                "request": MCP_ACTIONS[action],
+                "budget_id": str(budget.budget_id),
+                "trip_id": budget.trip_id,
+            }
+        )
         started = perf_counter()
         outcome = "error"
         try:
-            result = self.mcp.call_tool(tool, build_arguments(budget), correlation_id)
+            generated = self.ai_mode.run_tools(
+                prompt=prompt,
+                system=system,
+                correlation_id=correlation_id,
+                metadata={
+                    "feature": "student-5-budget-tools",
+                    "trip_id": budget.trip_id,
+                },
+            )
             outcome = "ok"
         except ApiError as error:
             outcome = error.code
@@ -144,10 +155,13 @@ class BackendService:
             )
         return McpActionResult(
             action=action,
-            tool=tool,
             correlation_id=correlation_id,
             duration_ms=duration_ms,
-            result=result,
+            run_id=generated.run_id,
+            model=generated.model,
+            provider=generated.provider,
+            answer=generated.response,
+            tools=generated.tools,
         )
 
     def list_trips(self) -> list[TripRecord]:
