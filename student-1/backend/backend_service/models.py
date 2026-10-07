@@ -546,26 +546,47 @@ class RagQueryResponse(RagAnswer):
     trip_id: str
 
 
+DEFAULT_MCP_REQUEST = (
+    "Find accommodation, activities and transport for this trip and check its budget."
+)
+McpCategory = Literal["accommodation", "activity", "transport", "budget"]
+
+
 class McpOptionsRequest(StrictModel):
+    request: Annotated[str, StringConstraints(min_length=1, max_length=500)] = (
+        DEFAULT_MCP_REQUEST
+    )
     country: Annotated[str, StringConstraints(min_length=1, max_length=100)] | None = (
         None
     )
 
 
-class McpToolError(StrictModel):
-    code: str
-    message: str
-    retryable: bool
+# What the model must return after its tool calls. Kept in step with
+# MCP_FINAL_ANSWER_SCHEMA in service.py, which is what AI-Mode is sent.
+class McpFinalOption(StrictModel):
+    category: McpCategory
+    name: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    detail: Annotated[str, StringConstraints(max_length=300)] | None = None
+    id: Annotated[str, StringConstraints(max_length=100)] | None = None
 
 
-class McpToolResult(StrictModel):
+class McpFinalAnswer(StrictModel):
+    summary: Annotated[str, StringConstraints(min_length=1, max_length=1000)]
+    options: list[McpFinalOption] = Field(default_factory=list, max_length=8)
+
+
+class McpOption(McpFinalOption):
+    grounded: bool
+    source_tool: str | None = None
+
+
+class McpToolCall(StrictModel):
     tool: str
     arguments: dict[str, Any]
-    status: Literal["ok", "error", "skipped"]
+    status: Literal["success", "error", "rejected"]
+    duration_ms: int = 0
     data: dict[str, Any] | None = None
-    error: McpToolError | None = None
-    reason: str | None = None
-    correlation_id: str | None = None
+    error: str | None = None
 
 
 class McpLocation(StrictModel):
@@ -573,16 +594,23 @@ class McpLocation(StrictModel):
     country: str | None
 
 
-class McpSummary(StrictModel):
-    ok: int
+class McpToolSummary(StrictModel):
+    success: int
     error: int
-    skipped: int
+    rejected: int
 
 
 class McpOptionsResponse(StrictModel):
     trip_id: str
     correlation_id: str
-    location: McpLocation
+    run_id: str
+    model: str
     persisted: Literal[False] = False
-    results: list[McpToolResult]
-    summary: McpSummary
+    request: str
+    location: McpLocation
+    summary: str
+    options: list[McpOption]
+    tools: list[McpToolCall]
+    tool_summary: McpToolSummary
+    ungrounded_dropped: int
+    write_tools_called: list[str]

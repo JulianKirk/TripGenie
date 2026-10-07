@@ -25,9 +25,8 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_RAG_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/rag-query`. Compose turns it on; CI and plain local runs leave it off. |
 | `STUDENT1_BACKEND_RAG_BASE_URL` | `http://127.0.0.1:8011` | Shared host-run RAG server. |
 | `STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | RAG query timeout (retrieval plus generation). |
-| `STUDENT1_BACKEND_MCP_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/mcp-options`. |
-| `STUDENT1_BACKEND_MCP_BASE_URL` | `http://127.0.0.1:8012/mcp` | Shared host-run MCP server's streamable-HTTP endpoint. |
-| `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS` | `40` | Timeout per MCP tool call. |
+| `STUDENT1_BACKEND_MCP_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/mcp-options` (also needs `STUDENT1_BACKEND_AI_MODE_BASE_URL`). |
+| `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS` | `200` | Budget for the AI-Mode tool run behind that route, retry included; must outlast AI-Mode's own agent timeout (180 s). |
 
 ## Activities on a trip
 
@@ -183,9 +182,9 @@ stop when the returned run contains tool calls, to avoid replaying actions.
 
 Both routes are off unless enabled (above). Disabled returns `503` with
 `RAG_DISABLED` / `MCP_DISABLED`, never an empty success. `/health` and `/ready`
-never probe RAG or MCP. Each request generates one correlation id
-(`student1-rag-…` / `student1-mcp-…`), sent as `correlation_id` and
-`X-Request-ID`. An unknown trip is the usual `404 NOT_FOUND`.
+never probe RAG or MCP, and never call `/generate`. Each request generates
+one correlation id (`student1-rag-…` / `student1-mcp-…`), sent as
+`correlation_id` (plus `X-Request-ID` to RAG). An unknown trip is the usual `404 NOT_FOUND`.
 
 ### `POST /api/trips/{tripId}/rag-query`
 
@@ -209,40 +208,52 @@ breaks the RAG contract.
 
 ### `POST /api/trips/{tripId}/mcp-options`
 
-Optional body `{"country": "Australia"}` (1–100 characters). Read-only option
-discovery through the shared MCP tools; **nothing is persisted** — users add
-options through the existing itinerary, accommodation and activity routes.
+The trip assistant. This service never calls the MCP server: per
+[ADR 0004](../../docs/architecture/decisions/0004-shared-mcp-generation.md) it
+sends one AI-Mode `/generate` request and the **model** chooses and calls the
+shared MCP tools, then AI-Mode returns the answer plus the tool trace.
+**Nothing is persisted** — users add options through the existing itinerary,
+accommodation and activity routes.
 
-Location: a `"City, Country"` destination is split on its last comma;
-otherwise the destination is the city and `country` comes from the body. The
-body's country is ignored when the destination already names one.
+Optional body (extra fields `422`):
+`{"request": "Find a mid-range stay and a food activity", "country": "Australia"}`
+— `request` 1–500 characters (default: find accommodation, activities and
+transport and check the budget), `country` 1–100 characters or null. The body's
+country wins; otherwise a `"City, Country"` destination is split on its last
+comma; otherwise country is null and the model is told to skip the two
+location searches.
 
-Tools run sequentially, each with `limit=5`: `trip_get_context`,
-`accommodations_search` and `activities_search` (both `skipped` without a
-country), `transport_search` (destination = city) and `budgets_list`.
-`budgets_get_summary` is deliberately not called: it fans out to Students 2–4
-and back to this service. `trip_get_context` makes the MCP server call back
-into `GET /api/trips/{tripId}`; the route handlers are sync, so that callback
-runs on another threadpool worker of the same uvicorn process.
+The `/generate` call carries: `prompt` = compact JSON `{request, trip: {id,
+name, destination, city, country, start_date, end_date, traveller_count}}`,
+`system` = `prompts/trip_tools_assistant_v1.md` (call `trip_get_context`
+first, then only the read-only `accommodations_search`, `activities_search`,
+`transport_search`, `budgets_list`; never `budgets_get_summary` or a write
+tool; only mention ids returned by tools), `schema` = the final-answer schema
+`{summary, options: [{category, name, detail, id}]}` (≤ 8 options),
+`metadata` `{service, feature: "trip-tools-assistant", trip_id, attempt}`, and
+a per-request timeout of `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS`.
+
+Grounding: ids are collected from successful tool results (`id` /
+`budget_id` anywhere in `structuredContent.data`). An option whose id was not
+returned by any tool is dropped and counted in `ungrounded_dropped`; an option
+with a null id is kept with `grounded: false`. Any `*_create` / `*_update` /
+`*_delete` tool in the trace is listed in `write_tools_called`.
 
 ```json
 {"data": {"trip_id": "trip_...", "correlation_id": "student1-mcp-...",
-  "location": {"city": "Sydney", "country": "Australia"}, "persisted": false,
-  "results": [
-    {"tool": "trip_get_context", "arguments": {"trip_id": "trip_..."}, "status": "ok",
-     "data": {"id": "trip_..."}, "error": null, "reason": null, "correlation_id": "student1-mcp-..."},
-    {"tool": "accommodations_search", "arguments": {"country": "Australia", "city": "Sydney", "limit": 5},
-     "status": "error", "data": null,
-     "error": {"code": "PROVIDER_UNAVAILABLE", "message": "Provider failed", "retryable": true},
-     "reason": null, "correlation_id": null}
-  ],
-  "summary": {"ok": 4, "error": 1, "skipped": 0}}}
+  "run_id": "...", "model": "qwen3:8b", "persisted": false,
+  "request": "Find a mid-range stay", "location": {"city": "Sydney", "country": "Australia"},
+  "summary": "Harbour Hotel fits ...",
+  "options": [{"category": "accommodation", "name": "Harbour Hotel", "detail": "$210/night",
+    "id": "6f1c...", "grounded": true, "source_tool": "accommodations_search"}],
+  "tools": [{"tool": "trip_get_context", "arguments": {"trip_id": "trip_..."},
+    "status": "success", "duration_ms": 41, "data": {"id": "trip_..."}, "error": null}],
+  "tool_summary": {"success": 4, "error": 0, "rejected": 0},
+  "ungrounded_dropped": 0, "write_tools_called": []}}
 ```
 
-One tool failing (tool error, timeout, malformed result) is recorded against
-that tool and the rest still run. Per-tool error codes are the MCP tool's own
-(`NOT_FOUND`, `PROVIDER_UNAVAILABLE`, …) or `DEPENDENCY_TIMEOUT`,
-`DEPENDENCY_UNAVAILABLE`, `BAD_GATEWAY` (malformed), `MCP_TOOL_ERROR`
-(rejected call). If **every** attempted tool failed because the MCP server
-could not be reached or timed out, the route returns
-`503 DEPENDENCY_UNAVAILABLE` with one `details` entry per tool instead.
+Errors: `503 MCP_DISABLED`; `503 DEPENDENCY_UNAVAILABLE` when AI-Mode is not
+configured or unreachable; `504 DEPENDENCY_TIMEOUT`; `502 BAD_GATEWAY` for a
+malformed AI-Mode response or trace; `502 AI_OUTPUT_INVALID` when the final
+answer breaks the schema; `502 MCP_TOOLS_NOT_USED` when the model made no
+successful tool call even after one retry (never an answer from memory).

@@ -176,14 +176,16 @@ class Settings:
     ai_max_context_accommodations: int = 6
     ai_max_context_activities: int = 12
     ai_max_context_transport: int = 8
-    # Release 1 host-run RAG and MCP servers. Off unless Compose turns them on,
-    # so CI and plain local runs never reach for a live host service.
+    # Release 1 host-run RAG server and the MCP trip assistant. Off unless
+    # Compose turns them on, so CI and plain local runs never reach for a live
+    # host service. The assistant reaches MCP only through AI-Mode /generate
+    # (ADR 0004); mcp_timeout_seconds bounds that one tool-running request and
+    # must outlast AI-Mode's own agent timeout (180 s by default).
     rag_enabled: bool = False
     rag_base_url: str = "http://127.0.0.1:8011"
     rag_timeout_seconds: float = 130.0
     mcp_enabled: bool = False
-    mcp_base_url: str = "http://127.0.0.1:8012/mcp"
-    mcp_timeout_seconds: float = 40.0
+    mcp_timeout_seconds: float = 200.0
 
     def __post_init__(self) -> None:
         self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
@@ -336,14 +338,9 @@ class Settings:
                 os.getenv("STUDENT1_BACKEND_MCP_ENABLED"),
                 env_name="STUDENT1_BACKEND_MCP_ENABLED",
             ),
-            mcp_base_url=_normalise_base_url(
-                os.getenv("STUDENT1_BACKEND_MCP_BASE_URL"),
-                env_name="STUDENT1_BACKEND_MCP_BASE_URL",
-                default="http://127.0.0.1:8012/mcp",
-            ),
             mcp_timeout_seconds=_parse_timeout(
                 os.getenv("STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS"),
                 env_name="STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS",
-                default=40.0,
+                default=200.0,
             ),
         )
