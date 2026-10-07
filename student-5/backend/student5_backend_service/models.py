@@ -275,9 +275,21 @@ class RagAnswer(UpstreamModel):
         return self
 
 
+class ToolTrace(UpstreamModel):
+    tool: str
+    arguments: dict[str, Any]
+    status: Literal["success", "error", "rejected"]
+    duration_ms: int = 0
+    result: dict[str, Any] | None = None
+    error: str | None = None
+
+
 class McpActionResult(StrictModel):
     action: str
-    tool: str
     correlation_id: str
     duration_ms: int
-    result: dict[str, Any]
+    run_id: str
+    model: str
+    provider: str
+    answer: str
+    tools: list[ToolTrace]

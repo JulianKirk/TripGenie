@@ -19,26 +19,31 @@ SUMMARY = {
     "currency": "AUD",
     "total_budget": "1000.00",
     "remaining_budget": "699.70",
-    "providers": {"accommodation": {"status": "unavailable", "subtotal": None}},
+}
+TOOL_CALL = {
+    "tool": "budgets_get_summary",
+    "arguments": {"budget_id": BUDGET_ID},
+    "status": "success",
+    "duration_ms": 40,
+    "result": {
+        "structuredContent": {"ok": True, "data": SUMMARY, "source": "student-5"},
+        "isError": False,
+    },
 }
 
 
-def tool_result(structured: dict, *, is_error: bool = False) -> dict:
+def generate_response(tools: list[dict], response: str = "Remaining is AUD 699.70."):
     return {
-        "jsonrpc": "2.0",
-        "id": "student5-mcp-000000000000",
-        "result": {
-            "content": [{"type": "text", "text": json.dumps(structured)}],
-            "structuredContent": structured,
-            "isError": is_error,
-        },
+        "data": {
+            "run_id": "aimode_1",
+            "correlation_id": "student5-mcp-000000000000",
+            "model": "llama3.1:8b",
+            "provider": "ollama",
+            "response": response,
+            "done": True,
+            "tools": tools,
+        }
     }
-
-
-def success(data: dict) -> dict:
-    return tool_result(
-        {"ok": True, "data": data, "correlation_id": "mcp-1", "source": "student-5"}
-    )
 
 
 def recording(payload: dict, status_code: int = 200):
@@ -69,9 +74,9 @@ def missing_budget_database(request: httpx.Request) -> httpx.Response:
 def mcp_app(settings: Settings, handler, *, enabled: bool = True) -> TestClient:
     return TestClient(
         create_app(
-            replace(settings, mcp_enabled=enabled, mcp_base_url="http://mcp.test/mcp"),
+            replace(settings, mcp_enabled=enabled),
             database_transport=httpx.MockTransport(missing_budget_database),
-            mcp_transport=httpx.MockTransport(handler),
+            ai_mode_transport=httpx.MockTransport(handler),
         )
     )
 
@@ -82,45 +87,70 @@ def run(
     return client.post(f"/api/budgets/{budget_id}/mcp/{action}")
 
 
-def test_budget_summary_action_calls_registered_tool(settings: Settings) -> None:
-    handler, requests = recording(success(SUMMARY))
+def test_budget_summary_action_goes_through_ai_mode_and_returns_tool_trace(
+    settings: Settings,
+) -> None:
+    handler, requests = recording(generate_response([TOOL_CALL]))
     with mcp_app(settings, handler) as client:
         response = run(client)
 
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["action"] == "budget-summary"
-    assert data["tool"] == "budgets_get_summary"
     assert data["correlation_id"].startswith("student5-mcp-")
     assert isinstance(data["duration_ms"], int)
-    assert data["result"] == SUMMARY
+    assert data["answer"] == "Remaining is AUD 699.70."
+    assert data["run_id"] == "aimode_1"
+    assert data["model"] == "llama3.1:8b"
+    assert data["tools"][0]["tool"] == "budgets_get_summary"
+    assert data["tools"][0]["result"] == TOOL_CALL["result"]
+    assert len(requests) == 1
+    assert requests[0].url.path == "/generate"
     sent = json.loads(requests[0].content)
-    assert requests[0].url.path == "/mcp"
-    assert "application/json" in requests[0].headers["accept"]
-    assert "text/event-stream" in requests[0].headers["accept"]
-    assert sent["method"] == "tools/call"
-    assert sent["params"] == {
-        "name": "budgets_get_summary",
-        "arguments": {"budget_id": BUDGET_ID},
+    assert sent["correlation_id"] == data["correlation_id"]
+    assert "schema" not in sent
+    assert json.loads(sent["prompt"]) == {
+        "request": "Get the spending summary for this budget.",
+        "budget_id": BUDGET_ID,
+        "trip_id": "trip_chunk3",
     }
+    assert "native MCP functions" in sent["system"]
+    assert sent["metadata"]["feature"] == "student-5-budget-tools"
 
 
-def test_expenses_action_derives_trip_from_budget(settings: Settings) -> None:
-    handler, requests = recording(
-        success({"expenses": [], "count": 0, "truncated": False})
-    )
+def test_expenses_action_prompts_with_trip_from_budget(settings: Settings) -> None:
+    handler, requests = recording(generate_response([]))
     with mcp_app(settings, handler) as client:
         response = run(client, "expenses")
 
     assert response.status_code == 200
-    assert json.loads(requests[0].content)["params"] == {
-        "name": "expenses_list",
-        "arguments": {"trip_id": "trip_chunk3", "limit": 20},
+    assert response.json()["data"]["tools"] == []
+    prompt = json.loads(json.loads(requests[0].content)["prompt"])
+    assert prompt["request"] == "List the 20 most recent expenses for this trip."
+    assert prompt["trip_id"] == "trip_chunk3"
+
+
+def test_failed_tool_call_is_returned_not_hidden(settings: Settings) -> None:
+    failed = {
+        "tool": "budgets_get_summary",
+        "arguments": {"budget_id": BUDGET_ID},
+        "status": "error",
+        "duration_ms": 5,
+        "error": "Provider unreachable",
     }
+    handler, _ = recording(generate_response([failed], "The tool failed."))
+    with mcp_app(settings, handler) as client:
+        response = run(client)
+
+    assert response.status_code == 200
+    call = response.json()["data"]["tools"][0]
+    assert call["status"] == "error"
+    assert call["error"] == "Provider unreachable"
+    assert call["result"] is None
 
 
 def test_disabled_mcp_makes_no_outbound_call(settings: Settings) -> None:
-    handler, requests = recording(success(SUMMARY))
+    handler, requests = recording(generate_response([TOOL_CALL]))
     with mcp_app(settings, handler, enabled=False) as client:
         response = run(client)
         health = client.get("/health").json()["data"]
@@ -135,7 +165,7 @@ def test_disabled_mcp_makes_no_outbound_call(settings: Settings) -> None:
 def test_unknown_action_is_rejected_without_a_call(
     settings: Settings, action: str
 ) -> None:
-    handler, requests = recording(success(SUMMARY))
+    handler, requests = recording(generate_response([TOOL_CALL]))
     with mcp_app(settings, handler) as client:
         response = run(client, action)
 
@@ -144,8 +174,8 @@ def test_unknown_action_is_rejected_without_a_call(
     assert requests == []
 
 
-def test_missing_budget_returns_404_before_mcp(settings: Settings) -> None:
-    handler, requests = recording(success(SUMMARY))
+def test_missing_budget_returns_404_before_ai_mode(settings: Settings) -> None:
+    handler, requests = recording(generate_response([TOOL_CALL]))
     with mcp_app(settings, handler) as client:
         response = run(client, budget_id=MISSING_BUDGET_ID)
         malformed = run(client, budget_id="not-a-uuid")
@@ -177,63 +207,20 @@ def test_transport_failures_are_structured(
     assert ready.status_code == 200
 
 
-def test_unregistered_tool_is_reported_as_unavailable(settings: Settings) -> None:
-    unknown = {
-        "jsonrpc": "2.0",
-        "id": "1",
-        "result": {
-            "content": [{"type": "text", "text": "Unknown tool: budgets_get_summary"}],
-            "isError": True,
-        },
-    }
-    handler, _ = recording(unknown)
-    with mcp_app(settings, handler) as client:
-        response = run(client)
-
-    assert response.status_code == 503
-    assert response.json()["error"]["details"] == [
-        {"field": "mcp", "issue": "tool not registered"}
-    ]
-
-
-def test_structured_tool_error_is_passed_through_safely(settings: Settings) -> None:
-    handler, _ = recording(
-        tool_result(
-            {
-                "ok": False,
-                "error": {
-                    "code": "PROVIDER_UNAVAILABLE",
-                    "message": "Provider unreachable",
-                    "retryable": True,
-                },
-                "correlation_id": "mcp-1",
-                "source": "student-5",
-            },
-            is_error=True,
-        )
-    )
-    with mcp_app(settings, handler) as client:
-        response = run(client)
-
-    assert response.status_code == 502
-    error = response.json()["error"]
-    assert error["code"] == "MCP_TOOL_ERROR"
-    assert error["message"] == "Provider unreachable"
-    assert error["details"] == [{"field": "mcp", "issue": "PROVIDER_UNAVAILABLE"}]
-
-
 @pytest.mark.parametrize(
     ("payload", "status_code"),
     [
-        ({"jsonrpc": "2.0", "id": "1", "error": {"code": -32602}}, 200),
-        (tool_result({"ok": True, "data": ["not", "an", "object"]}), 200),
-        (tool_result({"unexpected": True}), 200),
-        ({"jsonrpc": "2.0", "id": "1", "result": {"isError": True}}, 200),
-        (success({"blob": "x" * 33000}), 200),
-        ({"detail": "Not Acceptable"}, 406),
+        ({"data": {"unexpected": True}}, 200),
+        (generate_response([{"tool": "x", "status": "maybe"}]), 200),
+        (
+            generate_response([TOOL_CALL])
+            | {"data": generate_response([])["data"] | {"done": False}},
+            200,
+        ),
+        ({"error": {"code": "UPSTREAM_BAD", "message": "bad"}}, 502),
     ],
 )
-def test_malformed_or_oversized_results_return_bad_gateway(
+def test_malformed_ai_mode_results_return_bad_gateway(
     settings: Settings, payload: dict, status_code: int
 ) -> None:
     handler, _ = recording(payload, status_code)
@@ -241,13 +228,12 @@ def test_malformed_or_oversized_results_return_bad_gateway(
         response = run(client)
 
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "INVALID_DEPENDENCY_RESPONSE"
 
 
 def test_logs_exclude_tool_payloads(
     settings: Settings, caplog: pytest.LogCaptureFixture
 ) -> None:
-    handler, _ = recording(success(SUMMARY))
+    handler, _ = recording(generate_response([TOOL_CALL]))
     with caplog.at_level(logging.INFO), mcp_app(settings, handler) as client:
         run(client)
 

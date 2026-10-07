@@ -50,9 +50,9 @@ RAG_MESSAGES = {
 }
 MCP_MESSAGES = {
     "MCP_DISABLED": "MCP tools are disabled in this environment.",
-    "DEPENDENCY_UNAVAILABLE": "The shared MCP server is currently unavailable.",
-    "DEPENDENCY_TIMEOUT": "The MCP tool took too long to respond.",
-    "INVALID_DEPENDENCY_RESPONSE": "The MCP server returned an unusable result.",
+    "DEPENDENCY_UNAVAILABLE": "The AI service or MCP tool server is unavailable.",
+    "DEPENDENCY_TIMEOUT": "The AI tool run took too long to respond.",
+    "INVALID_DEPENDENCY_RESPONSE": "The AI service returned an unusable result.",
     "VALIDATION_ERROR": "That MCP action is not available.",
 }
 FIELD_LABELS = {
@@ -103,10 +103,6 @@ def _errors_by_field(error: BackendError) -> dict[str, list[str]]:
 
 
 def _mcp_message(error: BackendError) -> str:
-    if error.code == "MCP_TOOL_ERROR":
-        return f"The MCP tool reported an error: {error}"
-    if any(detail.get("issue") == "tool not registered" for detail in error.details):
-        return "This tool is not registered on the shared MCP server."
     return MCP_MESSAGES.get(error.code, str(error))
 
 
