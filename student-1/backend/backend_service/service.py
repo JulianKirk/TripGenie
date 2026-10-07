@@ -593,15 +593,14 @@ class BackendService:
         options: list[McpOption] = []
         ungrounded_dropped = 0
         for option in answer.options:
-            if option.id is not None and option.id not in known:
+            # Only options a tool actually returned are shown: a null or unknown
+            # id means the model made it up (seen live: an activity invented
+            # after activities_search returned no items).
+            if option.id not in known:
                 ungrounded_dropped += 1
                 continue
             options.append(
-                McpOption(
-                    **option.model_dump(),
-                    grounded=option.id is not None,
-                    source_tool=known.get(option.id),
-                )
+                McpOption(**option.model_dump(), source_tool=known[option.id])
             )
         write_tools = list(
             dict.fromkeys(

@@ -108,7 +108,6 @@
               <div class="item-card__content">
                 <div class="badge-row">
                   <span class="badge badge--muted">{{ option.category|capitalize }}</span>
-                  {% if not option.grounded %}<span class="badge badge--warning">not verified against tool results</span>{% endif %}
                 </div>
                 <p><strong>{{ option.name }}</strong>{% if option.detail %} — {{ option.detail }}{% endif %}</p>
                 {% if option.source_tool %}<p class="item-card__meta">From <code>{{ option.source_tool }}</code></p>{% endif %}

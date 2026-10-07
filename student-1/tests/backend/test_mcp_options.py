@@ -158,12 +158,12 @@ def test_model_drives_tools_and_answer_is_grounded(make) -> None:
     assert data["run_id"] == "run_1" and data["model"] == "qwen3:8b"
     assert data["location"] == {"city": "Canberra", "country": "Australia"}
     assert data["summary"] == "Two good fits."
-    assert [(o["name"], o["grounded"], o["source_tool"]) for o in data["options"]] == [
-        ("Harbour Hotel", True, "accommodations_search"),
-        ("Trip budget", True, "budgets_list"),
-        ("Some ferry", False, None),
+    # The unknown id and the null-id "Some ferry" are both dropped.
+    assert [(o["name"], o["source_tool"]) for o in data["options"]] == [
+        ("Harbour Hotel", "accommodations_search"),
+        ("Trip budget", "budgets_list"),
     ]
-    assert data["ungrounded_dropped"] == 1
+    assert data["ungrounded_dropped"] == 2
     assert data["write_tools_called"] == []
     assert data["tool_summary"] == {"success": 3, "error": 1, "rejected": 0}
     assert data["tools"][0] == {

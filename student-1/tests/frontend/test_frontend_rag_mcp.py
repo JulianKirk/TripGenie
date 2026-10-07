@@ -92,7 +92,6 @@ def mcp_options(
                 "name": "Harbour Hotel",
                 "detail": "$210/night near the quay",
                 "id": "a1",
-                "grounded": True,
                 "source_tool": "accommodations_search",
             },
         ],
@@ -520,9 +519,8 @@ def test_mcp_failed_calls_ungrounded_and_write_warnings_are_shown(
                 "category": "transport",
                 "name": "Some ferry",
                 "detail": None,
-                "id": None,
-                "grounded": False,
-                "source_tool": None,
+                "id": "transport_ferry",
+                "source_tool": "transport_search",
             },
         ],
         ungrounded_dropped=2,
@@ -541,7 +539,6 @@ def test_mcp_failed_calls_ungrounded_and_write_warnings_are_shown(
     assert '"badge badge--warning">Rejected' in text
     assert "city=not set" in text
     assert 'filters={"a": 1}' in text
-    assert "not verified against tool results" in text
     assert "2 suggested option(s) were hidden" in text
     assert "Warning: the assistant called a tool that can change data" in text
     assert "<code>activities_create</code>" in text

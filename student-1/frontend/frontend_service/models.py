@@ -370,8 +370,7 @@ class McpOption(StrictModel):
     name: str
     detail: str | None = None
     id: str | None = None
-    grounded: bool
-    source_tool: str | None = None
+    source_tool: str
 
 
 class McpToolCall(StrictModel):

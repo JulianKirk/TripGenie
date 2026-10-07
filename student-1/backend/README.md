@@ -235,8 +235,8 @@ a per-request timeout of `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS`.
 
 Grounding: ids are collected from successful tool results (`id` /
 `budget_id` anywhere in `structuredContent.data`). An option whose id was not
-returned by any tool is dropped and counted in `ungrounded_dropped`; an option
-with a null id is kept with `grounded: false`. Any `*_create` / `*_update` /
+returned by any tool, or that has no id, is dropped and counted in
+`ungrounded_dropped`, so every option shown came from a tool result. Any `*_create` / `*_update` /
 `*_delete` tool in the trace is listed in `write_tools_called`.
 
 ```json
@@ -245,7 +245,7 @@ with a null id is kept with `grounded: false`. Any `*_create` / `*_update` /
   "request": "Find a mid-range stay", "location": {"city": "Sydney", "country": "Australia"},
   "summary": "Harbour Hotel fits ...",
   "options": [{"category": "accommodation", "name": "Harbour Hotel", "detail": "$210/night",
-    "id": "6f1c...", "grounded": true, "source_tool": "accommodations_search"}],
+    "id": "6f1c...", "source_tool": "accommodations_search"}],
   "tools": [{"tool": "trip_get_context", "arguments": {"trip_id": "trip_..."},
     "status": "success", "duration_ms": 41, "data": {"id": "trip_..."}, "error": null}],
   "tool_summary": {"success": 4, "error": 0, "rejected": 0},

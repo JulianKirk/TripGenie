@@ -576,8 +576,7 @@ class McpFinalAnswer(StrictModel):
 
 
 class McpOption(McpFinalOption):
-    grounded: bool
-    source_tool: str | None = None
+    source_tool: str
 
 
 class McpToolCall(StrictModel):
