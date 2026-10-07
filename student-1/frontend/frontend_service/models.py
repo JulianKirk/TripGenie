@@ -365,22 +365,23 @@ class RagQueryResponse(StrictModel):
         return self
 
 
-class McpToolError(StrictModel):
-    code: str
-    message: str
-    retryable: bool
+class McpOption(StrictModel):
+    category: Literal["accommodation", "activity", "transport", "budget"]
+    name: str
+    detail: str | None = None
+    id: str | None = None
+    source_tool: str
 
 
-class McpToolResult(StrictModel):
+class McpToolCall(StrictModel):
     tool: str
     arguments: dict[str, Any]
-    status: Literal["ok", "error", "skipped"]
+    status: Literal["success", "error", "rejected"]
+    duration_ms: int
     # Tool payloads are owned by the MCP server; the template summarises them
     # defensively instead of pinning every tool's shape here.
     data: dict[str, Any] | None = None
-    error: McpToolError | None = None
-    reason: str | None = None
-    correlation_id: str | None = None
+    error: str | None = None
 
 
 class McpLocation(StrictModel):
@@ -388,19 +389,26 @@ class McpLocation(StrictModel):
     country: str | None
 
 
-class McpSummary(StrictModel):
-    ok: int
+class McpToolSummary(StrictModel):
+    success: int
     error: int
-    skipped: int
+    rejected: int
 
 
 class McpOptionsResponse(StrictModel):
     trip_id: TripIdentifier
     correlation_id: str
-    location: McpLocation
+    run_id: str
+    model: str
     persisted: Literal[False]
-    results: list[McpToolResult]
-    summary: McpSummary
+    request: str
+    location: McpLocation
+    summary: str
+    options: list[McpOption]
+    tools: list[McpToolCall]
+    tool_summary: McpToolSummary
+    ungrounded_dropped: int
+    write_tools_called: list[str]
 
 
 class BackendDependencyPayload(StrictModel):

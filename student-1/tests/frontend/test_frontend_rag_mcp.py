@@ -67,32 +67,50 @@ def tool(name: str, status: str, **fields: object) -> dict[str, object]:
         "tool": name,
         "arguments": fields.pop("arguments", {"trip_id": TRIP_ID}),
         "status": status,
+        "duration_ms": 40,
         "data": None,
         "error": None,
-        "reason": None,
-        "correlation_id": None,
         **fields,
     }
 
 
-def mcp_options(results: list[dict[str, object]], country: str | None) -> dict:
-    counts = {
-        s: sum(r["status"] == s for r in results) for s in ("ok", "error", "skipped")
-    }
-    return {
+def mcp_options(
+    tools: list[dict[str, object]], country: str | None, **overrides: object
+) -> dict:
+    payload = {
         "trip_id": TRIP_ID,
         "correlation_id": "student1-mcp-abc",
-        "location": {"city": "Sydney", "country": country},
+        "run_id": "run_42",
+        "model": "qwen3:8b",
         "persisted": False,
-        "results": results,
-        "summary": counts,
+        "request": "Find a stay",
+        "location": {"city": "Sydney", "country": country},
+        "summary": "Harbour Hotel suits two travellers.",
+        "options": [
+            {
+                "category": "accommodation",
+                "name": "Harbour Hotel",
+                "detail": "$210/night near the quay",
+                "id": "a1",
+                "source_tool": "accommodations_search",
+            },
+        ],
+        "tools": tools,
+        "tool_summary": {
+            s: sum(t["status"] == s for t in tools)
+            for s in ("success", "error", "rejected")
+        },
+        "ungrounded_dropped": 0,
+        "write_tools_called": [],
     }
+    payload.update(overrides)
+    return payload
 
 
 ALL_OK = [
     tool(
         "trip_get_context",
-        "ok",
+        "success",
         data={
             "name": "Sydney Getaway",
             "destination": "Sydney",
@@ -103,7 +121,7 @@ ALL_OK = [
     ),
     tool(
         "accommodations_search",
-        "ok",
+        "success",
         arguments={"country": "Australia", "city": "Sydney", "limit": 5},
         data={
             "items": [
@@ -120,7 +138,7 @@ ALL_OK = [
     ),
     tool(
         "activities_search",
-        "ok",
+        "success",
         data={
             "items": [
                 {
@@ -136,7 +154,7 @@ ALL_OK = [
     ),
     tool(
         "transport_search",
-        "ok",
+        "success",
         data={
             "items": [
                 {
@@ -155,7 +173,7 @@ ALL_OK = [
     ),
     tool(
         "budgets_list",
-        "ok",
+        "success",
         data={
             "budgets": [
                 {"budget_id": "b1", "currency": "AUD", "total_budget": "2500.00"}
@@ -406,7 +424,7 @@ def test_rag_without_htmx_renders_the_full_trip_page(
 # --- MCP -------------------------------------------------------------------
 
 
-def test_mcp_all_tools_ok_render_readable_summaries(
+def test_mcp_assistant_answer_options_and_tool_trace_render(
     client_factory, backend_api
 ) -> None:
     starting_items = set(backend_api.items)
@@ -414,16 +432,23 @@ def test_mcp_all_tools_ok_render_readable_summaries(
         client_factory,
         backend_api,
         MCP_URL,
-        {"country": " Australia "},
+        {"country": " Australia ", "request": " Find a stay "},
         data_response(200, mcp_options(ALL_OK, "Australia")),
     )
 
     assert response.status_code == 200
     text = response.text
     assert '<section id="mcp-panel"' in text and "<html" not in text
-    assert backend.bodies == [{"country": "Australia"}]
-    assert "Options for Sydney, Australia" in text
-    assert "5 succeeded · 0 failed · 0 skipped. Nothing was saved." in text
+    assert backend.bodies == [{"country": "Australia", "request": "Find a stay"}]
+    assert "Trip assistant for Sydney, Australia" in text
+    assert "Harbour Hotel suits two travellers." in text
+    # Option list with its category and source tool.
+    assert "<strong>Harbour Hotel</strong> — $210/night near the quay" in text
+    assert "From <code>accommodations_search</code>" in text
+    assert "not verified against tool results" not in text
+    # One card per tool the AI called, with readable summaries.
+    assert "Tools the AI called" in text
+    assert "5 succeeded · 0 failed · 0 rejected. Nothing was saved." in text
     assert "Sydney Getaway · Sydney · 2027-04-01 · 2027-04-03 · 2 traveller(s)" in text
     assert "Harbour Hotel · $210/night" in text
     assert "Bridge Climb · $300 per person" in text
@@ -432,71 +457,91 @@ def test_mcp_all_tools_ok_render_readable_summaries(
     assert "Trip budget · AUD 2500.00" in text
     assert "<code>accommodations_search</code>" in text
     assert "country=Australia · city=Sydney · limit=5" in text
-    assert "Some lookups failed" not in text
+    assert "40 ms" in text
+    assert "Model: qwen3:8b · Run ID: run_42 · Correlation ID: student1-mcp-abc" in text
+    assert "Warning: the assistant called a tool" not in text
+    assert "were hidden" not in text
     # Read-only: no save controls and nothing persisted.
     assert "draft_payload" not in text
     assert "<form" in text and text.count("<form") == 1
     assert set(backend_api.items) == starting_items
 
 
-def test_mcp_blank_country_is_sent_as_null(client_factory, backend_api) -> None:
-    skipped = [
-        tool(
-            "accommodations_search",
-            "skipped",
-            reason="A country is needed; the trip destination names only a city.",
-        ),
-    ]
+def test_mcp_panel_fields_are_labelled(client) -> None:
+    text = client.get(f"/trips/{TRIP_ID}").text
+
+    assert "AI mode · MCP tools" in text
+    assert "Ask the trip assistant" in text
+    assert (
+        '<label for="mcp-request">What should the assistant look for? (optional)'
+        "</label>" in text
+    )
+    assert 'name="request"' in text and 'maxlength="500"' in text
+    assert 'aria-describedby="mcp-request-hint"' in text
+    assert "choosing and calling trip tools" in text
+
+
+def test_mcp_blank_fields_send_null_country_and_no_request(
+    client_factory, backend_api
+) -> None:
     response, backend = post(
         client_factory,
         backend_api,
         MCP_URL,
-        {"country": "  "},
-        data_response(200, mcp_options(skipped, None)),
+        {"country": "  ", "request": "  "},
+        data_response(200, mcp_options(ALL_OK[:1], None, options=[])),
     )
 
     assert backend.bodies == [{"country": None}]
-    assert "Options for Sydney" in response.text
-    assert "Options for Sydney," not in response.text
-    assert "A country is needed" in response.text
+    assert "Trip assistant for Sydney" in response.text
+    assert "Trip assistant for Sydney," not in response.text
+    assert "The assistant did not list any options." in response.text
 
 
-def test_mcp_partial_failure_is_shown_per_tool(client_factory, backend_api) -> None:
-    results = [
+def test_mcp_failed_calls_ungrounded_and_write_warnings_are_shown(
+    client_factory, backend_api
+) -> None:
+    tools = [
         ALL_OK[0],
         tool(
             "accommodations_search",
             "error",
-            error={
-                "code": "PROVIDER_UNAVAILABLE",
-                "message": "Provider failed",
-                "retryable": True,
-            },
+            arguments={"country": "Australia", "city": None, "filters": {"a": 1}},
+            error="Provider failed",
         ),
-        tool(
-            "activities_search",
-            "skipped",
-            reason="A country is needed; the trip destination names only a city.",
-        ),
+        tool("activities_create", "rejected", error="write tools are not allowed"),
     ]
+    payload = mcp_options(
+        tools,
+        None,
+        options=[
+            {
+                "category": "transport",
+                "name": "Some ferry",
+                "detail": None,
+                "id": "transport_ferry",
+                "source_tool": "transport_search",
+            },
+        ],
+        ungrounded_dropped=2,
+        write_tools_called=["activities_create"],
+    )
     response, _ = post(
-        client_factory,
-        backend_api,
-        MCP_URL,
-        {"country": ""},
-        data_response(200, mcp_options(results, None)),
+        client_factory, backend_api, MCP_URL, {}, data_response(200, payload)
     )
 
     assert response.status_code == 200
     text = response.text
-    assert "1 succeeded · 1 failed · 1 skipped" in text
-    assert "Some lookups failed" in text
+    assert "1 succeeded · 1 failed · 1 rejected" in text
     assert "Provider failed" in text
-    assert "<code>PROVIDER_UNAVAILABLE</code>, can be retried" in text
-    assert '"badge badge--danger">Failed' in text
-    assert '"badge badge--warning">Skipped' in text
-    assert "A country is needed; the trip destination names only a city." in text
-    assert "Sydney Getaway" in text
+    assert "write tools are not allowed" in text
+    assert '"badge badge--danger">Error' in text
+    assert '"badge badge--warning">Rejected' in text
+    assert "city=not set" in text
+    assert 'filters={"a": 1}' in text
+    assert "2 suggested option(s) were hidden" in text
+    assert "Warning: the assistant called a tool that can change data" in text
+    assert "<code>activities_create</code>" in text
 
 
 @pytest.mark.parametrize(
@@ -505,6 +550,8 @@ def test_mcp_partial_failure_is_shown_per_tool(client_factory, backend_api) -> N
         (503, "MCP_DISABLED", "not enabled in this environment"),
         (503, "DEPENDENCY_UNAVAILABLE", "unavailable right now"),
         (504, "DEPENDENCY_TIMEOUT", "timed out"),
+        (502, "MCP_TOOLS_NOT_USED", "without using any trip tools"),
+        (502, "AI_OUTPUT_INVALID", "not in the expected format"),
         (404, "NOT_FOUND", "could not be found"),
         (422, "VALIDATION_ERROR", "Check the highlighted field"),
     ],
@@ -520,17 +567,19 @@ def test_mcp_failures_render_distinct_states(
         client_factory,
         backend_api,
         MCP_URL,
-        {"country": "Australia"},
+        {"country": "Australia", "request": "Find food"},
         error_response(
-            status, code, "Upstream said no.", [{"field": "country", "issue": "bad"}]
+            status, code, "Upstream said no.", [{"field": "request", "issue": "bad"}]
         ),
     )
 
     assert response.status_code == status
     assert headline in response.text
     assert 'value="Australia"' in response.text
+    assert ">Find food</textarea>" in response.text
     assert 'id="mcp-result-heading"' in response.text
     assert "succeeded" not in response.text
+    assert 'aria-invalid="true"' in response.text
 
 
 def test_mcp_malformed_response_is_an_error(client_factory, backend_api) -> None:

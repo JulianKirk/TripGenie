@@ -80,9 +80,11 @@ services:
       STUDENT1_BACKEND_RAG_ENABLED: "${STUDENT1_BACKEND_RAG_ENABLED:-true}"
       STUDENT1_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
       STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS: "130"
+      # The MCP trip assistant goes through AI-Mode /generate (ADR 0004); this
+      # bounds that one tool-running request and outlasts AI-Mode's 180 s
+      # agent timeout.
       STUDENT1_BACKEND_MCP_ENABLED: "${STUDENT1_BACKEND_MCP_ENABLED:-true}"
-      STUDENT1_BACKEND_MCP_BASE_URL: http://host.docker.internal:8012/mcp
-      STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS: "40"
+      STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS: "200"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -115,7 +117,7 @@ services:
       STUDENT1_FRONTEND_ACCOMMODATION_UI_URL: http://localhost:9003
       # Only the AI, RAG and MCP panels wait this long. Each outlasts the
       # backend's own worst case: AI 2 attempts x 120 s = 240 s, RAG 130 s,
-      # MCP 5 sequential tools x 40 s = 200 s.
+      # MCP assistant 200 s (retry included).
       STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS: "250"
       STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"

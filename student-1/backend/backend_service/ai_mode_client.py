@@ -166,17 +166,23 @@ class AiModeClient:
         schema: dict[str, object],
         correlation_id: str,
         metadata: dict[str, str],
+        system: str | None = None,
+        timeout: float | None = None,
     ) -> AiModeGeneratePayload:
         self._require_client()
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "schema": schema,
+            "correlation_id": correlation_id,
+            "metadata": metadata,
+        }
+        if system is not None:
+            body["system"] = system
         envelope = await self._request_model(
             "POST",
             "/generate",
-            json={
-                "prompt": prompt,
-                "schema": schema,
-                "correlation_id": correlation_id,
-                "metadata": metadata,
-            },
+            json=body,
+            timeout=timeout,
             expected_statuses={200},
             response_type=DataEnvelope[AiModeGeneratePayload],
             malformed_message="AI-Mode service returned a malformed generate response.",
@@ -220,11 +226,12 @@ class AiModeClient:
         path: str,
         *,
         json: dict[str, Any] | None = None,
+        timeout: float | None = None,
         expected_statuses: set[int],
         response_type: Any,
         malformed_message: str,
     ) -> T:
-        response = await self._send(method, path, json=json)
+        response = await self._send(method, path, json=json, timeout=timeout)
         if response.status_code not in expected_statuses:
             self._raise_error_response(response)
 
@@ -248,10 +255,13 @@ class AiModeClient:
         path: str,
         *,
         json: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         client = self._require_client()
+        # Only a caller that asks for it overrides the client-wide timeout.
+        extra = {} if timeout is None else {"timeout": timeout}
         try:
-            return await client.request(method, path, json=json)
+            return await client.request(method, path, json=json, **extra)
         except httpx.TimeoutException as exc:
             status = DependencyStatus(
                 status="timeout",

@@ -111,14 +111,17 @@ class BackendApiClient:
         self,
         trip_id: str,
         country: str | None,
+        request: str | None = None,
     ) -> McpOptionsResponse:
+        # A blank request is left out so the backend's default applies.
+        body = {"country": country} | ({"request": request} if request else {})
         envelope = await self._request_model(
             "POST",
             f"{self._api_prefix}/trips/{trip_id}/mcp-options",
-            json={"country": country},
+            json=body,
             expected_statuses={200},
             response_type=DataEnvelope[McpOptionsResponse],
-            malformed_message="Backend API returned a malformed MCP options response.",
+            malformed_message="Backend API returned a malformed trip assistant reply.",
             timeout=self._mcp_timeout,
         )
         return envelope.data

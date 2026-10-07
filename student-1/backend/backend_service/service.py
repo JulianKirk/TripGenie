@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Any
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from .accommodation_client import AccommodationClient
 from .activity_client import ActivityClient, ActivityDetails
+from .ai_mode_client import AiModeClient
 from .ai_suggestions import (
     AiSuggestionRequest,
     AiSuggestionService,
@@ -17,8 +23,13 @@ from .ai_suggestions import (
 )
 from .client import DatabaseApiClient
 from .config import Settings
-from .errors import ApiError, dependency_unavailable, validation_error
-from .mcp_client import McpCallError, McpClient
+from .errors import (
+    ApiError,
+    ai_output_invalid,
+    bad_gateway,
+    dependency_unavailable,
+    validation_error,
+)
 from .models import (
     DependencyStatus,
     HealthDependencies,
@@ -27,9 +38,11 @@ from .models import (
     ItineraryItemCreate,
     ItineraryItemRecord,
     ItineraryItemUpdate,
+    McpFinalAnswer,
+    McpOption,
     McpOptionsRequest,
     McpOptionsResponse,
-    McpToolResult,
+    McpToolCall,
     RagQueryRequest,
     RagQueryResponse,
     TripAccommodationDetail,
@@ -47,6 +60,7 @@ from .models import (
     TripTransportRecord,
     TripUpdate,
 )
+from .prompt_assets import load_prompt_asset
 from .rag_client import RagClient
 from .transport_client import TransportClient, TransportDetails
 from .trip_rules import (
@@ -56,9 +70,42 @@ from .trip_rules import (
 )
 
 VALIDATION_ERROR_MESSAGE = "One or more fields failed validation."
-MCP_RESULT_LIMIT = 5
-# Failures that mean the MCP server itself was not reachable, not a tool error.
-MCP_TRANSPORT_FAILURES = {"DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"}
+MCP_ASSISTANT_PROMPT = "trip_tools_assistant_v1.md"
+WRITE_TOOL_MARKERS = ("create", "update", "delete")
+
+
+def _text_or_null(max_length: int) -> dict[str, object]:
+    return {"anyOf": [{"type": "string", "maxLength": max_length}, {"type": "null"}]}
+
+
+# Sent to AI-Mode as the final-answer format; McpFinalAnswer validates the
+# reply. Plain types and small maxLengths keep Ollama's grammar compiler happy.
+MCP_FINAL_ANSWER_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["summary", "options"],
+    "properties": {
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "options": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["category", "name", "detail", "id"],
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["accommodation", "activity", "transport", "budget"],
+                    },
+                    "name": {"type": "string", "minLength": 1, "maxLength": 200},
+                    "detail": _text_or_null(300),
+                    "id": _text_or_null(100),
+                },
+            },
+        },
+    },
+}
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +127,36 @@ def _split_destination(destination: str) -> tuple[str, str | None]:
     return destination.strip(), None
 
 
+def _tool_call(trace: dict[str, Any]) -> McpToolCall:
+    """One AI-Mode ToolTrace, with only the MCP envelope's data kept."""
+    result = trace.get("result")
+    envelope = result.get("structuredContent") if isinstance(result, dict) else None
+    data = None
+    if isinstance(envelope, dict) and envelope.get("ok") is True:
+        data = envelope.get("data") if isinstance(envelope.get("data"), dict) else None
+    return McpToolCall(
+        tool=trace.get("tool"),
+        arguments=trace.get("arguments") or {},
+        status=trace.get("status"),
+        duration_ms=trace.get("duration_ms") or 0,
+        data=data,
+        error=trace.get("error"),
+    )
+
+
+def _result_ids(value: object) -> Iterator[str]:
+    """Every `id` / `budget_id` anywhere in a tool result, whatever its shape."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"id", "budget_id"} and isinstance(item, str | int):
+                yield str(item)
+            else:
+                yield from _result_ids(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _result_ids(item)
+
+
 class BackendService:
     def __init__(
         self,
@@ -90,7 +167,7 @@ class BackendService:
         activities: ActivityClient | None = None,
         transport: TransportClient | None = None,
         rag: RagClient | None = None,
-        mcp: McpClient | None = None,
+        ai_mode: AiModeClient | None = None,
     ) -> None:
         self._client = client
         self._ai_suggestions = ai_suggestions
@@ -99,7 +176,7 @@ class BackendService:
         self._activities = activities
         self._transport = transport
         self._rag = rag
-        self._mcp = mcp
+        self._ai_mode = ai_mode
 
     def list_trips(
         self,
@@ -417,119 +494,149 @@ class BackendService:
             **answer.model_dump(mode="json"),
         ).model_dump(mode="json")
 
-    def mcp_options(
+    async def mcp_options(
         self,
         trip_id: str,
         payload: McpOptionsRequest | None,
     ) -> dict[str, object]:
-        """Read-only option discovery through the shared MCP tools.
+        """Ask AI-Mode's model to answer by calling the shared MCP tools itself.
 
-        Nothing is persisted: the user adds what they like through the existing
-        itinerary, accommodation and activity routes. One tool failing is
-        recorded against that tool and the rest still run.
+        This service never calls MCP (ADR 0004): AI-Mode /generate owns the
+        tool loop and returns the trace, which is shown to the user and used
+        to drop any option whose id no successful tool returned. Nothing is
+        persisted here.
         """
-        if not self._settings.mcp_enabled or self._mcp is None:
-            raise _disabled("MCP_DISABLED", "mcp", "The MCP tool server")
-        trip = self._client.get_trip(trip_id)
-        city, country = _split_destination(trip.destination)
-        if country is None and payload is not None:
-            country = payload.country
-        location = {"country": country, "city": city}
-        no_country = (
-            "country is required for a location search; use a 'City, Country' "
-            "destination or send a country"
-        )
-        plan: list[tuple[str, dict[str, Any], str | None]] = [
-            ("trip_get_context", {"trip_id": trip_id}, None),
-            (
-                "accommodations_search",
-                {**location, "limit": MCP_RESULT_LIMIT},
-                None if country else no_country,
-            ),
-            (
-                "activities_search",
-                {"limit": MCP_RESULT_LIMIT, "filters": {"location": location}},
-                None if country else no_country,
-            ),
-            (
-                "transport_search",
-                {"destination": city, "limit": MCP_RESULT_LIMIT},
-                None,
-            ),
-            # budgets_list, not budgets_get_summary: the summary fans out to
-            # Students 2-4 and back to this service, a cycle not worth risking.
-            ("budgets_list", {"trip_id": trip_id, "limit": MCP_RESULT_LIMIT}, None),
-        ]
-        correlation_id = f"student1-mcp-{uuid4().hex[:12]}"
-        # ponytail: sequential, worst case = 5 x MCP timeout; parallelise the
-        # independent searches if latency matters.
-        results = [
-            self._call_mcp_tool(tool, arguments, skip_reason, correlation_id)
-            for tool, arguments, skip_reason in plan
-        ]
-        attempted = [result for result in results if result.status != "skipped"]
-        if all(
-            result.error is not None and result.error.code in MCP_TRANSPORT_FAILURES
-            for result in attempted
-        ):
+        if not self._settings.mcp_enabled:
+            raise _disabled("MCP_DISABLED", "mcp", "The MCP trip assistant")
+        if self._ai_mode is None or self._settings.ai_mode_base_url is None:
             raise dependency_unavailable(
-                "The MCP tool server is unavailable.",
-                [
-                    {"field": result.tool, "issue": result.error.code}
-                    for result in attempted
-                    if result.error is not None
-                ],
+                "The MCP trip assistant needs the shared AI-Mode service, which is "
+                "not configured.",
+                [{"field": "ai_mode", "issue": "runtime base URL is not configured"}],
             )
-        statuses = [result.status for result in results]
+        payload = payload or McpOptionsRequest()
+        trip = await asyncio.to_thread(self._client.get_trip, trip_id)
+        city, parsed_country = _split_destination(trip.destination)
+        country = payload.country or parsed_country
+        prompt = json.dumps(
+            {
+                "request": payload.request,
+                "trip": {
+                    "id": trip.id,
+                    "name": trip.name,
+                    "destination": trip.destination,
+                    "city": city,
+                    "country": country,
+                    "start_date": trip.start_date,
+                    "end_date": trip.end_date,
+                    "traveller_count": trip.traveller_count,
+                },
+            },
+            separators=(",", ":"),
+        )
+        correlation_id = f"student1-mcp-{uuid4().hex[:12]}"
+        # The whole route, retry included, stays inside one timeout budget so
+        # the frontend's longer timeout always outlasts it.
+        deadline = time.monotonic() + self._settings.mcp_timeout_seconds
+        for attempt in (1, 2):
+            generated = await self._ai_mode.generate(
+                prompt=prompt,
+                system=load_prompt_asset(MCP_ASSISTANT_PROMPT),
+                schema=MCP_FINAL_ANSWER_SCHEMA,
+                correlation_id=correlation_id,
+                metadata={
+                    "service": "student-1-backend",
+                    "feature": "trip-tools-assistant",
+                    "trip_id": trip_id,
+                    "attempt": str(attempt),
+                },
+                timeout=deadline - time.monotonic(),
+            )
+            try:
+                calls = [_tool_call(trace) for trace in generated.tools]
+            except ValidationError as exc:
+                raise bad_gateway(
+                    "AI-Mode service returned a malformed tool trace.",
+                    [{"field": "ai_mode", "issue": "tool trace did not match"}],
+                ) from exc
+            # ponytail: one blind retry when a small local model answers from
+            # memory instead of calling tools; tune the prompt before adding more.
+            if any(call.status == "success" for call in calls):
+                break
+            if attempt == 2 or deadline - time.monotonic() < 1:
+                raise ApiError(
+                    status_code=502,
+                    code="MCP_TOOLS_NOT_USED",
+                    message=(
+                        "The AI assistant answered without any successful MCP tool "
+                        "call, so its answer cannot be trusted. Try again."
+                    ),
+                    details=[
+                        {"field": call.tool, "issue": call.error or call.status}
+                        for call in calls
+                    ],
+                )
+
+        try:
+            answer = McpFinalAnswer.model_validate_json(generated.response)
+        except ValidationError as exc:
+            raise ai_output_invalid(
+                "The AI assistant's final answer did not match the expected format.",
+                [{"field": "response", "issue": "did not match the answer schema"}],
+            ) from exc
+
+        known: dict[str, str] = {}
+        for call in calls:
+            if call.status == "success":
+                for found in _result_ids(call.data):
+                    known.setdefault(found, call.tool)
+        options: list[McpOption] = []
+        ungrounded_dropped = 0
+        for option in answer.options:
+            # Only options a tool actually returned are shown: a null or unknown
+            # id means the model made it up (seen live: an activity invented
+            # after activities_search returned no items).
+            if option.id not in known:
+                ungrounded_dropped += 1
+                continue
+            options.append(
+                McpOption(**option.model_dump(), source_tool=known[option.id])
+            )
+        write_tools = list(
+            dict.fromkeys(
+                call.tool
+                for call in calls
+                if any(marker in call.tool for marker in WRITE_TOOL_MARKERS)
+            )
+        )
+        statuses = [call.status for call in calls]
         logger.info(
-            "mcp_options correlation_id=%s trip_id=%s statuses=%s",
+            "mcp_options correlation_id=%s run_id=%s trip_id=%s tools=%s "
+            "dropped=%s writes=%s",
             correlation_id,
+            generated.run_id,
             trip_id,
-            ",".join(statuses),
+            ",".join(f"{call.tool}:{call.status}" for call in calls),
+            ungrounded_dropped,
+            ",".join(write_tools) or "-",
         )
         return McpOptionsResponse(
             trip_id=trip_id,
-            correlation_id=correlation_id,
+            correlation_id=generated.correlation_id,
+            run_id=generated.run_id,
+            model=generated.model,
+            request=payload.request,
             location={"city": city, "country": country},
-            results=results,
-            summary={
-                "ok": statuses.count("ok"),
-                "error": statuses.count("error"),
-                "skipped": statuses.count("skipped"),
+            summary=answer.summary,
+            options=options,
+            tools=calls,
+            tool_summary={
+                status: statuses.count(status)
+                for status in ("success", "error", "rejected")
             },
+            ungrounded_dropped=ungrounded_dropped,
+            write_tools_called=write_tools,
         ).model_dump(mode="json")
-
-    def _call_mcp_tool(
-        self,
-        tool: str,
-        arguments: dict[str, Any],
-        skip_reason: str | None,
-        correlation_id: str,
-    ) -> McpToolResult:
-        if skip_reason is not None:
-            return McpToolResult(
-                tool=tool, arguments=arguments, status="skipped", reason=skip_reason
-            )
-        try:
-            envelope = self._mcp.call_tool(tool, arguments, correlation_id)
-        except McpCallError as exc:
-            return McpToolResult(
-                tool=tool,
-                arguments=arguments,
-                status="error",
-                error={
-                    "code": exc.code,
-                    "message": exc.message,
-                    "retryable": exc.retryable,
-                },
-            )
-        return McpToolResult(
-            tool=tool,
-            arguments=arguments,
-            status="ok",
-            data=envelope["data"],
-            correlation_id=envelope.get("correlation_id"),
-        )
 
     def update_trip(self, trip_id: str, payload: TripUpdate) -> dict[str, object]:
         updates = payload.model_dump(exclude_unset=True, mode="json")

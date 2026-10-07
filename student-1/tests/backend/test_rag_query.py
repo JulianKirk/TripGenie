@@ -205,7 +205,6 @@ def test_ready_ignores_enabled_but_unreachable_rag_and_mcp(
         database_api.handle,
         settings_override=settings,
         rag_handler=unreachable,
-        mcp_handler=unreachable,
     ) as client:
         ready = client.get("/ready")
         health = client.get("/health")
