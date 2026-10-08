@@ -1,0 +1,25 @@
+# Captured: 2026-10-02T02:47:33Z (UTC)
+## git
+main commit: aec615cf388ae13bb51567cd00186b021a85516e
+aec615c Release 1: Student 1 frontend RAG and MCP panels (#128) (#145)
+## ollama list (model names only)
+nomic-embed-text:latest
+llama3.1:8b
+qwen2.5:0.5b
+llama3.1:latest
+## python (host venv)
+Python 3.12.2
+## docker
+Docker version 29.5.3, build d1c06ef
+Docker Compose version v5.1.4
+## os
+ProductName:		macOS ProductVersion:		14.0 BuildVersion:		23A344 
+Apple M2
+mem_gb: 16
+## host service configuration (from runbook env)
+AI_MODE_DEFAULT_MODEL=llama3.1:8b
+AI_MODE_ALLOWED_MODELS=qwen2.5:0.5b,llama3.1:8b
+AI_MODE_DEFAULT_EMBEDDING_MODEL=nomic-embed-text
+AI_MODE_TIMEOUT_SECONDS=90
+AI_MODE_MCP_URL=http://127.0.0.1:8012/mcp
+Ports: AI-Mode 127.0.0.1:8006, RAG 127.0.0.1:8011, MCP 127.0.0.1:8012/mcp
