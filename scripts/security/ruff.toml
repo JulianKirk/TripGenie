@@ -1,0 +1,11 @@
+# Independent of service overrides: every stable Bandit rule is enabled.
+target-version = "py311"
+line-length = 88
+
+[lint]
+select = ["S"]
+
+[lint.per-file-ignores]
+# Assertions are the pytest contract, not production validation.
+"**/tests/**" = ["S101"]
+"**/test_*.py" = ["S101"]

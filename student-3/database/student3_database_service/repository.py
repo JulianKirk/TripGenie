@@ -256,7 +256,7 @@ class DatabaseService:
         departure_to: str | None = None,
     ) -> list[dict[str, object]]:
         columns = ", ".join(f"transport_options.{name}" for name in OPTION_FIELDS)
-        sql = f"SELECT {columns} FROM transport_options"
+        sql = f"SELECT {columns} FROM transport_options"  # noqa: S608 - constant OPTION_FIELDS
         conditions: list[str] = []
         params: list[object] = []
 
@@ -379,7 +379,7 @@ class DatabaseService:
         transport_id: str,
     ) -> sqlite3.Row:
         option_row = connection.execute(
-            f"SELECT {', '.join(OPTION_FIELDS)} FROM transport_options WHERE id = ?",
+            f"SELECT {', '.join(OPTION_FIELDS)} FROM transport_options WHERE id = ?",  # noqa: S608 - constant columns; bound values
             (transport_id,),
         ).fetchone()
         if option_row is None:
@@ -398,7 +398,7 @@ class DatabaseService:
             SELECT {columns}
             FROM transport_options
             WHERE transport_options.id = ?
-            """,
+            """,  # noqa: S608 - columns from OPTION_FIELDS; transport_id is bound
             (transport_id,),
         ).fetchone()
         if option_row is None:

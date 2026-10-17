@@ -173,7 +173,7 @@ def check_invariant(rule, values):
     try:
         # ponytail: eval, over an expression from this repo's own checks file and
         # values from the service under test. No caller input reaches it.
-        held = eval(
+        held = eval(  # noqa: S307 - trusted repository checks/*.json expressions only
             rule["expr"],
             {"__builtins__": {"float": float, "abs": abs, "len": len}},
             values,
@@ -554,7 +554,7 @@ def run_rag():
 
 
 def gh(*args):
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)  # noqa: S603, S607 - local gh CLI, fixed internal callers, no shell
 
 
 def observe_ci():
@@ -565,7 +565,7 @@ def observe_ci():
     branch = (
         os.getenv("CI_BRANCH")
         or subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607 - local Git CLI with literal arguments
             capture_output=True,
             text=True,
             check=False,

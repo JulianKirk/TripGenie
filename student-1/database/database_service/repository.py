@@ -337,7 +337,7 @@ class DatabaseService:
         status: TripStatus | None = None,
         destination: str | None = None,
     ) -> list[dict[str, object]]:
-        sql = f"SELECT {', '.join(TRIP_FIELDS)} FROM trips"
+        sql = f"SELECT {', '.join(TRIP_FIELDS)} FROM trips"  # noqa: S608 - constant columns
         conditions: list[str] = []
         params: list[object] = []
 
@@ -419,7 +419,7 @@ class DatabaseService:
         date: str | None = None,
         category: ItineraryCategory | None = None,
     ) -> list[dict[str, object]]:
-        sql = f"SELECT {', '.join(ITEM_FIELDS)} FROM itinerary_items WHERE trip_id = ?"
+        sql = f"SELECT {', '.join(ITEM_FIELDS)} FROM itinerary_items WHERE trip_id = ?"  # noqa: S608 - constant columns; bound values
         params: list[object] = [trip_id]
 
         if date is not None:
@@ -518,7 +518,7 @@ class DatabaseService:
         with self._connect() as connection:
             self._get_trip_row(connection, trip_id)
             rows = connection.execute(
-                f"SELECT {', '.join(TRIP_ACCOMMODATION_FIELDS)} "
+                f"SELECT {', '.join(TRIP_ACCOMMODATION_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_accommodations WHERE trip_id = ? "
                 "ORDER BY date ASC, accommodation_id ASC",
                 (trip_id,),
@@ -563,7 +563,7 @@ class DatabaseService:
                 )
 
             row = connection.execute(
-                f"SELECT {', '.join(TRIP_ACCOMMODATION_FIELDS)} "
+                f"SELECT {', '.join(TRIP_ACCOMMODATION_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_accommodations WHERE trip_id = ? AND accommodation_id = ?",
                 (trip_id, accommodation_id),
             ).fetchone()
@@ -594,7 +594,7 @@ class DatabaseService:
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute(
-                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trips JOIN trip_accommodations "
                 "ON trip_accommodations.trip_id = trips.id "
                 "WHERE trip_accommodations.accommodation_id = ? "
@@ -609,7 +609,7 @@ class DatabaseService:
         with self._connect() as connection:
             self._get_trip_row(connection, trip_id)
             rows = connection.execute(
-                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_activities WHERE trip_id = ? "
                 "ORDER BY date ASC, activity_id ASC",
                 (trip_id,),
@@ -649,7 +649,7 @@ class DatabaseService:
                 )
 
             row = connection.execute(
-                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "
+                f"SELECT {', '.join(TRIP_ACTIVITY_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_activities WHERE trip_id = ? AND activity_id = ?",
                 (trip_id, activity_id),
             ).fetchone()
@@ -679,7 +679,7 @@ class DatabaseService:
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute(
-                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trips JOIN trip_activities "
                 "ON trip_activities.trip_id = trips.id "
                 "WHERE trip_activities.activity_id = ? "
@@ -694,7 +694,7 @@ class DatabaseService:
         with self._connect() as connection:
             self._get_trip_row(connection, trip_id)
             rows = connection.execute(
-                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "
+                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_transport WHERE trip_id = ? "
                 "ORDER BY added_on ASC, transport_id ASC",
                 (trip_id,),
@@ -740,7 +740,7 @@ class DatabaseService:
                 )
 
             row = connection.execute(
-                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "
+                f"SELECT {', '.join(TRIP_TRANSPORT_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trip_transport WHERE trip_id = ? AND transport_id = ?",
                 (trip_id, transport_id),
             ).fetchone()
@@ -770,7 +770,7 @@ class DatabaseService:
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute(
-                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "
+                f"SELECT {', '.join('trips.' + name for name in TRIP_FIELDS)} "  # noqa: S608 - constant columns; bound values
                 "FROM trips JOIN trip_transport "
                 "ON trip_transport.trip_id = trips.id "
                 "WHERE trip_transport.transport_id = ? "
@@ -809,7 +809,7 @@ class DatabaseService:
         trip_id: str,
     ) -> sqlite3.Row:
         trip_row = connection.execute(
-            f"SELECT {', '.join(TRIP_FIELDS)} FROM trips WHERE id = ?",
+            f"SELECT {', '.join(TRIP_FIELDS)} FROM trips WHERE id = ?",  # noqa: S608 - constant columns; bound values
             (trip_id,),
         ).fetchone()
         if trip_row is None:
@@ -823,7 +823,7 @@ class DatabaseService:
         item_id: str,
     ) -> sqlite3.Row:
         item_row = connection.execute(
-            f"SELECT {', '.join(ITEM_FIELDS)} FROM itinerary_items WHERE id = ?",
+            f"SELECT {', '.join(ITEM_FIELDS)} FROM itinerary_items WHERE id = ?",  # noqa: S608 - constant columns; bound values
             (item_id,),
         ).fetchone()
         if item_row is None:

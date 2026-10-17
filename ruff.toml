@@ -23,7 +23,7 @@ select = [
     "N", "C4", "PIE", "RET", "RSE", "RUF",
     "PERF", "FURB", "A", "ISC", "T10", "FLY",
     "C90", "BLE", "EM", "PGH", "TC", "TID",
-    "ARG", "PTH", "LOG", "ASYNC", "FA",
+    "ARG", "PTH", "LOG", "ASYNC", "FA", "S",
 ]
 ignore = ["TID252"]
 
@@ -37,7 +37,8 @@ ignore = ["TID252"]
 "**/dependencies.py" = ["A002"]
 "**/routers/*.py" = ["A002"]
 # pytest passes every requested fixture in, used by the body or not.
-"**/tests/*" = ["ARG001", "ARG002"]
+"**/tests/*" = ["ARG001", "ARG002", "S101"]
+"**/test_*.py" = ["S101"]
 
 [lint.flake8-type-checking]
 # SQLAlchemy resolves Mapped[...] annotations at runtime to build the mappers,

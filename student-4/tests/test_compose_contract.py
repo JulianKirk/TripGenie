@@ -12,7 +12,7 @@ def compose_services(*, agentic: bool = False) -> dict[str, dict[str, Any]]:
     command = ["docker", "compose", "-f", "docker-compose.yml"]
     if agentic:
         command += ["-f", "ai-services/agentic-loop/docker-compose.agentic.yml"]
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - fixed Docker command assembled above
         [*command, "config", "--format", "json"],
         cwd=repository,
         check=True,

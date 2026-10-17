@@ -261,7 +261,7 @@ class DatabaseRepository:
         try:
             with self.connect() as connection:
                 connection.execute(
-                    f"UPDATE budgets SET {assignments} WHERE budget_id = :budget_id",
+                    f"UPDATE budgets SET {assignments} WHERE budget_id = :budget_id",  # noqa: S608 - model field names; bound values
                     values,
                 )
         except sqlite3.IntegrityError as exc:
@@ -350,7 +350,7 @@ class DatabaseRepository:
         )
         with self.connect() as connection:
             connection.execute(
-                f"UPDATE expenses SET {assignments} WHERE expense_id = :expense_id",
+                f"UPDATE expenses SET {assignments} WHERE expense_id = :expense_id",  # noqa: S608 - model field names; bound values
                 values,
             )
         return self.get_expense(expense_id)

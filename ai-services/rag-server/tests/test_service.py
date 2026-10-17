@@ -200,8 +200,8 @@ def test_query_logs_metadata_without_query_or_source_content(
     settings,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    query_secret = "private-question-content"
-    source_secret = "private-source-content"
+    query_secret = "private-question-content"  # noqa: S105  # pragma: allowlist secret - synthetic log-redaction fixture
+    source_secret = "private-source-content"  # noqa: S105  # pragma: allowlist secret - synthetic log-redaction fixture
     service = RagService(
         settings,
         FakeAiMode(),
