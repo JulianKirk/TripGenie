@@ -1,0 +1,16 @@
+minimum_pre_commit_version: '4.5.1'
+repos:
+  - repo: local
+    hooks:
+      - id: security
+        name: Ruff security, detect-secrets and pip-audit
+        entry: python scripts/security/scan.py
+        language: python
+        additional_dependencies:
+          - ruff==0.16.5
+          - detect-secrets==1.5.0
+          - pip-audit==2.10.0
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+        stages: [pre-commit, manual]

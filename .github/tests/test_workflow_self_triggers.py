@@ -20,7 +20,7 @@ def test_non_exempt_workflows_trigger_when_their_definition_changes():
         if workflow_file.name in EXEMPT_WORKFLOWS:
             continue
 
-        workflow = yaml.load(workflow_file.read_text(), Loader=yaml.BaseLoader)
+        workflow = yaml.load(workflow_file.read_text(), Loader=yaml.BaseLoader)  # noqa: S506 - BaseLoader constructs strings only; preserves YAML 'on'
         events = workflow.get("on", {})
         own_path = f".github/workflows/{workflow_file.name}"
 

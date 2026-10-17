@@ -6,11 +6,21 @@ on:
       - '.github/workflows/**'
       - '.github/workflows/workflow-policy-ci.yml'
       - '.github/tests/test_workflow_self_triggers.py'
+      - '.pre-commit-config.yaml'
+      - 'scripts/security/**'
+      - 'scripts/ci/**'
+      - 'tests/ci/**'
+      - 'ruff.toml'
   pull_request:
     paths:
       - '.github/workflows/**'
       - '.github/workflows/workflow-policy-ci.yml'
       - '.github/tests/test_workflow_self_triggers.py'
+      - '.pre-commit-config.yaml'
+      - 'scripts/security/**'
+      - 'scripts/ci/**'
+      - 'tests/ci/**'
+      - 'ruff.toml'
   workflow_dispatch:
 
 jobs:
@@ -23,6 +33,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install test dependencies
-        run: pip install pytest pyyaml
-      - name: Check workflow trigger policy
-        run: pytest -q .github/tests/test_workflow_self_triggers.py
+        run: pip install 'pytest>=9.0.3,<10' pyyaml -r scripts/security/requirements.txt
+      - name: Check workflow trigger policy and local gate regression tests
+        run: pytest -q .github/tests/test_workflow_self_triggers.py tests/ci

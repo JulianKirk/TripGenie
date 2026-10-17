@@ -22,7 +22,7 @@ REQUEST_TIMEOUT_SECONDS = 2.0
 def http_probe(url: str, contains: str | None) -> bool:
     """Return whether a successful response optionally contains required text."""
     try:
-        with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310 - trusted CI health URL, not user input
             body = response.read().decode("utf-8", errors="replace")
     except (OSError, urllib.error.HTTPError, urllib.error.URLError):
         return False

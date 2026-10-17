@@ -2,14 +2,13 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "graphify-update.yml"
 AGENT_INSTRUCTIONS = ROOT / "AGENTS.md"
 
 
 def test_graphify_workflow_has_safe_update_contract() -> None:
-    document = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
+    document = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)  # noqa: S506 - BaseLoader constructs strings only; preserves YAML 'on'
 
     triggers = document["on"]
     push = triggers["push"]

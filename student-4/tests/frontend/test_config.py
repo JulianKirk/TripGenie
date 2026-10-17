@@ -30,6 +30,7 @@ def test_settings_normalise_backend_url(monkeypatch: pytest.MonkeyPatch) -> None
         "backend.test",
         "ftp://backend.test",
         "https://backend.test/prefix",
+        # pragma: allowlist nextline secret - synthetic invalid-URL credentials
         "https://user:secret@backend.test",
         "https://backend.test?debug=true",
         "https://backend.test#fragment",

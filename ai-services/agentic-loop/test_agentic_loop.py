@@ -12,7 +12,7 @@ def test_registered_compose_services_exist():
         (Path(__file__).parent / "services.json").read_text()
     )
     result = subprocess.run(
-        ["docker", "compose", "config", "--services"],
+        ["docker", "compose", "config", "--services"],  # noqa: S607 - local Docker CLI; literal arguments
         cwd=REPOSITORY_ROOT,
         check=True,
         capture_output=True,
@@ -573,11 +573,11 @@ def test_ci_mode_turns_run_conclusions_into_checks(monkeypatch, tmp_path):
     runs = {
         "student-1-ci.yml": [
             {"databaseId": 1, "status": "completed", "conclusion": "success",
-             "headSha": "abcdef123"}
+             "headSha": "abcdef123"}  # pragma: allowlist secret - synthetic commit ID
         ],
         "student-2-ci.yml": [
             {"databaseId": 2, "status": "completed", "conclusion": "failure",
-             "headSha": "abcdef123"}
+             "headSha": "abcdef123"}  # pragma: allowlist secret - synthetic commit ID
         ],
         "student-3-ci.yml": [],
     }  # fmt: skip

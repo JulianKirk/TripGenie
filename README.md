@@ -38,6 +38,75 @@ additional coverage rather than the definition of this minimum baseline.
 
 ---
 
+### Release 2 local pre-commit security gate
+
+Install the hook once per clone using Python 3.11 or newer (activate your
+virtual environment first):
+
+```powershell
+python -m pip install -r scripts\security\requirements.txt
+python -m pre_commit install
+python -m pre_commit run security --all-files --verbose
+```
+
+On macOS/Linux, use `scripts/security/requirements.txt` in the install command.
+Normal `git commit` now runs the same blocking gate before creating a commit.
+The isolated hook environment pins Ruff, detect-secrets and pip-audit; it does
+not depend on which feature packages happen to be installed locally.
+
+- **Ruff:** all stable `S` (Bandit security) rules across the repository, with an
+  explicit security configuration that service overrides cannot disable.
+  Only pytest assertions are exempt from `S101`; reviewed false positives have
+  individual, explained `noqa` annotations.
+- **detect-secrets:** all detectors over tracked and non-ignored new files,
+  including non-Python configuration. Verification network calls are disabled
+  so possible secrets are never sent to provider APIs. Synthetic test fixtures
+  have inline allowlist explanations. The two generated Graphify checksum
+  exceptions match an exact file, detector and fingerprint in
+  `scripts/security/secret-allowlist.toml`; there is no bulk accepted baseline
+  or generated-directory exclusion.
+- **pip-audit:** resolves and audits runtime and every optional/dev dependency
+  from all service `pyproject.toml` files, plus every `requirements*.txt`,
+  including the agentic loop and security tools. Transitive dependencies are
+  included. No vulnerability IDs are ignored. Resolution/network failures,
+  skipped dependencies, malformed output and timeouts fail the gate.
+
+Each run copies the Git-eligible files to a temporary snapshot, then runs all
+three checks even if one fails. During a normal commit, pre-commit temporarily
+stashes unstaged tracked edits and restores them afterwards. Manual
+`--all-files` scans the current working tree, including non-ignored new files.
+Ignored local credentials, virtual environments, caches and Git history are
+not scanned; this is not a history scan or a substitute for secret rotation.
+Do not bypass the hook with `--no-verify` or `SKIP=security`.
+
+The complete JSON report is retained locally at
+`.git/security-reports/latest.json` (use `git rev-parse --git-path
+security-reports/latest.json` for worktrees). It contains timestamps, HEAD,
+Python/platform, scanned file and manifest lists, a content SHA-256, commands,
+tool versions, durations, exit codes, diagnostics, hashed secret findings and
+all resolved dependency versions/advisories. A failed run replaces the previous
+report, preventing stale success evidence. Dependency results apply to the
+versions resolved on that Python/platform at scan time, not to an existing
+deployed environment; scans require access to the package/advisory services.
+
+To retain named evidence outside the repository for the Release 2 technical
+report and the agentic-loop Testing Review:
+
+```powershell
+python scripts\security\scan.py --report "$env:TEMP\tripgenie-pre-commit-security.json"
+python -m pytest tests\ci -q
+```
+
+Preserve the JSON report and verbose hook output with the tested branch/HEAD
+and human review decision. Demonstrate both a clean pass and a blocked unsafe
+change in the showcase. The report can be supplied as evidence to the separate
+Testing Review; this gate does not call an LLM or claim that review ran.
+Promote evidence to `docs/reports/release-2` only when explicitly preparing the
+release submission. Local hooks must be installed by every contributor; a
+passing scan alone does not fulfil the technical-report or showcase criteria.
+
+---
+
 ## 3. Project Repository Structure
 
 ```text

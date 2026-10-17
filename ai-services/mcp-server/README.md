@@ -2,7 +2,7 @@
 
 One host-run MCP server for TripGenie's five public student backends.
 The server never reads a database or calls Ollama, and is not a Compose service.
-It uses the pinned Python MCP SDK `1.26.0` with Streamable HTTP at `/mcp`.
+It uses the pinned Python MCP SDK `1.30.0` with Streamable HTTP at `/mcp`.
 
 ## Start and inspect
 

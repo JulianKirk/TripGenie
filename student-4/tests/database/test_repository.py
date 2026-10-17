@@ -307,7 +307,7 @@ def test_repository_contains_populated_sqlite_database() -> None:
             "activity_categories",
             "activity_availability_schedules",
         ):
-            row = connection.execute(f"SELECT count(*) FROM {table}").fetchone()
+            row = connection.execute(f"SELECT count(*) FROM {table}").fetchone()  # noqa: S608 - literal table allowlist above
             assert row is not None
             count = row[0]
             assert count is not None
@@ -867,7 +867,7 @@ def test_database_rejects_non_boolean_activity_values(
 
     with pytest.raises(IntegrityError):
         session.execute(
-            text(f"UPDATE activities SET {column} = 2 WHERE id = :id"),
+            text(f"UPDATE activities SET {column} = 2 WHERE id = :id"),  # noqa: S608 - literal parametrized column allowlist
             {"id": activity.id.hex},
         )
         session.commit()

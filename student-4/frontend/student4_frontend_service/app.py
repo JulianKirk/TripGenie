@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
-from starlette.datastructures import FormData
 from starlette.responses import RedirectResponse, Response
 
 from .client import BackendClient
@@ -104,7 +103,6 @@ async def _form_response(
     activity_id: UUID | None,
 ) -> Any:
     form = await request.form()
-    assert isinstance(form, FormData)
     values = submitted_form_values(form)
     try:
         write = parse_activity_form(form)
