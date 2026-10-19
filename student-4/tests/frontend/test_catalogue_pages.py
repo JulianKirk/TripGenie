@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi.testclient import TestClient
@@ -8,6 +9,9 @@ from student4_frontend_service.app import create_app
 from student4_frontend_service.config import Settings
 
 from tests.frontend.conftest import ACTIVITY_ID, SUMMARY, FakeBackend
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def frontend(backend: FakeBackend) -> TestClient:
@@ -32,6 +36,17 @@ def test_index_is_full_htmx_page_with_tripgenie_shell(backend: FakeBackend) -> N
     assert 'id="activity-results"' in response.text
     assert 'aria-live="polite"' in response.text
     assert "Sydney Harbour guided walk" in response.text
+
+
+def test_portal_url_comes_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, backend: FakeBackend
+) -> None:
+    monkeypatch.setenv("TRIPGENIE_PORTAL_URL", "https://portal.example/")
+    app = create_app(Settings.from_env(), transport=httpx.MockTransport(backend.handle))
+    response = TestClient(app).get("/")
+
+    assert 'href="https://portal.example/theme.css"' in response.text
+    assert 'href="https://portal.example">Home</a>' in response.text
 
 
 def test_results_route_is_an_html_fragment(

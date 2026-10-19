@@ -18,6 +18,7 @@ DEFAULT_BACKEND_TIMEOUT = 5.0
 # belongs: a slow ordinary search is a broken backend, and the page should say
 # so quickly.
 DEFAULT_AI_TIMEOUT = 210.0
+DEFAULT_PORTAL_URL = "http://localhost:8080"
 
 
 @dataclass(slots=True)
@@ -28,6 +29,8 @@ class Settings:
     backend_timeout: float = DEFAULT_BACKEND_TIMEOUT
     ai_timeout: float = DEFAULT_AI_TIMEOUT
     service_name: str = "student-2-frontend"
+    # The shared portal, as the browser reaches it: the Home link.
+    portal_url: str = DEFAULT_PORTAL_URL
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -37,4 +40,7 @@ class Settings:
                 os.environ.get("BACKEND_TIMEOUT", DEFAULT_BACKEND_TIMEOUT)
             ),
             ai_timeout=float(os.environ.get("AI_TIMEOUT", DEFAULT_AI_TIMEOUT)),
+            portal_url=os.environ.get(
+                "TRIPGENIE_PORTAL_URL", DEFAULT_PORTAL_URL
+            ).rstrip("/"),
         )

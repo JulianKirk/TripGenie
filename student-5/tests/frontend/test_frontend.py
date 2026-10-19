@@ -147,6 +147,17 @@ def test_health_readiness_and_budget_list() -> None:
     assert 'aria-label="TripGenie modules"' not in page.text
 
 
+def test_portal_url_comes_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRIPGENIE_PORTAL_URL", "https://portal.example/")
+    with make_client() as client:
+        page = client.get("/")
+
+    assert 'href="https://portal.example/theme.css"' in page.text
+    assert '<a class="site-home" href="https://portal.example">Home</a>' in page.text
+
+
 def test_budget_form_uses_live_student_1_trip_directory() -> None:
     with make_client() as client:
         page = client.get("/budgets/new")

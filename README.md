@@ -256,6 +256,9 @@ assistant demonstration.
 Ordinary feature workflows remain usable if host AI services are unavailable.
 AI requests report dependency failures separately. The Student 4 assistant
 never silently substitutes direct catalogue calls when MCP fails.
+`shared/configuration/.env.cloud` is the cloud profile: every AI switch off.
+Off localhost, `TRIPGENIE_PORTAL_URL` (each frontend) and `STUDENT1_UI_URL` to
+`STUDENT5_UI_URL` (the portal) set the browser-facing addresses.
 
 ```bash
 docker compose --env-file shared/configuration/.env.example logs -f student-1-frontend student-1-backend student-1-database

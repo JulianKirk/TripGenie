@@ -1,0 +1,18 @@
+# nginx:alpine envsubsts this into conf.d/default.conf at start. index.html keeps
+# its localhost links (CI greps them); sub_filter swaps in each frontend's real
+# address, so the defaults in the Dockerfile reproduce today's page byte for byte.
+#
+# ponytail: the ":8081"-style port labels stay as they are; they are only a
+# caption. Template them too if a deployed portal should show the hostnames.
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    sub_filter_once off;
+    sub_filter 'http://localhost:8081' '${STUDENT1_UI_URL}';
+    sub_filter 'http://localhost:9003' '${STUDENT2_UI_URL}';
+    sub_filter 'http://localhost:8093' '${STUDENT3_UI_URL}';
+    sub_filter 'http://localhost:8084' '${STUDENT4_UI_URL}';
+    sub_filter 'http://localhost:8085' '${STUDENT5_UI_URL}';
+}

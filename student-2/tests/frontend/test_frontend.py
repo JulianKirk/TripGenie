@@ -10,7 +10,10 @@ from __future__ import annotations
 import re
 
 import httpx
+from fastapi.testclient import TestClient
 
+from frontend_service.app import create_app
+from frontend_service.config import Settings
 from tests.frontend.conftest import LISTING
 
 HTMX = {"HX-Request": "true"}
@@ -24,6 +27,15 @@ class TestPage:
         assert 'id="filters"' in response.text
         assert LISTING["name"] in response.text
         assert 'href="http://localhost:8080">Home</a>' in response.text
+
+    def test_home_link_comes_from_the_environment(self, monkeypatch, backend):
+        monkeypatch.setenv("TRIPGENIE_PORTAL_URL", "https://portal.example/")
+        app = create_app(
+            Settings.from_env(), transport=httpx.MockTransport(backend.handle)
+        )
+        with TestClient(app) as client:
+            response = client.get("/")
+        assert 'href="https://portal.example">Home</a>' in response.text
 
     def test_results_are_a_fragment(self, client):
         response = client.get("/accommodation", headers=HTMX)

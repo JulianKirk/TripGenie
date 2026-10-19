@@ -124,6 +124,7 @@ def create_app(
         backend.close()
 
     app = FastAPI(title="TripGenie Student 5 Frontend", lifespan=lifespan)
+    app.state.settings = settings
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
     def render(
