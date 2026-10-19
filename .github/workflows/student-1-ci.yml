@@ -28,6 +28,8 @@ on:
       - 'ruff.toml'
       - 'scripts/ci/wait_for_http.py'
   workflow_dispatch:
+  # cloud-deployment.yml runs this as a gate before every deploy.
+  workflow_call:
 
 # Release 1 keeps the RAG and MCP integrations in the code but CI never reaches
 # a host service: both are switched off here and the compose job proves it.

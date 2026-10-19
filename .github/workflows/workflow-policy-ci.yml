@@ -9,6 +9,8 @@ on:
       - '.pre-commit-config.yaml'
       - 'scripts/security/**'
       - 'scripts/ci/**'
+      - 'scripts/deploy/**'
+      - 'infra/**'
       - 'tests/ci/**'
       - 'ruff.toml'
   pull_request:
@@ -19,6 +21,8 @@ on:
       - '.pre-commit-config.yaml'
       - 'scripts/security/**'
       - 'scripts/ci/**'
+      - 'scripts/deploy/**'
+      - 'infra/**'
       - 'tests/ci/**'
       - 'ruff.toml'
   workflow_dispatch:
@@ -36,3 +40,5 @@ jobs:
         run: pip install 'pytest>=9.0.3,<10' pyyaml -r scripts/security/requirements.txt
       - name: Check workflow trigger policy and local gate regression tests
         run: pytest -q .github/tests/test_workflow_self_triggers.py tests/ci
+      - name: Compile the Azure Bicep template
+        run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null

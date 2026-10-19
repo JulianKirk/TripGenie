@@ -16,6 +16,8 @@ on:
       - 'scripts/ci/wait_for_http.py'
       - '.github/workflows/shared-ci.yml'
   workflow_dispatch:
+  # cloud-deployment.yml runs this as a gate before every deploy.
+  workflow_call:
 
 jobs:
   services:

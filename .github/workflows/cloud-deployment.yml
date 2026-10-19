@@ -1,22 +1,79 @@
 name: Cloud Deployment
 
+# Deploys the integrated app to Azure Container Apps (infra/azure/main.bicep)
+# once every service's CI passes. The deploy job runs in the `production`
+# environment, whose required reviewer is the human release decision. Azure
+# sign-in is OIDC: the repo holds IDs, never a credential. Setup:
+# scripts/deploy/azure/README.md.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Target Environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
+      image_tag:
+        description: 'Redeploy images already in the registry under this tag (blank builds the current commit)'
+        required: false
+        default: ''
+
+concurrency:
+  group: cloud-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
+  shared:
+    uses: ./.github/workflows/shared-ci.yml
+  ai-mode:
+    uses: ./.github/workflows/ai-mode-ci.yml
+  student-1:
+    uses: ./.github/workflows/student-1-ci.yml
+  student-2:
+    uses: ./.github/workflows/student-2-ci.yml
+  student-3:
+    uses: ./.github/workflows/student-3-ci.yml
+  student-4:
+    uses: ./.github/workflows/student-4-ci.yml
+  student-5:
+    uses: ./.github/workflows/student-5-ci.yml
+
   deploy:
-    name: Cloud Deployment
+    name: Deploy to Azure Container Apps
+    needs: [shared, ai-mode, student-1, student-2, student-3, student-4, student-5]
+    # Until bootstrap.sh has been run and its variables saved there is nothing
+    # to deploy to; skip rather than fail every push.
+    if: vars.AZURE_CLIENT_ID != ''
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+      SKIP_BUILD: ${{ inputs.image_tag && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy Placeholder
-        run: echo "Deploying to ${{ inputs.environment }}..."
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build, push and deploy
+        run: scripts/deploy/azure/deploy.sh "$IMAGE_TAG" | tee urls.txt
+      - name: Smoke test the deployed frontends
+        run: |
+          {
+            echo "## Cloud deployment \`$IMAGE_TAG\`"
+            sed 's/^/- /' urls.txt
+            echo
+            python3 scripts/deploy/azure/smoke_test.py $(cat urls.txt)
+          } | tee smoke.md >> "$GITHUB_STEP_SUMMARY"  # pipefail keeps a failed check fatal
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cloud-deployment-${{ env.IMAGE_TAG }}
+          path: |
+            urls.txt
+            smoke.md
