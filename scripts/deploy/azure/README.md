@@ -16,7 +16,7 @@ GitHub Actions ──OIDC──> Azure (rg-tripgenie)
 
 | File | Purpose |
 | --- | --- |
-| `bootstrap.sh` | One-time setup by the subscription owner: resource group, registry, pull identity, GitHub OIDC app |
+| `bootstrap.sh` | One-time setup by the subscription owner: resource group, registry, pull identity, and the managed identity GitHub signs in as (OIDC) |
 | `deploy.sh` | Build, push and deploy. Used by CI and by any teammate |
 | `compose_to_azure.py` | Reads `docker compose config` and renders the image list and Bicep `apps` parameter |
 | `smoke_test.py` | Post-deploy checks through the public frontends |

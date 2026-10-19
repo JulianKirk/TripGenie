@@ -5,18 +5,20 @@
 #
 #   - the resource group
 #   - a container registry, and an identity the apps use to pull from it
-#   - an Entra app GitHub Actions signs in as through OIDC (no client secret),
-#     trusted for `main` and the `production` environment, and allowed to
-#     deploy only inside the resource group
+#   - a managed identity GitHub Actions signs in as through OIDC (no client
+#     secret), trusted for `main` and the `production` environment, and allowed
+#     to deploy only inside the resource group
 #
-# Owner rights are needed once, for the role assignments; everything after this
-# runs as the GitHub app with Contributor on the resource group only.
+# A managed identity rather than an Entra app registration: university tenants
+# (UTS included) stop students registering apps, but a subscription owner can
+# always create identities. Owner rights are needed once, for the role
+# assignments; everything after this runs as that identity with Contributor on
+# the resource group only.
 set -euo pipefail
 
 repo=${GITHUB_REPOSITORY:-JulianKirk/TripGenie}
 rg=${AZURE_RESOURCE_GROUP:-rg-tripgenie}
 location=${AZURE_LOCATION:-australiaeast}
-github_app=tripgenie-github-deploy
 
 subscription=$(az account show --query id -o tsv)
 tenant=$(az account show --query tenantId -o tsv)
@@ -44,25 +46,21 @@ for attempt in 1 2 3 4 5; do
   sleep 10
 done
 
-app_id=$(az ad app list --display-name "$github_app" --query '[0].appId' -o tsv)
-[ -n "$app_id" ] ||
-  app_id=$(az ad app create --display-name "$github_app" --query appId -o tsv)
-az ad sp show --id "$app_id" -o none 2>/dev/null || az ad sp create --id "$app_id" -o none
+github=$(az identity create --name tripgenie-github --resource-group "$rg" \
+  --query '{client: clientId, principal: principalId}' -o tsv)
+read -r client_id github_principal <<< "$github"
 
 for subject in ref:refs/heads/main environment:production; do
-  name=github-$(echo "$subject" | tr ':/' '--')
-  if [ -z "$(az ad app federated-credential list --id "$app_id" --query "[?name=='$name'].name" -o tsv)" ]; then
-    az ad app federated-credential create --id "$app_id" -o none --parameters "{
-      \"name\": \"$name\",
-      \"issuer\": \"https://token.actions.githubusercontent.com\",
-      \"subject\": \"repo:$repo:$subject\",
-      \"audiences\": [\"api://AzureADTokenExchange\"]
-    }"
-  fi
+  az identity federated-credential create --name "github-$(echo "$subject" | tr ':/' '--')" \
+    --identity-name tripgenie-github --resource-group "$rg" \
+    --issuer https://token.actions.githubusercontent.com \
+    --subject "repo:$repo:$subject" --audiences api://AzureADTokenExchange -o none
 done
 
 for attempt in 1 2 3 4 5; do
-  az role assignment create --assignee "$app_id" --role Contributor --scope "$rg_id" -o none && break
+  az role assignment create --assignee-object-id "$github_principal" \
+    --assignee-principal-type ServicePrincipal --role Contributor \
+    --scope "$rg_id" -o none && break
   sleep 10
 done
 
@@ -71,14 +69,14 @@ cat <<EOF
 Azure is ready. Set these as GitHub Actions repository variables (Settings ->
 Secrets and variables -> Actions -> Variables). None of them is a secret.
 
-  AZURE_CLIENT_ID=$app_id
+  AZURE_CLIENT_ID=$client_id
   AZURE_TENANT_ID=$tenant
   AZURE_SUBSCRIPTION_ID=$subscription
   AZURE_RESOURCE_GROUP=$rg
 
 or, as a repository admin:
 
-  gh variable set AZURE_CLIENT_ID -R $repo -b $app_id
+  gh variable set AZURE_CLIENT_ID -R $repo -b $client_id
   gh variable set AZURE_TENANT_ID -R $repo -b $tenant
   gh variable set AZURE_SUBSCRIPTION_ID -R $repo -b $subscription
   gh variable set AZURE_RESOURCE_GROUP -R $repo -b $rg
