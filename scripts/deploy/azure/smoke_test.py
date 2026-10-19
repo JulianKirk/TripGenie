@@ -9,6 +9,7 @@ disabled, as the cloud baseline requires. Prints a Markdown table for the
 GitHub job summary and exits non-zero on any failure. Stdlib only.
 """
 
+import socket
 import sys
 import time
 import urllib.error
@@ -33,11 +34,24 @@ def request(url, form=None):
             return response.status, response.read().decode(errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode(errors="replace")
+    # socket.timeout is TimeoutError only from Python 3.10; macOS ships 3.9.
+    except (TimeoutError, socket.timeout, urllib.error.URLError) as error:  # noqa: UP041
+        return f"no response ({error})", ""
+
+
+def wake(url):
+    # A freshly deployed or idle chain can need more than one request timeout to
+    # start every replica behind it, so a page gets three tries.
+    for _ in range(3):
+        status, body = request(url)
+        if status == 200:
+            break
+    return status, body
 
 
 def checks(urls):
     for url in urls:
-        status, _ = request(url)
+        status, _ = wake(url)
         yield f"GET {url}", status == 200, status
 
     # The compose port lets the same checks run against a local stack too.

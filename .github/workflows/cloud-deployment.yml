@@ -1,28 +1,32 @@
 name: Cloud Deployment
 
-# Deploys the integrated app to Azure Container Apps (infra/azure/main.bicep)
-# once every service's CI passes. The deploy job runs in the `production`
-# environment, whose required reviewer is the human release decision. Azure
-# sign-in is OIDC: the repo holds IDs, never a credential. Setup:
-# scripts/deploy/azure/README.md.
+# Lab 11's CI/CD deployment, for TripGenie: run every service's post-commit CI,
+# then build, push and deploy to Azure Container Apps with the scripts in
+# scripts/deploy/azure/ and upload the evidence. Azure sign-in is OIDC; the
+# secrets hold IDs set once by gh-secrets-setup.sh, never a credential. The
+# deploy job runs in the `production` environment, whose required reviewer is
+# the human release decision.
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches:
+  #     - main
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Redeploy images already in the registry under this tag (blank builds the current commit)'
+      frontend_min_replicas:
+        description: 'Frontend replicas kept warm (0 scales to zero; 1 for a demo)'
         required: false
-        default: ''
+        default: '0'
+
+permissions:
+  id-token: write
+  contents: read
 
 concurrency:
   group: cloud-deployment
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 jobs:
+  # Post-commit tests: every service's own CI workflow, unchanged.
   shared:
     uses: ./.github/workflows/shared-ci.yml
   ai-mode:
@@ -38,42 +42,59 @@ jobs:
   student-5:
     uses: ./.github/workflows/student-5-ci.yml
 
-  deploy:
-    name: Deploy to Azure Container Apps
-    needs: [shared, ai-mode, student-1, student-2, student-3, student-4, student-5]
-    # Until bootstrap.sh has been run and its variables saved there is nothing
-    # to deploy to; skip rather than fail every push.
-    if: vars.AZURE_CLIENT_ID != ''
+  deploy_azure:
     runs-on: ubuntu-latest
+    needs: [shared, ai-mode, student-1, student-2, student-3, student-4, student-5]
+    if: github.event_name == 'workflow_dispatch'
     environment: production
-    permissions:
-      contents: read
-      id-token: write
     env:
-      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-      IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
-      SKIP_BUILD: ${{ inputs.image_tag && '1' || '' }}
+      IMAGE_TAG: ${{ github.sha }}
+      FRONTEND_MIN_REPLICAS: ${{ inputs.frontend_min_replicas }}
+
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/login@v2
+
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Build, push and deploy
-        run: scripts/deploy/azure/deploy.sh "$IMAGE_TAG" | tee urls.txt
-      - name: Smoke test the deployed frontends
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up deployment environment
+        run: bash scripts/deploy/azure/env-setup.sh
+
+      - name: Build and push images
+        run: bash scripts/deploy/azure/build-images.sh
+
+      - name: Azure login (refresh)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Container Apps environment
+        run: bash scripts/deploy/azure/deploy-azure-env.sh
+
+      - name: Azure login (refresh again)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: bash scripts/deploy/azure/deploy-azure.sh
+
+      - name: Validate deployment and generate evidence
         run: |
-          {
-            echo "## Cloud deployment \`$IMAGE_TAG\`"
-            sed 's/^/- /' urls.txt
-            echo
-            python3 scripts/deploy/azure/smoke_test.py $(cat urls.txt)
-          } | tee smoke.md >> "$GITHUB_STEP_SUMMARY"  # pipefail keeps a failed check fatal
-      - uses: actions/upload-artifact@v4
+          bash scripts/deploy/azure/deployment-testing.sh
+          cat docs/reports/release-2/cloud-deployment-results.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deployment evidence
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: cloud-deployment-${{ env.IMAGE_TAG }}
-          path: |
-            urls.txt
-            smoke.md
+          name: cloud-deployment-evidence
+          path: docs/reports/release-2/cloud-deployment-results.md
