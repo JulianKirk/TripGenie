@@ -5,7 +5,7 @@ workflow, `.github/workflows/student-1-ci.yml`, runs automated endpoint tests
 for two backend functions after every push that touches `student-1/**`
 (issue #174).
 
-Workflow run: <link to be added after merge>
+Workflow run (PR #181 CI, Student 1 CI on `pull_request`, "Validate Student 1 Compose Readiness" job: 7 passed in 0.20s, artifact `student-1-endpoint-test-evidence`): https://github.com/JulianKirk/TripGenie/actions/runs/39503253714/job/118905737971
 
 ## Endpoints under test and why
 
