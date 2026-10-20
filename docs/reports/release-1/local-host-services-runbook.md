@@ -1,7 +1,7 @@
 # Release 1 local host services runbook
 
 Release 1 runs AI-Mode, RAG, MCP, Ollama, and the agentic loop as host
-processes. Docker Compose runs only the shared reference service and the
+processes; Release 2 adds the Multi-Agent Server. Docker Compose runs only the shared reference service and the
 feature frontends, backends, and databases. Backends reach the host through
 `host.docker.internal`.
 
@@ -11,6 +11,7 @@ feature frontends, backends, and databases. Backends reach the host through
 | AI-Mode | 8006 | `http://host.docker.internal:8006` | `http://127.0.0.1:8006` |
 | RAG | 8011 | `http://host.docker.internal:8011` | `http://127.0.0.1:8011` |
 | MCP | 8012 | `http://host.docker.internal:8012/mcp` | `http://127.0.0.1:8012/mcp` |
+| Multi-Agent (Release 2) | 8013 | `http://host.docker.internal:8013` | `http://127.0.0.1:8013` |
 
 MCP in turn calls the public backends Compose publishes on host loopback:
 Student 1 `18001`, Student 2 `9000`, Student 3 `18003`, Student 4 `18008`,
@@ -86,6 +87,20 @@ python -m tripgenie_mcp serve
 Set `MCP_HOST` for a non-loopback binding. AI-Mode `/generate` (feature MCP
 assistants) needs MCP running. RAG answers use `/generate-plain` and do not.
 
+## 4b. Multi-Agent Server (terminal 4, Release 2)
+
+```bash
+cd ai-services/multi-agent-server
+python -m pip install -e ".[dev]"
+python -m multi_agent_service serve
+```
+
+Its Planner, Worker, and Reviewer run on AI-Mode, and the Worker uses MCP
+through AI-Mode `/generate`, so start it after both. Run history is kept in
+`ai-services/multi-agent-server/data/runs.sqlite3` (git-ignored). See
+`ai-services/multi-agent-server/README.md` for the terminal workflow and the
+feature-backend integration kit.
+
 ## 5. Docker Compose
 
 ```bash
@@ -110,6 +125,7 @@ curl http://127.0.0.1:8006/ready
 curl http://127.0.0.1:8011/health
 curl http://127.0.0.1:8011/ready
 curl http://127.0.0.1:8012/health
+curl http://127.0.0.1:8013/ready
 docker compose --env-file shared/configuration/.env.example ps
 curl http://127.0.0.1:18001/ready
 curl http://127.0.0.1:9000/health
@@ -129,6 +145,15 @@ Check that MCP reaches the published backends (from `ai-services/mcp-server`):
 ```bash
 python -m tripgenie_mcp call transport_search '{"limit":5}'
 python -m tripgenie_mcp call budgets_list '{"limit":5}'
+```
+
+Run one Planner → Worker → Reviewer → human review workflow from the
+terminal (from `ai-services/multi-agent-server`):
+
+```bash
+python -m multi_agent_service run --feature student-3 \
+  --task "What is the cheapest way to get from Melbourne to Sydney for two travellers?"
+python -m multi_agent_service export <run_id> --format markdown
 ```
 
 Then open the portal at `http://localhost:8080` and exercise each feature's

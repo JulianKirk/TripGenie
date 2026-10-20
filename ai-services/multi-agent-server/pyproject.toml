@@ -1,0 +1,33 @@
+[project]
+name = "tripgenie-multi-agent-server"
+version = "0.1.0"
+description = "Shared non-containerised Release 2 Multi-Agent Server: Planner, Worker and Reviewer agents with human review."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "jsonschema>=4.20,<5",
+    "pydantic>=2.8,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.3,<10.0",
+    "ruff>=0.6,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["multi_agent_service*"]
+
+[tool.setuptools.package-data]
+multi_agent_service = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

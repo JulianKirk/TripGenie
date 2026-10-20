@@ -21,6 +21,7 @@ AI gateway backed by a host-managed Ollama runtime.
 | `ai-services/ai-mode/` | The only application service that communicates with Ollama |
 | `ai-services/mcp-server/` | Shared host-run MCP tools over public feature APIs |
 | `ai-services/rag-server/` | Shared host-run retrieval and grounded responses |
+| `ai-services/multi-agent-server/` | Shared host-run Planner, Worker, and Reviewer workflow with human review |
 | `ai-services/agentic-loop/` | Local validation harness, including MCP and RAG modes |
 | `docs/` | Architecture decisions and release evidence |
 

@@ -163,7 +163,7 @@ TripGenie/
 │   ├── mcp-server/         # shared MCP tools over public feature APIs
 │   ├── rag-server/         # shared retrieval and grounded responses
 │   ├── agentic-loop/       # local validation harness, incl. MCP and RAG modes
-│   └── multi-agent-server/ # placeholder
+│   └── multi-agent-server/ # Release 2 Planner → Worker → Reviewer → human review (:8013)
 ├── scripts/
 │   ├── run-app.sh          # starts Compose plus the host AI services
 │   ├── ci/

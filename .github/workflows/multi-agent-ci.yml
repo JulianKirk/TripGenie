@@ -1,0 +1,55 @@
+name: Multi-Agent Server CI
+
+# The shared Release 2 Multi-Agent Server is a host process, never a Compose
+# service, so CI validates the package itself. Agents are exercised against a
+# fake AI-Mode; no Ollama, MCP server or feature backend is needed.
+on:
+  push:
+    paths:
+      - 'ai-services/multi-agent-server/**'
+      - '.github/workflows/multi-agent-ci.yml'
+      - 'ruff.toml'
+  pull_request:
+    paths:
+      - 'ai-services/multi-agent-server/**'
+      - '.github/workflows/multi-agent-ci.yml'
+      - 'ruff.toml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Build and Validate Shared Multi-Agent Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the Multi-Agent Server
+        working-directory: ai-services/multi-agent-server
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Validate the installed package and its prompt assets
+        working-directory: ai-services/multi-agent-server
+        run: |
+          python -c "from multi_agent_service.agents import load_prompt; [load_prompt(n) for n in ('planner_v1.md', 'worker_v1.md', 'reviewer_v1.md')]"
+          python -m multi_agent_service --help
+      - name: Run syntax checks
+        working-directory: ai-services/multi-agent-server
+        run: python -m compileall multi_agent_service tests
+      - name: Run Ruff checks
+        run: python -m ruff check ai-services/multi-agent-server
+      - name: Run Ruff format check
+        run: python -m ruff format --check ai-services/multi-agent-server
+      - name: Run the pytest suite
+        working-directory: ai-services/multi-agent-server
+        run: python -m pytest tests
+      - name: Confirm the server is not a Compose service
+        run: |
+          if docker compose config --services | grep -Eqi 'multi.?agent'; then
+            echo "::error::The Multi-Agent Server must run on the host, not in Compose."
+            exit 1
+          fi
+          echo "docker-compose.yml defines no multi-agent service."
