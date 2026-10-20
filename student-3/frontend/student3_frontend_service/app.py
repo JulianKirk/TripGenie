@@ -293,6 +293,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         client = BackendApiClient(app_settings, transport=transport)
         app.state.backend_client = client
+        app.state.settings = app_settings
         try:
             yield
         finally:

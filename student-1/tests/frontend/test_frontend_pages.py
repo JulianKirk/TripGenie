@@ -6,6 +6,9 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
+from frontend_service.app import create_app
+from frontend_service.config import Settings
 
 from .conftest import create_item_form_data, create_trip_form_data
 
@@ -36,6 +39,18 @@ def test_dashboard_renders_full_page_theme_and_accessible_controls(client) -> No
     assert 'class="skip-link" href="#app-shell"' in response.text
     assert '<nav class="panel panel--sidebar"' in response.text
     assert 'href="http://localhost:8080">Home</a>' in response.text
+
+
+def test_portal_url_comes_from_the_environment(monkeypatch, backend_api) -> None:
+    monkeypatch.setenv("TRIPGENIE_PORTAL_URL", "https://portal.example/")
+    app = create_app(
+        Settings.from_env(), transport=httpx.MockTransport(backend_api.handle)
+    )
+    with TestClient(app) as client:
+        page = client.get("/")
+
+    assert 'href="https://portal.example/theme.css"' in page.text
+    assert 'href="https://portal.example">Home</a>' in page.text
 
 
 def test_theme_and_local_assets_follow_the_shared_contract(

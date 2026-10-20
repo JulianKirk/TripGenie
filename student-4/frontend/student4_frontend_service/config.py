@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 DEFAULT_BACKEND_URL = "http://student-4-backend:8008"
 DEFAULT_AI_TIMEOUT = 210.0
+DEFAULT_PORTAL_URL = "http://localhost:8080"
 
 
 def _backend_url(value: str | None) -> str:
@@ -44,6 +45,8 @@ class Settings:
     backend_timeout: float = 5.0
     ai_timeout: float = DEFAULT_AI_TIMEOUT
     service_name: str = "student-4-frontend"
+    # The shared portal, as the browser reaches it: theme.css and Home.
+    portal_url: str = DEFAULT_PORTAL_URL
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -55,4 +58,7 @@ class Settings:
             ai_timeout=_timeout(
                 os.getenv("AI_TIMEOUT"), name="AI_TIMEOUT", default=DEFAULT_AI_TIMEOUT
             ),
+            portal_url=os.getenv("TRIPGENIE_PORTAL_URL", DEFAULT_PORTAL_URL)
+            .strip()
+            .rstrip("/"),
         )

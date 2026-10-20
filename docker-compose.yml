@@ -11,6 +11,13 @@ services:
     build:
       context: ./shared/frontend
       dockerfile: Dockerfile
+    environment:
+      # Browser addresses of the five frontends; the portal's links point here.
+      STUDENT1_UI_URL: http://localhost:8081
+      STUDENT2_UI_URL: http://localhost:9003
+      STUDENT3_UI_URL: http://localhost:8093
+      STUDENT4_UI_URL: http://localhost:8084
+      STUDENT5_UI_URL: http://localhost:8085
     ports:
       - "8080:80"
 
@@ -121,6 +128,8 @@ services:
       STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS: "250"
       STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"
+      # Where a browser reaches the shared portal: theme.css and the Home link.
+      TRIPGENIE_PORTAL_URL: http://localhost:8080
     ports:
       - "8081:8081"
     depends_on:
@@ -194,8 +203,8 @@ services:
       LOCATION_URL: http://shared-backend:9100
       # The ask box on the accommodation page. Unset it and the service still
       # runs -- /health says "not_configured" and only /accommodation/ai-search
-      # is gone.
-      AI_MODE_URL: http://host.docker.internal:8006
+      # is gone. No colon in the interpolation, so an env file can blank it.
+      AI_MODE_URL: ${STUDENT2_BACKEND_AI_MODE_URL-http://host.docker.internal:8006}
       # Longer than AI-Mode's own 90-second wait on Ollama (AI_MODE_TIMEOUT_SECONDS
       # in the runbook's host AI-Mode command), so a slow generation is
       # reported by the service that is actually waiting on it rather than
@@ -206,7 +215,7 @@ services:
       # Release 1 guide box: grounded answers from the host-run shared RAG
       # server. Empty turns the box off; the assistant box (MCP tools) needs
       # only AI_MODE_URL above, since AI-Mode runs the MCP loop.
-      RAG_URL: ${STUDENT2_BACKEND_RAG_URL:-http://host.docker.internal:8011}
+      RAG_URL: ${STUDENT2_BACKEND_RAG_URL-http://host.docker.internal:8011}
       RAG_TIMEOUT: "130"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -228,6 +237,8 @@ services:
       # so this sits above that. Every other call the page makes keeps the
       # ordinary 5 seconds.
       AI_TIMEOUT: "210"
+      # Where a browser reaches the shared portal: theme.css and the Home link.
+      TRIPGENIE_PORTAL_URL: http://localhost:8080
     depends_on:
       - student-2-backend
 
@@ -270,6 +281,8 @@ services:
       # The transport guide (RAG) only; outlasts the backend's 130 s RAG budget.
       STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS:-150}"
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
+      # Where a browser reaches the shared portal: theme.css and the Home link.
+      TRIPGENIE_PORTAL_URL: http://localhost:8080
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
     depends_on:
@@ -430,6 +443,8 @@ services:
       BACKEND_URL: "${STUDENT4_FRONTEND_BACKEND_URL:-http://student-4-backend:8008}"
       BACKEND_TIMEOUT: "${STUDENT4_FRONTEND_BACKEND_TIMEOUT:-5}"
       AI_TIMEOUT: "${STUDENT4_FRONTEND_AI_TIMEOUT:-210}"
+      # Where a browser reaches the shared portal: theme.css and the Home link.
+      TRIPGENIE_PORTAL_URL: http://localhost:8080
     ports:
       - "${STUDENT4_FRONTEND_HOST_PORT:-8084}:8084"
     depends_on:
@@ -493,6 +508,8 @@ services:
       STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "230"
       STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS: "230"
+      # Where a browser reaches the shared portal: theme.css and the Home link.
+      TRIPGENIE_PORTAL_URL: http://localhost:8080
     ports:
       - "8085:8085"
     depends_on:

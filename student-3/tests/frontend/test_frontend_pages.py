@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from student3_frontend_service.app import create_app
 from student3_frontend_service.config import Settings as FrontendSettings
 
 SHUTTLE_ID = "transport_2027_zqn_snow_shuttle"
@@ -113,6 +115,20 @@ def test_browse_lists_the_seeded_options(client: TestClient) -> None:
     assert "Queenstown Airport" in response.text
     assert "Melbourne" in response.text
     assert 'href="http://localhost:8080">Home</a>' in response.text
+
+
+def test_portal_url_comes_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, backend_app: Any
+) -> None:
+    monkeypatch.setenv("TRIPGENIE_PORTAL_URL", "https://portal.example/")
+    app = create_app(
+        FrontendSettings.from_env(), transport=httpx.ASGITransport(app=backend_app)
+    )
+    with TestClient(app) as client:
+        response = client.get("/")
+
+    assert 'href="https://portal.example/theme.css"' in response.text
+    assert 'href="https://portal.example">Home</a>' in response.text
 
 
 def test_browse_shows_derived_duration_and_seats(client: TestClient) -> None:

@@ -62,6 +62,8 @@ class Settings:
     # The transport guide (RAG) only; clears the backend's 130 s RAG budget.
     rag_timeout_seconds: float = 150.0
     service_name: str = "student-3-frontend"
+    # The shared portal, as the browser reaches it: theme.css and Home.
+    portal_url: str = "http://localhost:8080"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -95,6 +97,11 @@ class Settings:
                 os.getenv("STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS",
                 default=150.0,
+            ),
+            portal_url=_normalise_base_url(
+                os.getenv("TRIPGENIE_PORTAL_URL"),
+                env_name="TRIPGENIE_PORTAL_URL",
+                default="http://localhost:8080",
             ),
             service_name=os.getenv(
                 "STUDENT3_FRONTEND_SERVICE_NAME",
