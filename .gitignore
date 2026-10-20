@@ -18,6 +18,9 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+# SQLite write-ahead-log side files (the multi-agent run store uses WAL).
+*.sqlite3-wal
+*.sqlite3-shm
 !student-4/database/activities.db
 
 # Operating System

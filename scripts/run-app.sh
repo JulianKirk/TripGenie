@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Run the whole Release 1 application locally:
+# Run the whole Release 2 application locally:
 #   Compose (every feature's frontend, backend, database)
 #   + on the host: Ollama -> AI-Mode :8006 -> MCP :8012 -> RAG :8011
+#     -> Multi-Agent :8013
 #
 #   bash scripts/run-app.sh                      # llama3.1:8b (the demo model)
 #   AI_MODEL=qwen2.5:0.5b bash scripts/run-app.sh   # small and quick, weak answers
 #
-# AI-Mode, MCP and RAG must not be containers (Release 1 rule), so this script
-# runs them as host processes; the Compose backends reach them through
+# AI-Mode, MCP, RAG and the Multi-Agent Server must not be containers (Release
+# 1 and 2 rule), so this script runs them as host processes; the Compose
+# backends reach them through
 # host.docker.internal. Ctrl-C stops the host services; the containers keep
 # running (`docker compose down` stops them). Follows
 # docs/reports/release-1/local-host-services-runbook.md for macOS/Docker
@@ -49,7 +51,8 @@ if [ ! -x .venv/bin/python ]; then
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
-pip install -q -e ai-services/ai-mode -e ai-services/mcp-server -e ai-services/rag-server
+pip install -q -e ai-services/ai-mode -e ai-services/mcp-server -e ai-services/rag-server \
+  -e ai-services/multi-agent-server
 
 echo "== Ollama ($AI_MODEL + nomic-embed-text)"
 command -v ollama >/dev/null || { echo "Install Ollama first: https://ollama.com"; exit 1; }
@@ -107,6 +110,16 @@ if ! up http://127.0.0.1:8011/ready; then
   wait_for RAG http://127.0.0.1:8011/ready 20
 fi
 
+echo "== Multi-Agent :8013 (Planner -> Worker -> Reviewer -> human review)"
+if ! up http://127.0.0.1:8013/health; then
+  # Its agents run on AI-Mode; run history lives in
+  # ai-services/multi-agent-server/data/ (git-ignored).
+  MULTI_AGENT_AI_MODE_URL=http://127.0.0.1:8006 \
+    python -m multi_agent_service serve >"$LOGS/multi-agent.log" 2>&1 &
+  started+=($!)
+  wait_for Multi-Agent http://127.0.0.1:8013/ready 20
+fi
+
 cat <<EOF
 
 TripGenie is running. Logs: $LOGS
@@ -119,7 +132,8 @@ TripGenie is running. Logs: $LOGS
   Student 5 budgets        http://localhost:8085
 
   AI-Mode http://127.0.0.1:8006 · MCP http://127.0.0.1:8012/mcp · RAG http://127.0.0.1:8011
+  Multi-Agent http://127.0.0.1:8013 (terminal: python -m multi_agent_service run --help)
 
-Ctrl-C stops AI-Mode, MCP and RAG. Stop the containers with: docker compose down
+Ctrl-C stops AI-Mode, MCP, RAG and the Multi-Agent Server. Stop the containers with: docker compose down
 EOF
 wait

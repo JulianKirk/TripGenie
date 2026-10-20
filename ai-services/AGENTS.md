@@ -24,9 +24,13 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
 - Shared AI-Mode owns the native model/MCP tool loop behind `/generate`. Keep
   natural-language interpretation in the model and tool descriptions in MCP.
   `/embed` remains independent of MCP.
-- `multi-agent-server/` is not implemented. Define its contract before adding
-  runtime code. AI-Mode, MCP, RAG, and the validation loop stay outside
-  Compose.
+- `multi-agent-server/` is the Release 2 host-run Planner -> Worker ->
+  Reviewer -> human-review workflow on port 8013. Its agents call AI-Mode
+  only (`/generate-plain` for Planner and Reviewer, `/generate` for the
+  Worker); it never calls Ollama or MCP directly and never writes feature
+  data. Its contract is `docs/architecture/release-2-multi-agent-contract.md`
+  (ADR 0005); change both together. AI-Mode, MCP, RAG, the Multi-Agent
+  Server, and the validation loop stay outside Compose.
 
 ## AI-Mode checks
 
@@ -83,6 +87,24 @@ driven by `checks/mcp.json` and the RAG server's
 `config/calibration-queries.json`; update them when a tool or calibration case
 changes. The loop runs locally only; no CI workflow runs it, and student CI
 keeps MCP and RAG disabled.
+
+## Multi-Agent Server checks
+
+Run from the repository root:
+
+```bash
+python -m pip install -e "./ai-services/multi-agent-server[dev]"
+python -m compileall ai-services/multi-agent-server/multi_agent_service ai-services/multi-agent-server/tests
+ruff check ai-services/multi-agent-server
+ruff format --check ai-services/multi-agent-server
+pytest ai-services/multi-agent-server/tests -q
+```
+
+Tests use a fake AI-Mode transport and a temporary SQLite file. Keep the
+deterministic checks (schema, grounding, allowed tools, no writes, tool
+evidence) authoritative: a model verdict must never be the only gate.
+Prompts are package data in `multi_agent_service/prompts/`; a feature's own
+Worker prompt must stay first in the Worker's system prompt (ADR 0005).
 
 ## MCP checks
 
