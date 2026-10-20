@@ -9,6 +9,7 @@ on:
       - '.pre-commit-config.yaml'
       - 'scripts/security/**'
       - 'scripts/ci/**'
+      - 'scripts/deploy/**'
       - 'tests/ci/**'
       - 'ruff.toml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - '.pre-commit-config.yaml'
       - 'scripts/security/**'
       - 'scripts/ci/**'
+      - 'scripts/deploy/**'
       - 'tests/ci/**'
       - 'ruff.toml'
   workflow_dispatch:

@@ -1,22 +1,104 @@
 name: Cloud Deployment
 
+# Lab 11's CI/CD deployment, for TripGenie: run every service's post-commit CI,
+# then build, push and deploy to Azure Container Apps with the scripts in
+# scripts/deploy/azure/ and upload the evidence. Azure sign-in is OIDC; the
+# secrets hold IDs set once by gh-secrets-setup.sh, never a credential. The
+# deploy job runs in the `production` environment, whose required reviewer is
+# the human release decision.
 on:
+  # push:
+  #   branches:
+  #     - main
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Target Environment'
-        required: true
-        default: 'staging'
+      frontend_min_replicas:
+        description: 'Frontend replicas kept warm (0 scales to zero; 1 for a demo)'
         type: choice
-        options:
-          - staging
-          - production
+        options: ['0', '1']
+        default: '0'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: cloud-deployment
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Cloud Deployment
+  # Post-commit tests: every service's own CI workflow, unchanged.
+  shared:
+    uses: ./.github/workflows/shared-ci.yml
+  ai-mode:
+    uses: ./.github/workflows/ai-mode-ci.yml
+  student-1:
+    uses: ./.github/workflows/student-1-ci.yml
+  student-2:
+    uses: ./.github/workflows/student-2-ci.yml
+  student-3:
+    uses: ./.github/workflows/student-3-ci.yml
+  student-4:
+    uses: ./.github/workflows/student-4-ci.yml
+  student-5:
+    uses: ./.github/workflows/student-5-ci.yml
+
+  deploy_azure:
     runs-on: ubuntu-latest
+    needs: [shared, ai-mode, student-1, student-2, student-3, student-4, student-5]
+    if: github.event_name == 'workflow_dispatch'
+    environment: production
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      FRONTEND_MIN_REPLICAS: ${{ inputs.frontend_min_replicas }}
+
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy Placeholder
-        run: echo "Deploying to ${{ inputs.environment }}..."
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up deployment environment
+        run: bash scripts/deploy/azure/env-setup.sh
+
+      - name: Build and push images
+        run: bash scripts/deploy/azure/build-images.sh
+
+      - name: Azure login (refresh)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Container Apps environment
+        run: bash scripts/deploy/azure/deploy-azure-env.sh
+
+      - name: Azure login (refresh again)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: bash scripts/deploy/azure/deploy-azure.sh
+
+      - name: Validate deployment and generate evidence
+        run: bash scripts/deploy/azure/deployment-testing.sh
+
+      # Separate and always(): a failed check is exactly when the table matters.
+      - name: Publish deployment results
+        if: always()
+        run: cat docs/reports/release-2/cloud-deployment-results.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-deployment-evidence
+          path: docs/reports/release-2/cloud-deployment-results.md
