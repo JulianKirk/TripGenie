@@ -10,10 +10,8 @@ LOCATION="${LOCATION:-australiaeast}"
 
 echo "=== TripGenie Environment Setup ==="
 
-echo "Registering required resource providers (skips if already registered)..."
-az provider register --namespace Microsoft.App --wait
-az provider register --namespace Microsoft.OperationalInsights --wait
-az provider register --namespace Microsoft.ContainerRegistry --wait
+# Resource providers are registered once by gh-secrets-setup.sh: CI's identity
+# is scoped to this resource group and cannot register them.
 
 EXISTING_REGISTRY=$(az group show --name "$RESOURCE_GROUP" --query "tags.registryName" -o tsv 2>/dev/null || true)
 

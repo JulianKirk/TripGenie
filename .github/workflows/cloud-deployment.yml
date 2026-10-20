@@ -14,7 +14,8 @@ on:
     inputs:
       frontend_min_replicas:
         description: 'Frontend replicas kept warm (0 scales to zero; 1 for a demo)'
-        required: false
+        type: choice
+        options: ['0', '1']
         default: '0'
 
 permissions:
@@ -88,9 +89,12 @@ jobs:
         run: bash scripts/deploy/azure/deploy-azure.sh
 
       - name: Validate deployment and generate evidence
-        run: |
-          bash scripts/deploy/azure/deployment-testing.sh
-          cat docs/reports/release-2/cloud-deployment-results.md >> "$GITHUB_STEP_SUMMARY"
+        run: bash scripts/deploy/azure/deployment-testing.sh
+
+      # Separate and always(): a failed check is exactly when the table matters.
+      - name: Publish deployment results
+        if: always()
+        run: cat docs/reports/release-2/cloud-deployment-results.md >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload deployment evidence
         if: always()

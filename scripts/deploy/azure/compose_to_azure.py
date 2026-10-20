@@ -29,6 +29,10 @@ def port_of(service):
     return int(service["ports"][0]["target"])
 
 
+def image_ref(registry, name, tag):
+    return f"{registry}/tripgenie-{name}:{tag}"
+
+
 def built(config):
     return {n: s for n, s in config["services"].items() if "build" in s}
 
@@ -36,7 +40,7 @@ def built(config):
 def images(config, registry, tag):
     services = built(config)
     for name, service in services.items():
-        service["image"] = f"{registry}/tripgenie-{name}:{tag}"
+        service["image"] = image_ref(registry, name, tag)
         # Container Apps runs linux/amd64 only; a laptop on Apple silicon would
         # otherwise push arm64 images Azure cannot start.
         service["platform"] = "linux/amd64"
@@ -53,16 +57,20 @@ def apps(config, registry, tag, domain):
     services = built(config)
     # A browser reaches each public service at its published host port locally,
     # and at its own HTTPS address in Azure: https://<app>.<environment domain>.
+    # Only public apps qualify; a backend's loopback port has no cloud address.
     by_port = {
         str(p["published"]): name
         for name, s in services.items()
+        if is_public(name)
         for p in s.get("ports", [])
     }
 
     def cloud(value):
+        # Any other localhost URL (a host AI service, say) is left as it is: in
+        # Azure it simply fails to connect, which is what "disabled" means there.
         return re.sub(
             r"http://localhost:(\d+)",
-            lambda m: f"https://{by_port[m[1]]}.{domain}",
+            lambda m: f"https://{by_port[m[1]]}.{domain}" if m[1] in by_port else m[0],
             value,
         )
 
@@ -78,7 +86,7 @@ def apps(config, registry, tag, domain):
         result.append(
             {
                 "name": name,
-                "image": f"{registry}/tripgenie-{name}:{tag}",
+                "image": image_ref(registry, name, tag),
                 "port": port_of(service),
                 "external": is_public(name),
                 "env": dict(sorted(env.items())),

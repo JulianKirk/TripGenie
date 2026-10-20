@@ -67,5 +67,6 @@ Cost: the twelve internal apps run one replica each, about US$2 a day while
 deployed. Frontends scale to zero.
 
 ```bash
-bash scripts/deploy/azure/cleanup.sh
+bash scripts/deploy/azure/cleanup.sh   # then rerun gh-secrets-setup.sh before the next deploy:
+                                      # CI's roles are scoped to the deleted resource group
 ```

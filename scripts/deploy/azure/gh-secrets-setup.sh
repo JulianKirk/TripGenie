@@ -15,6 +15,7 @@ set -e
 export MSYS_NO_PATHCONV=1
 
 IDENTITY_GROUP="${IDENTITY_GROUP:-rg-tripgenie-github}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-rg-tripgenie}"
 IDENTITY_NAME="tripgenie-github-oidc"
 LOCATION="${LOCATION:-australiaeast}"
 
@@ -40,7 +41,19 @@ if [ -z "$SUBSCRIPTION_ID" ]; then
     exit 1
 fi
 
+# Lab 11 lets CI register these; CI's identity here can only act inside the
+# deployment resource group, so the subscription owner registers them once.
+for PROVIDER in Microsoft.App Microsoft.OperationalInsights Microsoft.ContainerRegistry; do
+    az provider register --namespace "$PROVIDER" --wait
+done
+
 az group create --name "$IDENTITY_GROUP" --location "$LOCATION" -o none
+# Only when missing: `az group create` on an existing group wipes its tags,
+# which hold env-setup.sh's deployment names.
+if [ "$(az group exists --name "$RESOURCE_GROUP")" != "true" ]; then
+    az group create --name "$RESOURCE_GROUP" --location "$LOCATION" -o none
+fi
+RG_SCOPE=$(az group show --name "$RESOURCE_GROUP" --query id -o tsv)
 CLIENT_ID=$(az identity create --name "$IDENTITY_NAME" --resource-group "$IDENTITY_GROUP" --query clientId -o tsv)
 PRINCIPAL_ID=$(az identity show --name "$IDENTITY_NAME" --resource-group "$IDENTITY_GROUP" --query principalId -o tsv)
 echo "Fetched subscription ID, tenant ID, and client ID from Azure."
@@ -55,9 +68,10 @@ OWNER_ID=$(gh api "repos/${REPO_SLUG}" --jq '.owner.id')
 REPO_ID=$(gh api "repos/${REPO_SLUG}" --jq '.id')
 REPO_SUBJECT="repo:${OWNER_NAME}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}"
 
-# Two trusted subjects: the main branch, and the `production` environment the
-# deploy job runs in (a job with an environment presents that subject instead).
-for SUFFIX in ref:refs/heads/main environment:production; do
+# Only the `production` environment is trusted: the deploy job runs in it, so a
+# token is issued only after its required reviewer approves. Trusting a branch
+# too would let any job on it sign in without that approval.
+for SUFFIX in environment:production; do
     FED_CRED_NAME="github-$(echo "$SUFFIX" | tr ':/' '--')"
     az identity federated-credential create \
       --name "$FED_CRED_NAME" \
@@ -70,27 +84,36 @@ for SUFFIX in ref:refs/heads/main environment:production; do
 done
 
 # Checked on every run: an earlier run may have created the identity but failed
-# before granting roles.
-for ROLE in "Contributor" "User Access Administrator"; do
-    EXISTING=$(az role assignment list --assignee "$PRINCIPAL_ID" --role "$ROLE" --scope "/subscriptions/$SUBSCRIPTION_ID" --query "[0].id" -o tsv 2>/dev/null || true)
-    if [ -z "$EXISTING" ]; then
-        # A fresh identity can take a moment to reach Entra.
-        for attempt in 1 2 3 4 5; do
-            az role assignment create \
-              --assignee-object-id "$PRINCIPAL_ID" \
-              --assignee-principal-type ServicePrincipal \
-              --role "$ROLE" \
-              --scope "/subscriptions/$SUBSCRIPTION_ID" -o none && break
-            sleep 10
-        done
-        echo "Granted $ROLE role."
-    else
-        echo "$ROLE role already assigned."
-    fi
-done
+# before granting roles. Lab 11 grants these on the whole subscription; here they
+# cover only the deployment resource group, so CI cannot touch anything else.
 # User Access Administrator: Contributor alone excludes roleAssignments/write,
 # which deploy-azure.sh's `--registry-identity system` needs to grant each
 # container app AcrPull.
+for ROLE in "Contributor" "User Access Administrator"; do
+    EXISTING=$(az role assignment list --assignee "$PRINCIPAL_ID" --role "$ROLE" --scope "$RG_SCOPE" --query "[0].id" -o tsv 2>/dev/null || true)
+    if [ -n "$EXISTING" ]; then
+        echo "$ROLE role already assigned."
+        continue
+    fi
+    # A fresh identity can take a moment to reach Entra.
+    GRANTED=""
+    for attempt in 1 2 3 4 5; do
+        if az role assignment create \
+          --assignee-object-id "$PRINCIPAL_ID" \
+          --assignee-principal-type ServicePrincipal \
+          --role "$ROLE" \
+          --scope "$RG_SCOPE" -o none; then
+            GRANTED=1
+            break
+        fi
+        sleep 10
+    done
+    if [ -z "$GRANTED" ]; then
+        echo "Could not grant $ROLE on $RESOURCE_GROUP. Are you the subscription Owner?" >&2
+        exit 1
+    fi
+    echo "Granted $ROLE role on $RESOURCE_GROUP."
+done
 
 gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO_SLUG" --body "$SUBSCRIPTION_ID"
 gh secret set AZURE_TENANT_ID --repo "$REPO_SLUG" --body "$TENANT_ID"

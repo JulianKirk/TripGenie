@@ -118,3 +118,22 @@ def test_renders_the_real_compose_file():
     # The image build file must itself be a valid compose project.
     images = load().images(json.loads(config), "r.io", "abc")
     assert set(images["volumes"]) >= {"student-1-db", "student-5-sqlite"}
+
+
+def test_only_public_ports_map_to_cloud_addresses():
+    config = json.loads(json.dumps(CONFIG))
+    config["services"]["student-1-backend"] = {
+        "build": {},
+        "ports": [{"target": 8001, "published": "18001", "host_ip": "127.0.0.1"}],
+    }
+    config["services"]["student-1-frontend"]["environment"] = {
+        "AI_URL": "http://localhost:8006",
+        "BACKEND_DEBUG_URL": "http://localhost:18001",
+    }
+    apps = {a["name"]: a for a in load().apps(config, "r.io", "abc", DOMAIN)}
+    # Unknown or internal-only ports stay as they are rather than crash the
+    # render or point a browser at an app it can never reach.
+    assert apps["student-1-frontend"]["env"] == {
+        "AI_URL": "http://localhost:8006",
+        "BACKEND_DEBUG_URL": "http://localhost:18001",
+    }

@@ -18,11 +18,6 @@ if [[ -z "$ENV_NAME" || -z "$LOCATION" ]]; then
   exit 1
 fi
 
-if az containerapp env show --name "$ENV_NAME" --resource-group "$RESOURCE_GROUP" -o none 2>/dev/null; then
-  echo "Container Apps environment $ENV_NAME already exists."
-  exit 0
-fi
-
 # Step 2: Create Container Apps environment
 # Lab 11 runs `az containerapp env create`. On this subscription that creates an
 # "express" environment, even with --enable-workload-profiles, and express has
@@ -30,12 +25,17 @@ fi
 # deploy-azure.sh needs. The CLI has no flag for the mode, so this asks the API
 # for a standard (WorkloadProfiles) environment directly. Its built-in
 # Consumption profile is the same pay-per-second compute and free grant.
-echo "Creating Container Apps environment..."
 ENV_ID="/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.App/managedEnvironments/$ENV_NAME"
-az rest --method put --url "https://management.azure.com${ENV_ID}?api-version=2026-07-01" -o none \
-  --body "{\"location\": \"$LOCATION\", \"properties\": {
-    \"environmentMode\": \"WorkloadProfiles\",
-    \"workloadProfiles\": [{\"name\": \"Consumption\", \"workloadProfileType\": \"Consumption\"}]}}"
+if az containerapp env show --name "$ENV_NAME" --resource-group "$RESOURCE_GROUP" -o none 2>/dev/null; then
+  # Still waited on below: a rerun after a timeout may find it provisioning.
+  echo "Container Apps environment $ENV_NAME already exists."
+else
+  echo "Creating Container Apps environment..."
+  az rest --method put --url "https://management.azure.com${ENV_ID}?api-version=2026-07-01" -o none \
+    --body "{\"location\": \"$LOCATION\", \"properties\": {
+      \"environmentMode\": \"WorkloadProfiles\",
+      \"workloadProfiles\": [{\"name\": \"Consumption\", \"workloadProfileType\": \"Consumption\"}]}}"
+fi
 
 # A first standard environment can take 15+ minutes; wait up to 30.
 for i in $(seq 1 120); do
