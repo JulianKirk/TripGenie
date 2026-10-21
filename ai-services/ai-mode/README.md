@@ -142,14 +142,25 @@ time for several inference rounds (Student 4 defaults to 210 seconds).
 ### `POST /generate-plain`
 
 Accepts the same request body as `/generate` and returns the same response
-envelope, but makes exactly one model call with no tools. It never contacts MCP,
-does not need MCP running, and always returns `"tools": []`. When `schema` is
+envelope, but makes exactly one model call with no tools. By default it never
+contacts MCP, does not need MCP running, and always returns `"tools": []`. When `schema` is
 supplied, that call is grammar-constrained to the schema and the answer is
 validated against it. Use it when the caller already owns the context, as
 the shared RAG server does for grounded answers. A model tool request, an empty
 answer or a schema-invalid answer returns `502 BAD_GATEWAY`. A provider timeout
 returns `504 DEPENDENCY_TIMEOUT`, and plain-generation errors carry no `tools`
 trace.
+
+Set `"tool_catalogue": true` when the model must reason about the tools without
+running them, as the multi-agent Planner does. AI-Mode then discovers the full
+MCP catalogue exactly as `/generate` does (`tools/list` only, never
+`tools/call`) and appends each tool's name, description and argument schema to
+the system message as reference text. The tools are not offered as callable
+functions, so the single call stays schema-constrained and `tools` is still
+`[]`. This mode needs MCP running and returns `503 DEPENDENCY_UNAVAILABLE`
+when it is not. The catalogue adds about 20,000 characters of model input; it
+counts toward `AI_MODE_AGENT_CONTEXT_CHARS`, not `AI_MODE_MAX_PROMPT_CHARS`.
+`/generate` rejects the field with `422`, because it always sends the catalogue.
 The complete MCP schemas are sent on every tool-capable round. Health checks and
 embeddings retain the existing SDK methods. Native chat uses the pinned SDK's
 lower-level `_request` helper because its high-level `chat()` tool serializer drops

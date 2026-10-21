@@ -11,7 +11,7 @@ service.
 
 | Agent | Does | AI-Mode call |
 | --- | --- | --- |
-| Planner | Writes the plan: goal, steps, required evidence, tools, success criteria | `/generate-plain` + plan schema |
+| Planner | Writes the plan: goal, steps, required evidence, tools, success criteria | `/generate-plain` + plan schema + `tool_catalogue` (sees every MCP tool's description and arguments; cannot run them) |
 | Worker | Carries out the plan with the feature's own prompt and MCP tools | `/generate` (model-directed MCP tool loop) + the feature's schema |
 | Checks | Schema, tool grounding, allowed tools, no writes, tool evidence | none (deterministic) |
 | Reviewer | Judges the result against the plan, evidence and checks; lists risks | `/generate-plain` + review schema |

@@ -67,6 +67,11 @@ def test_each_agent_uses_the_right_ai_mode_endpoint(
         "worker": "/generate",
         "reviewer": "/generate-plain",
     }
+    # Only the Planner asks AI-Mode for the MCP catalogue; it cannot run tools.
+    catalogue = {
+        call["agent"]: call["body"].get("tool_catalogue") for call in fake.calls
+    }
+    assert catalogue == {"planner": True, "worker": None, "reviewer": None}
 
 
 def test_the_planner_sees_the_task_but_only_allowed_tools_survive(

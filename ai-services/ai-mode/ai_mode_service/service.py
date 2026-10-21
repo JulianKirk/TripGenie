@@ -63,6 +63,17 @@ class AiModeService:
         self, payload: GenerateRequest, *, use_tools: bool = True
     ) -> GenerateResponsePayload:
         self._validate_payload_bounds(payload)
+        if use_tools and payload.tool_catalogue:
+            raise validation_error(
+                VALIDATION_ERROR_MESSAGE,
+                [
+                    {
+                        "field": "tool_catalogue",
+                        "issue": "applies only to /generate-plain; /generate "
+                        "always discovers the MCP catalogue",
+                    },
+                ],
+            )
         resolved_model = self._resolve_model(payload.model)
         run_id = f"aimode_{uuid4().hex[:12]}"
         correlation_id = _normalise_correlation_id(payload.correlation_id, run_id)
@@ -84,7 +95,9 @@ class AiModeService:
                     payload, resolved_model, correlation_id
                 )
             else:
-                response = await self._agent.generate_plain(payload, resolved_model)
+                response = await self._agent.generate_plain(
+                    payload, resolved_model, correlation_id
+                )
                 tools = []
         except ApiError as exc:
             _log_stage(

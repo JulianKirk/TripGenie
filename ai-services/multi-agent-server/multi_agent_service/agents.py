@@ -1,9 +1,11 @@
 """Planner, Worker and Reviewer agents: three roles over the AI-Mode gateway.
 
 Each agent is one bounded AI-Mode call with its own versioned system prompt
-and response schema. The Planner and Reviewer never touch tools; the Worker
-runs AI-Mode's model-directed MCP tool loop, so the evidence it gathers is the
-real tool trace rather than the model's account of it.
+and response schema. The Planner sees AI-Mode's discovered MCP catalogue
+(descriptions and argument schemas) but cannot run tools; the Reviewer never
+sees tools; the Worker runs AI-Mode's model-directed MCP tool loop, so the
+evidence it gathers is the real tool trace rather than the model's account of
+it.
 """
 
 from __future__ import annotations
@@ -156,6 +158,10 @@ class Agents:
             system=self._planner_system,
             schema=PLAN_SCHEMA,
             use_tools=False,
+            # AI-Mode appends the MCP catalogue it discovers, as reference text,
+            # so the plan can name real tools and arguments without the Planner
+            # running the tool loop.
+            tool_catalogue=True,
             timeout=self._settings.planner_timeout_seconds,
             run_id=run_id,
             correlation_id=correlation_id,
@@ -378,6 +384,7 @@ class Agents:
         correlation_id: str,
         feature: str,
         strict_json: bool = True,
+        tool_catalogue: bool = False,
     ) -> StageResult:
         started_at = utc_now()
         clock = time.perf_counter()
@@ -397,6 +404,7 @@ class Agents:
                 metadata=metadata,
                 use_tools=use_tools,
                 timeout=timeout,
+                tool_catalogue=tool_catalogue,
             )
         except AiModeError as exc:
             step = Step(

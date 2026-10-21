@@ -30,6 +30,14 @@ The constraints already in place:
    Reviewer each make one `/generate-plain` call with their own versioned
    prompt and response schema. The Worker makes one `/generate` call, so it
    uses the same MCP catalogue, limits and traces as every other feature.
+   The Planner sets `tool_catalogue: true`: AI-Mode discovers the MCP
+   catalogue exactly as for `/generate` and appends the tool names,
+   descriptions and argument schemas to its system message as reference
+   text, without offering them as callable functions. The Planner can then
+   name real tools and arguments without the tool loop, which would let it
+   execute tools and lose the plan's schema-constrained reply. Tool
+   definitions are never copied into multi-agent prompts; MCP stays their
+   only source.
 2. **Deterministic checks sit between the Worker and the Reviewer**: the
    feature's output schema, grounding of every declared id against successful
    tool results from that feature's source, allowed tools only, no write
