@@ -44,10 +44,18 @@ The constraints already in place:
    tools, and at least one successful tool call. A failed check stops the
    Reviewer approving and triggers the one permitted revision, so a model's
    opinion is never the only safeguard.
+   A revision goes back to the Planner, not only the Worker. Most live
+   failures were tool calls with wrong arguments (for example an integer sent
+   as a string), which AI-Mode rejects; with llama3.1:8b the model rarely
+   corrects them inside the tool loop and the Worker's call fails. That
+   failure is reviewed rather than ending the run, and the Planner gets the
+   rejected calls and the review so it can correct the plan against the tool
+   schemas. Only model failures (`BAD_GATEWAY`) are retried; outages and
+   timeouts are not, and an attempt that ran a write tool is never repeated.
 3. **Runs are asynchronous.** `POST /runs` returns `202` and the workflow runs
    in the background; callers poll `GET /runs/{id}`. The state machine is
    `planning → working → reviewing → awaiting_human → completed | rejected`,
-   with `failed` from any stage.
+   with `reviewing → planning` on a revision and `failed` from any stage.
 4. **Human review is the only way a run finishes successfully.** The server
    never writes feature data. Changes the Worker proposes are returned as
    `proposed_actions`; after a human approves (or partially accepts), the
