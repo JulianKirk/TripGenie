@@ -188,7 +188,7 @@ The full table of deployed settings is in
 | Not deployed | AI-Mode, Ollama, MCP server, RAG server, Multi-Agent Server, agentic loop | Absent from the 18-app list |
 | Disabled by flag | RAG and MCP for Students 1, 3, 4 and 5; Student 4 assistant (`AI_ASSISTANT_ENABLED=false`) | Deployed settings read 21 Oct. Student 1 RAG returned **503 live** in the run. The others were not live-tested. |
 | Disabled because no URL is set | Student 2 AI-assisted search and RAG (`AI_MODE_URL` and `RAG_URL` absent) | Deployed settings read 21 Oct. Not live-tested. |
-| **Unreachable, not disabled** | Student 1 AI suggestions, Student 3 AI transport suggestions, Student 5 AI budget analysis | Each AI-Mode URL is `http://host.docker.internal:8006`, which does not exist in Azure. Student 1's backend would treat a *blank* URL as disabled, but the deployed URL is not blank. These paths were not called live. |
+| **Unreachable, not disabled** | Student 1 AI suggestions, Student 3 AI transport suggestions, Student 5 AI budget analysis | Each AI-Mode URL is `http://host.docker.internal:8006`, which does not exist in Azure. Student 1's backend would treat a *blank* URL as disabled, but the deployed URL is not blank. These paths were not called live. [PR #190](https://github.com/YourNightmareIsOver/TripGenie/pull/190) would blank Student 1's URL in the cloud and drive AI UI visibility from `/api/ai-features`. That PR is **open, not merged or deployed**, and it is not part of `188951a`. |
 | Still visible in the UI | AI, RAG and MCP controls on the Student 2–5 pages | Shown in the [screenshots](cloud-evidence/live-checks-2026-10-21.md). Hiding them is not deployed. |
 
 ## Ownership
@@ -230,8 +230,11 @@ The full table of deployed settings is in
   `frontend_min_replicas=1`. The first portal load on 21 Oct took 17.6 s. The
   internal apps keep one replica.
 - **Direct AI paths are unreachable rather than disabled** (see
-  [AI-off configuration](#ai-off-configuration)). A blank-URL cloud setting
-  and UI hiding are being prepared separately. Neither is merged or deployed.
+  [AI-off configuration](#ai-off-configuration)). For Student 1,
+  [PR #190](https://github.com/YourNightmareIsOver/TripGenie/pull/190) would
+  blank the cloud URL and hide the AI controls. It is open but not merged or
+  deployed. Taking effect would need both the merge and a newly authorised
+  deployment. Students 3 and 5 have no equivalent change.
 - **Observability.** Two Log Analytics workspaces exist, but the environment
   sends no app logs to them. Evidence comes from workflow logs and artifacts.
 - **Leftover role assignments.** The AcrPull grants for the removed system
@@ -280,5 +283,6 @@ review below exists.
 4. **Optional improvements:**
    - automated CRUD for Students 2–5 in the cloud smoke test;
    - live proof that the three direct AI-Mode paths report "unavailable", or
-     disabling them by configuration;
+     disabling them by configuration (for Student 1, merge and deploy
+     [PR #190](https://github.com/YourNightmareIsOver/TripGenie/pull/190));
    - a later cost query once billing settles.
