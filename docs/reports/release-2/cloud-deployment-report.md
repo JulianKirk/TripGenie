@@ -53,10 +53,11 @@ frontends still build `http://` asset and form URLs behind Azure's HTTPS proxy.
 
 The 21 Oct inspection found every public frontend serving HTTP 200. However,
 five apps had a failed latest revision while an older working revision
-continued to serve. A fix is in progress, and a reviewed workflow run is still
-required before the release decision.
+continued to serve. The cause has been identified and a fix is in progress, but
+it is not yet merged or deployed. A reviewed workflow run is still required
+before the release decision.
 
-*(About 310 words. Update the last paragraph once the pending evidence
+*(About 320 words. Update the last paragraph once the pending evidence
 exists.)*
 
 ## Azure reference architecture
@@ -119,6 +120,12 @@ flowchart LR
   aimode --- mcp
   aimode --- rag
 ```
+
+The diagram shows the **currently deployed** identity model, in which each
+app has a system-assigned identity with AcrPull. A pending change would
+replace this with a dedicated, registry-only AcrPull user-assigned identity
+(see [Limitations](#known-limitations)). That change is not merged or
+deployed.
 
 Unlike the original #171 task list, the deployed system uses **ACR, not GHCR**.
 It has **no Azure Files mount**: the storage account is unused and the
@@ -196,14 +203,26 @@ CRUD for Students 2 to 5.
   `frontend_min_replicas=1`. The internal apps keep one replica.
 - **HTTP URLs behind the HTTPS proxy.** Student frontends still emit
   `http://` asset, form and HTMX URLs derived from `request.url_for`. This
-  risks mixed-content blocking or redirects. The fix is in progress on branch
-  `aadirai31/cloud-deployment-prerequisites`. It is not merged or deployed.
+  risks mixed-content blocking or redirects. A fix is proposed but not merged
+  or deployed. A cloud-only `TRIPGENIE_FORWARDED_ALLOW_IPS=*` setting would
+  feed `FORWARDED_ALLOW_IPS` on the five student frontends, so they trust
+  Azure's forwarded HTTPS headers. Locally they would keep trusting only the
+  loopback address.
 - **Failed latest revisions.** On 21 Oct 2026, five apps had a failed or
   unhealthy latest revision running Microsoft's quickstart placeholder image:
   `shared-database`, `student-1-frontend`, `student-3-frontend`,
   `student-4-backend` and `student-4-frontend`. Older revisions with the real
   application were still serving. This deployment is not a clean final
   release.
+  - **Cause.** With Azure CLI 2.91.0, `az containerapp create
+    --registry-identity system` first deploys the quickstart image and then
+    applies a second update that restores the real image. Azure activity logs
+    from earlier laptop deployments show that the second update never happened
+    for these apps.
+  - **Proposed fix, not merged or deployed.** A dedicated, registry-only
+    AcrPull user-assigned identity would remove the quickstart step. A bounded
+    readiness check would then confirm that each app's latest revision runs
+    the requested image and is ready.
 - **Image tags.** The current images are tagged `latest` by the earlier
   script-driven deploy. The workflow tags images with `github.sha`, but no
   workflow run has produced SHA-tagged images yet.
@@ -222,8 +241,10 @@ It can only be recorded after the pending evidence below exists.
 ## Pending evidence
 
 1. A successful `cloud-deployment.yml` run, with its link, log and
-   `cloud-deployment-evidence` artifact. This depends on the prerequisite fixes
-   landing first.
+   `cloud-deployment-evidence` artifact. The prerequisite fixes must be merged
+   first: the registry identity and revision readiness check, the proxy
+   header setting, and a bootstrap script that uses the canonical repository
+   and its authoritative OIDC subject prefix.
 2. A clean revision state for all 18 apps, including the five listed above.
 3. Screenshots of each of the six public frontends at their Azure URLs.
 4. CRUD evidence in the cloud for every feature. The smoke test covers only
