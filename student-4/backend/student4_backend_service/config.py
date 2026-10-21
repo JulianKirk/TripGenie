@@ -33,10 +33,13 @@ class Settings:
     rag_url: str | None = None
     rag_enabled: bool = False
     rag_timeout: float = DEFAULT_RAG_TIMEOUT
+    multi_agent_enabled: bool = False
+    multi_agent_url: str = "http://127.0.0.1:8013"
+    multi_agent_timeout: float = 15.0
     service_name: str = "student-4-backend"
 
     def __post_init__(self) -> None:
-        for name in ("agent_timeout", "rag_timeout"):
+        for name in ("agent_timeout", "rag_timeout", "multi_agent_timeout"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 message = f"{name} must be positive and finite"
                 raise ValueError(message)
@@ -52,6 +55,15 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         return cls(
+            multi_agent_enabled=_flag("STUDENT4_BACKEND_MULTI_AGENT_ENABLED"),
+            multi_agent_url=os.environ.get(
+                "STUDENT4_BACKEND_MULTI_AGENT_BASE_URL", "http://127.0.0.1:8013"
+            )
+            .strip()
+            .rstrip("/"),
+            multi_agent_timeout=float(
+                os.environ.get("STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS", "15")
+            ),
             ai_assistant_prompt_asset=os.environ.get(
                 "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
             ),

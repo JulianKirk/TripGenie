@@ -773,3 +773,65 @@ returns an available total of `0.00`.
 An unknown trip or activity remains `404`. Invalid upstream data returns `502`,
 and an unavailable itinerary or database service returns `503`, so downstream
 budgets never treat an unknown activity cost as zero.
+
+## Smart Planner (Release 2)
+
+Smart Planner is a recommendation workflow, separate from `/activity/assistant`
+and `/activity/knowledge`. The frontend calls this backend; only the backend
+calls the shared host-run Multi-Agent Server. No activity persistence changes
+are needed. The shared server owns run storage, Planner/Worker/Reviewer execution
+and human decision history.
+
+| Method | Path | Success | Purpose |
+| --- | --- | --- | --- |
+| POST | `/activity/planner/runs` | 202 | Start with `{question, trip_id?}` (same validation as the assistant). |
+| GET | `/activity/planner/runs/{run_id}` | 200 | Fetch progress and grounded activity cards. |
+| POST | `/activity/planner/runs/{run_id}/review` | 200 | Record approval, correction or rejection. |
+| GET | `/activity/planner/runs/{run_id}/history` | 200 | Download `{run, history}` evidence. |
+
+Run IDs match `magent_` followed by twelve lowercase hexadecimal digits. Reads,
+reviews and history reject runs belonging to other features. This is feature
+scoping, not user authentication; the application has no per-user run ownership.
+
+Start/get/review return `{run, answer}`. `run` contains status, plan, stage outputs,
+checks, reviewer findings and the human decision. `answer` uses the existing
+assistant presentation contract (`parts`, resolved `activities`, tool traces,
+unavailable IDs and an optional error). Cards must be grounded in successful
+Student 4 tool results from this run and are resolved through ordinary activity
+lookup. Invalid model results retain their traces but do not produce cards.
+
+A decision body is `{decision: "approve"|"correct"|"reject", reviewer, notes?}`.
+`reviewer` is 1–60 characters and notes at most 1000. `correct` also requires
+`corrected_result` using the Worker shape:
+`{"type":"final","parts":[{"type":"text","text":"Edited recommendation"}]}`.
+Activity parts may be retained only with IDs grounded in the run's tool results.
+Correction records a human edit; it does not restart the agents. Failed blocking
+checks prevent approval/correction through this backend; rejection remains possible.
+Partial acceptance is not exposed because this workflow proposes no executable actions.
+
+Approval does not write activities, book anything, or add itinerary items. The
+ordinary Add to itinerary control remains available on accepted cards. Prompts
+instruct the Worker to use read-only tools, but the shared server's `allowed_tools`
+and `no_writes` checks are retrospective, not a pre-execution authorization gate.
+Tool traces remain visible: rejection cannot undo any tool calls already executed.
+
+Configuration (read by backend `Settings.from_env`):
+
+| Variable | Standalone default | Compose default |
+| --- | --- | --- |
+| `STUDENT4_BACKEND_MULTI_AGENT_ENABLED` | `false` | `false` |
+| `STUDENT4_BACKEND_MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013` | `http://host.docker.internal:8013` |
+| `STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` | `15` |
+
+Enable locally with `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=true` in the environment
+passed to Compose, then recreate the Student 4 backend. Start the host services
+using the shared Multi-Agent Server README. Keep the flag false in CI and the
+cloud baseline. Polling uses short requests rather than holding a request open
+for the whole model workflow. Readiness continues to depend on the database,
+not optional AI services.
+
+Disabled/unavailable returns `503`, a dependency timeout `504`, invalid upstream
+data `502`, unknown/other-feature runs `404`, and a run no longer awaiting review
+`409`. Invalid local input is `400`. Requests are never automatically retried:
+a timeout after start/review may have an ambiguous outcome; refresh a known run
+before submitting again. A failed run still returns its recorded partial evidence.

@@ -106,3 +106,14 @@ def test_agentic_overlay_preserves_single_activity_backend_binding() -> None:
     assert len(ports) == 1
     assert ports[0]["host_ip"] == "127.0.0.1"
     assert ports[0]["published"] == "18008"
+
+
+def test_student_4_planner_is_host_only_and_opt_in() -> None:
+    services = compose_services()
+    env = services["student-4-backend"]["environment"]
+    assert (
+        env["STUDENT4_BACKEND_MULTI_AGENT_BASE_URL"]
+        == "http://host.docker.internal:8013"
+    )
+    assert env["STUDENT4_BACKEND_MULTI_AGENT_ENABLED"] == "false"
+    assert not any("multi-agent" in name for name in services)

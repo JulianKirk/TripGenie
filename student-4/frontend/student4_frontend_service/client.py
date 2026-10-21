@@ -19,6 +19,7 @@ from .models import (
     ItinerarySelectionWrite,
     TripDirectory,
 )
+from .planner_models import Evidence, PlannerResponse
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -173,6 +174,46 @@ class BackendClient:
             request_timeout=self._settings.ai_timeout,
         )
 
+    async def start_planner(self, body: dict[str, object]) -> PlannerResponse:
+        return await self._request(
+            "POST",
+            "/activity/planner/runs",
+            PlannerResponse,
+            {202},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
+    async def planner(self, run_id: str) -> PlannerResponse:
+        return await self._request(
+            "GET",
+            f"/activity/planner/runs/{run_id}",
+            PlannerResponse,
+            {200},
+            request_timeout=self._settings.ai_timeout,
+        )
+
+    async def review_planner(
+        self, run_id: str, body: dict[str, object]
+    ) -> PlannerResponse:
+        return await self._request(
+            "POST",
+            f"/activity/planner/runs/{run_id}/review",
+            PlannerResponse,
+            {200},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
+    async def planner_history(self, run_id: str) -> Evidence:
+        return await self._request(
+            "GET",
+            f"/activity/planner/runs/{run_id}/history",
+            Evidence,
+            {200},
+            request_timeout=self._settings.ai_timeout,
+        )
+
     async def _request(
         self,
         method: str,
@@ -202,7 +243,10 @@ class BackendClient:
                 payload: object = response.json()
             except ValueError:
                 payload = None
-            if 400 <= response.status_code < 500:
+            if (
+                path.startswith("/activity/planner/runs")
+                or 400 <= response.status_code < 500
+            ):
                 detail = _safe_client_detail(payload) or INVALID_REQUEST
             raise FrontendError(
                 kind="backend_error",

@@ -114,3 +114,56 @@ section, repository path and excerpt, plus request, RAG run and retrieval
 details. Insufficient context, disabled RAG and failures render explicit
 banners without sources, and state that browsing remains available. The trip
 picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).
+
+## Smart Planner
+
+The existing AI activity assistant has a third radio option, **Smart Planner**,
+using the same question box and optional trip selector. Activity tools (MCP) and
+Activity guides (RAG) keep their existing behaviour.
+
+The new flow is:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Activities frontend
+    participant API as Activities backend
+    participant MA as Shared Multi-Agent Server
+    User->>UI: Select Smart Planner and ask
+    UI->>API: Start activity planning run
+    API->>MA: POST /runs (Activities prompt/schema/grounding)
+    MA-->>UI: Run ID via backend
+    Note over MA: Planner → Worker with MCP → Reviewer
+    loop While planning, working or reviewing
+        UI->>API: Poll run every 2 seconds
+        API->>MA: GET /runs/{id}
+        MA-->>UI: Progress and evidence via backend
+    end
+    UI-->>User: Draft activity cards, checks, reviewer findings
+    User->>UI: Approve, correct or reject
+    UI->>API: Submit human decision
+    API->>MA: POST /runs/{id}/review
+    MA-->>UI: Recorded decision via backend
+```
+
+`/planner/{run_id}` is a bookmarkable full page and an HTMX partial endpoint.
+Active runs poll; awaiting-human and terminal states stop polling. Refresh links
+work without JavaScript. Errors stop automatic polling and provide a refresh
+link for known runs. A start timeout has no guaranteed run ID: do not assume the
+server did not start work or automatically resubmit it.
+
+The results show the plan, tool calls/results, stage attempts, validation checks,
+reviewer findings and human decision. Model text is escaped. Draft cards do not
+show Add to itinerary. Approval records acceptance only; accepted cards expose
+the existing manual itinerary control. Correction edits recommendation text and
+selects which grounded cards to keep; it is not an agent rerun. Failed blocking
+checks must be resolved in a new run or the proposal rejected.
+
+`/planner/{run_id}/history` downloads JSON evidence through the backend. History
+includes the run, stage outputs/tool traces and coordination/audit events. It is
+not published automatically. Reviewer names are user-entered audit labels, not
+verified identities. No per-user authentication is introduced by this feature.
+
+Local and cloud-disabled states remain understandable without breaking catalogue
+browsing. See the backend API documentation for the opt-in configuration and the
+shared service's limitation around retrospective tool checks.

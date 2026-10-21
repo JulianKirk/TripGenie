@@ -21,6 +21,8 @@ from .itinerary_routes import router as itinerary_router
 from .knowledge import ask as ask_knowledge
 from .knowledge_models import KnowledgeRequest, KnowledgeResponse
 from .location_client import LocationClient
+from .planner_client import PlannerClient
+from .planner_routes import router as planner_router
 from .rag_client import RagClient
 from .schemas import HealthResponse
 
@@ -37,6 +39,7 @@ def create_app(
     location_transport: httpx.AsyncBaseTransport | None = None,
     itinerary_transport: httpx.AsyncBaseTransport | None = None,
     ai_mode_transport: httpx.AsyncBaseTransport | None = None,
+    multi_agent_transport: httpx.AsyncBaseTransport | None = None,
     rag_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
@@ -49,12 +52,14 @@ def create_app(
         app.state.itinerary = ItineraryClient(settings, transport=itinerary_transport)
         app.state.ai = AiModeClient(settings, transport=ai_mode_transport)
         app.state.rag = RagClient(settings, transport=rag_transport)
+        app.state.planner = PlannerClient(settings, transport=multi_agent_transport)
         yield
         await app.state.db.aclose()
         await app.state.location.aclose()
         await app.state.itinerary.aclose()
         await app.state.ai.aclose()
         await app.state.rag.aclose()
+        await app.state.planner.aclose()
 
     app = FastAPI(title="Activities and Attractions Backend Service", lifespan=lifespan)
     errors.register(app)
@@ -110,6 +115,7 @@ def create_app(
     ) -> KnowledgeResponse:
         return await ask_knowledge(payload, settings, request.app.state.rag)
 
+    app.include_router(planner_router)
     app.include_router(itinerary_router)
     app.include_router(activity_router)
     return app
