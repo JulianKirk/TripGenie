@@ -130,6 +130,10 @@ services:
       STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Whose X-Forwarded-Proto uvicorn believes when building page URLs.
+      # Uvicorn's own default locally; the cloud profile trusts the HTTPS
+      # ingress (see shared/configuration/.env.cloud).
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "8081:8081"
     depends_on:
@@ -239,6 +243,8 @@ services:
       AI_TIMEOUT: "210"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     depends_on:
       - student-2-backend
 
@@ -283,6 +289,8 @@ services:
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
     depends_on:
@@ -445,6 +453,8 @@ services:
       AI_TIMEOUT: "${STUDENT4_FRONTEND_AI_TIMEOUT:-210}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "${STUDENT4_FRONTEND_HOST_PORT:-8084}:8084"
     depends_on:
@@ -510,6 +520,8 @@ services:
       STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS: "230"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "8085:8085"
     depends_on:

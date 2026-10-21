@@ -95,7 +95,7 @@ def apps(config, registry, tag, domain):
     return result
 
 
-def az_args(app, environment, registry, frontend_min_replicas):
+def az_args(app, environment, registry, registry_identity, frontend_min_replicas):
     port = str(app["port"])
     if app["external"]:
         ingress = ["--ingress", "external", "--target-port", port]
@@ -109,7 +109,13 @@ def az_args(app, environment, registry, frontend_min_replicas):
         min_replicas = "1"
     args = ["--name", app["name"], "--environment", environment]
     args += ["--image", app["image"], *ingress]
-    args += ["--registry-server", registry, "--registry-identity", "system"]
+    # A user-assigned identity, never `system`: with `system` the CLI first
+    # replaces the app with a placeholder image and no registry, then puts the
+    # real image back in a second request. Every redeploy then staged a failed
+    # placeholder revision, and the app was left on it whenever the second
+    # request never came. This identity already holds AcrPull, so one request
+    # deploys the real image.
+    args += ["--registry-server", registry, "--registry-identity", registry_identity]
     args += ["--workload-profile-name", "Consumption"]
     args += ["--cpu", "0.25", "--memory", "0.5Gi"]
     # ponytail: one replica and no Azure Files share, as in Lab 11. A database
@@ -128,6 +134,9 @@ def main():
     parser.add_argument("--registry", required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--environment", help="apps: Container Apps environment")
+    parser.add_argument(
+        "--registry-identity", help="apps: identity resource ID with AcrPull"
+    )
     parser.add_argument("--domain", help="apps: the environment's default domain")
     parser.add_argument("--frontend-min-replicas", default="0")
     args = parser.parse_args()
@@ -136,7 +145,13 @@ def main():
         json.dump(images(config, args.registry, args.tag), sys.stdout, indent=2)
         return
     for app in apps(config, args.registry, args.tag, args.domain):
-        line = az_args(app, args.environment, args.registry, args.frontend_min_replicas)
+        line = az_args(
+            app,
+            args.environment,
+            args.registry,
+            args.registry_identity,
+            args.frontend_min_replicas,
+        )
         print(shlex.join(line))
 
 
