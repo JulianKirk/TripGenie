@@ -95,7 +95,9 @@ class Settings:
             rag_url=os.environ.get("STUDENT4_BACKEND_RAG_BASE_URL") or None,
             rag_enabled=_flag("STUDENT4_BACKEND_RAG_ENABLED"),
             rag_timeout=float(
-                os.environ.get("STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS", DEFAULT_RAG_TIMEOUT)
+                os.environ.get(
+                    "STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS", DEFAULT_RAG_TIMEOUT
+                )
             ),
         )
 

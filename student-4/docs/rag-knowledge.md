@@ -1,11 +1,12 @@
 # Activity guides through shared RAG
 
-The activity assistant panel has two modes. **Activity tools (MCP)** is the
+The activity assistant panel has three modes. **Activity tools (MCP)** is the
 existing shared-generation assistant described in
 [the MCP assistant guide](mcp-assistant.md). **Activity guides (RAG)** answers
 questions using only indexed TripGenie activity knowledge. Each answer shows
 source citations and a confidence category, or a notice that there is not enough
-context to answer.
+context to answer. **Smart Planner** provides the separate reviewed activity
+recommendation workflow described in [the frontend guide](frontend-service.md#smart-planner).
 
 ```text
 Browser ─▶ Student 4 frontend ─▶ Student 4 backend ─▶ host RAG :8011 ─▶ host AI-Mode :8006 ─▶ Ollama

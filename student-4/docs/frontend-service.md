@@ -157,7 +157,8 @@ reviewer findings and human decision. Model text is escaped. Draft cards do not
 show Add to itinerary. Approval records acceptance only; accepted cards expose
 the existing manual itinerary control. Correction edits recommendation text and
 selects which grounded cards to keep; it is not an agent rerun. Failed blocking
-checks must be resolved in a new run or the proposal rejected.
+checks disable approval and correction; they must be resolved in a new run or the
+proposal rejected. Rejection remains available.
 
 `/planner/{run_id}/history` downloads JSON evidence through the backend. History
 includes the run, stage outputs/tool traces and coordination/audit events. It is

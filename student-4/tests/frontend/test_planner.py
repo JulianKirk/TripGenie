@@ -145,3 +145,22 @@ def test_evidence_download_contains_run_and_events() -> None:
         response.headers["content-disposition"] == f'attachment; filename="{RUN}.json"'
     )
     assert response.json()["history"][0]["actor"] == "human:Julian"
+
+
+def test_failed_checks_disable_acceptance_but_keep_rejection_available() -> None:
+    data = response_data()
+    data["run"]["checks"] = [
+        {
+            "name": "tool_evidence",
+            "passed": False,
+            "blocking": True,
+            "detail": "No tool call succeeded",
+        }
+    ]
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=data))
+    with TestClient(create_app(Settings(), transport=transport)) as client:
+        response = client.get(f"/planner/{RUN}")
+    assert 'value="approve" disabled' in response.text
+    assert 'value="correct" disabled' in response.text
+    assert 'value="reject">Reject' in response.text
+    assert "cannot be accepted" in response.text
