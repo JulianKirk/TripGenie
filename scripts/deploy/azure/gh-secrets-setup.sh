@@ -32,6 +32,35 @@ fi
 REPO_URL=$(git config --get remote.origin.url)
 REPO_SLUG=$(echo "$REPO_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
 
+# The remote may still use a name the repo had before a rename or transfer;
+# GitHub redirects it, so ask for the repo's current name.
+if ! REPO=$(gh api "repos/${REPO_SLUG}" --jq '.full_name') || [ -z "$REPO" ]; then
+    echo "Could not look up GitHub repository '${REPO_SLUG}'." >&2
+    exit 1
+fi
+[ "$REPO" = "$REPO_SLUG" ] || echo "Remote '${REPO_SLUG}' is now '${REPO}'; using '${REPO}'."
+
+# The OIDC subject is whatever GitHub issues, so ask GitHub rather than build it
+# from names: an immutable subject (repos created after 2026-07-15, TripGenie
+# included) carries owner and repo IDs as well, and either kind changes when the
+# repo is renamed or transferred. Only the default template is supported: a
+# custom one (include_claim_keys) puts other claims in front of the environment.
+if ! OIDC=$(gh api "repos/${REPO}/actions/oidc/customization/sub" \
+    --jq '"\(.use_default)\t\(.sub_claim_prefix // "")"'); then
+    echo "Could not read the OIDC subject template of '${REPO}'." >&2
+    exit 1
+fi
+IFS=$'\t' read -r USE_DEFAULT REPO_SUBJECT <<< "$OIDC"
+if [ "$USE_DEFAULT" != "true" ]; then
+    echo "'${REPO}' uses a custom OIDC subject template; this script supports only the default one." >&2
+    exit 1
+fi
+if [[ "$REPO_SUBJECT" != repo:* ]]; then
+    echo "GitHub reported no OIDC subject prefix for '${REPO}'; not guessing one." >&2
+    exit 1
+fi
+echo "GitHub OIDC subject prefix: '${REPO_SUBJECT}'."
+
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 
@@ -58,16 +87,8 @@ CLIENT_ID=$(az identity create --name "$IDENTITY_NAME" --resource-group "$IDENTI
 PRINCIPAL_ID=$(az identity show --name "$IDENTITY_NAME" --resource-group "$IDENTITY_GROUP" --query principalId -o tsv)
 echo "Fetched subscription ID, tenant ID, and client ID from Azure."
 
-# Re-synced on every run (not just at creation) because GitHub's OIDC subject claim
-# changes if the repo/owner is renamed or transferred. Repos created after
-# 2026-07-15 (TripGenie included) use GitHub's immutable subject format, with
-# owner/repo IDs instead of names, so the IDs are fetched live.
-OWNER_NAME=$(echo "$REPO_SLUG" | cut -d/ -f1)
-REPO_NAME=$(echo "$REPO_SLUG" | cut -d/ -f2)
-OWNER_ID=$(gh api "repos/${REPO_SLUG}" --jq '.owner.id')
-REPO_ID=$(gh api "repos/${REPO_SLUG}" --jq '.id')
-REPO_SUBJECT="repo:${OWNER_NAME}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}"
-
+# Re-synced on every run (not just at creation): the subject changes if the repo
+# is renamed or transferred.
 # Only the `production` environment is trusted: the deploy job runs in it, so a
 # token is issued only after its required reviewer approves. Trusting a branch
 # too would let any job on it sign in without that approval.
@@ -87,8 +108,7 @@ done
 # before granting roles. Lab 11 grants these on the whole subscription; here they
 # cover only the deployment resource group, so CI cannot touch anything else.
 # User Access Administrator: Contributor alone excludes roleAssignments/write,
-# which deploy-azure.sh's `--registry-identity system` needs to grant each
-# container app AcrPull.
+# which build-images.sh needs to grant the apps' registry identity AcrPull.
 for ROLE in "Contributor" "User Access Administrator"; do
     EXISTING=$(az role assignment list --assignee "$PRINCIPAL_ID" --role "$ROLE" --scope "$RG_SCOPE" --query "[0].id" -o tsv 2>/dev/null || true)
     if [ -n "$EXISTING" ]; then
@@ -115,9 +135,9 @@ for ROLE in "Contributor" "User Access Administrator"; do
     echo "Granted $ROLE role on $RESOURCE_GROUP."
 done
 
-gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO_SLUG" --body "$SUBSCRIPTION_ID"
-gh secret set AZURE_TENANT_ID --repo "$REPO_SLUG" --body "$TENANT_ID"
-gh secret set AZURE_CLIENT_ID --repo "$REPO_SLUG" --body "$CLIENT_ID"
+gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO" --body "$SUBSCRIPTION_ID"
+gh secret set AZURE_TENANT_ID --repo "$REPO" --body "$TENANT_ID"
+gh secret set AZURE_CLIENT_ID --repo "$REPO" --body "$CLIENT_ID"
 echo "Pushed AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID, and AZURE_CLIENT_ID to GitHub Actions secrets."
 
 echo "=== GitHub Secrets Setup Complete ==="
