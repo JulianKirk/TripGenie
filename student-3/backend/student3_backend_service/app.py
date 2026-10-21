@@ -16,6 +16,10 @@ from .config import Settings
 from .errors import VALIDATION_ERROR_MESSAGE, ApiError, bad_request, validation_error
 from .mcp_client import McpClient
 from .models import (
+    AgentReviewRequest,
+    AgentRunIdentifier,
+    AgentRunRequest,
+    AgentRunView,
     AvailabilityStatus,
     DataEnvelope,
     DeleteResponse,
@@ -41,6 +45,7 @@ from .models import (
     TripIdentifier,
     TripTransportSummary,
 )
+from .multi_agent_client import MultiAgentClient
 from .rag_client import RagClient
 from .service import BackendService
 from .trips_client import TripsApiClient
@@ -326,6 +331,7 @@ def create_app(
     ai_transport: httpx.BaseTransport | None = None,
     mcp_transport: httpx.BaseTransport | None = None,
     rag_transport: httpx.BaseTransport | None = None,
+    multi_agent_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
 
@@ -336,6 +342,10 @@ def create_app(
         ai_client = AiModeClient(app_settings, transport=ai_transport)
         mcp_client = McpClient(app_settings, transport=mcp_transport)
         rag_client = RagClient(app_settings, transport=rag_transport)
+        multi_agent_client = MultiAgentClient(
+            app_settings,
+            transport=multi_agent_transport,
+        )
         app.state.database_client = client
         app.state.trips_client = trips_client
         app.state.ai_client = ai_client
@@ -348,6 +358,7 @@ def create_app(
             ai_client,
             mcp_client,
             rag_client,
+            multi_agent_client,
         )
         try:
             yield
@@ -357,6 +368,7 @@ def create_app(
             ai_client.close()
             mcp_client.close()
             rag_client.close()
+            multi_agent_client.close()
 
     app = FastAPI(
         title="TripGenie Student 3 Transport API",
@@ -498,6 +510,45 @@ def create_app(
         threadpool worker rather than the event loop.
         """
         return envelope(service.rag_query(payload))
+
+    # Release 2 multi-agent planning. Sync like the MCP routes: the Worker's
+    # transport tools read this service back while a run is in progress.
+    @router.post(
+        "/transport-options/agent-runs",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AgentRunView],
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def start_agent_run(
+        payload: AgentRunRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """Start a Planner -> Worker -> Reviewer run; poll it until it waits."""
+        return envelope(service.start_agent_run(payload))
+
+    @router.get(
+        "/transport-options/agent-runs/{run_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AgentRunView],
+    )
+    def get_agent_run(
+        run_id: AgentRunIdentifier,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        return envelope(service.get_agent_run(run_id))
+
+    @router.post(
+        "/transport-options/agent-runs/{run_id}/review",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AgentRunView],
+    )
+    def review_agent_run(
+        run_id: AgentRunIdentifier,
+        payload: AgentReviewRequest,
+        service: ServiceDep,
+    ) -> dict[str, object]:
+        """The human decision. Approved suggestions are added to the trip."""
+        return envelope(service.review_agent_run(run_id, payload))
 
     # Release 1 MCP. Sync handlers on purpose: they block a threadpool worker,
     # not the event loop. The shared transport tools read this same service's
