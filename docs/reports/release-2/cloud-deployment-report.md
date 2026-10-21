@@ -193,6 +193,7 @@ CRUD for Students 2 to 5.
 | Student 1 post-commit endpoint tests | [Run 39569785539](https://github.com/YourNightmareIsOver/TripGenie/actions/runs/39569785539), artifact `student-1-endpoint-test-evidence`: 7 passed, 0 failed, 0 errors, 0 skipped. [Report](student-1-post-commit-testing-report.md) | Available |
 | Student 1 pre-commit security scan | [Report](student-1-pre-commit-security-report.md) (#182) | Historical scan evidence. It does not prove that every commit on every machine was scanned. |
 | Live resource state | Read-only inspection, 21 Oct 2026 (this report) | Observation only. No exported log is committed. |
+| Cloud prerequisite fixes | [PR #187](https://github.com/YourNightmareIsOver/TripGenie/pull/187) | Open. All GitHub checks pass. Not merged or deployed. |
 
 ## Known limitations
 
@@ -203,8 +204,9 @@ CRUD for Students 2 to 5.
   `frontend_min_replicas=1`. The internal apps keep one replica.
 - **HTTP URLs behind the HTTPS proxy.** Student frontends still emit
   `http://` asset, form and HTMX URLs derived from `request.url_for`. This
-  risks mixed-content blocking or redirects. A fix is proposed but not merged
-  or deployed. A cloud-only `TRIPGENIE_FORWARDED_ALLOW_IPS=*` setting would
+  risks mixed-content blocking or redirects. A fix is proposed in
+  [PR #187](https://github.com/YourNightmareIsOver/TripGenie/pull/187) but not
+  merged or deployed. A cloud-only `TRIPGENIE_FORWARDED_ALLOW_IPS=*` setting would
   feed `FORWARDED_ALLOW_IPS` on the five student frontends, so they trust
   Azure's forwarded HTTPS headers. Locally they would keep trusting only the
   loopback address.
@@ -219,7 +221,9 @@ CRUD for Students 2 to 5.
     applies a second update that restores the real image. Azure activity logs
     from earlier laptop deployments show that the second update never happened
     for these apps.
-  - **Proposed fix, not merged or deployed.** A dedicated, registry-only
+  - **Proposed fix in
+    [PR #187](https://github.com/YourNightmareIsOver/TripGenie/pull/187), not
+    merged or deployed.** A dedicated, registry-only
     AcrPull user-assigned identity would remove the quickstart step. A bounded
     readiness check would then confirm that each app's latest revision runs
     the requested image and is ready.
@@ -241,10 +245,12 @@ It can only be recorded after the pending evidence below exists.
 ## Pending evidence
 
 1. A successful `cloud-deployment.yml` run, with its link, log and
-   `cloud-deployment-evidence` artifact. The prerequisite fixes must be merged
-   first: the registry identity and revision readiness check, the proxy
-   header setting, and a bootstrap script that uses the canonical repository
-   and its authoritative OIDC subject prefix.
+   `cloud-deployment-evidence` artifact. The prerequisite fixes in
+   [PR #187](https://github.com/YourNightmareIsOver/TripGenie/pull/187) must
+   be merged and deployed first. That PR's GitHub checks pass, but it is not
+   merged or deployed. It covers the registry identity and revision readiness
+   check, the proxy header setting, and a bootstrap script that uses the
+   canonical repository and its authoritative OIDC subject prefix.
 2. A clean revision state for all 18 apps, including the five listed above.
 3. Screenshots of each of the six public frontends at their Azure URLs.
 4. CRUD evidence in the cloud for every feature. The smoke test covers only
