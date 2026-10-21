@@ -111,7 +111,10 @@ docker compose --env-file shared/configuration/.env.example up --build -d
 Containers start and pass their health checks whether or not the host services
 are running; an unreachable host service disables only the AI, RAG, or MCP
 feature. To turn Student 1's RAG or MCP client off explicitly, set
-`STUDENT1_BACKEND_RAG_ENABLED=false` or `STUDENT1_BACKEND_MCP_ENABLED=false`
+`STUDENT1_BACKEND_RAG_ENABLED=false` or `STUDENT1_BACKEND_MCP_ENABLED=false`;
+Student 1's Release 2 "Plan my itinerary" is `STUDENT1_BACKEND_MULTI_AGENT_ENABLED`
+(Compose default `true`; `false` in Student 1 CI and `.env.cloud`, where it
+answers `503 MULTI_AGENT_DISABLED`)
 (Student 5 has matching `STUDENT5_BACKEND_*` flags, and Student 3 has
 `STUDENT3_BACKEND_MCP_ENABLED` and `STUDENT3_BACKEND_RAG_ENABLED`). Student 2
 turns its RAG guide off with an empty `STUDENT2_BACKEND_RAG_URL=` and its MCP
@@ -155,6 +158,26 @@ python -m multi_agent_service run --feature student-3 \
   --task "What is the cheapest way to get from Melbourne to Sydney for two travellers?"
 python -m multi_agent_service export <run_id> --format markdown
 ```
+
+Student 1's "Plan my itinerary" through its own backend (Compose up, the
+Multi-Agent Server running; replace the trip id with one of yours). The start
+returns `202` at once; poll until `status` is `awaiting_human`, then decide:
+
+```bash
+trip=http://127.0.0.1:18001/api/trips/trip_2026_melbourne_food_trail
+curl -s -X POST -H 'Content-Type: application/json' -d '{}' "$trip/multi-agent-plan"
+curl -s "$trip/multi-agent-plan/<run_id>"          # repeat until awaiting_human
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"decision":"partial","accepted_items":[0]}' "$trip/multi-agent-plan/<run_id>/review"
+curl -s "$trip/itinerary-items" | grep "item_<run_id>_"   # what was saved
+```
+
+The same run is visible from `ai-services/multi-agent-server` with
+`python -m multi_agent_service export <run_id> --format markdown`. In the
+browser, open the trip at `http://localhost:8081`, use **Plan my itinerary**,
+and try each of approve, save corrections, save selected and reject on
+separate runs. Record only what a real run produced; Release 2 evidence goes
+under `docs/reports/release-2/`.
 
 Then open the portal at `http://localhost:8080` and exercise each feature's
 AI, MCP, and RAG flows.

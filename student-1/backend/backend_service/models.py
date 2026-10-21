@@ -613,3 +613,217 @@ class McpOptionsResponse(StrictModel):
     tool_summary: McpToolSummary
     ungrounded_dropped: int
     write_tools_called: list[str]
+
+
+# --- Release 2 multi-agent itinerary planner ------------------------------
+# The shared Multi-Agent Server's run record, as much of it as this service
+# reads (ai-services/multi-agent-server/multi_agent_service/models.py).
+
+DEFAULT_MULTI_AGENT_REQUEST = (
+    "Plan my itinerary: draft up to 8 itinerary items for this trip from its "
+    "saved accommodation, transport and activities."
+)
+MultiAgentRunStatus = Literal[
+    "planning",
+    "working",
+    "reviewing",
+    "awaiting_human",
+    "completed",
+    "rejected",
+    "failed",
+]
+MultiAgentDecision = Literal["approve", "correct", "partial", "reject"]
+MultiAgentRunIdentifier = Annotated[
+    str, StringConstraints(pattern=r"^magent_[0-9a-f]{12}$")
+]
+
+
+class MultiAgentPlan(UpstreamModel):
+    goal: str
+    steps: list[str] = Field(default_factory=list)
+    required_evidence: list[str] = Field(default_factory=list)
+    tools_to_use: list[str] = Field(default_factory=list)
+    success_criteria: list[str] = Field(default_factory=list)
+
+
+class MultiAgentToolTrace(UpstreamModel):
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["success", "error", "rejected"]
+    duration_ms: int = 0
+    result: dict[str, Any] | None = None
+    error: str | None = None
+
+
+class MultiAgentStep(UpstreamModel):
+    agent: Literal["planner", "worker", "reviewer"]
+    attempt: int
+    status: Literal["completed", "failed"]
+    duration_ms: int = 0
+    model: str | None = None
+    tools: list[MultiAgentToolTrace] = Field(default_factory=list)
+    error: dict[str, str] | None = None
+
+
+class MultiAgentCheck(UpstreamModel):
+    name: str
+    passed: bool
+    blocking: bool
+    detail: str
+
+
+class MultiAgentReview(UpstreamModel):
+    verdict: Literal["approve", "revise", "reject"]
+    summary: str
+    issues: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class MultiAgentHumanReview(UpstreamModel):
+    decision: MultiAgentDecision
+    reviewer: str
+    notes: str | None = None
+    decided_at: str
+    accepted_actions: list[int] = Field(default_factory=list)
+
+
+class MultiAgentRun(UpstreamModel):
+    run_id: MultiAgentRunIdentifier
+    feature: str
+    task: str
+    trip_id: str | None = None
+    correlation_id: str
+    status: MultiAgentRunStatus
+    created_at: str
+    updated_at: str
+    attempts: int = 0
+    plan: MultiAgentPlan | None = None
+    steps: list[MultiAgentStep] = Field(default_factory=list)
+    checks: list[MultiAgentCheck] = Field(default_factory=list)
+    review: MultiAgentReview | None = None
+    result: dict[str, Any] | None = None
+    proposed_actions: list[dict[str, Any]] = Field(default_factory=list)
+    human: MultiAgentHumanReview | None = None
+    final_result: dict[str, Any] | None = None
+    approved_actions: list[dict[str, Any]] = Field(default_factory=list)
+    error: dict[str, str] | None = None
+
+
+class PlanDraftItem(StrictModel):
+    """One itinerary item the Worker drafted; `source_id` names its evidence.
+
+    The limits match OUTPUT_SCHEMA in multi_agent_plan.py, so a correction
+    accepted here is one the Multi-Agent Server accepts too.
+    """
+
+    date: IsoDate
+    start_time: IsoTime | None = None
+    end_time: IsoTime | None = None
+    title: Annotated[str, StringConstraints(min_length=1, max_length=120)]
+    location: Annotated[str, StringConstraints(max_length=200)] | None = None
+    description: Annotated[str, StringConstraints(max_length=400)] | None = None
+    category: ItineraryCategory
+    source_id: Annotated[str, StringConstraints(max_length=64)] | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_draft_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_draft_time(cls, value: str | None) -> str | None:
+        return value if value is None else _validate_iso_time(value)
+
+    @field_validator("location", "description", "source_id")
+    @classmethod
+    def normalise_draft_text(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class MultiAgentPlanRequest(StrictModel):
+    request: Annotated[str, StringConstraints(min_length=1, max_length=500)] = (
+        DEFAULT_MULTI_AGENT_REQUEST
+    )
+
+
+class MultiAgentReviewRequest(StrictModel):
+    decision: MultiAgentDecision
+    reviewer: Annotated[str, StringConstraints(min_length=1, max_length=60)] = (
+        "traveller"
+    )
+    notes: Annotated[str, StringConstraints(max_length=1000)] | None = None
+    # `correct`: the full corrected list. `partial`: indexes of the proposed
+    # items accepted. Both are ignored for the other decisions.
+    corrected_items: list[PlanDraftItem] | None = Field(default=None, max_length=8)
+    accepted_items: list[Annotated[int, Field(ge=0)]] | None = Field(
+        default=None, max_length=10
+    )
+
+
+class PlanItemView(StrictModel):
+    index: int
+    date: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    title: str | None = None
+    location: str | None = None
+    description: str | None = None
+    category: str | None = None
+    source_id: str | None = None
+    # Blocking: the item cannot be saved as it is. Warnings: the human decides.
+    problems: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PlanStepView(StrictModel):
+    agent: str
+    attempt: int
+    status: str
+    duration_ms: int
+    model: str | None = None
+    tools: list[McpToolCall] = Field(default_factory=list)
+    error: str | None = None
+
+
+class PlanSavedItem(StrictModel):
+    index: int
+    id: str
+    title: str | None = None
+
+
+class PlanFailedItem(StrictModel):
+    index: int
+    id: str
+    code: str
+    message: str
+
+
+class PlanPersistence(StrictModel):
+    outcome: Literal["saved", "partially_saved", "nothing_saved", "rejected"]
+    saved: list[PlanSavedItem] = Field(default_factory=list)
+    already_saved: list[PlanSavedItem] = Field(default_factory=list)
+    failed: list[PlanFailedItem] = Field(default_factory=list)
+
+
+class MultiAgentPlanResponse(StrictModel):
+    trip_id: str
+    run_id: str
+    correlation_id: str
+    status: MultiAgentRunStatus
+    active: bool
+    request: str
+    created_at: str
+    updated_at: str
+    attempts: int
+    plan: MultiAgentPlan | None = None
+    steps: list[PlanStepView] = Field(default_factory=list)
+    checks: list[MultiAgentCheck] = Field(default_factory=list)
+    review: MultiAgentReview | None = None
+    summary: str | None = None
+    items: list[PlanItemView] = Field(default_factory=list)
+    approved_items: list[PlanItemView] = Field(default_factory=list)
+    human: MultiAgentHumanReview | None = None
+    error: dict[str, str] | None = None
+    persistence: PlanPersistence | None = None

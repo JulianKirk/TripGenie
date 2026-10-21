@@ -8,13 +8,18 @@
   {% endif %}
 {%- endmacro %}
 
-{# Shared failure state for the RAG and MCP panels. Every code gets its own
-   headline so a disabled feature, a slow model and a broken response never
-   look alike -- and none of them looks like an empty success. #}
-{% macro panel_error(error, heading_id) -%}
+{# Shared failure state for the RAG, MCP and multi-agent panels. Every code
+   gets its own headline so a disabled feature, a slow model and a broken
+   response never look alike -- and none of them looks like an empty success.
+   `overrides` lets a panel word a shared code for its own subject. #}
+{% macro panel_error(error, heading_id, overrides={}) -%}
   {% set headlines = {
     "RAG_DISABLED": "Knowledge base answers are not enabled in this environment.",
     "MCP_DISABLED": "The MCP trip assistant is not enabled in this environment.",
+    "MULTI_AGENT_DISABLED": "The multi-agent itinerary planner is not enabled in this environment.",
+    "MULTI_AGENT_NOT_REVIEWABLE": "This plan is not ready for a decision.",
+    "MULTI_AGENT_ALREADY_DECIDED": "This plan was already decided; the recorded decision stands.",
+    "RUN_LIMIT_REACHED": "The multi-agent server is busy with other plans. Try again shortly.",
     "MCP_TOOLS_NOT_USED": "The AI assistant answered without using any trip tools, so its answer was not shown. Try again.",
     "AI_OUTPUT_INVALID": "The AI assistant's answer was not in the expected format. Try again.",
     "INDEX_NOT_READY": "The knowledge base index is not ready yet. Try again shortly.",
@@ -25,7 +30,7 @@
     "NOT_FOUND": "This trip could not be found.",
   } %}
   <div class="banner {% if error.code.endswith('_DISABLED') %}banner--info{% else %}banner--error{% endif %}" role="alert">
-    <p id="{{ heading_id }}" data-autofocus><strong>{{ headlines.get(error.code, "The request failed.") }}</strong></p>
+    <p id="{{ heading_id }}" data-autofocus><strong>{{ overrides.get(error.code) or headlines.get(error.code, "The request failed.") }}</strong></p>
     <p>{{ error.message }}</p>
     {% if error.details %}
       <ul class="banner__list">

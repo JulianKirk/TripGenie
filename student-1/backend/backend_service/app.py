@@ -36,6 +36,10 @@ from .models import (
     ItineraryItemUpdate,
     McpOptionsRequest,
     McpOptionsResponse,
+    MultiAgentPlanRequest,
+    MultiAgentPlanResponse,
+    MultiAgentReviewRequest,
+    MultiAgentRunIdentifier,
     RagQueryRequest,
     RagQueryResponse,
     TransportIdentifier,
@@ -54,6 +58,7 @@ from .models import (
     TripTransportDetail,
     TripUpdate,
 )
+from .multi_agent_client import MultiAgentClient
 from .rag_client import RagClient
 from .service import BackendService
 from .transport_client import TransportClient
@@ -253,6 +258,7 @@ def create_app(
     activity_transport: httpx.BaseTransport | None = None,
     transport_api_transport: httpx.BaseTransport | None = None,
     rag_transport: httpx.BaseTransport | None = None,
+    multi_agent_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     resolved_database_transport = database_transport or transport
@@ -274,6 +280,7 @@ def create_app(
             transport=transport_api_transport,
         )
         rag = RagClient(app_settings, transport=rag_transport)
+        multi_agent = MultiAgentClient(app_settings, transport=multi_agent_transport)
         app.state.backend_service = BackendService(
             client,
             AiSuggestionService(ai_mode_client, app_settings),
@@ -283,6 +290,7 @@ def create_app(
             transport_options,
             rag,
             ai_mode_client,
+            multi_agent,
         )
         try:
             yield
@@ -293,6 +301,7 @@ def create_app(
             activities.close()
             transport_options.close()
             rag.close()
+            multi_agent.close()
 
     app = FastAPI(
         title="TripGenie Student 1 Backend API",
@@ -456,6 +465,48 @@ def create_app(
         service: BackendService = Depends(get_service),
     ) -> dict[str, object]:
         return envelope(await service.mcp_options(trip_id, payload))
+
+    # The multi-agent routes are sync: each makes one short call to the
+    # Multi-Agent Server (runs are asynchronous there) on a threadpool
+    # worker, so the event loop stays free for the MCP server's
+    # trip_get_context call back into GET /api/trips/{trip_id}.
+    @router.post(
+        "/trips/{trip_id}/multi-agent-plan",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[MultiAgentPlanResponse],
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def start_multi_agent_plan(
+        trip_id: TripIdentifier,
+        payload: MultiAgentPlanRequest | None = None,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.start_multi_agent_plan(trip_id, payload))
+
+    @router.get(
+        "/trips/{trip_id}/multi-agent-plan/{run_id}",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[MultiAgentPlanResponse],
+    )
+    def get_multi_agent_plan(
+        trip_id: TripIdentifier,
+        run_id: MultiAgentRunIdentifier,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.get_multi_agent_plan(trip_id, run_id))
+
+    @router.post(
+        "/trips/{trip_id}/multi-agent-plan/{run_id}/review",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[MultiAgentPlanResponse],
+    )
+    def review_multi_agent_plan(
+        trip_id: TripIdentifier,
+        run_id: MultiAgentRunIdentifier,
+        payload: MultiAgentReviewRequest,
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.review_multi_agent_plan(trip_id, run_id, payload))
 
     @router.patch(
         "/trips/{trip_id}",

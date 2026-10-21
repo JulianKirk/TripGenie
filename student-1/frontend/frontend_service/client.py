@@ -14,6 +14,7 @@ from .models import (
     ErrorEnvelope,
     ItineraryItemRecord,
     McpOptionsResponse,
+    MultiAgentPlanResponse,
     RagQueryResponse,
     TripDetail,
     TripRecord,
@@ -37,6 +38,7 @@ class BackendApiClient:
         self._ai_timeout = settings.ai_timeout_seconds
         self._rag_timeout = settings.rag_timeout_seconds
         self._mcp_timeout = settings.mcp_timeout_seconds
+        self._multi_agent_timeout = settings.multi_agent_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -123,6 +125,57 @@ class BackendApiClient:
             response_type=DataEnvelope[McpOptionsResponse],
             malformed_message="Backend API returned a malformed trip assistant reply.",
             timeout=self._mcp_timeout,
+        )
+        return envelope.data
+
+    async def start_multi_agent_plan(
+        self,
+        trip_id: str,
+        request: str | None = None,
+    ) -> MultiAgentPlanResponse:
+        # A blank request is left out so the backend's default applies.
+        return await self._multi_agent_plan(
+            "POST",
+            f"/trips/{trip_id}/multi-agent-plan",
+            json={"request": request} if request else {},
+            expected_statuses={202},
+        )
+
+    async def get_multi_agent_plan(
+        self, trip_id: str, run_id: str
+    ) -> MultiAgentPlanResponse:
+        return await self._multi_agent_plan(
+            "GET", f"/trips/{trip_id}/multi-agent-plan/{run_id}"
+        )
+
+    async def review_multi_agent_plan(
+        self,
+        trip_id: str,
+        run_id: str,
+        payload: dict[str, object],
+    ) -> MultiAgentPlanResponse:
+        return await self._multi_agent_plan(
+            "POST",
+            f"/trips/{trip_id}/multi-agent-plan/{run_id}/review",
+            json=payload,
+        )
+
+    async def _multi_agent_plan(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, object] | None = None,
+        expected_statuses: set[int] | None = None,
+    ) -> MultiAgentPlanResponse:
+        envelope = await self._request_model(
+            method,
+            f"{self._api_prefix}{path}",
+            json=json,
+            expected_statuses=expected_statuses or {200},
+            response_type=DataEnvelope[MultiAgentPlanResponse],
+            malformed_message="Backend API returned a malformed multi-agent plan.",
+            timeout=self._multi_agent_timeout,
         )
         return envelope.data
 

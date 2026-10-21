@@ -411,6 +411,116 @@ class McpOptionsResponse(StrictModel):
     write_tools_called: list[str]
 
 
+# Release 2 multi-agent "Plan my itinerary": the backend's view of one run.
+MultiAgentRunStatus = Literal[
+    "planning",
+    "working",
+    "reviewing",
+    "awaiting_human",
+    "completed",
+    "rejected",
+    "failed",
+]
+MULTI_AGENT_RUN_ID_PATTERN = r"^magent_[0-9a-f]{12}$"
+
+
+class MultiAgentPlan(StrictModel):
+    goal: str
+    steps: list[str]
+    required_evidence: list[str]
+    tools_to_use: list[str]
+    success_criteria: list[str]
+
+
+class MultiAgentStep(StrictModel):
+    agent: str
+    attempt: int
+    status: str
+    duration_ms: int
+    model: str | None = None
+    tools: list[McpToolCall]
+    error: str | None = None
+
+
+class MultiAgentCheck(StrictModel):
+    name: str
+    passed: bool
+    blocking: bool
+    detail: str
+
+
+class MultiAgentReview(StrictModel):
+    verdict: Literal["approve", "revise", "reject"]
+    summary: str
+    issues: list[str]
+    risks: list[str]
+    recommendations: list[str]
+
+
+class MultiAgentHumanReview(StrictModel):
+    decision: Literal["approve", "correct", "partial", "reject"]
+    reviewer: str
+    notes: str | None = None
+    decided_at: str
+    accepted_actions: list[int]
+
+
+class MultiAgentPlanItem(StrictModel):
+    index: int
+    date: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    title: str | None = None
+    location: str | None = None
+    description: str | None = None
+    category: str | None = None
+    source_id: str | None = None
+    problems: list[str]
+    warnings: list[str]
+
+
+class MultiAgentSavedItem(StrictModel):
+    index: int
+    id: str
+    title: str | None = None
+
+
+class MultiAgentFailedItem(StrictModel):
+    index: int
+    id: str
+    code: str
+    message: str
+
+
+class MultiAgentPersistence(StrictModel):
+    outcome: Literal["saved", "partially_saved", "nothing_saved", "rejected"]
+    saved: list[MultiAgentSavedItem]
+    already_saved: list[MultiAgentSavedItem]
+    failed: list[MultiAgentFailedItem]
+
+
+class MultiAgentPlanResponse(StrictModel):
+    trip_id: TripIdentifier
+    run_id: Annotated[str, StringConstraints(pattern=MULTI_AGENT_RUN_ID_PATTERN)]
+    correlation_id: str
+    status: MultiAgentRunStatus
+    active: bool
+    request: str
+    created_at: str
+    updated_at: str
+    attempts: int
+    plan: MultiAgentPlan | None = None
+    steps: list[MultiAgentStep]
+    checks: list[MultiAgentCheck]
+    review: MultiAgentReview | None = None
+    summary: str | None = None
+    items: list[MultiAgentPlanItem]
+    approved_items: list[MultiAgentPlanItem]
+    human: MultiAgentHumanReview | None = None
+    error: dict[str, str] | None = None
+    persistence: MultiAgentPersistence | None = None
+
+
 class BackendDependencyPayload(StrictModel):
     status: ShortText
     service: ShortText

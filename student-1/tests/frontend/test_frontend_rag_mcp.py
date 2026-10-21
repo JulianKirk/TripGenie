@@ -206,7 +206,8 @@ def test_trip_page_renders_both_panels_alongside_existing_sections(client) -> No
     assert 'placeholder="Australia"' in text
     assert 'hx-target="#rag-panel"' in text
     assert 'hx-target="#mcp-panel"' in text
-    assert text.count('hx-disabled-elt="find button"') == 2
+    # RAG, MCP and the Release 2 multi-agent planner's start form.
+    assert text.count('hx-disabled-elt="find button"') == 3
     assert 'id="rag-loading"' in text and 'id="mcp-loading"' in text
     # Existing Release 0 sections and the AI-Mode panel are still there.
     for heading in (

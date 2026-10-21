@@ -43,6 +43,16 @@ from .models import (
     McpOptionsRequest,
     McpOptionsResponse,
     McpToolCall,
+    MultiAgentPlanRequest,
+    MultiAgentPlanResponse,
+    MultiAgentReviewRequest,
+    MultiAgentRun,
+    PlanDraftItem,
+    PlanFailedItem,
+    PlanItemView,
+    PlanPersistence,
+    PlanSavedItem,
+    PlanStepView,
     RagQueryRequest,
     RagQueryResponse,
     TripAccommodationDetail,
@@ -59,6 +69,18 @@ from .models import (
     TripTransportDetail,
     TripTransportRecord,
     TripUpdate,
+)
+from .multi_agent_client import MultiAgentClient
+from .multi_agent_plan import (
+    ACTIVE_STATUSES,
+    CORRELATION_PREFIX,
+    DECIDED_STATUSES,
+    FEATURE,
+    PROMPT_ASSET,
+    build_run_request,
+    clashes,
+    plan_item_id,
+    plan_item_prefix,
 )
 from .prompt_assets import load_prompt_asset
 from .rag_client import RagClient
@@ -157,6 +179,107 @@ def _result_ids(value: object) -> Iterator[str]:
             yield from _result_ids(item)
 
 
+def _owns_run(run: MultiAgentRun, trip_id: str) -> bool:
+    """A run is this trip's plan only if this feature started it for it."""
+    return (
+        run.feature == FEATURE
+        and run.trip_id == trip_id
+        and run.correlation_id.startswith(CORRELATION_PREFIX)
+    )
+
+
+def _owned_run(
+    multi_agent: MultiAgentClient, trip_id: str, run_id: str
+) -> MultiAgentRun:
+    run = multi_agent.get(run_id)
+    if run.run_id != run_id or not _owns_run(run, trip_id):
+        # The same answer as an unknown run: another trip's or another
+        # feature's run is not disclosed.
+        raise ApiError(
+            status_code=404,
+            code="NOT_FOUND",
+            message="That multi-agent plan was not found.",
+            details=[{"field": "run_id", "issue": "resource does not exist"}],
+        )
+    return run
+
+
+def _run_mismatch() -> ApiError:
+    return bad_gateway(
+        "The multi-agent planner returned an invalid response.",
+        [{"field": "multi_agent", "issue": "run does not match this request"}],
+    )
+
+
+def _ensure_saveable(views: list[PlanItemView], *, field: str) -> None:
+    details = [
+        {"field": f"{field}.{view.index}", "issue": "; ".join(view.problems)}
+        for view in views
+        if view.problems
+    ]
+    if details:
+        raise validation_error(VALIDATION_ERROR_MESSAGE, details)
+
+
+def _validation_problem(error: Any) -> str:
+    location = ".".join(str(part) for part in error["loc"]) or "item"
+    return f"{location} {error['msg']}"
+
+
+def _raw_item_fields(raw: dict[str, Any]) -> dict[str, str | None]:
+    """A malformed draft, shown as far as it goes so the human can correct it."""
+    fields = (
+        "date",
+        "start_time",
+        "end_time",
+        "title",
+        "location",
+        "description",
+        "category",
+        "source_id",
+    )
+    return {
+        name: raw[name][:400] if isinstance(raw.get(name), str) else None
+        for name in fields
+    }
+
+
+def _save_outcome(saved: int, failed: int) -> str:
+    if not failed:
+        return "saved"
+    return "partially_saved" if saved else "nothing_saved"
+
+
+def _saved_status(
+    run: MultiAgentRun,
+    existing: list[ItineraryItemRecord],
+) -> PlanPersistence:
+    """Read-only: which approved items are on the trip now."""
+    if run.status == "rejected" or run.human is None:
+        return PlanPersistence(outcome="rejected")
+    titles = {item.id: item.title for item in existing}
+    saved: list[PlanSavedItem] = []
+    missing: list[PlanFailedItem] = []
+    for index in run.human.accepted_actions:
+        item_id = plan_item_id(run.run_id, index)
+        if item_id in titles:
+            saved.append(PlanSavedItem(index=index, id=item_id, title=titles[item_id]))
+        else:
+            missing.append(
+                PlanFailedItem(
+                    index=index,
+                    id=item_id,
+                    code="NOT_SAVED",
+                    message="Not saved yet; submit the same decision again to retry.",
+                ),
+            )
+    return PlanPersistence(
+        outcome=_save_outcome(len(saved), len(missing)),
+        saved=saved,
+        failed=missing,
+    )
+
+
 class BackendService:
     def __init__(
         self,
@@ -168,6 +291,7 @@ class BackendService:
         transport: TransportClient | None = None,
         rag: RagClient | None = None,
         ai_mode: AiModeClient | None = None,
+        multi_agent: MultiAgentClient | None = None,
     ) -> None:
         self._client = client
         self._ai_suggestions = ai_suggestions
@@ -177,6 +301,7 @@ class BackendService:
         self._transport = transport
         self._rag = rag
         self._ai_mode = ai_mode
+        self._multi_agent = multi_agent
 
     def list_trips(
         self,
@@ -636,6 +761,446 @@ class BackendService:
             },
             ungrounded_dropped=ungrounded_dropped,
             write_tools_called=write_tools,
+        ).model_dump(mode="json")
+
+    # ------------------------------------------------ multi-agent planner
+    # Planner -> Worker -> Reviewer run on the shared Multi-Agent Server, which
+    # never writes trip data. This service starts and reads runs, validates
+    # the drafted items against its own itinerary rules, records the human
+    # decision and then saves only what the human approved, through
+    # create_itinerary_item, under ids derived from the run.
+
+    def _require_multi_agent(self) -> MultiAgentClient:
+        if not self._settings.multi_agent_enabled or self._multi_agent is None:
+            raise _disabled(
+                "MULTI_AGENT_DISABLED", "multi_agent", "The multi-agent planner"
+            )
+        return self._multi_agent
+
+    def start_multi_agent_plan(
+        self,
+        trip_id: str,
+        payload: MultiAgentPlanRequest | None,
+    ) -> dict[str, object]:
+        multi_agent = self._require_multi_agent()
+        payload = payload or MultiAgentPlanRequest()
+        detail = self.get_trip(trip_id)
+        correlation_id = f"{CORRELATION_PREFIX}{uuid4().hex[:12]}"
+        run = multi_agent.start(
+            build_run_request(
+                detail,
+                task=payload.request,
+                worker_system=load_prompt_asset(PROMPT_ASSET),
+                correlation_id=correlation_id,
+            ),
+        )
+        if run.correlation_id != correlation_id or not _owns_run(run, trip_id):
+            raise _run_mismatch()
+        logger.info(
+            "multi_agent_plan started correlation_id=%s run_id=%s trip_id=%s",
+            correlation_id,
+            run.run_id,
+            trip_id,
+        )
+        return self._plan_view(trip_id, run)
+
+    def get_multi_agent_plan(self, trip_id: str, run_id: str) -> dict[str, object]:
+        multi_agent = self._require_multi_agent()
+        self._client.get_trip(trip_id)
+        return self._plan_view(trip_id, _owned_run(multi_agent, trip_id, run_id))
+
+    def review_multi_agent_plan(
+        self,
+        trip_id: str,
+        run_id: str,
+        payload: MultiAgentReviewRequest,
+    ) -> dict[str, object]:
+        """Record the human decision, then save what it approved.
+
+        Repeating the decision already recorded retries the save: items are
+        written under `plan_item_id(run_id, index)`, so one already saved is
+        reported as such rather than written twice. A different decision on
+        a decided plan is refused; nothing here changes a recorded decision.
+        """
+        multi_agent = self._require_multi_agent()
+        trip, existing, evidence_ids = self._plan_evidence(trip_id)
+        run = _owned_run(multi_agent, trip_id, run_id)
+        if run.status == "awaiting_human":
+            body = self._review_body(run, payload, trip, existing, evidence_ids)
+            try:
+                run = multi_agent.review(run_id, body)
+            except ApiError as exc:
+                if exc.code != "RUN_NOT_AWAITING_REVIEW":
+                    raise
+                # Decided by another submission meanwhile: act on that record.
+                run = multi_agent.get(run_id)
+            if run.run_id != run_id or not _owns_run(run, trip_id):
+                raise _run_mismatch()
+        if run.status not in DECIDED_STATUSES:
+            raise ApiError(
+                status_code=409,
+                code="MULTI_AGENT_NOT_REVIEWABLE",
+                message=(
+                    f"This plan is {run.status}; only a plan awaiting review "
+                    "can take a decision."
+                ),
+                details=[{"field": "status", "issue": run.status}],
+            )
+        if run.human is None:
+            raise _run_mismatch()
+        if run.human.decision != payload.decision:
+            raise ApiError(
+                status_code=409,
+                code="MULTI_AGENT_ALREADY_DECIDED",
+                message=(
+                    f"This plan was already decided ({run.human.decision}); "
+                    "a recorded decision cannot be changed."
+                ),
+                details=[{"field": "decision", "issue": run.human.decision}],
+            )
+        persistence = self._persist_plan(run, trip, existing)
+        logger.info(
+            "multi_agent_plan decided correlation_id=%s run_id=%s trip_id=%s "
+            "decision=%s outcome=%s saved=%s already_saved=%s failed=%s",
+            run.correlation_id,
+            run.run_id,
+            trip_id,
+            run.human.decision,
+            persistence.outcome,
+            len(persistence.saved),
+            len(persistence.already_saved),
+            len(persistence.failed),
+        )
+        return self._plan_view(trip_id, run, persistence=persistence)
+
+    def _plan_evidence(
+        self,
+        trip_id: str,
+    ) -> tuple[TripRecord, list[ItineraryItemRecord], set[str]]:
+        """The trip, its items, and every id a drafted item may cite."""
+        trip = self._client.get_trip(trip_id)
+        items = self._client.list_itinerary_items(trip_id)
+        ids = {item.id for item in items}
+        ids.update(
+            row.accommodation_id
+            for row in self._client.list_trip_accommodations(trip_id)
+        )
+        ids.update(
+            row.activity_id for row in self._client.list_trip_activities(trip_id)
+        )
+        ids.update(
+            row.transport_id for row in self._client.list_trip_transport(trip_id)
+        )
+        return trip, items, ids
+
+    def _check_plan_items(
+        self,
+        entries: list[tuple[int, dict[str, Any]]],
+        *,
+        run_id: str,
+        trip: TripRecord,
+        existing: list[ItineraryItemRecord],
+        evidence_ids: set[str],
+    ) -> list[PlanItemView]:
+        """Deterministic checks on drafted items, beside the Reviewer's view.
+
+        `problems` (bad format, outside the trip, end before start) block a
+        save. `warnings` (time clashes, repeats, a source not on this trip)
+        are for the human to weigh. Items this run already saved are left out
+        of the comparison so a saved plan does not clash with itself.
+        """
+        prefix = plan_item_prefix(run_id)
+        others = [
+            item.model_dump(mode="json")
+            for item in existing
+            if not item.id.startswith(prefix)
+        ]
+        views: list[PlanItemView] = []
+        drafts: list[dict[str, Any] | None] = []
+        for index, raw in entries:
+            warnings: list[str] = []
+            try:
+                draft = PlanDraftItem.model_validate(raw).model_dump(mode="json")
+            except ValidationError as exc:
+                views.append(
+                    PlanItemView(
+                        index=index,
+                        **_raw_item_fields(raw),
+                        problems=[_validation_problem(e) for e in exc.errors()[:4]],
+                    ),
+                )
+                drafts.append(None)
+                continue
+            problems = self._item_rule_problems(draft, trip)
+            source_id = draft["source_id"]
+            if source_id is not None and source_id not in evidence_ids:
+                warnings.append(f"Source '{source_id}' is not saved on this trip.")
+            for other in others:
+                if (
+                    other["date"] == draft["date"]
+                    and str(other["title"]).casefold() == draft["title"].casefold()
+                ):
+                    warnings.append(f"Repeats '{other['title']}' already planned.")
+                elif clashes(draft, other):
+                    warnings.append(
+                        f"Overlaps '{other['title']}' at {other['start_time']}."
+                    )
+            views.append(
+                PlanItemView(index=index, **draft, problems=problems, warnings=warnings)
+            )
+            drafts.append(None if problems else draft)
+        for first in range(len(drafts)):
+            for second in range(first + 1, len(drafts)):
+                a, b = drafts[first], drafts[second]
+                if a is not None and b is not None and clashes(a, b):
+                    views[first].warnings.append(
+                        f"Overlaps drafted item {views[second].index + 1}."
+                    )
+                    views[second].warnings.append(
+                        f"Overlaps drafted item {views[first].index + 1}."
+                    )
+        return views
+
+    def _item_rule_problems(self, draft: dict[str, Any], trip: TripRecord) -> list[str]:
+        """The itinerary create rules, as problems rather than an error."""
+        record = {key: value for key, value in draft.items() if key != "source_id"}
+        try:
+            self._validate_item_record(
+                {**record, "id": "item_validation_preview", "trip_id": trip.id},
+                trip,
+            )
+        except ApiError as exc:
+            return [f"{detail['field']} {detail['issue']}" for detail in exc.details]
+        return []
+
+    def _review_body(
+        self,
+        run: MultiAgentRun,
+        payload: MultiAgentReviewRequest,
+        trip: TripRecord,
+        existing: list[ItineraryItemRecord],
+        evidence_ids: set[str],
+    ) -> dict[str, Any]:
+        """The server's review request, refused here (422, nothing recorded)
+        when the decision would approve an item this service cannot save."""
+
+        def check(entries: list[tuple[int, dict[str, Any]]]) -> list[PlanItemView]:
+            return self._check_plan_items(
+                entries,
+                run_id=run.run_id,
+                trip=trip,
+                existing=existing,
+                evidence_ids=evidence_ids,
+            )
+
+        body: dict[str, Any] = {
+            "decision": payload.decision,
+            "reviewer": payload.reviewer,
+        }
+        if payload.notes:
+            body["notes"] = payload.notes
+        proposed = list(enumerate(run.proposed_actions))
+        if payload.decision == "approve":
+            if not proposed:
+                raise validation_error(
+                    VALIDATION_ERROR_MESSAGE,
+                    [
+                        {
+                            "field": "decision",
+                            "issue": "the plan has no items; reject it",
+                        }
+                    ],
+                )
+            _ensure_saveable(check(proposed), field="items")
+        elif payload.decision == "partial":
+            indexes = sorted(set(payload.accepted_items or []))
+            if not indexes:
+                raise validation_error(
+                    VALIDATION_ERROR_MESSAGE,
+                    [{"field": "accepted_items", "issue": "select at least one item"}],
+                )
+            if indexes[-1] >= len(proposed):
+                raise validation_error(
+                    VALIDATION_ERROR_MESSAGE,
+                    [
+                        {
+                            "field": "accepted_items",
+                            "issue": f"must index the {len(proposed)} drafted item(s)",
+                        },
+                    ],
+                )
+            _ensure_saveable(
+                check([proposed[index] for index in indexes]),
+                field="accepted_items",
+            )
+            body["accepted_actions"] = indexes
+        elif payload.decision == "correct":
+            if not payload.corrected_items:
+                raise validation_error(
+                    VALIDATION_ERROR_MESSAGE,
+                    [
+                        {
+                            "field": "corrected_items",
+                            "issue": "keep at least one item, or reject the plan",
+                        },
+                    ],
+                )
+            items = [item.model_dump(mode="json") for item in payload.corrected_items]
+            _ensure_saveable(check(list(enumerate(items))), field="corrected_items")
+            summary = (run.result or {}).get("summary")
+            body["corrected_result"] = {
+                "summary": (
+                    summary[:600]
+                    if isinstance(summary, str) and summary.strip()
+                    else "Corrected by the traveller."
+                ),
+                "items": items,
+            }
+        return body
+
+    def _persist_plan(
+        self,
+        run: MultiAgentRun,
+        trip: TripRecord,
+        existing: list[ItineraryItemRecord],
+    ) -> PlanPersistence:
+        """Save the approved items one by one and report each outcome.
+
+        Each item goes through create_itinerary_item, the same validation
+        and database path as a hand-entered item. One failing does not stop
+        the rest, and the result never claims more than was saved.
+        """
+        if run.status == "rejected" or run.human is None:
+            return PlanPersistence(outcome="rejected")
+        accepted = run.human.accepted_actions
+        if len(accepted) != len(run.approved_actions):
+            raise _run_mismatch()
+        existing_ids = {item.id for item in existing}
+        saved: list[PlanSavedItem] = []
+        already: list[PlanSavedItem] = []
+        failed: list[PlanFailedItem] = []
+        for index, raw in zip(accepted, run.approved_actions, strict=True):
+            item_id = plan_item_id(run.run_id, index)
+            try:
+                draft = PlanDraftItem.model_validate(raw)
+            except ValidationError:
+                failed.append(
+                    PlanFailedItem(
+                        index=index,
+                        id=item_id,
+                        code="VALIDATION_ERROR",
+                        message="The approved item is not a valid itinerary item.",
+                    ),
+                )
+                continue
+            if item_id in existing_ids:
+                already.append(
+                    PlanSavedItem(index=index, id=item_id, title=draft.title)
+                )
+                continue
+            source = f" (source {draft.source_id})" if draft.source_id else ""
+            item = ItineraryItemCreate(
+                **draft.model_dump(mode="json", exclude={"source_id"}),
+                id=item_id,
+                notes=f"Added from multi-agent plan {run.run_id}{source}.",
+            )
+            try:
+                created = self.create_itinerary_item(trip.id, item)
+            except ApiError as exc:
+                if exc.code == "CONFLICT" and self._item_on_trip(item_id, trip.id):
+                    already.append(
+                        PlanSavedItem(index=index, id=item_id, title=draft.title)
+                    )
+                else:
+                    failed.append(
+                        PlanFailedItem(
+                            index=index, id=item_id, code=exc.code, message=exc.message
+                        ),
+                    )
+                continue
+            saved.append(
+                PlanSavedItem(index=index, id=item_id, title=str(created["title"]))
+            )
+        return PlanPersistence(
+            outcome=_save_outcome(len(saved) + len(already), len(failed)),
+            saved=saved,
+            already_saved=already,
+            failed=failed,
+        )
+
+    def _item_on_trip(self, item_id: str, trip_id: str) -> bool:
+        try:
+            return self._client.get_itinerary_item(item_id).trip_id == trip_id
+        except ApiError:
+            return False
+
+    def _plan_view(
+        self,
+        trip_id: str,
+        run: MultiAgentRun,
+        *,
+        persistence: PlanPersistence | None = None,
+    ) -> dict[str, object]:
+        items: list[PlanItemView] = []
+        approved: list[PlanItemView] = []
+        if run.status == "awaiting_human" or run.status in DECIDED_STATUSES:
+            trip, existing, evidence_ids = self._plan_evidence(trip_id)
+            context = {
+                "run_id": run.run_id,
+                "trip": trip,
+                "existing": existing,
+                "evidence_ids": evidence_ids,
+            }
+            items = self._check_plan_items(
+                list(enumerate(run.proposed_actions)), **context
+            )
+            if run.status == "completed" and run.human is not None:
+                accepted = run.human.accepted_actions
+                if len(accepted) != len(run.approved_actions):
+                    raise _run_mismatch()
+                approved = self._check_plan_items(
+                    list(zip(accepted, run.approved_actions, strict=True)),
+                    **context,
+                )
+            if run.status in DECIDED_STATUSES and persistence is None:
+                persistence = _saved_status(run, existing)
+        result = (
+            run.final_result
+            if run.status == "completed" and run.final_result is not None
+            else run.result
+        )
+        summary = (result or {}).get("summary")
+        return MultiAgentPlanResponse(
+            trip_id=trip_id,
+            run_id=run.run_id,
+            correlation_id=run.correlation_id,
+            status=run.status,
+            active=run.status in ACTIVE_STATUSES,
+            request=run.task,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            attempts=run.attempts,
+            plan=run.plan,
+            steps=[
+                PlanStepView(
+                    agent=step.agent,
+                    attempt=step.attempt,
+                    status=step.status,
+                    duration_ms=step.duration_ms,
+                    model=step.model,
+                    tools=[_tool_call(trace.model_dump()) for trace in step.tools],
+                    error=(step.error or {}).get("message"),
+                )
+                for step in run.steps
+            ],
+            checks=run.checks,
+            review=run.review,
+            summary=summary[:600] if isinstance(summary, str) else None,
+            items=items,
+            approved_items=approved,
+            human=run.human,
+            error=run.error,
+            persistence=persistence,
         ).model_dump(mode="json")
 
     def update_trip(self, trip_id: str, payload: TripUpdate) -> dict[str, object]:
