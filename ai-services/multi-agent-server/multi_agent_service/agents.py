@@ -1,7 +1,9 @@
 """Planner, Worker and Reviewer agents: three roles over the AI-Mode gateway.
 
 Each agent is one bounded AI-Mode call with its own versioned system prompt
-and response schema. The Planner sees AI-Mode's discovered MCP catalogue
+and response schema. On a revision the Planner is called again with what went
+wrong in the previous attempt, so a plan with wrong tool arguments is fixed
+where it was made. The Planner sees AI-Mode's discovered MCP catalogue
 (descriptions and argument schemas) but cannot run tools; the Reviewer never
 sees tools; the Worker runs AI-Mode's model-directed MCP tool loop, so the
 evidence it gathers is the real tool trace rather than the model's account of
@@ -120,6 +122,42 @@ class StageResult:
     output: dict[str, Any] | None
 
 
+def previous_attempt(
+    plan: Plan,
+    worker: Step,
+    checks: list[Check],
+    review: AgentReview,
+) -> dict[str, Any]:
+    """What the Planner needs to fix its plan: the plan, the Worker's tool calls
+    with their outcomes, any Worker error, the failed checks and the review."""
+    summary: dict[str, Any] = {
+        "plan": {"goal": plan.goal, "steps": plan.steps},
+        "tool_calls": [
+            {
+                "tool": trace.tool,
+                "arguments": _truncate(_json(trace.arguments), 200),
+                "status": trace.status,
+                **({"error": _truncate(trace.error, 120)} if trace.error else {}),
+            }
+            for trace in worker.tools[:8]
+        ],
+        "failed_checks": [
+            {"check": check.name, "detail": check.detail}
+            for check in checks
+            if check.blocking and not check.passed
+        ],
+        "reviewer_feedback": {
+            "verdict": review.verdict,
+            "summary": review.summary,
+            "issues": review.issues,
+            "recommendations": review.recommendations,
+        },
+    }
+    if worker.error:
+        summary["worker_error"] = worker.error
+    return summary
+
+
 class Agents:
     def __init__(self, settings: Settings, ai_mode: AiModeClient) -> None:
         self._settings = settings
@@ -136,24 +174,25 @@ class Agents:
         *,
         run_id: str,
         correlation_id: str,
+        attempt: int = 1,
+        previous: dict[str, Any] | None = None,
     ) -> tuple[Step, Plan]:
         properties = request.output_schema.get("properties")
-        prompt = _json(
-            {
-                "feature": request.feature,
-                "task": request.task,
-                "trip_id": request.trip_id,
-                "context": request.context,
-                "allowed_tools": request.allowed_tools,
-                "output_fields": sorted(properties)
-                if isinstance(properties, dict)
-                else [],
-            },
-        )
+        payload: dict[str, Any] = {
+            "feature": request.feature,
+            "task": request.task,
+            "trip_id": request.trip_id,
+            "context": request.context,
+            "allowed_tools": request.allowed_tools,
+            "output_fields": sorted(properties) if isinstance(properties, dict) else [],
+        }
+        if previous is not None:
+            payload["previous_attempt"] = previous
+        prompt = _json(payload)
         self._ensure_budget(prompt, self._planner_system, "planner")
         stage = await self._call(
             "planner",
-            1,
+            attempt,
             prompt=prompt,
             system=self._planner_system,
             schema=PLAN_SCHEMA,
@@ -272,8 +311,11 @@ class Agents:
         attempt: int,
         run_id: str,
         correlation_id: str,
+        worker_error: dict[str, str] | None = None,
     ) -> tuple[Step, AgentReview]:
-        prompt = self._review_prompt(request, plan, result, tools, checks)
+        prompt = self._review_prompt(
+            request, plan, result, tools, checks, worker_error=worker_error
+        )
         stage = await self._call(
             "reviewer",
             attempt,
@@ -309,6 +351,8 @@ class Agents:
         result: dict[str, Any] | None,
         tools: list[ToolTrace],
         checks: list[Check],
+        *,
+        worker_error: dict[str, str] | None = None,
     ) -> str:
         """Fit the evidence into AI-Mode's prompt budget, shrinking it if needed.
 
@@ -334,29 +378,29 @@ class Agents:
                     data = trace.result.get("structuredContent", trace.result)
                     entry["data_excerpt"] = _truncate(_json(data), excerpt)
                 evidence.append(entry)
-            prompt = _json(
-                {
-                    "task": request.task,
-                    "plan": plan.model_dump(mode="json"),
-                    "result": _truncate(_json(result), result_limit)
-                    if result is not None
-                    else None,
-                    "tool_evidence": evidence,
-                    # An explicit pass/FAIL per check plus a count: given the raw
-                    # model with "blocking": true, the 8b Reviewer read every
-                    # check as failed (seen live).
-                    "checks_passed": f"{sum(c.passed for c in checks)} of "
-                    f"{len(checks)}",
-                    "checks": [
-                        {
-                            "check": check.name,
-                            "result": "pass" if check.passed else "FAIL",
-                            "detail": check.detail,
-                        }
-                        for check in checks
-                    ],
-                },
-            )
+            payload: dict[str, Any] = {
+                "task": request.task,
+                "plan": plan.model_dump(mode="json"),
+                "result": _truncate(_json(result), result_limit)
+                if result is not None
+                else None,
+                "tool_evidence": evidence,
+                # An explicit pass/FAIL per check plus a count: given the raw
+                # model with "blocking": true, the 8b Reviewer read every
+                # check as failed (seen live).
+                "checks_passed": f"{sum(c.passed for c in checks)} of {len(checks)}",
+                "checks": [
+                    {
+                        "check": check.name,
+                        "result": "pass" if check.passed else "FAIL",
+                        "detail": check.detail,
+                    }
+                    for check in checks
+                ],
+            }
+            if worker_error is not None:
+                payload["worker_error"] = worker_error
+            prompt = _json(payload)
             if (
                 len(prompt) + len(self._reviewer_system)
                 <= self._settings.max_stage_prompt_chars

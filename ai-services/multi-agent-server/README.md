@@ -17,6 +17,13 @@ service.
 | Reviewer | Judges the result against the plan, evidence and checks; lists risks | `/generate-plain` + review schema |
 | Human | Approves, corrects, partially accepts or rejects | `POST /runs/{id}/review` |
 
+When the Reviewer asks for a revision, a check fails, or the Worker's call
+fails because the model got its tool calls wrong (AI-Mode `BAD_GATEWAY`), the
+run goes back to the Planner with the previous attempt (plan, tool calls and
+their errors, failed checks, review) and then to the Worker again, once by
+default. Outages and timeouts are not retried, and an attempt that ran a
+write tool is never repeated.
+
 ## Run it
 
 ```bash
