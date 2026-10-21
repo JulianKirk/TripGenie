@@ -256,7 +256,10 @@ assistant demonstration.
 Ordinary feature workflows remain usable if host AI services are unavailable.
 AI requests report dependency failures separately. The Student 4 assistant
 never silently substitutes direct catalogue calls when MCP fails.
-`shared/configuration/.env.cloud` is the cloud profile: every AI switch off.
+`shared/configuration/.env.cloud` is the cloud profile: every AI switch off,
+and `TRIPGENIE_FORWARDED_ALLOW_IPS=*` so the Python frontends trust the Azure
+HTTPS ingress's `X-Forwarded-Proto` and render `https://` page URLs. Without it
+(as locally), uvicorn keeps its loopback-only default.
 Off localhost, `TRIPGENIE_PORTAL_URL` (each frontend) and `STUDENT1_UI_URL` to
 `STUDENT5_UI_URL` (the portal) set the browser-facing addresses.
 
