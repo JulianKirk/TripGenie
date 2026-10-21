@@ -27,7 +27,7 @@ def record(**changes: Any) -> dict[str, Any]:
 
 
 def test_disabled_planner_does_not_contact_dependencies() -> None:
-    with TestClient(create_app(Settings())) as client:
+    with TestClient(create_app(Settings(multi_agent_enabled=False))) as client:
         response = client.post(
             "/activity/planner/runs", json={"question": "Find activities"}
         )
@@ -279,3 +279,17 @@ def test_failed_checks_block_approval_but_allow_rejection() -> None:
             == 200
         )
     assert methods == ["GET", "GET", "POST"]
+
+
+def test_planner_is_enabled_by_default_locally(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("STUDENT4_BACKEND_MULTI_AGENT_ENABLED", raising=False)
+    assert Settings().multi_agent_enabled is True
+    assert Settings.from_env().multi_agent_enabled is True
+
+
+@pytest.mark.parametrize("enabled", ["false", "0"])
+def test_planner_can_be_disabled_for_ci_and_cloud(
+    monkeypatch: pytest.MonkeyPatch, enabled: str
+) -> None:
+    monkeypatch.setenv("STUDENT4_BACKEND_MULTI_AGENT_ENABLED", enabled)
+    assert Settings.from_env().multi_agent_enabled is False

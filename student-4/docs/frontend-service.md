@@ -165,5 +165,6 @@ not published automatically. Reviewer names are user-entered audit labels, not
 verified identities. No per-user authentication is introduced by this feature.
 
 Local and cloud-disabled states remain understandable without breaking catalogue
-browsing. See the backend API documentation for the opt-in configuration and the
+browsing. Smart Planner is enabled by default locally and explicitly disabled in
+CI and the cloud profile. See the backend API documentation for configuration and the
 shared service's limitation around retrospective tool checks.

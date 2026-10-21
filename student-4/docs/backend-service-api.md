@@ -819,14 +819,13 @@ Configuration (read by backend `Settings.from_env`):
 
 | Variable | Standalone default | Compose default |
 | --- | --- | --- |
-| `STUDENT4_BACKEND_MULTI_AGENT_ENABLED` | `false` | `false` |
+| `STUDENT4_BACKEND_MULTI_AGENT_ENABLED` | `true` | `true` |
 | `STUDENT4_BACKEND_MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013` | `http://host.docker.internal:8013` |
 | `STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` | `15` |
 
-Enable locally with `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=true` in the environment
-passed to Compose, then recreate the Student 4 backend. Start the host services
-using the shared Multi-Agent Server README. Keep the flag false in CI and the
-cloud baseline. Polling uses short requests rather than holding a request open
+Smart Planner is enabled by default locally. Start the host services using the
+shared Multi-Agent Server README. Set `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=false`
+to disable it explicitly; CI and the cloud profile already set this override. Polling uses short requests rather than holding a request open
 for the whole model workflow. Readiness continues to depend on the database,
 not optional AI services.
 

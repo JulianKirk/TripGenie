@@ -33,7 +33,7 @@ class Settings:
     rag_url: str | None = None
     rag_enabled: bool = False
     rag_timeout: float = DEFAULT_RAG_TIMEOUT
-    multi_agent_enabled: bool = False
+    multi_agent_enabled: bool = True
     multi_agent_url: str = "http://127.0.0.1:8013"
     multi_agent_timeout: float = 15.0
     service_name: str = "student-4-backend"
@@ -55,7 +55,9 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         return cls(
-            multi_agent_enabled=_flag("STUDENT4_BACKEND_MULTI_AGENT_ENABLED"),
+            multi_agent_enabled=_flag(
+                "STUDENT4_BACKEND_MULTI_AGENT_ENABLED", default=True
+            ),
             multi_agent_url=os.environ.get(
                 "STUDENT4_BACKEND_MULTI_AGENT_BASE_URL", "http://127.0.0.1:8013"
             )
@@ -92,8 +94,8 @@ class Settings:
         )
 
 
-def _flag(name: str) -> bool:
-    value = os.environ.get(name, "false").lower()
+def _flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name, str(default).lower()).lower()
     if value not in {"true", "false", "1", "0"}:
         message = f"{name} must be true or false"
         raise ValueError(message)
