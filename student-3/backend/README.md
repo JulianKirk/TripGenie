@@ -47,6 +47,9 @@ therefore a plan state, not a carrier state:
 | `STUDENT3_BACKEND_RAG_ENABLED` | `false` | Release 1 transport guide. Compose sets `true`; CI sets `false`. |
 | `STUDENT3_BACKEND_RAG_BASE_URL` | `http://127.0.0.1:8011` | Shared host-run RAG server. Compose uses `http://host.docker.internal:8011`. |
 | `STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | Timeout for one RAG query, covering retrieval and grounded generation. |
+| `STUDENT3_BACKEND_MULTI_AGENT_ENABLED` | `false` | Release 2 multi-agent planning. Compose sets `true`; CI and the cloud profile set `false`. |
+| `STUDENT3_BACKEND_MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013` | Shared host-run Multi-Agent Server. Compose uses `http://host.docker.internal:8013`. |
+| `STUDENT3_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` | Timeout for one call to that server (runs execute in the background there). |
 
 ## API surface
 
@@ -73,6 +76,9 @@ Responses wrap payloads in a `data` envelope; failures use the shared
 | `POST` | `/api/transport-options/mcp/search` | **MCP** — `transport_search` through the shared MCP server. Writes nothing. |
 | `POST` | `/api/transport-options/mcp/compare` | **MCP** — `transport_compare`. Writes nothing. |
 | `POST` | `/api/trips/{tripId}/transport/mcp` | **MCP** — `transport_trip_costs`. Writes nothing. |
+| `POST` | `/api/transport-options/agent-runs` | **Multi-agent** — start a Planner → Worker → Reviewer run. `202`; writes nothing. |
+| `GET` | `/api/transport-options/agent-runs/{runId}` | **Multi-agent** — the run so far; poll it while the agents work. |
+| `POST` | `/api/transport-options/agent-runs/{runId}/review` | **Multi-agent** — the human decision; adds approved options to the run's trip. |
 
 ### Filters
 
@@ -243,6 +249,54 @@ pricing and cost estimates, and planning and availability. Each guide section
 fits one retrieval chunk. Calibration cases for them are in
 `config/calibration-queries.json`; rebuild the index with
 `python -m rag_service ingest --rebuild` after changing any of them.
+
+## Release 2 multi-agent planning
+
+These routes connect the feature to the **shared** host-run Multi-Agent Server
+(`ai-services/multi-agent-server`, contract in
+`docs/architecture/release-2-multi-agent-contract.md`).
+
+`POST /api/transport-options/agent-runs` takes the same fields as AI
+suggestions — `question` (1–500 characters) and optional `trip_id`, `origin`
+and `destination` — and starts a run with this feature's own Worker prompt
+(`STUDENT3_BACKEND_AI_PROMPT_ASSET`), the `TransportRecommendationDraft`
+schema, the four read-only transport tools, grounding on
+`suggestions[].transport_id` from `student-3` tool results, and each
+suggestion as a proposed action. It returns `202` with the run in `planning`;
+the agents work in the background and the caller polls
+`GET /api/transport-options/agent-runs/{runId}` (`runId` matches
+`^magent_[0-9a-f]{12}$`). The run view has the plan, every agent stage with
+the Worker's tool calls, the server's deterministic checks, the Reviewer's
+verdict, issues, risks and recommendations, the answer, and each suggestion
+re-read from this service with `grounded` set only when a successful Student 3
+tool in the Worker's final attempt returned its id.
+
+`POST /api/transport-options/agent-runs/{runId}/review` records the human
+decision:
+
+```json
+{"decision": "approve | correct | partial | reject", "reviewer": "ronit",
+ "notes": "optional", "accepted": [0], "corrected_overview": "optional",
+ "traveller_count": 4}
+```
+
+`accepted` indexes the run's suggestions: the ones kept for `partial`, and the
+corrected answer's suggestions for `correct` (which may also replace the
+overview). `traveller_count` is required when the run has a trip and a
+grounded suggestion. After the server records the decision, this service adds
+each approved suggestion to the run's trip through the normal plan-entry rules
+(selectable, enough seats). It never adds an id no transport tool returned,
+even if a human approved it, and reports every option it could not add in
+`save_errors`; the reply's `saved` lists what was added. The Multi-Agent
+Server itself never writes Student 3 data, and a second decision is refused
+with `409 RUN_NOT_AWAITING_REVIEW`, so a double submit cannot add twice.
+
+When disabled every route is `503 MULTI_AGENT_DISABLED`. An unreachable server
+is `503 DEPENDENCY_UNAVAILABLE` (`504` on timeout); the server's own
+`404 RUN_NOT_FOUND`, `409 RUN_NOT_AWAITING_REVIEW`, `422 VALIDATION_ERROR` and
+`503 RUN_LIMIT_REACHED` pass through; anything else is `502`. `/health` and
+`/ready` report `integrations.multi_agent` from configuration and never call the
+server. Logs carry run ids, decisions and counts, never questions or answers.
 
 ## Business rules owned here
 

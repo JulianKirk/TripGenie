@@ -5,6 +5,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from . import agent_runs
 from .ai_mode_client import AiModeClient
 from .ai_suggestions import (
     build_prompt,
@@ -23,6 +24,11 @@ from .errors import (
 )
 from .mcp_client import McpCallError, McpClient
 from .models import (
+    AgentReviewRequest,
+    AgentRunRequest,
+    AgentRunView,
+    AgentSavedSelection,
+    AgentSaveError,
     AvailabilityStatus,
     DeleteResponse,
     DependencyStatus,
@@ -47,6 +53,7 @@ from .models import (
     TripTransportPin,
     TripTransportSummary,
 )
+from .multi_agent_client import MultiAgentClient
 from .rag_client import RagClient
 from .transport_rules import (
     active_plan_cost_total,
@@ -98,6 +105,7 @@ class BackendService:
         ai_client: AiModeClient | None = None,
         mcp_client: McpClient | None = None,
         rag_client: RagClient | None = None,
+        multi_agent_client: MultiAgentClient | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
@@ -105,6 +113,7 @@ class BackendService:
         self._ai_client = ai_client
         self._mcp_client = mcp_client
         self._rag_client = rag_client
+        self._multi_agent_client = multi_agent_client
 
     # ------------------------------------------------------------------ health
 
@@ -134,6 +143,9 @@ class BackendService:
         return HealthIntegrations(
             rag="enabled" if self._settings.rag_enabled else "disabled",
             mcp="enabled" if self._settings.mcp_enabled else "disabled",
+            multi_agent=(
+                "enabled" if self._settings.multi_agent_enabled else "disabled"
+            ),
         )
 
     def _probe_database(self) -> DependencyStatus:
@@ -353,27 +365,7 @@ class BackendService:
                 details=[{"field": "ai_mode", "issue": "client is not configured"}],
             )
 
-        # A quick local check before spending a model run: when nothing on the
-        # requested route could be planned, say so plainly instead of asking
-        # the model to search an empty catalogue.
-        options = self._client.list_transport_options(
-            origin=payload.origin,
-            destination=payload.destination,
-        )
-        if not any(is_actionable(option) for option in options):
-            raise validation_error(
-                "There are no bookable transport options to recommend from.",
-                [
-                    {
-                        "field": "origin",
-                        "issue": (
-                            "no available option matches this route; widen it or "
-                            "add transport options first"
-                        ),
-                    },
-                ],
-            )
-
+        self._ensure_bookable_route(payload.origin, payload.destination)
         if payload.trip_id is not None:
             self._ensure_trip_is_known(payload.trip_id)
 
@@ -404,6 +396,34 @@ class BackendService:
             model=generated.model,
             provider=generated.provider,
         )
+
+    def _ensure_bookable_route(
+        self,
+        origin: str | None,
+        destination: str | None,
+    ) -> None:
+        """A quick local check before spending a model run.
+
+        When nothing on the requested route could be planned, say so plainly
+        instead of asking the model to search an empty catalogue.
+        """
+        options = self._client.list_transport_options(
+            origin=origin,
+            destination=destination,
+        )
+        if not any(is_actionable(option) for option in options):
+            raise validation_error(
+                "There are no bookable transport options to recommend from.",
+                [
+                    {
+                        "field": "origin",
+                        "issue": (
+                            "no available option matches this route; widen it or "
+                            "add transport options first"
+                        ),
+                    },
+                ],
+            )
 
     def _current_option(self, transport_id: str) -> TransportOptionRecord | None:
         """The stored record behind a suggestion, or None if it has gone."""
@@ -607,6 +627,108 @@ class BackendService:
             len(answer.citations),
         )
         return answer.model_dump(mode="json")
+
+    # ------------------------------------------------- multi-agent planning
+
+    def start_agent_run(self, payload: AgentRunRequest) -> AgentRunView:
+        """Start a Planner -> Worker -> Reviewer run on the shared server.
+
+        Returns at once with the run in `planning`; the agents work in the
+        background and the caller polls. Nothing is written until a human
+        decides.
+        """
+        client = self._multi_agent()
+        self._ensure_bookable_route(payload.origin, payload.destination)
+        if payload.trip_id is not None:
+            self._ensure_trip_is_known(payload.trip_id)
+        body = agent_runs.build_run_request(self._settings, payload)
+        run = client.start_run(body)
+        logger.info(
+            "agent_run_started correlation_id=%s run_id=%s",
+            body["correlation_id"],
+            run.get("run_id"),
+        )
+        return agent_runs.to_view(run, self._current_option)
+
+    def get_agent_run(self, run_id: str) -> AgentRunView:
+        run = self._multi_agent().get_run(run_id)
+        return agent_runs.to_view(run, self._current_option)
+
+    def review_agent_run(
+        self,
+        run_id: str,
+        decision: AgentReviewRequest,
+    ) -> AgentRunView:
+        """Record the human decision, then add what was approved to the trip.
+
+        The server never writes Student 3 data: approved suggestions are added
+        here, through the same rules as the plan-entry route (selectable,
+        enough seats). Only grounded ids are added, and one failure does not
+        undo the others or the decision.
+        """
+        client = self._multi_agent()
+        run = client.get_run(run_id)
+        decided = client.review(run_id, agent_runs.review_body(run, decision))
+
+        saved: list[AgentSavedSelection] = []
+        errors: list[AgentSaveError] = []
+        trip_id = decided.get("trip_id")
+        if trip_id and decision.traveller_count is not None:
+            grounded = agent_runs.grounded_ids(decided)
+            for transport_id in agent_runs.approved_ids(decided):
+                if transport_id not in grounded:
+                    errors.append(
+                        AgentSaveError(
+                            transport_id=transport_id,
+                            code="UNGROUNDED_SUGGESTION",
+                            message="No transport tool returned this id, so it "
+                            "was not added.",
+                        ),
+                    )
+                    continue
+                try:
+                    self.add_to_itinerary(
+                        transport_id,
+                        trip_id,
+                        ItinerarySelectionRequest(
+                            traveller_count=decision.traveller_count,
+                            notes=f"Added after multi-agent review {run_id}.",
+                        ),
+                    )
+                except ApiError as exc:
+                    errors.append(
+                        AgentSaveError(
+                            transport_id=transport_id,
+                            code=exc.code,
+                            message=exc.message,
+                        ),
+                    )
+                    continue
+                saved.append(
+                    AgentSavedSelection(
+                        transport_id=transport_id,
+                        trip_id=trip_id,
+                        traveller_count=decision.traveller_count,
+                    ),
+                )
+        logger.info(
+            "agent_run_decided run_id=%s decision=%s saved=%s save_errors=%s",
+            run_id,
+            decision.decision,
+            len(saved),
+            len(errors),
+        )
+        view = agent_runs.to_view(decided, self._current_option)
+        return view.model_copy(update={"saved": saved, "save_errors": errors})
+
+    def _multi_agent(self) -> MultiAgentClient:
+        if not self._settings.multi_agent_enabled or self._multi_agent_client is None:
+            raise _disabled(
+                "MULTI_AGENT_DISABLED",
+                "multi_agent",
+                "The Multi-Agent Server",
+            )
+        return self._multi_agent_client
 
     # -------------------------------------------------------------- MCP tools
 

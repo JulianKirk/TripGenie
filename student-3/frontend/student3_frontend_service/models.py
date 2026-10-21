@@ -345,3 +345,103 @@ class RagAnswer(LenientModel):
     retrieval: RagRetrieval = Field(default_factory=RagRetrieval)
     run_id: str
     correlation_id: str
+
+
+# ------------------------------------------------------- Release 2 multi-agent
+
+AGENT_ACTIVE_STATUSES = frozenset({"planning", "working", "reviewing"})
+
+
+class AgentPlan(LenientModel):
+    goal: str
+    steps: list[str] = Field(default_factory=list)
+
+
+class AgentStage(LenientModel):
+    agent: str
+    attempt: int = 1
+    status: str
+    duration_ms: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    tools: list[ToolCallTrace] = Field(default_factory=list)
+
+
+class AgentCheck(LenientModel):
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+class AgentReview(LenientModel):
+    verdict: str
+    summary: str
+    issues: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class AgentSuggestion(LenientModel):
+    index: int
+    transport_id: str
+    reason: str
+    grounded: bool
+    option: TransportOptionRecord | None = None
+
+
+class AgentHumanDecision(LenientModel):
+    decision: str
+    reviewer: str
+    notes: str | None = None
+    decided_at: str
+
+
+class AgentSavedSelection(LenientModel):
+    transport_id: str
+    trip_id: str
+    traveller_count: int
+
+
+class AgentSaveError(LenientModel):
+    transport_id: str
+    code: str
+    message: str
+
+
+class AgentRunError(LenientModel):
+    code: str
+    message: str
+
+
+class AgentRun(LenientModel):
+    """A Planner -> Worker -> Reviewer run, as the backend reports it."""
+
+    run_id: str
+    status: str
+    task: str
+    trip_id: str | None = None
+    attempts: int = 0
+    created_at: str
+    updated_at: str
+    plan: AgentPlan | None = None
+    stages: list[AgentStage] = Field(default_factory=list)
+    checks: list[AgentCheck] = Field(default_factory=list)
+    review: AgentReview | None = None
+    overview: str | None = None
+    considerations: list[str] = Field(default_factory=list)
+    disclaimer: str | None = None
+    suggestions: list[AgentSuggestion] = Field(default_factory=list)
+    human: AgentHumanDecision | None = None
+    error: AgentRunError | None = None
+    saved: list[AgentSavedSelection] = Field(default_factory=list)
+    save_errors: list[AgentSaveError] = Field(default_factory=list)
+
+    @property
+    def active(self) -> bool:
+        """The agents are still working, so the page keeps polling."""
+        return self.status in AGENT_ACTIVE_STATUSES
+
+    @property
+    def addable(self) -> list[AgentSuggestion]:
+        """Suggestions a human can accept: a transport tool returned them."""
+        return [item for item in self.suggestions if item.grounded]

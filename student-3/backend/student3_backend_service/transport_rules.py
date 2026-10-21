@@ -144,7 +144,6 @@ def sort_options_for_comparison(
     )
 
 
-
 def missing_trip_error(trip_id: str) -> ApiError:
     return validation_error(
         VALIDATION_ERROR_MESSAGE,
@@ -166,9 +165,7 @@ def ensure_option_is_selectable(option: TransportOptionRecord) -> None:
             details=[
                 {
                     "field": "transport_id",
-                    "issue": (
-                        f"option is {option.availability_status.value}"
-                    ),
+                    "issue": (f"option is {option.availability_status.value}"),
                 },
             ],
         )
@@ -198,8 +195,7 @@ def ensure_seats_available(
                 {
                     "field": "traveller_count",
                     "issue": (
-                        f"only {max(remaining, 0)} of {option.capacity} "
-                        f"seat(s) remain"
+                        f"only {max(remaining, 0)} of {option.capacity} seat(s) remain"
                     ),
                 },
             ],

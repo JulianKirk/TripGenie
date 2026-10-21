@@ -116,6 +116,7 @@ BOOKABLE_AVAILABILITY_STATUSES = frozenset(
     {AvailabilityStatus.AVAILABLE, AvailabilityStatus.LIMITED},
 )
 
+
 class ErrorDetail(StrictModel):
     field: str
     issue: str
@@ -233,5 +234,3 @@ class TransportOptionRecord(TransportOptionStored):
     itinerary service, so the backend derives the seat count instead. The name
     is kept so callers that read a "record" still have one.
     """
-
-

@@ -198,4 +198,3 @@ def test_offsets_must_be_supplied_as_a_pair(service: DatabaseService) -> None:
 
     assert excinfo.value.status_code == 422
     assert excinfo.value.details[0]["field"] == "departure_utc_offset"
-
