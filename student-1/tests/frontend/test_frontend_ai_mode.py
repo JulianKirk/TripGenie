@@ -310,4 +310,33 @@ def test_ai_mode_absence_error_does_not_break_normal_trip_pages(
     assert 'value="Sydney Getaway"' in edit_response.text
 
 
+def test_ai_post_once_ai_mode_is_disabled_shows_why_without_the_form(
+    client,
+    backend_api,
+) -> None:
+    # A page loaded before AI-Mode was switched off still posts here; the
+    # backend refuses and the trip page explains why but offers no AI form.
+    backend_api.ai_features["ai_suggestions"] = False
+    backend_api.ai_responses.append(
+        error_response(
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+            "AI suggestions are unavailable because the shared AI-Mode service "
+            "is not configured.",
+        ),
+    )
+
+    response = client.post(
+        "/trips/trip_2027_sydney_getaway/ai-suggestions",
+        data={"requested_date": "2027-04-02", "goal": "Plan a gentle afternoon."},
+        headers=HTMX_HEADERS,
+    )
+
+    assert response.status_code == 503
+    assert "shared AI-Mode service is not configured." in response.text
+    assert '<h3 id="ai-detail-heading" data-autofocus>' in response.text
+    assert "/ai-suggestions" not in response.text
+    assert "Harbour Walk" in response.text
+
+
 AI_REVIEW_NOTICE_SNIPPET = "You are reviewing an AI-generated draft."

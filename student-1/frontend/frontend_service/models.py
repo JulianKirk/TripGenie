@@ -429,6 +429,12 @@ class BackendHealthPayload(StrictModel):
     dependencies: BackendHealthDependencies
 
 
+class AiFeatures(StrictModel):
+    ai_suggestions: bool
+    rag: bool
+    mcp: bool
+
+
 class DependencyStatus(StrictModel):
     status: ShortText
     service: ShortText

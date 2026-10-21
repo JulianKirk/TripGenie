@@ -31,6 +31,7 @@ from .errors import (
     validation_error,
 )
 from .models import (
+    AiFeatures,
     DependencyStatus,
     HealthDependencies,
     HealthResponse,
@@ -476,6 +477,19 @@ class BackendService:
             transport_sources=transport_sources,
         )
         return trip, items, cross_service_context, time_blocks
+
+    def ai_features(self) -> dict[str, object]:
+        """The configuration the AI routes check, so the UI offers only those.
+
+        Read from settings, never from a live probe: an AI service that is
+        configured but briefly down still shows its panel and fails explicitly.
+        """
+        ai_mode = self._settings.ai_mode_base_url is not None
+        return AiFeatures(
+            ai_suggestions=ai_mode,
+            rag=self._settings.rag_enabled and self._rag is not None,
+            mcp=self._settings.mcp_enabled and ai_mode and self._ai_mode is not None,
+        ).model_dump(mode="json")
 
     def rag_query(self, trip_id: str, payload: RagQueryRequest) -> dict[str, object]:
         if not self._settings.rag_enabled or self._rag is None:

@@ -5,9 +5,12 @@
   <h3 id="ai-detail-heading"{% if ai_result or ai_error %} data-autofocus{% endif %}>
     Draft itinerary suggestions
   </h3>
+  {% set offered = ai_features is none or ai_features.ai_suggestions %}
+  {% if offered %}
   <p>
     Request draft suggestions for one trip day. TripGenie never saves AI output automatically — review and edit each draft through the normal itinerary CRUD form first.
   </p>
+  {% endif %}
 
   {% if ai_error %}
     <div class="banner banner--error" role="alert">
@@ -22,6 +25,7 @@
     </div>
   {% endif %}
 
+  {% if offered %}
   <form
     class="form-grid"
     action="{{ request.url_for('generate_ai_suggestions', trip_id=trip.id) }}"
@@ -103,6 +107,7 @@
   >
     Generating draft suggestions…
   </div>
+  {% endif %}
 
   {% if ai_result %}
     <section class="panel panel--nested" aria-labelledby="ai-results-heading">
