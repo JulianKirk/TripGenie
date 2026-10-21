@@ -1,8 +1,8 @@
 """Post-commit endpoint tests against the live Student 1 Compose stack.
 
 student-1-ci.yml's compose job runs these over HTTP once the stack is ready.
-They skip when nothing answers at the base URL, so a bare `pytest` run without
-the stack stays green; testpaths in pyproject.toml leaves this directory out.
+An unreachable or unhealthy backend fails the suite. Ordinary pytest runs
+exclude this directory through testpaths in pyproject.toml.
 """
 
 from __future__ import annotations
@@ -20,10 +20,7 @@ BASE_URL = os.environ.get("STUDENT1_ENDPOINT_BASE_URL", "http://127.0.0.1:18001"
 @pytest.fixture(scope="module")
 def client() -> Iterator[httpx.Client]:
     with httpx.Client(base_url=f"{BASE_URL}/api", timeout=10) as http:
-        try:
-            http.get(f"{BASE_URL}/health")
-        except httpx.TransportError:
-            pytest.skip(f"Student 1 backend is not reachable at {BASE_URL}")
+        http.get(f"{BASE_URL}/health").raise_for_status()
         yield http
 
 

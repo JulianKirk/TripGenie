@@ -55,9 +55,10 @@ own path). The `compose` job:
    the Markdown report as the artifact `student-1-endpoint-test-evidence`;
 6. tears the stack down with `docker compose down -v`.
 
-The tests skip when the backend is unreachable. `tests/endpoint` is also not in
-the `testpaths` in `student-1/pyproject.toml`, so the unit-test jobs
-(`pytest tests/backend`, and so on) never collect these tests.
+An unreachable backend or an unsuccessful `/health` response fails fixture
+setup and the CI job. These are required endpoint checks, not optional tests.
+`tests/endpoint` is not in the `testpaths` in `student-1/pyproject.toml`, so
+ordinary unit-test runs do not require a live backend.
 
 ## Local run
 
@@ -82,8 +83,37 @@ PASSED tests/endpoint/test_post_commit_endpoints.py::test_create_item_outside_tr
 $ docker compose -p s1endpoint down -v
 ```
 
-A second run against the same stack also passed (7 passed). With the backend
-unreachable (`STUDENT1_ENDPOINT_BASE_URL=http://127.0.0.1:1`), all 7 tests skip.
+A second run against the same stack also passed (7 passed). The original
+implementation skipped all seven tests when the backend was unreachable,
+incorrectly returning exit code 0. The client fixture now propagates connection
+and HTTP errors so an unavailable backend cannot produce a successful CI run.
+
+### Unavailable-backend correction
+
+Verified on Windows with Python 3.11:
+
+| Run | Result | Exit code |
+| --- | --- | --- |
+| Original fixture, backend at `http://127.0.0.1:1` | 7 skipped | 0 |
+| Corrected fixture, same unreachable backend | 7 setup errors, 0 skipped | 1 |
+| Corrected fixture, live backend and database APIs | 7 passed, 0 skipped | 0 |
+| Default Student 1 unit-test suite | 288 passed | 0 |
+
+The healthy correction run used real Uvicorn backend and database processes on
+ports 28001 and 28002 with an isolated SQLite database and RAG/MCP disabled.
+No HTTP responses were mocked. This was a native-process check, not a new
+Compose run; Docker was not running on that machine.
+
+The unreachable run still generated JUnit XML containing all seven errors.
+The existing workflow reports these as `ERROR` and uploads the evidence even
+when pytest fails. To reproduce from `student-1/` after installing dependencies:
+
+```powershell
+$env:STUDENT1_ENDPOINT_BASE_URL = "http://127.0.0.1:1"
+python -m pytest tests\endpoint --junitxml=student-1-endpoint-tests.xml --tb=line
+$LASTEXITCODE  # 1
+Remove-Item Env:STUDENT1_ENDPOINT_BASE_URL
+```
 
 ## Deliberate-failure demonstration
 
