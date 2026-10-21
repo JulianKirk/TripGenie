@@ -67,10 +67,12 @@ class Settings:
                 os.environ.get("STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS", "15")
             ),
             ai_assistant_prompt_asset=os.environ.get(
-                "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
+                "STUDENT4_BACKEND_MCP_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
             ),
-            assistant_enabled=_flag("AI_ASSISTANT_ENABLED"),
-            agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "210")),
+            assistant_enabled=_flag("STUDENT4_BACKEND_MCP_ENABLED"),
+            agent_timeout=float(
+                os.environ.get("STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS", "210")
+            ),
             database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             db_timeout=float(os.environ.get("DB_TIMEOUT", DEFAULT_DB_TIMEOUT)),
             location_url=os.environ.get("LOCATION_URL", DEFAULT_LOCATION_URL),
@@ -84,13 +86,17 @@ class Settings:
             itinerary_timeout=float(
                 os.environ.get("ITINERARY_TIMEOUT", DEFAULT_ITINERARY_TIMEOUT)
             ),
-            ai_mode_url=os.environ.get("AI_MODE_URL") or None,
+            ai_mode_url=os.environ.get("STUDENT4_BACKEND_AI_MODE_BASE_URL") or None,
             ai_mode_timeout=float(
-                os.environ.get("AI_MODE_TIMEOUT", DEFAULT_AI_MODE_TIMEOUT)
+                os.environ.get(
+                    "STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS", DEFAULT_AI_MODE_TIMEOUT
+                )
             ),
-            rag_url=os.environ.get("RAG_URL") or None,
-            rag_enabled=_flag("RAG_ENABLED"),
-            rag_timeout=float(os.environ.get("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)),
+            rag_url=os.environ.get("STUDENT4_BACKEND_RAG_BASE_URL") or None,
+            rag_enabled=_flag("STUDENT4_BACKEND_RAG_ENABLED"),
+            rag_timeout=float(
+                os.environ.get("STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS", DEFAULT_RAG_TIMEOUT)
+            ),
         )
 
 

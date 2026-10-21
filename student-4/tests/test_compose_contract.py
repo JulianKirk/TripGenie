@@ -75,7 +75,7 @@ def test_host_ai_services_stay_out_of_compose() -> None:
         (1, "STUDENT1_BACKEND_AI_MODE_BASE_URL"),
         (2, "AI_MODE_URL"),
         (3, "STUDENT3_BACKEND_AI_MODE_BASE_URL"),
-        (4, "AI_MODE_URL"),
+        (4, "STUDENT4_BACKEND_AI_MODE_BASE_URL"),
         (5, "STUDENT5_BACKEND_AI_MODE_BASE_URL"),
     ):
         backend = services[f"student-{student}-backend"]
@@ -89,15 +89,18 @@ def test_host_ai_services_stay_out_of_compose() -> None:
     )
     backend = services["student-4-backend"]
     assert "MCP_URL" not in backend["environment"]
-    assert backend["environment"]["AI_ASSISTANT_ENABLED"] == "true"
+    assert backend["environment"]["STUDENT4_BACKEND_MCP_ENABLED"] == "true"
 
 
 def test_student_4_backend_reaches_host_rag() -> None:
     environment = compose_services()["student-4-backend"]["environment"]
 
-    assert environment["RAG_URL"] == "http://host.docker.internal:8011"
-    assert environment["RAG_ENABLED"] == "true"
-    assert float(environment["RAG_TIMEOUT"]) > 0
+    assert (
+        environment["STUDENT4_BACKEND_RAG_BASE_URL"]
+        == "http://host.docker.internal:8011"
+    )
+    assert environment["STUDENT4_BACKEND_RAG_ENABLED"] == "true"
+    assert float(environment["STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS"]) > 0
 
 
 def test_agentic_overlay_preserves_single_activity_backend_binding() -> None:

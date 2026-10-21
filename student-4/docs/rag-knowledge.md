@@ -80,8 +80,8 @@ curl -s -X POST http://127.0.0.1:8011/query -H 'Content-Type: application/json' 
 
 Start the application with
 `docker compose --env-file shared/configuration/.env.example up --build -d`.
-Compose sets `RAG_URL=http://host.docker.internal:8011` and
-`RAG_ENABLED=true`. The backend route can be checked directly:
+Compose sets `STUDENT4_BACKEND_RAG_BASE_URL=http://host.docker.internal:8011` and
+`STUDENT4_BACKEND_RAG_ENABLED=true`. The backend route can be checked directly:
 
 ```bash
 curl -s -X POST http://127.0.0.1:18008/activity/knowledge \
@@ -109,7 +109,7 @@ the itinerary picker keep working.
 ## CI
 
 `student-4-ci.yml` keeps the integration configured but sets
-`STUDENT4_BACKEND_RAG_ENABLED=false` and `STUDENT4_AI_ASSISTANT_ENABLED=false`
+`STUDENT4_BACKEND_RAG_ENABLED=false` and `STUDENT4_BACKEND_MCP_ENABLED=false`
 for its Compose job. A verification step prints the effective backend
 variables, checks that `/activity/knowledge` returns `status: "disabled"` and
 that `/activity/assistant` reports that it is disabled, and checks that the

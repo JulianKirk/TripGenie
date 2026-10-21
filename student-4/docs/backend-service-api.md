@@ -53,11 +53,30 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
-| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
-| `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
-| `RAG_URL` | unset | Shared host RAG server base URL. Compose sets `http://host.docker.internal:8011`; when unset, knowledge answers report a safe error. |
-| `RAG_ENABLED` | `false` standalone; `true` in Compose | Enable grounded activity-knowledge answers. |
-| `RAG_TIMEOUT` | `130` | Timeout in seconds for one RAG query, including grounded generation. |
+| `STUDENT4_BACKEND_AI_MODE_BASE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
+| `STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `100` | Timeout in seconds for each AI generation. |
+| `STUDENT4_BACKEND_RAG_BASE_URL` | unset | Shared host RAG server base URL. Compose sets `http://host.docker.internal:8011`; when unset, knowledge answers report a safe error. |
+| `STUDENT4_BACKEND_RAG_ENABLED` | `false` standalone; `true` in Compose | Enable grounded activity-knowledge answers. |
+| `STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | Timeout in seconds for one RAG query, including grounded generation. |
+
+The backend reads the same `STUDENT4_BACKEND_*` AI configuration names that
+Compose accepts. URLs use `_BASE_URL`, timeouts use `_TIMEOUT_SECONDS`, and the
+activity-tools assistant uses `_MCP_*`, matching Students 1, 3 and 5. Existing
+custom environment files must rename these settings:
+
+| Previous Compose override | Canonical name |
+| --- | --- |
+| `STUDENT4_AI_ASSISTANT_ENABLED` | `STUDENT4_BACKEND_MCP_ENABLED` |
+| `STUDENT4_AGENT_TIMEOUT` | `STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS` |
+| `STUDENT4_BACKEND_AI_MODE_URL` | `STUDENT4_BACKEND_AI_MODE_BASE_URL` |
+| `STUDENT4_BACKEND_AI_MODE_TIMEOUT` | `STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS` |
+| `STUDENT4_BACKEND_RAG_URL` | `STUDENT4_BACKEND_RAG_BASE_URL` |
+| `STUDENT4_BACKEND_RAG_TIMEOUT` | `STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS` |
+
+For a standalone backend, use the canonical names rather than the old unprefixed
+`AI_MODE_URL`, `AI_MODE_TIMEOUT`, `AI_ASSISTANT_ENABLED`,
+`AI_ASSISTANT_PROMPT_ASSET`, `AGENT_TIMEOUT`, `RAG_URL`, `RAG_ENABLED` and
+`RAG_TIMEOUT` names. Defaults and enablement behaviour are unchanged.
 
 ### Publicly writable data
 
@@ -130,10 +149,10 @@ and CRUD workflows remain available independently.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Trusted packaged system prompt. |
-| `AI_ASSISTANT_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant UI/API workflow. |
-| `AI_MODE_URL` | unset standalone | Shared AI-Mode base URL. |
-| `AGENT_TIMEOUT` | `210` | HTTP deadline for the shared generation run, in seconds. |
+| `STUDENT4_BACKEND_MCP_PROMPT_ASSET` | `activity_assistant_v1.md` | Trusted packaged system prompt. |
+| `STUDENT4_BACKEND_MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant UI/API workflow. |
+| `STUDENT4_BACKEND_AI_MODE_BASE_URL` | unset standalone | Shared AI-Mode base URL. |
+| `STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS` | `210` | HTTP deadline for the shared generation run, in seconds. |
 
 MCP URL and tool limits are configured on shared AI-Mode, not Student 4.
 See [setup and demonstration](mcp-assistant.md). No persistence schema changes.
@@ -183,7 +202,7 @@ The route always returns `200` with a `KnowledgeResponse`:
 ```
 
 An RAG insufficient-context response, or an answer without citations, maps to
-`status: "insufficient_context"` with no citations. When `RAG_ENABLED` is false
+`status: "insufficient_context"` with no citations. When `STUDENT4_BACKEND_RAG_ENABLED` is false
 the server is never called and `status` is `disabled`. RAG `INDEX_NOT_READY`,
 `DEPENDENCY_UNAVAILABLE`, `DEPENDENCY_TIMEOUT` and `VALIDATION_ERROR`, transport
 failures and malformed or unsupported-schema responses map to `status: "error"`
