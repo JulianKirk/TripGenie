@@ -128,9 +128,9 @@ class Settings:
     agent_timeout_seconds: float = 180.0
     agent_max_turns: int = 8
     agent_max_calls: int = 16
-    agent_context_chars: int = 120000
+    agent_context_chars: int = 45000
     agent_result_bytes: int = 32768
-    context_tokens: int = 32768
+    context_tokens: int = 12288
 
     def __post_init__(self) -> None:
         self.mcp_url = _normalise_base_url(
@@ -217,9 +217,9 @@ class Settings:
             ),
             agent_max_turns=int(os.getenv("AI_MODE_AGENT_MAX_TURNS", "8")),
             agent_max_calls=int(os.getenv("AI_MODE_AGENT_MAX_CALLS", "16")),
-            agent_context_chars=int(os.getenv("AI_MODE_AGENT_CONTEXT_CHARS", "120000")),
+            agent_context_chars=int(os.getenv("AI_MODE_AGENT_CONTEXT_CHARS", "45000")),
             agent_result_bytes=int(os.getenv("AI_MODE_AGENT_RESULT_BYTES", "32768")),
-            context_tokens=int(os.getenv("AI_MODE_CONTEXT_TOKENS", "32768")),
+            context_tokens=int(os.getenv("AI_MODE_CONTEXT_TOKENS", "12288")),
             service_name=os.getenv("AI_MODE_SERVICE_NAME", "ai-mode").strip()
             or "ai-mode",
             ollama_base_url=_normalise_base_url(
