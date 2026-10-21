@@ -26,8 +26,9 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
   `/embed` remains independent of MCP.
 - `multi-agent-server/` is the Release 2 host-run Planner -> Worker ->
   Reviewer -> human-review workflow on port 8013. Its agents call AI-Mode
-  only (`/generate-plain` for Planner and Reviewer, `/generate` for the
-  Worker); it never calls Ollama or MCP directly and never writes feature
+  only (`/generate-plain` for Planner and Reviewer, the Planner with
+  `tool_catalogue` so AI-Mode describes the MCP tools without running them;
+  `/generate` for the Worker); it never calls Ollama or MCP directly and never writes feature
   data. Its contract is `docs/architecture/release-2-multi-agent-contract.md`
   (ADR 0005); change both together. AI-Mode, MCP, RAG, the Multi-Agent
   Server, and the validation loop stay outside Compose.

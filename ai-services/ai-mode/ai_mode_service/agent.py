@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from itertools import islice
 from time import monotonic
@@ -20,6 +22,28 @@ from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavai
 from .models import GenerateRequest, ToolTrace
 from .provider import OllamaProviderAdapter
 from .schema import validate_schema
+
+CATALOGUE_PREAMBLE = (
+    "MCP tool catalogue, for reference only. These are the tools available to "
+    "agents that execute work. You cannot call any tool in this request; use "
+    "each tool's name, description and argument schema only to reason about "
+    "which tools fit the task and which arguments they need."
+)
+
+
+def _definitions(catalogue: dict[str, Any]) -> list[dict[str, Any]]:
+    """Native function definitions, exactly as `/generate` sends them."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.inputSchema,
+            },
+        }
+        for tool in catalogue.values()
+    ]
 
 
 def _failure(exc: BaseException) -> ApiError:
@@ -66,26 +90,8 @@ class Agent:
         try:
             async with (
                 asyncio.timeout(self.settings.agent_timeout_seconds),
-                httpx.AsyncClient(
-                    headers={"X-Request-ID": request_id},
-                    timeout=self.settings.mcp_timeout_seconds,
-                    transport=self.transport,
-                    follow_redirects=False,
-                ) as client,
-                streamable_http_client(self.settings.mcp_url, http_client=client) as (
-                    read,
-                    write,
-                    _,
-                ),
-                ClientSession(
-                    read,
-                    write,
-                    read_timeout_seconds=timedelta(
-                        seconds=self.settings.mcp_timeout_seconds
-                    ),
-                ) as session,
+                self._session(request_id) as session,
             ):
-                await session.initialize()
                 answer = await self._run(session, payload, model, request_id, trace)
             return answer, trace
         except Exception as exc:
@@ -93,14 +99,31 @@ class Agent:
             error.tools = [entry.model_dump(mode="json") for entry in trace]
             raise error from exc
 
-    async def generate_plain(self, payload: GenerateRequest, model: str) -> str:
-        """One model call without MCP, for callers such as RAG that own context."""
-        messages = []
-        if payload.system:
-            messages.append({"role": "system", "content": payload.system})
-        messages.append({"role": "user", "content": payload.prompt})
+    async def generate_plain(
+        self, payload: GenerateRequest, model: str, request_id: str
+    ) -> str:
+        """One model call that can never execute a tool.
+
+        By default MCP is not contacted, for callers such as RAG that own their
+        context. With `tool_catalogue`, the discovered catalogue is appended to
+        the system message as reference text, for callers such as the
+        multi-agent Planner that reason about tools but must not run them.
+        """
         try:
             async with asyncio.timeout(self.settings.agent_timeout_seconds):
+                system = payload.system
+                if payload.tool_catalogue:
+                    async with self._session(request_id) as session:
+                        definitions = _definitions(await self._catalogue(session))
+                    reference = (
+                        f"{CATALOGUE_PREAMBLE}\n"
+                        f"{json.dumps(definitions, ensure_ascii=False)}"
+                    )
+                    system = f"{system}\n\n{reference}" if system else reference
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": payload.prompt})
                 self._bound(messages, [])
                 reply = await self.provider.chat(
                     model=model,
@@ -113,6 +136,53 @@ class Agent:
         if reply.tool_calls:
             raise bad_gateway("The model requested tools during plain generation.")
         return _final_text(reply.content, payload.output_schema)
+
+    @asynccontextmanager
+    async def _session(self, request_id: str) -> AsyncIterator[ClientSession]:
+        async with (
+            httpx.AsyncClient(
+                headers={"X-Request-ID": request_id},
+                timeout=self.settings.mcp_timeout_seconds,
+                transport=self.transport,
+                follow_redirects=False,
+            ) as client,
+            streamable_http_client(self.settings.mcp_url, http_client=client) as (
+                read,
+                write,
+                _,
+            ),
+            ClientSession(
+                read,
+                write,
+                read_timeout_seconds=timedelta(
+                    seconds=self.settings.mcp_timeout_seconds
+                ),
+            ) as session,
+        ):
+            await session.initialize()
+            yield session
+
+    async def _catalogue(self, session: ClientSession) -> dict[str, Any]:
+        """The full MCP catalogue, following pagination, with schemas validated."""
+        catalogue = {}
+        cursor = None
+        cursors = set()
+        while True:
+            page = await session.list_tools(cursor=cursor)
+            for tool in page.tools:
+                if tool.name in catalogue:
+                    raise bad_gateway("MCP advertised duplicate tool names.")
+                validate_schema(tool.inputSchema)
+                catalogue[tool.name] = tool
+            self._bound(
+                [], [tool.model_dump(mode="json") for tool in catalogue.values()]
+            )
+            cursor = page.nextCursor
+            if not cursor:
+                return catalogue
+            if cursor in cursors:
+                raise bad_gateway("MCP tool discovery repeated a page.")
+            cursors.add(cursor)
 
     def _bound(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -134,36 +204,8 @@ class Agent:
         request_id: str,
         trace: list[ToolTrace],
     ) -> str:
-        catalogue = {}
-        cursor = None
-        cursors = set()
-        while True:
-            page = await session.list_tools(cursor=cursor)
-            for tool in page.tools:
-                if tool.name in catalogue:
-                    raise bad_gateway("MCP advertised duplicate tool names.")
-                validate_schema(tool.inputSchema)
-                catalogue[tool.name] = tool
-            self._bound(
-                [], [tool.model_dump(mode="json") for tool in catalogue.values()]
-            )
-            cursor = page.nextCursor
-            if not cursor:
-                break
-            if cursor in cursors:
-                raise bad_gateway("MCP tool discovery repeated a page.")
-            cursors.add(cursor)
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "parameters": tool.inputSchema,
-                },
-            }
-            for tool in catalogue.values()
-        ]
+        catalogue = await self._catalogue(session)
+        tools = _definitions(catalogue)
         messages = []
         if payload.system:
             messages.append({"role": "system", "content": payload.system})

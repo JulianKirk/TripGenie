@@ -117,6 +117,8 @@ class GenerateRequest(StrictModel):
     output_schema: dict[str, Any] | None = Field(default=None, alias="schema")
     correlation_id: str | None = None
     metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict)
+    # /generate-plain only: describe the MCP catalogue without executing tools.
+    tool_catalogue: bool = False
 
     @field_validator("prompt", "system")
     @classmethod

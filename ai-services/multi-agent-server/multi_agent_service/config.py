@@ -92,7 +92,9 @@ class Settings:
     features: tuple[str, ...] = DEFAULT_FEATURES
     # The Planner and Reviewer make one tool-free AI-Mode call each. The Worker
     # runs AI-Mode's MCP tool loop, whose own budget defaults to 180 s.
-    planner_timeout_seconds: float = 60.0
+    # The Planner reads AI-Mode's full MCP catalogue (~20k characters), so it
+    # needs about 30 s warm on llama3.1:8b; the margin covers a cold load.
+    planner_timeout_seconds: float = 90.0
     worker_timeout_seconds: float = 200.0
     reviewer_timeout_seconds: float = 60.0
     # A whole run, including one revision. Past this it is marked failed with
@@ -162,7 +164,7 @@ class Settings:
             planner_timeout_seconds=_parse_float(
                 os.getenv("MULTI_AGENT_PLANNER_TIMEOUT_SECONDS"),
                 env_name="MULTI_AGENT_PLANNER_TIMEOUT_SECONDS",
-                default=60.0,
+                default=90.0,
             ),
             worker_timeout_seconds=_parse_float(
                 os.getenv("MULTI_AGENT_WORKER_TIMEOUT_SECONDS"),

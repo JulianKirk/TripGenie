@@ -176,3 +176,15 @@ def test_failed_checks_are_shown_before_the_human_decides(
     assert "warning: check grounding failed: ids no successful student-3" in out
     assert "TRN12345" in out
     assert "status: rejected" in out
+
+
+def test_a_terminal_with_nothing_to_read_does_not_crash_the_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_input(_: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", no_input)
+
+    assert cli._ask("Notes: ") is None

@@ -139,6 +139,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A Windows console or pipe may use a legacy code page without "→" or
+    # model-written characters; substitute them instead of crashing mid-run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     arguments = _parser().parse_args(argv)
     if arguments.command == "serve":
         settings = Settings.from_env()
@@ -296,7 +301,12 @@ def _print_step(step: dict[str, Any], run: dict[str, Any]) -> None:
 
 
 def _ask(prompt: str) -> str | None:
-    return input(prompt).strip() if sys.stdin.isatty() else None
+    if not sys.stdin.isatty():
+        return None
+    try:
+        return input(prompt).strip()
+    except EOFError:  # A pseudo-terminal with nothing to read, e.g. Git Bash.
+        return None
 
 
 def _choose_decision(arguments: argparse.Namespace) -> str | None:

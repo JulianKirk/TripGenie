@@ -19,7 +19,8 @@ sequenceDiagram
     UI->>API: POST feature route
     API->>MA: POST /runs (task, feature prompt, schema, tools, grounding)
     MA-->>API: 202 {run_id, status: planning}
-    MA->>AI: Planner · /generate-plain (plan schema)
+    MA->>AI: Planner · /generate-plain (plan schema, tool_catalogue)
+    AI->>MCP: tools/list only (no tools/call)
     MA->>AI: Worker · /generate (feature schema)
     AI->>MCP: model-directed tools/call
     AI-->>MA: result + tools trace
@@ -170,7 +171,7 @@ durations, never prompts or tool data.
 | `MULTI_AGENT_MODEL` | unset (AI-Mode's default; must be on AI-Mode's allow-list) |
 | `MULTI_AGENT_DB_PATH` | `ai-services/multi-agent-server/data/runs.sqlite3` |
 | `MULTI_AGENT_FEATURES` | `student-1,…,student-5` |
-| `MULTI_AGENT_PLANNER_TIMEOUT_SECONDS` / `_WORKER_` / `_REVIEWER_` | `60` / `200` / `60` |
+| `MULTI_AGENT_PLANNER_TIMEOUT_SECONDS` / `_WORKER_` / `_REVIEWER_` | `90` / `200` / `60` |
 | `MULTI_AGENT_RUN_TIMEOUT_SECONDS` | `420` (must cover one of each stage) |
 | `MULTI_AGENT_MAX_REVISIONS` | `1` |
 | `MULTI_AGENT_MAX_ACTIVE_RUNS` | `4` |

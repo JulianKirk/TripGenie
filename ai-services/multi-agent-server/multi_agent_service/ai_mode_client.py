@@ -1,8 +1,10 @@
 """The Multi-Agent Server's only route to a model: the shared AI-Mode gateway.
 
 AI-Mode stays the sole Ollama adapter. The Planner and Reviewer use the
-tool-free `/generate-plain`; the Worker uses `/generate`, where AI-Mode runs
-the model-directed MCP tool loop and returns the real tool trace.
+tool-free `/generate-plain` (the Planner with `tool_catalogue`, so AI-Mode
+describes the MCP tools without executing any); the Worker uses `/generate`,
+where AI-Mode runs the model-directed MCP tool loop and returns the real tool
+trace.
 """
 
 from __future__ import annotations
@@ -93,6 +95,7 @@ class AiModeClient:
         metadata: dict[str, str],
         use_tools: bool,
         timeout: float,
+        tool_catalogue: bool = False,
     ) -> Generation:
         body: dict[str, Any] = {
             "prompt": prompt,
@@ -103,6 +106,8 @@ class AiModeClient:
         }
         if self._model:
             body["model"] = self._model
+        if tool_catalogue:
+            body["tool_catalogue"] = True
         path = "/generate" if use_tools else "/generate-plain"
         try:
             response = await self._client.post(
