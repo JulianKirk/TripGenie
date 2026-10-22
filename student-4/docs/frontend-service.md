@@ -123,7 +123,7 @@ Activity guides (RAG) remain separate modes.
 
 The activity MCP and Smart Planner prompts treat each submission as a one-shot
 request. They must not ask follow-up questions or expect human review to supply
-missing inputs. Human review only accepts, corrects or rejects the finished draft.
+missing inputs. Human review accepts or corrects the finished draft, or rejects it with feedback to request a new run.
 Unspecified inputs are identified in the response, using catalogue evidence for
 the known constraints; an unknown party size must not produce a verified total-budget
 recommendation.
@@ -157,7 +157,7 @@ sequenceDiagram
 Active runs poll; awaiting-human and terminal states stop polling. Refresh links
 work without JavaScript. Errors stop automatic polling and provide a refresh
 link for known runs. Failed review submissions preserve the entered reviewer,
-notes, correction text parts and card selections in both HTMX and full-page
+notes, correction text parts, trip, optional per-activity date/time and card selections in both HTMX and full-page
 responses. The frontend safely reads current run status after a failure; it never
 retries the decision. If status is unavailable or no longer awaiting review, the
 submitted form remains editable with decision controls disabled. **Refresh status
@@ -170,15 +170,40 @@ resubmit it.
 
 The results show the plan, tool calls/results, stage attempts, validation checks,
 reviewer findings and human decision. Model text is escaped. Draft cards do not
-show Add to itinerary. Approval records acceptance only; accepted cards expose
-the existing manual itinerary control. Correction edits recommendation text and
-selects which grounded cards to keep; it is not an agent rerun. Each original
-text part gets its own correction textarea (up to 1000 characters), preserving
-longer multi-part narratives without truncation. Clearing a text part removes it;
-at least one nonempty text part is required. Corrected output retains the
-backend limits of twelve total parts and six activity cards. Failed blocking
-checks disable approval and correction; they must be resolved in a new run or the
-proposal rejected. Rejection remains available.
+show the independent Add to itinerary action. Each draft card has a **Dismiss
+suggestion** button. Dismissal posts only presentation state to
+`/planner/{run_id}/selection`, reads the current run and hides that card without
+changing agent evidence. **Restore all suggestions** reverses dismissals. These
+controls retain typed reviewer, notes, correction, trip and schedule fields.
+Selected IDs are validated against the backend-grounded activity cards. The
+selected subset is also represented in the run URL for refreshes. If cards are
+dismissed, the original narrative is hidden because it may describe removed
+suggestions; its original text remains in the correction fields and evidence.
+
+**Approve and add to trip** submits the explicitly selected cards, a trip and
+optional per-card local date/time to the backend's existing itinerary integration.
+Text-only results can be approved without itinerary writes. Individual additions
+show added/already-present outcomes and any errors. Approval and additions are
+not replayed after a lost response: **Refresh status and keep edits** reads only
+the run. A completed run confirms that approval was recorded; users check their
+trip when the original addition response is unavailable. Accepted cards retain
+the ordinary manual itinerary control for subsequent changes.
+
+Correction edits recommendation text and selects which grounded cards to keep;
+it does not rerun an agent. Saving retained cards uses the same trip integration.
+Each original text part gets its own textarea (up to 1000 characters). Clearing a
+text part removes it; at least one nonempty text part is required. Corrected
+output retains the limits of twelve total parts and six cards. A text-only
+correction records no itinerary additions. Failed blocking checks disable
+approval and correction; rejection remains available.
+
+**Reject** records rejection without another search. **Reject and regenerate**
+requires the reviewer name and a nonempty explanation (at most 1000 characters).
+It posts to `/planner/{run_id}/regenerate`; the backend records rejection and
+starts a new run using the original question/trip and feedback, including the
+explicitly dismissed IDs. The new result links to the previous rejected run.
+A failed response preserves feedback and reads the original run; regeneration
+is never automatically repeated.
 
 `/planner/{run_id}/history` downloads JSON evidence through the backend. History
 includes the run, stage outputs/tool traces and coordination/audit events. It is

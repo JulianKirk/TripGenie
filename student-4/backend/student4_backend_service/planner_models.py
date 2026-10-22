@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
+from uuid import UUID  # noqa: TC003
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .assistant_models import AssistantResponse, FinalAction, ToolTrace
-from .schemas import StrictModel
+from .schemas import ActivitySchedule, StrictModel
 
 RunId = Annotated[str, Field(pattern=r"^magent_[0-9a-f]{12}$")]
 
@@ -86,9 +87,28 @@ class Run(BaseModel):
     error: dict[str, str] | None = None
 
 
+class SavedSelection(StrictModel):
+    activity_id: UUID
+    trip_id: str
+    status: Literal["added", "already_present"]
+
+
+class SaveError(StrictModel):
+    activity_id: UUID
+    trip_id: str
+    message: str
+
+
 class PlannerResponse(StrictModel):
     run: Run
     answer: AssistantResponse
+    saved: list[SavedSelection] = Field(default_factory=list)
+    save_errors: list[SaveError] = Field(default_factory=list)
+    previous_run_id: RunId | None = None
+
+
+class PlannerSelection(ActivitySchedule):
+    activity_id: UUID
 
 
 class Decision(StrictModel):
@@ -96,6 +116,36 @@ class Decision(StrictModel):
     reviewer: str = Field(min_length=1, max_length=60)
     notes: str | None = Field(default=None, max_length=1000)
     corrected_result: FinalAction | None = None
+    trip_id: str | None = Field(
+        default=None, pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+    )
+    selections: list[PlannerSelection] | None = Field(default=None, max_length=6)
+
+    @field_validator("selections")
+    @classmethod
+    def unique_selections(
+        cls, value: list[PlannerSelection] | None
+    ) -> list[PlannerSelection] | None:
+        if value is not None and len({item.activity_id for item in value}) != len(
+            value
+        ):
+            msg = "Select each activity once."
+            raise ValueError(msg)
+        return value
+
+
+class Regenerate(StrictModel):
+    reviewer: str = Field(min_length=1, max_length=60)
+    feedback: str = Field(min_length=1, max_length=1000)
+    dismissed_activity_ids: list[UUID] = Field(default_factory=list, max_length=6)
+
+    @field_validator("feedback", "reviewer")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            msg = "Must not be blank."
+            raise ValueError(msg)
+        return value.strip()
 
 
 class HistoryEvent(BaseModel):

@@ -817,36 +817,69 @@ existing callers can omit it. This adds no model calls or UI steps.
 | --- | --- | --- | --- |
 | POST | `/activity/planner/runs` | 202 | Start with `{question, trip_id?}` (same validation as the assistant). |
 | GET | `/activity/planner/runs/{run_id}` | 200 | Fetch progress and grounded activity cards. |
-| POST | `/activity/planner/runs/{run_id}/review` | 200 | Record approval, correction or rejection. |
+| POST | `/activity/planner/runs/{run_id}/review` | 200 | Approve selected suggestions and add them to a trip, correct text, or reject. |
+| POST | `/activity/planner/runs/{run_id}/regenerate` | 202 | Reject the current result with feedback and start a linked replacement. |
 | GET | `/activity/planner/runs/{run_id}/history` | 200 | Download `{run, history}` evidence. |
 
 Run IDs match `magent_` followed by twelve lowercase hexadecimal digits. Reads,
 reviews and history reject runs belonging to other features. This is feature
 scoping, not user authentication; the application has no per-user run ownership.
 
-Start/get/review return `{run, answer}`. `run` contains status, plan, stage outputs,
-checks, reviewer findings and the human decision. `answer` uses the existing
-assistant presentation contract (`parts`, resolved `activities`, tool traces,
-unavailable IDs and an optional error). Cards must be grounded in successful
-Student 4 tool results from this run and are resolved through ordinary activity
-lookup. Invalid model results retain their traces but do not produce cards.
+Start/get/review/regenerate return `{run, answer, saved, save_errors,
+previous_run_id}`. `run` contains status, plan, stage outputs, checks, reviewer
+findings and the human decision. `answer` uses the existing assistant contract
+(`parts`, resolved `activities`, tool traces, unavailable IDs and an optional
+error). Cards must be grounded in successful Student 4 tool results from this
+run and are resolved through ordinary activity lookup. Invalid model results
+retain their traces but do not produce cards.
 
-A decision body is `{decision: "approve"|"correct"|"reject", reviewer, notes?}`.
-`reviewer` is 1–60 characters and notes at most 1000. `correct` also requires
-`corrected_result` using the Worker shape:
-`{"type":"final","parts":[{"type":"text","text":"Edited recommendation"}]}`.
-Activity parts may be retained only with IDs grounded in the run's tool results.
-Approval validates and accepts the original draft; `corrected_result` is used only
-for a `correct` decision. Correction records a human edit; it does not restart the
-agents. Failed blocking
-checks prevent approval/correction through this backend; rejection remains possible.
-Partial acceptance is not exposed because this workflow proposes no executable actions.
+A review body is `{decision: "approve"|"correct"|"reject", reviewer, notes?,
+corrected_result?, trip_id?, selections?}`. `reviewer` is 1–60 characters and
+notes at most 1000. `correct` requires `corrected_result` in the Worker shape,
+for example `{"type":"final","parts":[{"type":"text","text":"Edited recommendation"}]}`.
+Corrections may retain only activity IDs present in the original Worker result
+and grounded in its successful tool evidence. Approval uses the original draft;
+`corrected_result` is used only for `correct`. Failed blocking checks prevent
+approval/correction; rejection remains possible.
 
-Approval does not write activities, book anything, or add itinerary items. The
-ordinary Add to itinerary control remains available on accepted cards. Prompts
-instruct the Worker to use read-only tools, but the shared server's `allowed_tools`
-and `no_writes` checks are retrospective, not a pre-execution authorization gate.
-Tool traces remain visible: rejection cannot undo any tool calls already executed.
+When the reviewed answer contains cards, supply an explicit nonempty
+`selections` array (maximum six distinct entries) and a target `trip_id`, or use
+the original run's selected trip. Each entry is `{activity_id, date?, start_time?}`;
+dates use `YYYY-MM-DD`, local times use `HH:MM`. Selected IDs must be original
+cards retained in the reviewed answer. The backend drops unselected cards and
+records a shared correction for subset acceptance. Text-only acceptance or
+correction requires no trip and creates no itinerary items.
+
+Before recording approval, the backend validates the trip, date bounds,
+selected activities and current membership through ordinary public APIs. After
+the shared server confirms completion and the approved result, the backend
+calls the existing Student 1 activity itinerary API once per selected item.
+Existing memberships are preserved without rescheduling. This creates no activity
+catalogue records and makes no bookings.
+
+The review response reports confirmed additions as
+`{activity_id, trip_id, status: "added"|"already_present"}` in `saved`. Individual
+unconfirmed saves appear as `{activity_id, trip_id, message}` in `save_errors`;
+other selected additions continue. These arrays describe this operation and are
+not replayed by GET or stored as shared workflow events. The trip API remains
+the source of truth for saved memberships. A completed run cannot be reviewed
+again. The backend never automatically retries a review or an itinerary write.
+
+Regeneration accepts `{reviewer, feedback, dismissed_activity_ids?}`. Feedback
+must be nonblank and at most 1000 characters; at most six dismissed UUIDs may
+identify cards from this result. Only `awaiting_human` runs may regenerate. The
+backend records rejection with the feedback, then starts a new run using the
+same task, trip, prompts, output schema and grounding policy. Bounded context
+contains `human_feedback`, `previous_run_id` and all grounded original suggestion
+IDs as `rejected_activity_ids`; metadata
+also records `parent_run_id`. The response identifies the original run through
+`previous_run_id`. If starting the replacement cannot be confirmed, the original
+rejection remains available and the response explains that a replacement may
+have started. Neither operation is retried automatically.
+
+Agent prompts instruct read-only tool use. The shared server's `allowed_tools`
+and `no_writes` checks validate tool traces; tool traces remain visible throughout
+human review and rejection does not undo prior tool execution.
 
 Configuration (read by backend `Settings.from_env`):
 

@@ -205,6 +205,18 @@ class BackendClient:
             request_timeout=self._settings.ai_timeout,
         )
 
+    async def regenerate_planner(
+        self, run_id: str, body: dict[str, object]
+    ) -> PlannerResponse:
+        return await self._request(
+            "POST",
+            f"/activity/planner/runs/{run_id}/regenerate",
+            PlannerResponse,
+            {202},
+            json=body,
+            request_timeout=self._settings.ai_timeout,
+        )
+
     async def planner_history(self, run_id: str) -> Evidence:
         return await self._request(
             "GET",

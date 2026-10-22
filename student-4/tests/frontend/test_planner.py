@@ -331,7 +331,9 @@ def test_review_validation_error_keeps_unchecked_cards_and_escaped_fields() -> N
         assert "<script>bad</script>" not in response.text
         assert f'value="{ACTIVITY_ID}" checked' in response.text
         assert f'value="{other_id}"> Keep Another walk' in response.text
-    assert [request.method for request in requests] == ["GET", "GET"]
+    assert [
+        request.method for request in requests if request.url.path != "/activity/trips"
+    ] == ["GET", "GET"]
 
 
 def test_correction_can_remove_a_text_part_but_not_every_text_part() -> None:

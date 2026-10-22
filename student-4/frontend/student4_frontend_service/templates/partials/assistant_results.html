@@ -16,6 +16,7 @@
           <div><dt>Wheelchair access</dt><dd>{{ activity.wheelchair_accessible|accessibility }}</dd></div>
         </dl>
         <div class="actions">
+          {% if planner_draft and dismiss_urls and activity.id|string in dismiss_urls %}<button class="button" type="submit" form="planner-review" name="dismiss_id" value="{{ activity.id }}" formaction="/planner/{{ run_id }}/selection" formnovalidate hx-post="/planner/{{ run_id }}/selection" hx-include="#planner-review" hx-target="#planner-result" hx-swap="outerHTML" hx-validate="false">Dismiss suggestion</button>{% endif %}
           <button class="button" type="button" hx-get="/activity/{{ activity.id }}" hx-target="#activity-dialog" hx-swap="innerHTML">View details</button>
           {% if activity.is_active and not planner_draft %}<button class="button button--primary" type="button" hx-get="/activity/{{ activity.id }}/itineraries/dialog" hx-target="#activity-dialog" hx-swap="innerHTML">Add to itinerary</button>
           {% elif not activity.is_active %}<span class="field-hint">This activity is no longer active.</span>{% endif %}

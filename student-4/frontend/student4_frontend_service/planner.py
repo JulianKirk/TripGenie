@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 from .client import BackendClient
 from .errors import FrontendError
 from .planner_models import RunId  # noqa: TC001 - FastAPI annotation
+from .planner_selection import Selection, scheduling_body
 
 if TYPE_CHECKING:
     from fastapi.templating import Jinja2Templates
@@ -46,13 +47,15 @@ class ReviewForm:
         )
 
 
-def render(
+async def render(
     request: Request,
     result: PlannerResponse | None = None,
     *,
     error: str | None = None,
     run_id: str | None = None,
     submitted: ReviewForm | None = None,
+    selection: Selection | None = None,
+    recovering: bool | None = None,
 ) -> Response:
     templates = cast("Jinja2Templates", request.app.state.templates)
     partial = "partials/planner_results.html"
@@ -67,15 +70,62 @@ def render(
             or [""],
             activity_ids=list(result.answer.activities),
         )
+    selection = selection or Selection.from_fields(request.query_params)
+    trips = []
+    trip_error = None
+    displayed_answer = result.answer if result else None
+    dismiss_urls: dict[str, str] = {}
+    if result is not None:
+        selection.resolve(result)
+        if result.run.status == "awaiting_human" and result.answer.activities:
+            try:
+                directory = await _client(request).trips()
+                trips = directory.trips
+                if not directory.available:
+                    trip_error = (
+                        "Trips are unavailable. Refresh before approving activities."
+                    )
+            except FrontendError as exc:
+                trip_error = exc.detail
+        if result.run.status == "awaiting_human":
+            dismiss_urls = {
+                key: selection.url(result.run.run_id, without=key)
+                for key in selection.ids
+            }
+            # The original narrative may reference dismissed suggestions.
+            if set(selection.ids) != set(result.answer.activities):
+                displayed_answer = result.answer.model_copy(
+                    update={
+                        "parts": [
+                            part
+                            for part in result.answer.parts
+                            if part.type == "activity"
+                            and str(part.activity_id) in selection.ids
+                        ],
+                        "activities": {
+                            key: value
+                            for key, value in result.answer.activities.items()
+                            if key in selection.ids
+                        },
+                    }
+                )
+        if submitted is None and review_form is not None:
+            review_form.activity_ids = list(selection.ids)
     return templates.TemplateResponse(
         request,
         partial if request.headers.get("HX-Request") == "true" else "planner_page.html",
         {
             "planner": result,
+            "displayed_answer": displayed_answer,
+            "selection": selection,
+            "selection_url": selection.url(result.run.run_id) if result else "",
+            "dismiss_urls": dismiss_urls,
+            "trips": trips,
+            "trip_error": trip_error,
             "error": error,
             "run_id": result.run.run_id if result else run_id,
             "review_form": review_form,
-            "recovering": submitted is not None,
+            "recovering": submitted is not None if recovering is None else recovering,
             "results_template": partial,
         },
     )
@@ -88,17 +138,17 @@ async def start(request: Request, client: BackendClient, form: FormData) -> Resp
         body["trip_id"] = trip
     try:
         result = await client.start_planner(body)
-        return render(request, result)
+        return await render(request, result)
     except FrontendError as exc:
-        return render(request, error=exc.detail)
+        return await render(request, error=exc.detail)
 
 
 @router.get("/planner/{run_id}")
 async def get(request: Request, run_id: RunId, client: ClientDep) -> Response:
     try:
-        return render(request, await client.planner(run_id))
+        return await render(request, await client.planner(run_id))
     except FrontendError as exc:
-        return render(request, error=exc.detail, run_id=run_id)
+        return await render(request, error=exc.detail, run_id=run_id)
 
 
 def decision_body(form: FormData) -> dict[str, object]:
@@ -143,6 +193,11 @@ def decision_body(form: FormData) -> dict[str, object]:
             msg = "Keep at most twelve recommendation parts, including activities."
             raise ValueError(msg)
         body["corrected_result"] = {"type": "final", "parts": parts}
+    if decision in {"approve", "correct"} and str(form.get("selection", "")) == "1":
+        selected = [str(UUID(str(value))) for value in form.getlist("selected_ids")]
+        if decision == "correct":
+            selected = [str(UUID(str(value))) for value in form.getlist("activity_ids")]
+        body.update(scheduling_body(form, list(dict.fromkeys(selected))))
     return body
 
 
@@ -151,7 +206,7 @@ async def review(request: Request, run_id: RunId, client: ClientDep) -> Response
     form = await request.form()
     try:
         body = decision_body(form)
-        return render(request, await client.review_planner(run_id, body))
+        return await render(request, await client.review_planner(run_id, body))
     except (ValueError, FrontendError) as exc:
         message = exc.detail if isinstance(exc, FrontendError) else str(exc)
         return await recover_review(request, run_id, client, form, error=message)
@@ -170,13 +225,71 @@ async def recover_review(
         result = await client.planner(run_id)
     except FrontendError as exc:
         error = f"{error} {exc.detail}" if error else exc.detail
-    return render(
+    return await render(
         request,
         result,
         error=error,
         run_id=run_id,
         submitted=ReviewForm.from_form(form),
+        selection=Selection.from_fields(form),
     )
+
+
+@router.post("/planner/{run_id}/selection")
+async def select(request: Request, run_id: RunId, client: ClientDep) -> Response:
+    """Change presentation only, preserving edits without sending a decision."""
+    form = await request.form()
+    try:
+        result = await client.planner(run_id)
+    except FrontendError as exc:
+        return await recover_review(request, run_id, client, form, error=exc.detail)
+    selection = Selection.from_fields(form)
+    selection.resolve(result)
+    submitted = ReviewForm.from_form(form)
+    if result.run.status == "awaiting_human":
+        if str(form.get("restore", "")) == "all":
+            selection.ids = list(result.answer.activities)
+            submitted.activity_ids = list(selection.ids)
+        else:
+            dismissed = str(form.get("dismiss_id", ""))
+            selection.ids = [key for key in selection.ids if key != dismissed]
+            submitted.activity_ids = [
+                key for key in submitted.activity_ids if key != dismissed
+            ]
+        selection.explicit = True
+    response = await render(
+        request,
+        result,
+        selection=selection,
+        submitted=submitted,
+        recovering=False,
+    )
+    response.headers["HX-Push-Url"] = selection.url(run_id)
+    return response
+
+
+@router.post("/planner/{run_id}/regenerate")
+async def regenerate(request: Request, run_id: RunId, client: ClientDep) -> Response:
+    form = await request.form()
+    reviewer = str(form.get("reviewer", "")).strip()
+    feedback = str(form.get("feedback", "")).strip()
+    try:
+        if not 1 <= len(reviewer) <= 60 or not 1 <= len(feedback) <= 1000:
+            msg = "Enter your name and feedback (1-1000 characters) to regenerate."
+            raise ValueError(msg)
+        dismissed = [str(UUID(str(value))) for value in form.getlist("dismissed_ids")]
+        result = await client.regenerate_planner(
+            run_id,
+            {
+                "reviewer": reviewer,
+                "feedback": feedback,
+                "dismissed_activity_ids": list(dict.fromkeys(dismissed)),
+            },
+        )
+        return await render(request, result)
+    except (ValueError, FrontendError) as exc:
+        message = exc.detail if isinstance(exc, FrontendError) else str(exc)
+        return await recover_review(request, run_id, client, form, error=message)
 
 
 @router.post("/planner/{run_id}/recover")
@@ -194,4 +307,4 @@ async def history(request: Request, run_id: RunId, client: ClientDep) -> Respons
             headers={"Content-Disposition": f'attachment; filename="{run_id}.json"'},
         )
     except FrontendError as exc:
-        return render(request, error=exc.detail, run_id=run_id)
+        return await render(request, error=exc.detail, run_id=run_id)

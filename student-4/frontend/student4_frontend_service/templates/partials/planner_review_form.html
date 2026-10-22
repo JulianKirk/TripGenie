@@ -1,20 +1,31 @@
+{% set original_activities = planner.answer.activities if planner else {} %}
 {% set can_review = planner and planner.run.status == 'awaiting_human' %}
 {% set failed_checks = planner.run.checks|selectattr('blocking')|rejectattr('passed')|list if planner else [] %}
 {% if failed_checks %}<p class="banner banner--error" role="alert">This draft failed validation checks and cannot be accepted. Reject it and start a revised request.</p>{% endif %}
-{% if recovering %}<p role="status">Your submitted edits are preserved below. A failed response may still have recorded your decision. Check the current status before submitting another decision. Refresh status only reads this run; it does not send your decision again.</p>{% endif %}
+{% if recovering %}<p role="status">Your submitted edits are preserved below. A failed response may still have recorded your decision and added activities to your trip. Check the trip before attempting to add activities again. Check the current status before submitting another decision. Refresh status only reads this run; it does not send your decision again.</p>{% endif %}
 {% if not can_review %}<p role="status">Decision controls are disabled because this run is not confirmed as awaiting review. Refresh its status to check.</p>{% endif %}
-<form method="post" action="/planner/{{ run_id }}/review" hx-post="/planner/{{ run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-disabled-elt="find button">
-  <p>Approval records your acceptance of these recommendations. It does not add them to your itinerary or book anything.</p>
+<form id="planner-review" method="post" action="/planner/{{ run_id }}/review" hx-post="/planner/{{ run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-disabled-elt="find button">
+  <input type="hidden" name="selection" value="1">
+  {% for key in selection.ids %}<input type="hidden" name="selected_ids" value="{{ key }}">{% endfor %}
+  {% for key in original_activities if key not in selection.ids %}<input type="hidden" name="dismissed_ids" value="{{ key }}"><input type="hidden" name="date_{{ key }}" value="{{ selection.dates.get(key, '') }}"><input type="hidden" name="start_time_{{ key }}" value="{{ selection.times.get(key, '') }}">{% endfor %}
+  <p>Approve to add the selected activities to your trip. This does not make a booking. Dismiss suggestions above before approving. You can restore dismissed suggestions before making a decision.</p>
+  {% if original_activities %}
+    {% if trip_error %}<p class="banner banner--error" role="alert">{{ trip_error }}</p>{% endif %}
+    {% if not selection.ids %}<p role="status">No activities selected. Restore suggestions, enter a text-only correction, or reject and regenerate.</p>{% endif %}
+    <label class="field">Trip<select name="trip_id"><option value="">Choose a trip</option>{% for trip in trips %}<option value="{{ trip.id }}"{% if trip.id == selection.trip_id %} selected{% endif %}>{{ trip.name }} ({{ trip.start_date }} – {{ trip.end_date }})</option>{% endfor %}{% if selection.trip_id and selection.trip_id not in trips|map(attribute='id')|list %}<option value="{{ selection.trip_id }}" selected>{{ selection.trip_id }}</option>{% endif %}</select></label>
+    {% for key in selection.ids %}<fieldset><legend>{{ original_activities[key].name }}</legend><label class="field">Activity date (optional)<input type="date" name="date_{{ key }}" value="{{ selection.dates.get(key, '') }}"></label><label class="field">Local start time (optional)<input type="time" name="start_time_{{ key }}" value="{{ selection.times.get(key, '') }}"></label></fieldset>{% endfor %}
+  {% endif %}
   <label class="field">Your name<input name="reviewer" value="{{ review_form.reviewer }}" required maxlength="60" autocomplete="name"></label>
   <label class="field">Review notes (optional)<textarea name="notes" maxlength="1000">{{ review_form.notes }}</textarea></label>
-  <div class="actions"><button class="button button--primary" name="decision" value="approve"{% if not can_review or failed_checks %} disabled{% endif %}>Approve</button><button class="button" name="decision" value="reject"{% if not can_review %} disabled{% endif %}>Reject</button></div>
+  <div class="actions"><button class="button button--primary" name="decision" value="approve"{% if not can_review or failed_checks or (original_activities and not selection.ids) %} disabled{% endif %}>{{ "Approve and add to trip" if original_activities else "Approve" }}</button><button class="button" name="decision" value="reject"{% if not can_review %} disabled{% endif %}>Reject</button></div>
   <details{% if recovering %} open{% endif %}><summary>Correct the recommendation</summary>
-    <p>Edit each text part and choose which suggested activities to keep. Clear a text part to remove it; keep at least one nonempty text part. Each text part allows 1000 characters; keep at most twelve parts including up to six activities. This records your edit; it does not ask the AI to run again.</p>
+    <p>Saving a correction adds its retained activities to the selected trip. A text-only correction saves no itinerary entries. Edit each text part and choose which suggested activities to keep. Clear a text part to remove it; keep at least one nonempty text part. Each text part allows 1000 characters; keep at most twelve parts including up to six activities. This records your edit; it does not ask the AI to run again.</p>
     {% for text in review_form.corrections %}<label class="field">Corrected recommendation, part {{ loop.index }}<textarea name="correction" maxlength="1000">{{ text }}</textarea></label>{% endfor %}
-    {% set activities = planner.answer.activities if planner else {} %}
+    {% set activities = original_activities if planner else {} %}
     {% for key, activity in activities.items() %}<label><input type="checkbox" name="activity_ids" value="{{ key }}"{% if key in review_form.activity_ids %} checked{% endif %}> Keep {{ activity.name }}</label>{% endfor %}
     {% for key in review_form.activity_ids if key not in activities %}<label><input type="checkbox" name="activity_ids" value="{{ key }}" checked> Keep activity {{ key }} (details unavailable; acceptance still requires this run's tool evidence)</label>{% endfor %}
     <button class="button" name="decision" value="correct"{% if not can_review or failed_checks %} disabled{% endif %}>Save correction</button>
   </details>
+  <details{% if selection.feedback %} open{% endif %}><summary>Reject the whole result and try again</summary><p>Explain what should change. This rejects this run and starts a new one using your feedback.</p><label class="field">Why should the result change?<textarea name="feedback" maxlength="1000">{{ selection.feedback }}</textarea></label><button class="button" type="submit" formaction="/planner/{{ run_id }}/regenerate" hx-post="/planner/{{ run_id }}/regenerate"{% if not can_review %} disabled{% endif %}>Reject and regenerate</button></details>
   <button class="button" type="submit" formaction="/planner/{{ run_id }}/recover" formnovalidate hx-post="/planner/{{ run_id }}/recover" hx-validate="false">Refresh status and keep edits</button>
 </form>
