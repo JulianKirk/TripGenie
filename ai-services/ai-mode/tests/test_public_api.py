@@ -419,6 +419,7 @@ def test_generate_uses_requested_model_when_provider_model_is_untrusted(
             "response": '{"suggestions":[]}',
             "done": True,
             "tools": [],
+            "available_tools": [],
         }
     }
     assert response.json()["data"]["run_id"].startswith("aimode_")

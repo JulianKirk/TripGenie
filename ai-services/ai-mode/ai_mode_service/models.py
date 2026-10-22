@@ -111,6 +111,9 @@ class GenerateRequest(StrictModel):
         populate_by_name=True,
     )
 
+    feature: (
+        Literal["student-1", "student-2", "student-3", "student-4", "student-5"] | None
+    ) = None
     prompt: PromptText
     system: PromptText | None = None
     model: ModelName | None = None
@@ -173,6 +176,7 @@ class GenerateResponsePayload(StrictModel):
     response: str
     done: bool = True
     tools: list[ToolTrace] = Field(default_factory=list)
+    available_tools: list[str] = Field(default_factory=list)
 
 
 class EmbedRequest(StrictModel):

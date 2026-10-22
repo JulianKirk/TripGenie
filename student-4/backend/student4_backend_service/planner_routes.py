@@ -33,14 +33,6 @@ if TYPE_CHECKING:
     from .assistant import ActivityLookup
 
 router = APIRouter(prefix="/activity/planner/runs", tags=["Smart Planner"])
-TOOLS = [
-    "activities_search",
-    "activities_get",
-    "activities_list_categories",
-    "activities_committed_costs",
-    "trip_get_context",
-    "trips_list_itinerary_items",
-]
 
 
 def _client(request: Request) -> PlannerClient:
@@ -118,7 +110,6 @@ async def start(
         "feature_instructions": _prompt_asset("activity_planner_rules_v1.md"),
         "worker_system": _prompt_asset("activity_planner_v1.md"),
         "output_schema": FinalAction.model_json_schema(),
-        "allowed_tools": TOOLS,
         "grounding": {"source": "student-4", "id_paths": ["parts[].activity_id"]},
         "correlation_id": f"student4-plan-{uuid4().hex[:16]}",
         "metadata": {"service": "student-4-backend"},

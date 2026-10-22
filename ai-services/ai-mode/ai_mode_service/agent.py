@@ -85,15 +85,18 @@ class Agent:
 
     async def generate(
         self, payload: GenerateRequest, model: str, request_id: str
-    ) -> tuple[str, list[ToolTrace]]:
+    ) -> tuple[str, list[ToolTrace], list[str]]:
         trace: list[ToolTrace] = []
+        available_tools: list[str] = []
         try:
             async with (
                 asyncio.timeout(self.settings.agent_timeout_seconds),
                 self._session(request_id) as session,
             ):
-                answer = await self._run(session, payload, model, request_id, trace)
-            return answer, trace
+                answer = await self._run(
+                    session, payload, model, request_id, trace, available_tools
+                )
+            return answer, trace, available_tools
         except Exception as exc:
             error = _failure(exc)
             error.tools = [entry.model_dump(mode="json") for entry in trace]
@@ -101,7 +104,7 @@ class Agent:
 
     async def generate_plain(
         self, payload: GenerateRequest, model: str, request_id: str
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """One model call that can never execute a tool.
 
         By default MCP is not contacted, for callers such as RAG that own their
@@ -109,12 +112,15 @@ class Agent:
         the system message as reference text, for callers such as the
         multi-agent Planner that reason about tools but must not run them.
         """
+        available_tools: list[str] = []
         try:
             async with asyncio.timeout(self.settings.agent_timeout_seconds):
                 system = payload.system
                 if payload.tool_catalogue:
                     async with self._session(request_id) as session:
-                        definitions = _definitions(await self._catalogue(session))
+                        catalogue = await self._catalogue(session, payload.feature)
+                        available_tools = list(catalogue)
+                        definitions = _definitions(catalogue)
                     reference = (
                         f"{CATALOGUE_PREAMBLE}\n"
                         f"{json.dumps(definitions, ensure_ascii=False)}"
@@ -135,7 +141,7 @@ class Agent:
             raise _failure(exc) from exc
         if reply.tool_calls:
             raise bad_gateway("The model requested tools during plain generation.")
-        return _final_text(reply.content, payload.output_schema)
+        return _final_text(reply.content, payload.output_schema), available_tools
 
     @asynccontextmanager
     async def _session(self, request_id: str) -> AsyncIterator[ClientSession]:
@@ -162,16 +168,33 @@ class Agent:
             await session.initialize()
             yield session
 
-    async def _catalogue(self, session: ClientSession) -> dict[str, Any]:
-        """The full MCP catalogue, following pagination, with schemas validated."""
+    async def _catalogue(
+        self, session: ClientSession, feature: str | None = None
+    ) -> dict[str, Any]:
+        """Discover MCP-owned feature membership before bounding model context."""
         catalogue = {}
+        seen: set[str] = set()
         cursor = None
         cursors = set()
         while True:
             page = await session.list_tools(cursor=cursor)
             for tool in page.tools:
-                if tool.name in catalogue:
+                if tool.name in seen:
                     raise bad_gateway("MCP advertised duplicate tool names.")
+                seen.add(tool.name)
+                if feature is not None:
+                    membership = (tool.meta or {}).get("tripgenie")
+                    audiences = (
+                        membership.get("features")
+                        if isinstance(membership, dict)
+                        else None
+                    )
+                    if not (
+                        isinstance(audiences, list)
+                        and all(isinstance(value, str) for value in audiences)
+                        and feature in audiences
+                    ):
+                        continue
                 validate_schema(tool.inputSchema)
                 catalogue[tool.name] = tool
             self._bound(
@@ -179,6 +202,10 @@ class Agent:
             )
             cursor = page.nextCursor
             if not cursor:
+                if feature is not None and not catalogue:
+                    raise bad_gateway(
+                        "MCP published no tools for the requested feature."
+                    )
                 return catalogue
             if cursor in cursors:
                 raise bad_gateway("MCP tool discovery repeated a page.")
@@ -203,8 +230,10 @@ class Agent:
         model: str,
         request_id: str,
         trace: list[ToolTrace],
+        available_tools: list[str],
     ) -> str:
-        catalogue = await self._catalogue(session)
+        catalogue = await self._catalogue(session, payload.feature)
+        available_tools.extend(catalogue)
         tools = _definitions(catalogue)
         messages = []
         if payload.system:

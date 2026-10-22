@@ -46,6 +46,7 @@ class Step(BaseModel):
     output: dict[str, Any] | None = None
     error: dict[str, str] | None = None
     tools: list[ToolTrace] = Field(default_factory=list)
+    available_tools: list[str] = Field(default_factory=list)
 
 
 class Human(BaseModel):

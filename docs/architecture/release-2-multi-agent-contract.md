@@ -64,11 +64,10 @@ All JSON responses use `{"data": ...}`; errors use
 | `feature` | string | One of `student-1` … `student-5` (`MULTI_AGENT_FEATURES`). |
 | `task` | string | The traveller's request, 1–500 characters. |
 | `trip_id` | string? | `trip_…` identifier, when the task is about a trip. |
-| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
+| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
 | `feature_instructions` | string | Optional trusted domain rules, default empty. Appended to Planner and Reviewer system prompts, including revisions; keep role-neutral and omit Worker output formatting. Worker policy remains in `worker_system`. Shares the 6,000-character allowance with `worker_system`. |
 | `worker_system` | string | The feature's own Worker prompt. It leads the Worker's system prompt, followed by workflow rules; common rules are not appended again. Combined with `feature_instructions`, at most 6,000 characters. |
 | `output_schema` | JSON Schema | The Worker's result shape. Must be `type: object`, at most 6,000 characters, local `$ref`s only. |
-| `allowed_tools` | string[] | MCP tool names the Worker may use (at most 24, distinct). Empty means no tool checks. |
 | `grounding` | object? | `{source, id_paths, id_keys}`. Every value at an `id_path` (e.g. `suggestions[].transport_id`) must appear under an `id_key` (default `id`) in a successful tool result whose `source` matches. |
 | `actions_path` | string? | Where the result lists changes for the human to approve, e.g. `actions`. |
 | `correlation_id` | string? | `^[A-Za-z0-9][A-Za-z0-9._:-]{0,47}$`; stage calls append `.p1`, `.w1`, `.r1` … |
@@ -87,6 +86,16 @@ backend that sends it; older servers reject unknown fields.
 Unknown fields are rejected (`422 VALIDATION_ERROR`). At most
 `MULTI_AGENT_MAX_ACTIVE_RUNS` (default 4) run at once; beyond that `POST /runs`
 returns `503 RUN_LIMIT_REACHED`.
+
+The server forwards `feature` as a top-level AI-Mode field, separately from logging
+metadata. Planner and Worker use the same MCP-owned membership policy. No caller
+tool list is copied into model input. Each step records `available_tools`, the
+actual names discovered by AI-Mode; Planner tool names are matched against its
+snapshot, and Worker calls are checked against its snapshot. Successful scoped
+responses must report a nonempty valid catalogue. Human acceptance also verifies
+recorded tool membership for scoped runs. Historical completed Worker records
+without snapshots keep their existing read/review behavior.
+Deploy MCP metadata support and AI-Mode before updating the Multi-Agent Server.
 
 ## The run record
 
@@ -158,8 +167,8 @@ last attempt the run always goes to the human, whatever the verdict.
 | Check | Passes when |
 | --- | --- |
 | `output_schema` | The Worker returned JSON matching `output_schema`. |
-| `allowed_tools` | Every tool call was in `allowed_tools` (only when the list is non-empty). |
-| `tool_evidence` | At least one tool call succeeded (only when `allowed_tools` is non-empty). |
+| `tool_scope` | Every tool call appears in the Worker's `available_tools` catalogue snapshot returned by AI-Mode. Always checked. |
+| `tool_evidence` | At least one tool call succeeded. Always checked. |
 | `no_writes` | No called tool name contains `create`, `update`, `delete`, `remove`, `add` or `set`. |
 | `grounding` | Every value at `grounding.id_paths` came from a successful tool result from `grounding.source`. |
 

@@ -63,14 +63,17 @@ working on the relevant slice.
 - Preserve existing feature functionality. Frontends call their own backends;
   feature backends supply prompts and presentation while shared AI-Mode owns
   the model-directed MCP loop behind `/generate`.
-- Every `/generate` request discovers the full MCP tool catalogue. MCP owns
+- `/generate` and catalogue-enabled `/generate-plain` discover MCP tools and
+  filter them by the optional `feature` field using MCP-owned tool metadata.
+  Omitted `feature` retains the full catalogue. MCP owns feature membership,
   tool descriptions, schemas and public-API execution; AI-Mode owns inference,
   protocol validation, execution limits and traces. Do not duplicate tool
   definitions or natural-language request parsing in feature assistants.
 - MCP tools call the owning service's documented public data APIs, never its
   database or AI orchestration endpoints. Ordinary CRUD and browsing retain
   their existing paths. Avoid callbacks into the generation workflow.
-- All advertised tools, including writes, are available to shared generation.
+- All advertised tools within the selected feature scope, including writes,
+  are available to shared generation.
   Trusted prompts instruct the model to write only when explicitly requested;
   this is not a hard read-only authorization guarantee. Keep results and partial
   execution visible. Never retry ambiguous writes automatically.

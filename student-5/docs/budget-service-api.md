@@ -184,7 +184,7 @@ that server and the UI polls it.
 The run request carries this feature's own Worker prompt
 (`prompts/budget_agents_v1.md`), its output schema (`budget_id`, `overview`,
 `findings[]`, `actions[]` of `{category, new_allocation, reason}`), the
-read-only tools `budgets_get_summary`, `expenses_list` and `budgets_list`, the
+feature identifier `student-5` for MCP-owned tool selection, the
 grounding rule `{source: "student-5", id_paths: ["budget_id"], id_keys:
 ["budget_id"]}` and `actions_path: "actions"`. The Worker receives the budget
 id, trip id, currency, total and current allocations as context, never the

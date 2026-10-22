@@ -11,7 +11,7 @@ and a host-managed Ollama runtime.
 
 Student backends supply prompts and final-answer schemas. This service owns MCP
 discovery and the tool loop; MCP owns tool descriptions and input schemas. All
-advertised tools, including writes, are available to every generation caller.
+advertised tools in the selected feature scope, including writes, are available.
 Clients must not automatically retry a run that has executed tools.
 
 ## Environment variables
@@ -30,13 +30,13 @@ Clients must not automatically retry a run that has executed tools.
 | `AI_MODE_MAX_RESPONSE_BYTES` | `16384` | Max accepted provider response size. |
 | `AI_MODE_MAX_EMBED_INPUTS` | `32` | Maximum texts accepted by one embedding request. |
 | `AI_MODE_MAX_EMBED_INPUT_CHARS` | `12000` | Maximum characters in each embedding input. |
-| `AI_MODE_CONTEXT_TOKENS` | `32768` | Native chat context window for the full tool catalogue and conversation. |
+| `AI_MODE_CONTEXT_TOKENS` | `32768` | Native chat context window for the selected tool catalogue and conversation. |
 | `AI_MODE_MCP_URL` | `http://127.0.0.1:8012/mcp` | Host-run shared MCP endpoint. |
 | `AI_MODE_MCP_TIMEOUT_SECONDS` | `15` | MCP request timeout. |
 | `AI_MODE_AGENT_TIMEOUT_SECONDS` | `180` | Whole generation-run deadline. |
 | `AI_MODE_AGENT_MAX_TURNS` | `8` | Maximum tool-decision rounds, plus final schema formatting. |
 | `AI_MODE_AGENT_MAX_CALLS` | `16` | Maximum executed tool calls per run. |
-| `AI_MODE_AGENT_CONTEXT_CHARS` | `120000` | Bounded serialized conversation and full tool catalogue. |
+| `AI_MODE_AGENT_CONTEXT_CHARS` | `120000` | Bounded serialized conversation and selected tool catalogue. |
 | `AI_MODE_AGENT_RESULT_BYTES` | `32768` | Maximum serialized result per tool call. |
 | `AI_MODE_MAX_EMBED_DIMENSIONS` | `4096` | Maximum accepted provider vector dimension. |
 
@@ -105,14 +105,15 @@ Example:
 ### `POST /generate`
 
 Each request starts a fresh non-streaming native Ollama chat/tool conversation.
-The service discovers the full configured MCP catalogue (including pagination),
-sends its descriptions and argument schemas to the model, executes model-selected
+The service discovers the configured MCP catalogue (including pagination),
+selects tools using the optional `feature` field and MCP-owned metadata,
+and sends matching descriptions and argument schemas to the model, executes model-selected
 calls and returns their results until the model answers. No domain-specific prompt
 parsing, recommendation filtering or answer rewriting happens here.
 
 When `schema` is provided, a final model formatting call with tools disabled emits
 that schema. If the initial structured-answer draft used no tools, one bounded
-check keeps the full tool catalogue available before formatting; the model can
+check keeps the selected tool catalogue available before formatting; the model can
 retrieve missing data or ask for clarification. This uses the existing turn/time
 budget and does not guarantee semantic completeness. Provider responses marked
 `done_reason=length` fail explicitly rather than being accepted or retried.
@@ -123,7 +124,7 @@ and `result` (the actual MCP result). Errors after execution add a top-level `to
 trace beside the existing `error` envelope. A failed run does not undo completed
 writes. Oversized results are omitted but their known execution status is retained.
 
-All tools are executable; prompts should direct writes only for explicit requests.
+All selected tools are executable; prompts should direct writes only for explicit requests.
 This is a trusted local service, not a new authorization layer. Unknown tool names,
 invalid arguments, external schema references, duplicate non-read-only calls and
 excessive execution are rejected. A known tool's invalid arguments are returned
@@ -139,6 +140,26 @@ baseline; `/generate` reports MCP availability at request time.
 Use a generation model that supports native tool calls. Allow enough consumer HTTP
 time for several inference rounds (Student 4 defaults to 210 seconds).
 
+### Feature selection
+
+Both generation endpoints accept optional `feature`: `student-1` through
+`student-5`. For example, `{"feature":"student-4","prompt":"Find kayaking in Sydney"}`
+selects the activity catalogue and shared trip context tools. Feature backends set
+this field; logging `metadata.feature` does not select tools. Omit it for the
+complete catalogue. An unsupported feature returns `422` before discovery or inference.
+
+MCP publishes membership as `_meta.tripgenie.features`. AI-Mode applies that
+membership before the model-context budget and uses the same selected catalogue
+for native tool execution and reference-only generation. Unlabelled tools are not
+selected for a feature; an empty feature catalogue returns `502` rather than using
+a broader catalogue. Guessed tool names outside the selected catalogue are rejected
+before execution, with partial traces retained.
+
+Success responses include `available_tools`, the discovered names for this request.
+Plain generation without `tool_catalogue` returns an empty list and does not
+contact MCP, even when `feature` is supplied. The selector adds no inference rounds.
+Update MCP metadata support and AI-Mode before enabling feature selection in callers.
+
 ### `POST /generate-plain`
 
 Accepts the same request body as `/generate` and returns the same response
@@ -152,14 +173,14 @@ returns `504 DEPENDENCY_TIMEOUT`, and plain-generation errors carry no `tools`
 trace.
 
 Set `"tool_catalogue": true` when the model must reason about the tools without
-running them, as the multi-agent Planner does. AI-Mode then discovers the full
+running them, as the multi-agent Planner does. AI-Mode discovers and scopes the
 MCP catalogue exactly as `/generate` does (`tools/list` only, never
 `tools/call`) and appends each tool's name, description and argument schema to
 the system message as reference text. The tools are not offered as callable
 functions, so the single call stays schema-constrained and `tools` is still
 `[]`. This mode needs MCP running and returns `503 DEPENDENCY_UNAVAILABLE`
-when it is not. The catalogue adds about 20,000 characters of model input; it
-counts toward `AI_MODE_AGENT_CONTEXT_CHARS`, not `AI_MODE_MAX_PROMPT_CHARS`.
+when it is not. Only selected definitions are added to model input; they
+count toward `AI_MODE_AGENT_CONTEXT_CHARS`, not `AI_MODE_MAX_PROMPT_CHARS`.
 `/generate` rejects the field with `422`, because it always sends the catalogue.
 The complete MCP schemas are sent on every tool-capable round. Health checks and
 embeddings retain the existing SDK methods. Native chat uses the pinned SDK's

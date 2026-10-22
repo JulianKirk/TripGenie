@@ -109,6 +109,7 @@ def generation(body: Any, tools: list[dict[str, Any]] | None = None) -> httpx.Re
                 "response": body if isinstance(body, str) else json.dumps(body),
                 "done": True,
                 "tools": tools or [],
+                "available_tools": ["transport_search", "transport_get"],
             },
         },
     )
@@ -189,7 +190,6 @@ def run_request(**overrides: Any) -> dict[str, Any]:
         "context": {"first_search": {"limit": 5}},
         "worker_system": "Suggest transport options with their exact prices.",
         "output_schema": OUTPUT_SCHEMA,
-        "allowed_tools": ["transport_search", "transport_get"],
         "grounding": {"source": "student-3", "id_paths": ["items[].id"]},
         "actions_path": "actions",
         "correlation_id": "student3-agents-test",

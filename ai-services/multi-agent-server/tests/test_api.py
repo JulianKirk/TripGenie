@@ -38,8 +38,8 @@ from multi_agent_service.app import create_app
             {"worker_system": "x" * 3000, "feature_instructions": "y" * 3001},
             "feature_instructions",
         ),
-        ({"allowed_tools": ["transport_search", "transport_search"]}, "allowed_tools"),
-        ({"allowed_tools": ["Bad Tool"]}, "allowed_tools.0"),
+        ({"allowed_tools": ["transport_search"]}, "allowed_tools"),
+        ({"allowed_tools": []}, "allowed_tools"),
         (
             {"grounding": {"source": "student-3", "id_paths": ["a..b"]}},
             "grounding.id_paths",
@@ -144,7 +144,7 @@ def test_export_as_markdown_is_report_ready(client: TestClient) -> None:
 
 def test_runs_can_be_listed_and_filtered(client: TestClient) -> None:
     first = start_and_settle(client)
-    start_and_settle(client, feature="student-1", allowed_tools=[], grounding=None)
+    start_and_settle(client, feature="student-1", grounding=None)
 
     everything = client.get("/runs").json()["data"]
     transport = client.get("/runs?feature=student-3").json()["data"]

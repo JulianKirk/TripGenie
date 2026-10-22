@@ -38,13 +38,6 @@ from .models import (
     TransportRecommendationRequest,
 )
 
-# The read-only transport tools; MCP owns their definitions.
-TRANSPORT_TOOLS = [
-    "transport_search",
-    "transport_get",
-    "transport_compare",
-    "transport_trip_costs",
-]
 # Each suggestion is a proposed action: what a human approves gets added.
 ACTIONS_PATH = "suggestions"
 
@@ -55,7 +48,7 @@ def build_run_request(
     settings: Settings,
     payload: AgentRunRequest,
 ) -> dict[str, Any]:
-    """The run request: this feature's own prompt, schema, tools and grounding."""
+    """The run request: this feature's own prompt, schema, feature and grounding."""
     system, prompt = build_prompt(
         settings,
         TransportRecommendationRequest(
@@ -76,7 +69,6 @@ def build_run_request(
         "context": context,
         "worker_system": system,
         "output_schema": TransportRecommendationDraft.model_json_schema(),
-        "allowed_tools": TRANSPORT_TOOLS,
         "grounding": {
             "source": TRANSPORT_SOURCE,
             "id_paths": ["suggestions[].transport_id"],

@@ -228,7 +228,7 @@ def test_start_sends_the_budget_prompt_schema_tools_and_grounding(
     assert sent["context"]["budget_id"] == BUDGET_ID
     assert sent["context"]["budget_trip_id"] == "trip_chunk3"
     assert sent["context"]["current_allocations"]["food"] == "0.00"
-    assert sent["allowed_tools"][0] == "budgets_get_summary"
+    assert "allowed_tools" not in sent
     assert sent["grounding"] == {
         "source": "student-5",
         "id_paths": ["budget_id"],

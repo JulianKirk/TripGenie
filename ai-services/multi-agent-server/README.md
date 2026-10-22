@@ -11,7 +11,7 @@ service.
 
 | Agent | Does | AI-Mode call |
 | --- | --- | --- |
-| Planner | Writes the plan: goal, steps, required evidence, tools, success criteria | `/generate-plain` + plan schema + `tool_catalogue` (sees every MCP tool's description and arguments; cannot run them) |
+| Planner | Writes the plan: goal, steps, required evidence, tools, success criteria | `/generate-plain` + plan schema + `tool_catalogue` (sees its feature's tool descriptions and arguments; cannot run them) |
 | Worker | Carries out the plan with the feature's own prompt and MCP tools | `/generate` (model-directed MCP tool loop) + the feature's schema |
 | Checks | Schema, tool grounding, allowed tools, no writes, tool evidence | none (deterministic) |
 | Reviewer | Judges the result against the plan, evidence and checks; lists risks | `/generate-plain` + review schema |
@@ -50,7 +50,8 @@ python -m multi_agent_service export <run_id> --format markdown --output run.md
 ```
 
 Terminal runs use a generic answer schema (`answer` plus grounded `items`)
-and the feature's read-only tools by default (`--tool` overrides). Pass
+and MCP-owned feature membership selected by `--feature`. The obsolete `--tool`
+selector is rejected by the CLI. Pass
 `--decision` and `--reviewer` to run without prompts, or `--no-review` to stop
 at `awaiting_human`.
 
@@ -88,12 +89,6 @@ response = httpx.post(
         "context": {"first_search": {"limit": 12}},  # your prompt's own fields
         "worker_system": load_prompt("transport_agents_v1.md"),
         "output_schema": MyDraft.model_json_schema(),
-        "allowed_tools": [
-            "transport_search",
-            "transport_get",
-            "transport_compare",
-            "transport_trip_costs",
-        ],
         "grounding": {
             "source": "student-3",
             "id_paths": ["suggestions[].transport_id"],
@@ -124,6 +119,13 @@ Planner/Reviewer stage budgets count the common rules. Omitting it
 preserves existing behavior. Upgrade the shared server before a feature starts
 sending the field; older servers reject it as unknown. Trusted feature backends
 load these instructions from assets, never from user request text.
+
+The server forwards `feature` to AI-Mode for each agent. MCP owns feature
+membership; callers do not supply tool lists. Retired caller-list fields are
+rejected in new requests and removed from saved requests at startup. Each stage
+records `available_tools` from AI-Mode; the Planner uses its catalogue snapshot
+and deterministic tool checks use the Worker's snapshot. Tool evidence remains
+required. Upgrade MCP and AI-Mode before the Multi-Agent Server.
 
 ### 3. Poll and show each stage
 

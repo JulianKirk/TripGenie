@@ -54,6 +54,25 @@ prefix. All defaults match the Compose loopback ports; override the relevant
 URLs if they use different bindings.
 The Student 5 backend serves `/api/v1` in Compose; Student 1 and 3 serve `/api`.
 
+## Feature membership
+
+Each tool advertises `_meta.tripgenie` with its owning `owner` and a `features`
+array. The catalogue and these memberships are maintained in MCP, alongside the
+description and input schema. Result `source` continues to identify the owner.
+
+| Feature | Tools included |
+| --- | --- |
+| `student-1` | Trip tools and accommodation/activity/transport/budget discovery searches. |
+| `student-2` | Accommodation tools and shared trip tools. |
+| `student-3` | Transport tools and shared trip tools. |
+| `student-4` | Activity tools and shared trip tools. |
+| `student-5` | Budget/expense tools, committed accommodation/activity/transport costs and shared trip tools. |
+
+AI-Mode consumes this metadata for its optional `feature` selector. It sends only
+matching definitions to the model and validates calls against that same selected
+catalogue before MCP execution. Direct MCP clients continue to discover the complete
+catalogue; providers and tool execution retain their existing HTTP contracts.
+
 ## Tool contract
 
 Activity catalogue CRUD is available to trusted external local clients; other
@@ -148,9 +167,10 @@ There is no MCP authentication or per-client authorization in this local server.
 Loopback and DNS-rebinding checks are the existing trusted-client boundary;
 any client able to reach it can call the catalogue write tools. Do not expose it
 on a network without adding authentication and authorization. The shared
-generation agent discovers all advertised tools for every request. Tool
-names, descriptions and schemas come from this server. All tools, including writes,
-are executable; prompts instruct models to write only when explicitly requested.
+generation agent selects tools using MCP feature membership when a request
+supplies `feature`; unscoped requests use the full catalogue. Names, descriptions
+and schemas come from this server. Selected tools, including writes, are executable;
+prompts instruct models to write only when explicitly requested.
 There is no feature-specific read-only allowlist. Failed runs can contain completed
 writes, and ambiguous writes must not be retried automatically.
 

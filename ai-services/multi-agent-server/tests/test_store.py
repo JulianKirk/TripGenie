@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
+from contextlib import closing
 from typing import TYPE_CHECKING
 
 import httpx
@@ -77,6 +80,32 @@ def test_runs_cut_off_by_a_restart_are_marked_failed(tmp_path: Path) -> None:
     }
     assert store.get("magent_000000000002").status == "awaiting_human"
     assert store.events("magent_000000000001")[-1].event == "run_failed"
+
+
+def test_retired_request_field_is_removed_from_saved_history(tmp_path: Path) -> None:
+    path = tmp_path / "runs.sqlite3"
+    store = RunStore(path)
+    run = _stored("magent_000000000001", "awaiting_human")
+    store.save(run, insert=True)
+    record = run.model_dump(mode="json")
+    record["request"]["allowed_tools"] = ["activities_delete"]
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute(
+            "UPDATE runs SET record = ? WHERE run_id = ?",
+            (json.dumps(record), run.run_id),
+        )
+        connection.commit()
+
+    restarted = RunStore(path)
+    restored = restarted.get(run.run_id)
+    assert restored is not None
+    assert "allowed_tools" not in restored.request.model_dump()
+    assert restored.task == run.task
+    assert restored.status == "awaiting_human"
+    assert len(restarted.list_runs()) == 1
+    with closing(sqlite3.connect(path)) as connection:
+        saved = json.loads(connection.execute("SELECT record FROM runs").fetchone()[0])
+    assert "allowed_tools" not in saved["request"]
 
 
 def test_the_store_uses_write_ahead_logging(tmp_path: Path) -> None:

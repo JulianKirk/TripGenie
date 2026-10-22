@@ -260,7 +260,7 @@ These routes connect the feature to the **shared** host-run Multi-Agent Server
 suggestions — `question` (1–500 characters) and optional `trip_id`, `origin`
 and `destination` — and starts a run with this feature's own Worker prompt
 (`STUDENT3_BACKEND_AI_PROMPT_ASSET`), the `TransportRecommendationDraft`
-schema, the four read-only transport tools, grounding on
+schema, `feature: "student-3"` for MCP-owned tool selection, grounding on
 `suggestions[].transport_id` from `student-3` tool results, and each
 suggestion as a proposed action. It returns `202` with the run in `planning`;
 the agents work in the background and the caller polls

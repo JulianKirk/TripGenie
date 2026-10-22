@@ -51,6 +51,7 @@ def test_ai_client_returns_generated_json_with_provenance() -> None:
         "ollama",
     )
     assert captured == {
+        "feature": "student-4",
         "prompt": "Plan a search",
         "schema": {"type": "object"},
         "correlation_id": "student4-plan-1",

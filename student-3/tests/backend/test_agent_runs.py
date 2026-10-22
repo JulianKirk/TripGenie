@@ -275,12 +275,7 @@ def test_a_run_is_started_with_this_features_prompt_tools_and_grounding(
         "first_search": {"limit": 12, "origin": "Geelong"},
     }
     assert body["output_schema"]["title"] == "TransportRecommendationDraft"
-    assert body["allowed_tools"] == [
-        "transport_search",
-        "transport_get",
-        "transport_compare",
-        "transport_trip_costs",
-    ]
+    assert "allowed_tools" not in body
     assert body["grounding"] == {
         "source": "student-3",
         "id_paths": ["suggestions[].transport_id"],
