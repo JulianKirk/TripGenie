@@ -1,0 +1,16 @@
+  <details class="assistant-tools" {% if result.status == 'error' %}open{% endif %}>
+    <summary>Tools used · {{ result.tools|length }} calls</summary>
+    <p class="field-hint">Recorded by the shared AI service from MCP execution. Rejected calls were not sent to MCP.</p>
+    {% if result.tools %}<ol>
+      {% for call in result.tools %}<li>
+        <strong>{{ call.tool }}</strong> · {{ call.status }} · {{ call.duration_ms }} ms
+        <div>Arguments: <code>{{ call.arguments|tojson }}</code></div>
+        {% if call.result_count is not none %}<div>Activities returned: {{ call.result_count }}</div>{% endif %}
+        {% if call.activity_ids %}<div>Activity IDs: {% for activity_id in call.activity_ids %}<code>{{ activity_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+        {% if call.correlation_id %}<div>MCP correlation: <code>{{ call.correlation_id }}</code></div>{% endif %}
+        {% if call.result %}<details><summary>Returned tool data</summary><pre>{{ call.result|tojson(indent=2) }}</pre></details>{% endif %}
+        {% if call.error %}<div role="status">{{ call.error }}</div>{% endif %}
+      </li>{% endfor %}
+    </ol>{% else %}<p>No MCP tool calls were made.</p>{% endif %}
+    <p class="field-hint">Request: <code>{{ result.request_id }}</code></p>
+  </details>

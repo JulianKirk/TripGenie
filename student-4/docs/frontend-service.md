@@ -117,101 +117,42 @@ picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).
 
 ## Smart Planner
 
-The existing AI activity assistant has a third radio option, **Smart Planner**,
-using the same question box and optional trip selector. Activity tools (MCP) and
-Activity guides (RAG) remain separate modes.
+The AI activity assistant offers **Activity tools (MCP)**, **Activity guides
+(RAG)** and **Smart Planner**. Smart Planner stays in the assistant panel on the
+catalogue page. `/?planner_run={run_id}#ai-suggestions` restores a known workflow;
+`/planner/{run_id}` renders that same page or an HTMX workflow partial.
 
-The activity MCP and Smart Planner prompts treat each submission as a one-shot
-request. They must not ask follow-up questions or expect human review to supply
-missing inputs. Human review accepts or corrects the finished draft, or rejects it with feedback to request a new run.
-Unspecified inputs are identified in the response, using catalogue evidence for
-the known constraints; an unknown party size must not produce a verified total-budget
-recommendation.
+Active runs poll through the feature backend every two seconds. The panel shows
+the Planner's approach, then **Agent execution** with nested **Activities found**
+and **Tools used** dropdowns. Activity names come from successful structured
+Student 4 tool results; tool arguments, results and attempts remain available.
+Validation checks and Reviewer findings precede the activity suggestion cards.
+Full cards appear once, after execution and validation finish.
 
-The new flow is:
+Each card supports **Approve**, **Reject without reason**, and **Reject with
+reason**. Approval displays a check mark. Rejected cards remain visible with a
+red background and their optional reason. These are pending choices:
+`POST /planner/{run_id}/choices` reads the current run and updates form state
+without recording a shared decision or adding activities. Users may change their
+choices before applying them. The form retains reviewer, reasons, itinerary and
+per-activity schedule fields across choice actions.
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as Activities frontend
-    participant API as Activities backend
-    participant MA as Shared Multi-Agent Server
-    User->>UI: Select Smart Planner and ask
-    UI->>API: Start activity planning run
-    API->>MA: POST /runs (Activities prompt/schema/grounding)
-    MA-->>UI: Run ID via backend
-    Note over MA: Planner → Worker with MCP → Reviewer
-    loop While planning, working or reviewing
-        UI->>API: Poll run every 2 seconds
-        API->>MA: GET /runs/{id}
-        MA-->>UI: Progress and evidence via backend
-    end
-    UI-->>User: Draft activity cards, checks, reviewer findings
-    User->>UI: Approve, correct or reject
-    UI->>API: Submit human decision
-    API->>MA: POST /runs/{id}/review
-    MA-->>UI: Recorded decision via backend
-```
+Once every suggestion has a choice, **Apply approvals** sends one review request
+through the feature backend. Only approved activities are added to the chosen
+itinerary, with optional per-card date and local start time. If all suggestions
+are rejected, **Apply decisions** records the rejections without itinerary
+writes. The shared human-review audit records every card's choice and reason in
+one decision. Recorded cards retain their approval symbols or rejection styling
+when the page is refreshed. Blocking checks prevent approval; rejection remains
+available.
 
-`/planner/{run_id}` is a bookmarkable full page and an HTMX partial endpoint.
-Active runs poll; awaiting-human and terminal states stop polling. Refresh links
-work without JavaScript. Errors stop automatic polling and provide a refresh
-link for known runs. Failed review submissions preserve the entered reviewer,
-notes, correction text parts, trip, optional per-activity date/time and card selections in both HTMX and full-page
-responses. The frontend safely reads current run status after a failure; it never
-retries the decision. If status is unavailable or no longer awaiting review, the
-submitted form remains editable with decision controls disabled. **Refresh status
-and keep edits** posts the fields to `/planner/{run_id}/recover`, which only reads
-the backend run and repopulates the form; it never submits a review decision.
-The preserved form is request-local, not durable draft storage: navigating away
-or opening a fresh run URL discards unsaved edits. A start timeout has no
-guaranteed run ID: do not assume the server did not start work or automatically
-resubmit it.
+The form uses ordinary POSTs as well as HTMX, and all full-page responses keep
+the assistant and catalogue together. Review errors retain pending choices and
+read current status without replaying the review or itinerary additions. Added,
+already-present and unconfirmed addition outcomes are displayed from the apply
+response. Completed workflows offer no second apply action.
 
-The results show the plan, tool calls/results, stage attempts, validation checks,
-reviewer findings and human decision. Model text is escaped. Draft cards do not
-show the independent Add to itinerary action. Each draft card has a **Dismiss
-suggestion** button. Dismissal posts only presentation state to
-`/planner/{run_id}/selection`, reads the current run and hides that card without
-changing agent evidence. **Restore all suggestions** reverses dismissals. These
-controls retain typed reviewer, notes, correction, trip and schedule fields.
-Selected IDs are validated against the backend-grounded activity cards. The
-selected subset is also represented in the run URL for refreshes. If cards are
-dismissed, the original narrative is hidden because it may describe removed
-suggestions; its original text remains in the correction fields and evidence.
-
-**Approve and add to trip** submits the explicitly selected cards, a trip and
-optional per-card local date/time to the backend's existing itinerary integration.
-Text-only results can be approved without itinerary writes. Individual additions
-show added/already-present outcomes and any errors. Approval and additions are
-not replayed after a lost response: **Refresh status and keep edits** reads only
-the run. A completed run confirms that approval was recorded; users check their
-trip when the original addition response is unavailable. Accepted cards retain
-the ordinary manual itinerary control for subsequent changes.
-
-Correction edits recommendation text and selects which grounded cards to keep;
-it does not rerun an agent. Saving retained cards uses the same trip integration.
-Each original text part gets its own textarea (up to 1000 characters). Clearing a
-text part removes it; at least one nonempty text part is required. Corrected
-output retains the limits of twelve total parts and six cards. A text-only
-correction records no itinerary additions. Failed blocking checks disable
-approval and correction; rejection remains available.
-
-**Reject** records rejection without another search. **Reject and regenerate**
-requires the reviewer name and a nonempty explanation (at most 1000 characters).
-It posts to `/planner/{run_id}/regenerate`; the backend records rejection and
-starts a new run using the original question/trip and feedback, including the
-IDs of all suggestions in the rejected result. The browser moves to the new
-run URL, retaining the previous-result link through progress polling and refresh.
-A failed response preserves feedback and reads the original run; regeneration
-is never automatically repeated.
-
-`/planner/{run_id}/history` downloads JSON evidence through the backend. History
-includes the run, stage outputs/tool traces and coordination/audit events. It is
-not published automatically. Reviewer names are user-entered audit labels, not
-verified identities. No per-user authentication is introduced by this feature.
-
-Local and cloud-disabled states remain understandable without breaking catalogue
-browsing. Smart Planner is enabled by default locally and explicitly disabled in
-CI and the cloud profile. See the backend API documentation for configuration and the
-shared service's retrospective tool-check contract.
+`/planner/{run_id}/history` downloads the shared workflow and per-suggestion
+review evidence through the feature backend. Model output and reasons are
+HTML-escaped. Ordinary catalogue, MCP and RAG workflows retain their existing
+routes.

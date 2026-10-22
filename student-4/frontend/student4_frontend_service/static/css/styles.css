@@ -97,3 +97,14 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 .citations { padding-left: 1.25rem; overflow-wrap: anywhere; }
 .citations li { margin-block: .6rem; }
 .citations blockquote { margin: .35rem 0 0; padding-left: .75rem; color: var(--muted); border-left: 3px solid var(--line); }
+
+.activity-card--rejected {
+  border-color: #b42318;
+  background: #fff1f0;
+}
+.activity-card--approved {
+  border-color: #16803c;
+}
+.planner-choice--approved { color: #146c32; }
+.planner-choice--rejected { color: #9b1c16; }
+.planner-apply { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border, #d0d5dd); }

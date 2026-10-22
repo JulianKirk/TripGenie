@@ -13,7 +13,7 @@
     </aside>
     <section class="panel results-panel">
       <div id="activity-results" aria-live="polite">
-        {% include "partials/results.html" %}
+        {% with error=catalogue_error if planner_mode else error %}{% include "partials/results.html" %}{% endwith %}
       </div>
     </section>
   </div>

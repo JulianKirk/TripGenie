@@ -135,20 +135,20 @@ def test_planner_ui_resolves_real_catalogue_cards_and_records_human_review(
             data={
                 "decision": "approve",
                 "reviewer": "Test traveller",
-                "selection": "1",
-                "selected_ids": activity_id,
+                f"choice_{activity_id}": "approve",
                 "trip_id": SYDNEY,
             },
         )
-        assert "Human decision: approve" in accepted.text
+        assert "Human decisions recorded" in accepted.text
         assert "Test traveller" in accepted.text
-        assert "Added to trip" in accepted.text
+        assert "Itinerary updated" in accepted.text
         assert activity_id in entries
         evidence = browser.get(f"/planner/{run_id}/history")
         assert evidence.json()["run"]["human"]["decision"] == "approve"
         assert evidence.json()["run"]["steps"][0]["tools"][0]["status"] == "success"
     assert called == [
         ("POST", "/runs"),
+        ("GET", f"/runs/{run_id}"),
         ("GET", f"/runs/{run_id}"),
         ("GET", f"/runs/{run_id}"),
         ("POST", f"/runs/{run_id}/review"),

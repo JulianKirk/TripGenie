@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
@@ -18,6 +19,7 @@ from .planner_models import (
     Run,
     SavedSelection,
     SaveError,
+    SuggestionDecision,
 )
 
 if TYPE_CHECKING:
@@ -202,3 +204,99 @@ def _rejected_ids(run: Run, payload: Regenerate) -> list[str]:
     if not set(payload.dismissed_activity_ids) <= _card_ids(original):
         raise HTTPException(400, "Only suggestions from this result can be dismissed.")
     return sorted(str(key) for key in _card_ids(original))
+
+
+def _item_audit(run: Run, payload: Decision) -> str | None:
+    """Validate a complete staged choice set and fit the shared review contract."""
+    if payload.item_decisions is None:
+        return payload.notes
+    try:
+        original = _validate_result(run.result, run)
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(
+            400, "Only grounded original suggestions can be reviewed."
+        ) from exc
+    rows = payload.item_decisions
+    ids = [row.activity_id for row in rows]
+    if len(set(ids)) != len(ids) or set(ids) != _card_ids(original):
+        raise HTTPException(400, "Record one decision for every original suggestion.")
+    approved = {row.activity_id for row in rows if row.decision == "approve"}
+    selected = {row.activity_id for row in payload.selections or []}
+    if selected != approved:
+        raise HTTPException(
+            400, "Selected additions must match the approved suggestions."
+        )
+    if (
+        payload.decision != ("approve" if approved else "reject")
+        or payload.corrected_result is not None
+    ):
+        raise HTTPException(
+            400, "The overall decision must match the suggestion choices."
+        )
+    data: dict[str, object] = {
+        "activity_reviews": [
+            [str(row.activity_id), row.decision, row.notes] for row in rows
+        ]
+    }
+    if payload.notes:
+        data["notes"] = payload.notes
+    encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > 1000:
+        raise HTTPException(
+            400,
+            (
+                "Review reasons are too long to record together. "
+                "Shorten the reasons and apply again."
+            ),
+        )
+    return encoded
+
+
+def _recorded_choices(run: Run) -> list[SuggestionDecision]:
+    if run.human is None or not run.human.notes:
+        return []
+    try:
+        data = json.loads(run.human.notes)
+        if not isinstance(data, dict) or not isinstance(
+            data.get("activity_reviews"), list
+        ):
+            return []
+        rows = data["activity_reviews"]
+        if any(not isinstance(row, list) or len(row) != 3 for row in rows):
+            return []
+        result = [
+            SuggestionDecision.model_validate(
+                {"activity_id": row[0], "decision": row[1], "notes": row[2]}
+            )
+            for row in rows
+        ]
+        original = _validate_result(run.result, run)
+        if len(result) != len({row.activity_id for row in result}) or {
+            row.activity_id for row in result
+        } != _card_ids(original):
+            return []
+        approved = {row.activity_id for row in result if row.decision == "approve"}
+        if run.status == "completed":
+            final = _validate_result(run.final_result, run)
+            if _card_ids(final) != approved:
+                return []
+        elif run.status != "rejected" or approved:
+            return []
+        return result
+    except (ValueError, ValidationError):
+        return []
+
+
+def _confirm_item_audit(run: Run, payload: Decision, notes: str | None) -> None:
+    if payload.item_decisions is None:
+        return
+    if (
+        run.human is None
+        or run.human.notes != notes
+        or _recorded_choices(run) != payload.item_decisions
+    ):
+        raise HTTPException(
+            502,
+            "Smart Planner did not confirm the complete suggestion review audit. "
+            "No itinerary additions were attempted.",
+        )

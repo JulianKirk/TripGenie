@@ -35,7 +35,10 @@ from .planner_models import (
 from .planner_review import (
     _accepted,
     _confirm_approval,
+    _confirm_item_audit,
+    _item_audit,
     _preflight,
+    _recorded_choices,
     _rejected_ids,
     _save,
     _tools,
@@ -77,7 +80,8 @@ def _run(data: object, run_id: str | None = None) -> Run:
 
 async def _present(run: Run, resolve: ActivityLookup) -> PlannerResponse:
     answer = AssistantResponse(request_id=run.run_id, tools=_tools(run))
-    data = run.final_result if run.status == "completed" else run.result
+    choices = _recorded_choices(run)
+    data = run.final_result if run.status == "completed" and not choices else run.result
     if data is not None:
         try:
             action = _validate_result(data, run)
@@ -104,7 +108,7 @@ async def _present(run: Run, resolve: ActivityLookup) -> PlannerResponse:
             "The planning workflow failed. Review the recorded steps and "
             "tool results for partial execution."
         )
-    return PlannerResponse(run=run, answer=answer)
+    return PlannerResponse(run=run, answer=answer, item_decisions=choices)
 
 
 @router.post("", status_code=202, response_model=PlannerResponse)
@@ -159,8 +163,9 @@ async def review(
         "decision": payload.decision,
         "reviewer": payload.reviewer,
     }
-    if payload.notes is not None:
-        body["notes"] = payload.notes
+    notes = _item_audit(run, payload)
+    if notes is not None:
+        body["notes"] = notes
     action: FinalAction | None = None
     trip_id: str | None = None
     existing: set[str] = set()
@@ -179,6 +184,7 @@ async def review(
             body["decision"] = "correct"
             body["corrected_result"] = action.model_dump(mode="json")
     updated = _run(await client.request("POST", f"/runs/{run_id}/review", body), run_id)
+    _confirm_item_audit(updated, payload, notes)
     if action is not None:
         _confirm_approval(updated, action, str(body["decision"]))
     response = await _present(updated, partial(get_activity, db=db, location=location))
@@ -260,4 +266,4 @@ async def history(run_id: RunId, client: PlannerDep) -> Evidence:
             raise ValueError(msg)
     except (ValueError, ValidationError) as exc:
         raise HTTPException(502, "Smart Planner returned invalid history.") from exc
-    return Evidence(run=run, history=events)
+    return Evidence(run=run, history=events, item_decisions=_recorded_choices(run))

@@ -1,0 +1,17 @@
+{% if item_choice == 'approve' %}<p class="planner-choice planner-choice--approved"><strong>✓ Approved{% if can_review %} · pending{% endif %}</strong></p>{% elif item_choice == 'reject' %}<p class="planner-choice planner-choice--rejected"><strong>✕ {{ 'Rejected with reason' if choices.reasons.get(key) else 'Rejected without reason' }}{% if can_review %} · pending{% endif %}</strong></p>{% endif %}
+{% if can_review %}
+  {% if item_choice %}<input type="hidden" name="choice_{{ key }}" value="{{ item_choice }}">{% endif %}
+  <div class="actions">
+    <button class="button" type="submit" name="approve_id" value="{{ key }}" formaction="/planner/{{ run.run_id }}/choices" formnovalidate hx-post="/planner/{{ run.run_id }}/choices"{% if failed_checks or not activity or not activity.is_active %} disabled{% endif %}>Approve</button>
+    <button class="button" type="submit" name="reject_id" value="{{ key }}" formaction="/planner/{{ run.run_id }}/choices" formnovalidate hx-post="/planner/{{ run.run_id }}/choices">Reject without reason</button>
+  </div>
+  <details{% if choices.reasons.get(key) or reason_id == key %} open{% endif %}><summary>Reject with reason</summary>
+    <label class="field" for="reason-{{ key }}">Reason for rejecting this suggestion<textarea id="reason-{{ key }}" name="reason_{{ key }}" maxlength="1000">{{ choices.reasons.get(key, '') }}</textarea></label>
+    <button class="button" type="submit" name="reject_reason_id" value="{{ key }}" formaction="/planner/{{ run.run_id }}/choices" formnovalidate hx-post="/planner/{{ run.run_id }}/choices">Reject with reason</button>
+  </details>
+  {% if item_choice == 'approve' %}<details><summary>Schedule (optional)</summary>
+    <label class="field" for="date-{{ key }}">Date<input id="date-{{ key }}" type="date" name="date_{{ key }}" value="{{ choices.dates.get(key, '') }}"></label>
+    <label class="field" for="time-{{ key }}">Start time<input id="time-{{ key }}" type="time" name="start_time_{{ key }}" value="{{ choices.times.get(key, '') }}"></label>
+    <p class="field-hint">If no date is chosen, the itinerary uses its start date.</p>
+  </details>{% else %}<input type="hidden" name="date_{{ key }}" value="{{ choices.dates.get(key, '') }}"><input type="hidden" name="start_time_{{ key }}" value="{{ choices.times.get(key, '') }}">{% endif %}
+{% elif item_choice == 'reject' and choices.reasons.get(key) %}<p>{{ choices.reasons[key] }}</p>{% endif %}

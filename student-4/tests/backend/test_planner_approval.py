@@ -77,7 +77,11 @@ class Workflow:
             self.run.update(
                 status="rejected" if body["decision"] == "reject" else "completed",
                 final_result=body.get("corrected_result", self.run["result"]),
-                human={"decision": body["decision"], "reviewer": body["reviewer"]},
+                human={
+                    "decision": body["decision"],
+                    "reviewer": body["reviewer"],
+                    "notes": body.get("notes"),
+                },
             )
         return httpx.Response(200, json={"data": self.run})
 
@@ -360,3 +364,140 @@ def test_inactive_suggestion_cannot_be_approved_or_added() -> None:
     assert response.status_code == 400
     assert not workflow.posts
     assert not itinerary.rows
+
+
+def test_staged_choices_record_full_audit_and_save_only_approved() -> None:
+    workflow, itinerary = Workflow(), FakeItinerary()
+    with app(workflow, itinerary) as client:
+        assert client.post("/activity", json=public_payload()).status_code == 201
+        response = client.post(
+            f"{PATH}/review",
+            json={
+                "decision": "approve",
+                "reviewer": "Julian",
+                "trip_id": SYDNEY,
+                "selections": [{"activity_id": ACTIVITY_ID, "date": "2027-04-02"}],
+                "item_decisions": [
+                    {"activity_id": ACTIVITY_ID, "decision": "approve"},
+                    {
+                        "activity_id": OTHER,
+                        "decision": "reject",
+                        "notes": "Too expensive",
+                    },
+                ],
+            },
+        )
+        refreshed = client.get(PATH)
+    assert len(refreshed.json()["item_decisions"]) == 2
+    assert refreshed.json()["answer"]["parts"] == workflow.run["result"]["parts"]
+    assert response.status_code == 200, response.text
+    assert response.json()["saved"][0]["activity_id"] == ACTIVITY_ID
+    audit = json.loads(workflow.posts[0]["notes"])
+    assert audit["activity_reviews"][1][2] == "Too expensive"
+    assert workflow.posts[0]["decision"] == "correct"
+    assert len(response.json()["item_decisions"]) == 2
+    assert response.json()["answer"]["parts"] == workflow.run["result"]["parts"]
+    assert list(itinerary.rows) == [(SYDNEY, ACTIVITY_ID)]
+
+
+def test_all_rejected_choices_record_reasons_without_itinerary_write() -> None:
+    workflow, itinerary = Workflow(), FakeItinerary()
+    with app(workflow, itinerary) as client:
+        response = client.post(
+            f"{PATH}/review",
+            json={
+                "decision": "reject",
+                "reviewer": "Julian",
+                "item_decisions": [
+                    {"activity_id": ACTIVITY_ID, "decision": "reject"},
+                    {
+                        "activity_id": OTHER,
+                        "decision": "reject",
+                        "notes": "Too crowded",
+                    },
+                ],
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["run"]["status"] == "rejected"
+    assert (
+        json.loads(workflow.posts[0]["notes"])["activity_reviews"][1][2]
+        == "Too crowded"
+    )
+    assert itinerary.rows == {}
+
+
+def test_incomplete_duplicate_or_mismatched_choices_are_not_submitted() -> None:
+    workflow, itinerary = Workflow(), FakeItinerary()
+    choices = [
+        [{"activity_id": ACTIVITY_ID, "decision": "reject"}],
+        [{"activity_id": ACTIVITY_ID, "decision": "reject"}] * 2,
+        [
+            {"activity_id": ACTIVITY_ID, "decision": "approve"},
+            {"activity_id": OTHER, "decision": "reject"},
+        ],
+        [
+            {"activity_id": ACTIVITY_ID, "decision": "reject", "notes": "x" * 1000},
+            {"activity_id": OTHER, "decision": "reject"},
+        ],
+    ]
+    with app(workflow, itinerary) as client:
+        for items in choices:
+            response = client.post(
+                f"{PATH}/review",
+                json={
+                    "decision": "reject",
+                    "reviewer": "Julian",
+                    "item_decisions": items,
+                },
+            )
+            assert response.status_code == 400, response.text
+    assert workflow.posts == []
+    assert itinerary.rows == {}
+
+
+def test_staged_review_requires_shared_audit_confirmation_before_additions() -> None:
+    for missing in (True, False):
+        workflow, itinerary = Workflow(), FakeItinerary()
+
+        def corrupt_notes(
+            request: httpx.Request,
+            workflow: Workflow = workflow,
+            missing: bool = missing,
+        ) -> httpx.Response:
+            workflow.handle(request)
+            if request.method == "POST" and request.url.path.endswith("/review"):
+                workflow.run["human"]["notes"] = None if missing else "Another review"
+            return httpx.Response(200, json={"data": workflow.run})
+
+        with TestClient(
+            create_app(
+                Settings(multi_agent_enabled=True),
+                multi_agent_transport=httpx.MockTransport(corrupt_notes),
+                itinerary_transport=httpx.MockTransport(itinerary.handle),
+                database_transport=httpx.MockTransport(FakeDatabase().handle),
+                location_transport=httpx.MockTransport(location_handler),
+            )
+        ) as client:
+            assert client.post("/activity", json=public_payload()).status_code == 201
+            response = client.post(
+                f"{PATH}/review",
+                json={
+                    "decision": "approve",
+                    "reviewer": "Julian",
+                    "trip_id": SYDNEY,
+                    "selections": [{"activity_id": ACTIVITY_ID, "date": "2027-04-02"}],
+                    "item_decisions": [
+                        {"activity_id": ACTIVITY_ID, "decision": "approve"},
+                        {
+                            "activity_id": OTHER,
+                            "decision": "reject",
+                            "notes": "Too expensive",
+                        },
+                    ],
+                },
+            )
+        assert response.status_code == 502, response.text
+        assert "audit" in response.json()["detail"]
+        assert len(workflow.posts) == 1
+        assert itinerary.rows == {}

@@ -900,3 +900,29 @@ data `502`, unknown/other-feature runs `404`, and a run no longer awaiting revie
 `409`. Invalid local input is `400`. Requests are never automatically retried:
 a timeout after start/review may have an ambiguous outcome; refresh a known run
 before submitting again. A failed run still returns its recorded partial evidence.
+
+### Staged individual suggestion choices
+
+The existing `POST /activity/planner/runs/{run_id}/review` request accepts an
+optional `item_decisions` list. Each entry contains `activity_id`, `decision`
+(`approve` or `reject`) and optional `notes` recording that suggestion's reason.
+The list must contain every original, grounded suggestion exactly once. The
+`selections` list must match the approved activity IDs and supplies their
+existing date/time fields. Send overall `decision: "approve"` when any activity
+is approved, or `"reject"` when all are rejected. Staged choices cannot supply
+a separate `corrected_result`.
+
+Applying choices records one shared human review before any itinerary additions.
+The backend sends only the approved subset as the corrected final result.
+Per-suggestion choices and reasons are retained in shared human notes as compact
+JSON: `{"activity_reviews": [["activity-uuid", "approve", null],
+["other-uuid", "reject", "Reason"]]}`. Optional general notes use the `notes`
+key. The encoded audit must fit the shared 1,000-character notes contract;
+validation returns 400 before submission if reasons need shortening.
+
+Planner responses expose the recorded choices as `item_decisions`. When this
+audit is present, `answer` retains the original recommendation cards so approved
+and rejected suggestions can remain visible together after refresh. The shared
+`run.final_result` remains the authoritative approved subset. Evidence downloads
+retain the original agent result and shared human audit. Refreshing never
+replays a review or itinerary addition.

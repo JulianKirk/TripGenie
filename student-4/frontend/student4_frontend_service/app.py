@@ -9,19 +9,19 @@ from uuid import UUID  # noqa: TC003 - FastAPI resolves route annotations at run
 from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from starlette.responses import RedirectResponse, Response
 
+from .catalogue import _category_labels, _results_context, catalogue_context
 from .client import BackendClient
 from .config import Settings
 from .errors import FrontendError
 from .forms import activity_form_values, parse_activity_form, submitted_form_values
-from .models import (
-    ItinerarySelectionWrite,
-    TripDirectory,
-)
+from .models import ItinerarySelectionWrite
+from .planner import get as get_planner
 from .planner import router as planner_router
 from .planner import start as start_planner
+from .planner_models import RunId
 from .presenters import (
     accessibility_label,
     format_duration,
@@ -61,28 +61,6 @@ ClientDep = Annotated[BackendClient, Depends(_client)]
 
 def _error(exc: BaseException, fallback: str) -> str:
     return exc.detail if isinstance(exc, FrontendError) else fallback
-
-
-def _category_labels(categories: CategoryList | BaseException) -> dict[str, str]:
-    if isinstance(categories, BaseException):
-        return {}
-    return {row.code: row.label for row in categories.categories}
-
-
-def _results_context(
-    *,
-    page: object,
-    labels: dict[str, str],
-    params: object,
-    error: str | None = None,
-) -> dict[str, object]:
-    return {
-        "page": page if not isinstance(page, BaseException) else None,
-        "labels": labels,
-        "params": params,
-        "error": error,
-        "party_size": getattr(params, "get", lambda _name: None)("party_size"),
-    }
 
 
 def _validation_errors(exc: ValidationError) -> dict[str, list[str]]:
@@ -210,42 +188,16 @@ async def ready(
 
 @router.get("/")
 async def index(request: Request, client: ClientDep) -> Any:
-    try:
-        body = build_search_body(request.query_params)
-    except QueryInputError as exc:
-        body = {"limit": 20, "offset": 0}
-        query_error: str | None = str(exc)
-    else:
-        query_error = None
-    body["include_inactive"] = True
-    categories, page, trips = await asyncio.gather(
-        client.categories(), client.search(body), client.trips(), return_exceptions=True
+    if run_id := request.query_params.get("planner_run"):
+        try:
+            parsed = TypeAdapter(RunId).validate_python(run_id)
+        except ValidationError:
+            pass
+        else:
+            return await get_planner(request, parsed, client)
+    return TEMPLATES.TemplateResponse(
+        request, "page.html", await catalogue_context(request, client)
     )
-    labels = _category_labels(categories)
-    results_error = query_error
-    if isinstance(page, BaseException):
-        results_error = _error(page, "Activities could not be loaded.")
-    context = {
-        "categories": None if isinstance(categories, BaseException) else categories,
-        "selected_limit": body["limit"],
-        "categories_error": (
-            _error(categories, "Categories could not be loaded.")
-            if isinstance(categories, BaseException)
-            else None
-        ),
-        "trip_directory": (
-            TripDirectory(available=False, trips=[])
-            if isinstance(trips, BaseException)
-            else trips
-        ),
-        **_results_context(
-            page=page,
-            labels=labels,
-            params=request.query_params,
-            error=results_error,
-        ),
-    }
-    return TEMPLATES.TemplateResponse(request, "page.html", context)
 
 
 @router.get("/activity")

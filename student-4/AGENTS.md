@@ -44,9 +44,10 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
   frontend orchestration lives in `planner.py`. Feature backends own prompt/schema
   and grounded card presentation; shared agents own planning/execution/review.
   Human approval adds only explicitly selected, grounded recommendations to a
-  chosen trip through the existing itinerary client. Keep pre-approval dismissal
-  reversible and retain the original agent evidence. Record rejection feedback
-  before starting a fresh workflow; keep it separate from trusted prompts.
+  chosen trip through the existing itinerary client. Stage independent card
+  approvals or rejections in the inline assistant, keeping rejected cards visible.
+  Apply all choices through one shared human decision before itinerary writes;
+  retain the original agent evidence and per-card reasons in the review audit.
   Preserve partial itinerary-save outcomes and never replay ambiguous writes.
   Preserve partial traces, validate the
   run's feature before reads/reviews, and never retry ambiguous start/review calls.

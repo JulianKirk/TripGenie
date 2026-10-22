@@ -1,34 +1,58 @@
 <section id="planner-result" aria-label="Smart Planner workflow" aria-live="polite"
-{% if planner and not recovering and planner.run.status in ['planning', 'working', 'reviewing'] %}hx-get="{{ selection_url }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+{% if planner and planner.run.status in ['planning', 'working', 'reviewing'] %}hx-get="/planner/{{ planner.run.run_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
 {% if error %}
   <div class="banner banner--error" role="alert"><strong>Smart Planner request failed</strong><p>{{ error }}</p></div>
-  {% if run_id and not recovering %}<p><a class="button" href="/planner/{{ run_id }}" hx-get="/planner/{{ run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh this run</a></p>{% endif %}
+  {% if run_id %}<p><a href="/?planner_run={{ run_id }}#ai-suggestions" hx-get="/planner/{{ run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Check recorded status</a></p>{% endif %}
 {% endif %}
 {% if planner %}
   {% set run = planner.run %}
-  <h3>Smart Planner · {{ {'planning':'Planning', 'working':'Finding activities', 'reviewing':'Reviewing', 'awaiting_human':'Your decision', 'completed':'Accepted · approval recorded', 'rejected':'Rejected', 'failed':'Failed'}[run.status] }}</h3>
+  <h3>Smart Planner · {{ {'planning':'Planning', 'working':'Finding activities', 'reviewing':'Reviewing', 'awaiting_human':'Your decision', 'completed':'Review complete', 'rejected':'Review complete', 'failed':'Failed'}[run.status] }}</h3>
   <p>{{ run.task }}</p>
-  <p class="field-hint">Planning → Finding activities → Reviewing → Your decision</p>
-  <p>{% if not recovering and run.status != 'awaiting_human' %}<a href="/planner/{{ run.run_id }}" hx-get="/planner/{{ run.run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh progress</a> · {% endif %}<a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a></p>
-  {% if run.plan %}<details open><summary>Planner’s approach</summary><p>{{ run.plan.goal }}</p><ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>
-    {% if run.plan.required_evidence %}<p>Required evidence:</p><ul>{% for item in run.plan.required_evidence %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-  </details>{% endif %}
-  {% if run.steps %}<details><summary>Agent execution</summary><ol>{% for step in run.steps %}<li>{{ step.agent }} · attempt {{ step.attempt }} · {{ step.status }}</li>{% endfor %}</ol></details>{% endif %}
-  {% if run.status not in ['completed', 'rejected'] and planner.answer.parts %}<p><strong>Draft — awaiting your decision.</strong></p>{% endif %}
-  {% if selection.explicit and run.status == 'awaiting_human' %}<p role="status">Showing {{ selection.ids|length }} selected activities. The original answer remains in workflow evidence.</p><button class="button" type="submit" form="planner-review" name="restore" value="all" formaction="/planner/{{ run.run_id }}/selection" formnovalidate hx-post="/planner/{{ run.run_id }}/selection" hx-include="#planner-review" hx-target="#planner-result" hx-swap="outerHTML" hx-validate="false">Restore all suggestions</button>{% endif %}
-  {% if selection.previous_run_id %}<p>Regenerated from <a href="/planner/{{ selection.previous_run_id }}">previous rejected result</a>.</p>{% endif %}
-  {% if planner.saved %}<section aria-label="Added to trip"><h4>Added to trip</h4><ul>{% for saved in planner.saved %}<li>{{ planner.answer.activities[saved.activity_id].name if saved.activity_id in planner.answer.activities else saved.activity_id }} — {{ 'Added' if saved.status == 'added' else 'Already in trip' }} · {{ saved.trip_id }}</li>{% endfor %}</ul></section>{% endif %}
-  {% if planner.save_errors %}<section class="banner banner--error" role="alert"><h4>Some trip additions could not be confirmed</h4><p>Approval was recorded. Check the trip before using the activity’s Add to itinerary action; additions are never retried automatically.</p><ul>{% for item in planner.save_errors %}<li>{{ planner.answer.activities[item.activity_id].name if item.activity_id in planner.answer.activities else item.activity_id }} — {{ item.message }}</li>{% endfor %}</ul></section>{% endif %}
-  {% with result=displayed_answer, error=none, planner_draft=(run.status != 'completed') %}{% include "partials/assistant_results.html" %}{% endwith %}
+  <p class="field-hint">Planning → Agent execution → Validation → Human review</p>
+  {% if run.plan %}<details><summary>Planner’s approach</summary><p>{{ run.plan.goal }}</p><ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol></details>{% endif %}
+  <details{% if run.status in ['planning', 'working', 'reviewing'] %} open{% endif %}>
+    <summary>Agent execution</summary>
+    {% if run.steps %}<ol>{% for step in run.steps %}<li>{{ step.agent }} · attempt {{ step.attempt }} · {{ step.status }}</li>{% endfor %}</ol>{% else %}<p>The agents are starting.</p>{% endif %}
+    <details><summary>Activities found · {{ found_activities|length }}</summary>
+      {% if found_activities %}<ul>{% for name in found_activities.values() %}<li>{{ name }}</li>{% endfor %}</ul>{% else %}<p>No activity results recorded yet.</p>{% endif %}
+    </details>
+    {% with result=planner.answer %}{% include "partials/assistant_tools.html" %}{% endwith %}
+  </details>
   {% if run.checks %}<details open><summary>Validation checks</summary><ul>{% for check in run.checks %}<li><strong>{{ 'Passed' if check.passed else 'Failed' }}: {{ check.name }}</strong> — {{ check.detail }}</li>{% endfor %}</ul></details>{% endif %}
   {% if run.review %}<section aria-label="Reviewer findings"><h4>Reviewer: {{ run.review.verdict }}</h4><p>{{ run.review.summary }}</p>
     {% for label, entries in [('Issues', run.review.issues), ('Risks', run.review.risks), ('Recommendations', run.review.recommendations)] %}{% if entries %}<h5>{{ label }}</h5><ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>{% endif %}{% endfor %}
   </section>{% endif %}
-  {% if run.status == 'completed' and not planner.saved and not planner.save_errors %}<p role="status">Approval was recorded. Check your trip for activity additions; refreshing this run does not repeat additions or confirm their outcome.</p>{% endif %}
-  {% if run.human %}<p><strong>Human decision: {{ run.human.decision }}</strong> · {{ run.human.reviewer }}</p>{% if run.human.notes %}<p>{{ run.human.notes }}</p>{% endif %}{% endif %}
-  <p class="field-hint">Run: <code>{{ run.run_id }}</code>. Check recorded tool results for any actions performed; rejecting a proposal does not undo tool calls.</p>
-{% endif %}
-{% if review_form and (recovering or (planner and planner.run.status == 'awaiting_human')) %}
-  {% include "partials/planner_review_form.html" %}
+  {% if planner.answer.error %}<div class="banner banner--error" role="alert">{{ planner.answer.error }}</div>{% endif %}
+  {% if run.status in ['awaiting_human', 'completed', 'rejected'] %}
+    <section aria-label="Human review"><h4>Activity suggestions</h4>
+      {% if show_narrative %}{% for part in planner.answer.parts %}{% if part.type == 'text' %}<p class="assistant-text">{{ part.text }}</p>{% endif %}{% endfor %}{% endif %}
+      {% set can_review = run.status == 'awaiting_human' %}
+      {% set failed_checks = run.checks|selectattr('blocking')|rejectattr('passed')|list %}
+      {% if failed_checks %}<p role="status">Suggestions cannot be approved until blocking checks pass. You can reject them.</p>{% endif %}
+      {% if can_review %}<p>Your choices are pending until you apply them. Approvals add only the selected activities to your itinerary.</p>
+      <form id="planner-review" method="post" action="/planner/{{ run.run_id }}/review" hx-post="/planner/{{ run.run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-sync="#planner-review:drop" hx-disabled-elt="#planner-review button, #planner-review input, #planner-review textarea, #planner-review select">{% endif %}
+      {% for key in suggestion_ids %}
+        {% set activity = planner.answer.activities.get(key) %}
+        {% set item_choice = choices.decisions.get(key) %}
+        {% if activity %}{% with planner_item=true %}{% include "partials/assistant_card.html" %}{% endwith %}
+        {% else %}<article class="activity-card{% if item_choice == 'reject' %} activity-card--rejected{% endif %}"><h3>Activity unavailable · {{ key }}</h3><p>This activity can no longer be added to an itinerary.</p>{% include "partials/planner_choice_controls.html" %}</article>{% endif %}
+      {% else %}<p role="status">No activity cards were returned.</p>{% endfor %}
+      {% if can_review %}
+        <section class="planner-apply" aria-label="Apply review decisions">
+          {% if suggestion_ids %}<p role="status">{{ choices.decisions|length }} of {{ suggestion_ids|length }} suggestions reviewed · {{ approved_count }} approved · {{ choices.decisions|length - approved_count }} rejected</p>{% endif %}
+          <label class="field" for="planner-reviewer">Your name<input id="planner-reviewer" name="reviewer" value="{{ choices.reviewer }}" required maxlength="60" autocomplete="name"></label>
+          {% if suggestion_ids %}<label class="field" for="planner-itinerary">Itinerary for approved activities<select id="planner-itinerary" name="trip_id"><option value="">Choose an itinerary</option>{% for trip in trips %}<option value="{{ trip.id }}"{% if trip.id == choices.trip_id %} selected{% endif %}>{{ trip.name }} · {{ trip.start_date }} to {{ trip.end_date }}</option>{% endfor %}</select></label>{% else %}<label class="field">Reason (optional)<textarea name="result_reason" maxlength="1000">{{ choices.result_reason }}</textarea></label>{% endif %}
+          {% if trip_error %}<p role="status">{{ trip_error }}</p>{% endif %}
+          <button class="button button--primary" type="submit"{% if choices.decisions|length != suggestion_ids|length or (approved_count and (failed_checks or trip_error or not trips)) %} disabled{% endif %}>{{ 'Apply approvals' if approved_count else ('Apply decisions' if suggestion_ids else 'Reject result') }}</button>
+          <p class="field-hint">This records all card decisions together. Rejected activities will not be added.</p>
+        </section>
+      </form>{% endif %}
+      {% if planner.saved %}<section aria-label="Added to itinerary"><h4>Itinerary updated</h4><ul>{% for saved in planner.saved %}<li>{{ decision_names.get(saved.activity_id, saved.activity_id) }} — {{ 'Added' if saved.status == 'added' else 'Already in itinerary' }}</li>{% endfor %}</ul></section>{% endif %}
+      {% if planner.save_errors %}<section class="banner banner--error" role="alert"><h4>Some additions could not be confirmed</h4><p>Your decisions were recorded. Check the itinerary before adding these activities again.</p><ul>{% for item in planner.save_errors %}<li>{{ decision_names.get(item.activity_id, item.activity_id) }} — {{ item.message }}</li>{% endfor %}</ul></section>{% endif %}
+      {% if run.human %}<p><strong>Human decisions recorded</strong> · {{ run.human.reviewer }}{% if run.human.decided_at %} · {{ run.human.decided_at }}{% endif %}</p>{% endif %}
+      {% if not can_review and run.status == 'completed' and not planner.saved and not planner.save_errors %}<p role="status">Approval was recorded. Check your itinerary for additions; refreshing never repeats them.</p>{% endif %}
+    </section>
+  {% endif %}
+  <p class="field-hint"><a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a> · Run: <code>{{ run.run_id }}</code></p>
 {% endif %}
 </section>

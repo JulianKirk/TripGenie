@@ -99,12 +99,24 @@ class SaveError(StrictModel):
     message: str
 
 
+class SuggestionDecision(StrictModel):
+    activity_id: UUID
+    decision: Literal["approve", "reject"]
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("notes")
+    @classmethod
+    def trim_notes(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
 class PlannerResponse(StrictModel):
     run: Run
     answer: AssistantResponse
     saved: list[SavedSelection] = Field(default_factory=list)
     save_errors: list[SaveError] = Field(default_factory=list)
     previous_run_id: RunId | None = None
+    item_decisions: list[SuggestionDecision] = Field(default_factory=list)
 
 
 class PlannerSelection(ActivitySchedule):
@@ -120,6 +132,9 @@ class Decision(StrictModel):
         default=None, pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
     )
     selections: list[PlannerSelection] | None = Field(default=None, max_length=6)
+    item_decisions: list[SuggestionDecision] | None = Field(
+        default=None, min_length=1, max_length=6
+    )
 
     @field_validator("selections")
     @classmethod
@@ -160,3 +175,4 @@ class HistoryEvent(BaseModel):
 class Evidence(StrictModel):
     run: Run
     history: list[HistoryEvent]
+    item_decisions: list[SuggestionDecision] = Field(default_factory=list)
