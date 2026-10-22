@@ -123,10 +123,13 @@ catalogue page. `/?planner_run={run_id}#ai-suggestions` restores a known workflo
 `/planner/{run_id}` renders that same page or an HTMX workflow partial.
 
 Active runs poll through the feature backend every two seconds. The panel shows
-the Planner's approach, then **Agent execution** with nested **Activities found**
-and **Tools used** dropdowns. Activity names come from successful structured
-Student 4 tool results; tool arguments, results and attempts remain available.
-Validation checks and Reviewer findings precede the activity suggestion cards.
+**Planner**, **Worker**, **Validation checks** and **Reviewer** dropdowns from the
+start, each with a coloured status badge. Agent badges distinguish not yet run,
+running, completed and failed states, including retry attempts. The Worker
+contains nested **Activities found** and **Tools used** dropdowns. Activity names
+come from successful structured Student 4 tool results; tool arguments, results
+and attempts remain available. Validation checks and Reviewer findings precede
+the activity suggestion cards.
 Full cards appear once, after execution and validation finish.
 
 Each card supports **Approve**, **Reject without reason**, and **Reject with

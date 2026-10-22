@@ -68,7 +68,9 @@ def test_inline_workflow_orders_evidence_checks_and_single_review_cards() -> Non
         page = client.get(f"/planner/{RUN}")
     assert "AI activity assistant" in page.text
     assert 'value="planner" checked' in page.text
-    assert page.text.index("Agent execution") < page.text.index("Validation checks")
+    assert page.text.index('id="planner-stage-worker"') < page.text.index(
+        "Validation checks"
+    )
     assert page.text.index("Validation checks") < page.text.index(
         "Sydney Harbour guided walk</h3>"
     )
@@ -241,5 +243,61 @@ def test_recorded_mixed_choices_keep_all_cards_with_final_symbols() -> None:
     assert "Another walk</h3>" in page.text
     assert "✓ Approved</strong>" in page.text and "Too strenuous" in page.text
     assert "Human decisions recorded" in page.text
-    assert "pending" not in page.text and ">Apply approvals<" not in page.text
+    assert "· pending" not in page.text and ">Apply approvals<" not in page.text
     assert "Take a walk." not in page.text
+
+
+def test_all_agent_dropdowns_are_present_before_execution() -> None:
+    with TestClient(
+        create_app(Settings(), transport=handler_for(cards("planning"), []))
+    ) as client:
+        page = client.get(f"/planner/{RUN}", headers={"HX-Request": "true"})
+    assert 'id="planner-stage-planner"' in page.text
+    assert 'id="planner-stage-worker"' in page.text
+    assert 'id="planner-stage-reviewer"' in page.text
+    assert page.text.count("Not yet run</span>") == 3
+    assert "Running</span>" in page.text
+    assert "Agent execution</summary>" not in page.text
+
+
+def test_worker_contains_activity_and_tool_submenus_and_retry_statuses() -> None:
+    data = cards("working")
+    data["run"]["attempts"] = 2
+    data["run"]["steps"] = [
+        {"agent": "planner", "attempt": 1, "status": "completed"},
+        {"agent": "worker", "attempt": 1, "status": "failed"},
+        {"agent": "reviewer", "attempt": 1, "status": "completed"},
+        {"agent": "planner", "attempt": 2, "status": "completed"},
+    ]
+    with TestClient(create_app(Settings(), transport=handler_for(data, []))) as client:
+        page = client.get(f"/planner/{RUN}", headers={"HX-Request": "true"})
+    worker = page.text.split('id="planner-stage-worker"')[1].split(
+        'id="planner-stage-reviewer"'
+    )[0]
+    reviewer = page.text.split('id="planner-stage-reviewer"')[1]
+    assert "Running</span>" in worker
+    assert "Activities found" in worker and "Tools used" in worker
+    assert "Not yet run</span>" in reviewer
+    assert "attempt 1 · failed" in worker
+
+
+def test_timeout_marks_the_interrupted_agent_failed_without_a_finished_step() -> None:
+    for finished, interrupted in (
+        ([], "planner"),
+        (["planner"], "worker"),
+        (["planner", "worker"], "reviewer"),
+        (["planner", "worker", "reviewer"], "planner"),
+    ):
+        data = cards("failed")
+        data["run"]["error"] = {"code": "RUN_TIMEOUT", "message": "Workflow timed out"}
+        data["run"]["steps"] = [
+            {"agent": name, "attempt": 1, "status": "completed"} for name in finished
+        ]
+        with TestClient(
+            create_app(Settings(), transport=handler_for(data, []))
+        ) as client:
+            page = client.get(f"/planner/{RUN}", headers={"HX-Request": "true"})
+        stage = page.text.split(f'id="planner-stage-{interrupted}"')[1].split(
+            "</summary>"
+        )[0]
+        assert 'planner-status--failed">Failed</span>' in stage
