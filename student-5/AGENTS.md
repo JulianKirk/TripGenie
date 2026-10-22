@@ -20,6 +20,9 @@ This file supplements the repository-level `AGENTS.md` for `student-5/`.
   with this feature's own prompt, schema and read-only budget tools. The server
   never writes Student 5 data: after a human approves, the backend applies only
   grounded allocation changes that still fit within the total budget.
+- `tests/endpoint` holds the Release 2 post-commit endpoint tests (expense
+  creation and budget summary). They run only in `student-5-ci.yml` against the
+  live Compose slice, so `testpaths` leaves them out of ordinary pytest runs.
 
 ## Development and verification
 

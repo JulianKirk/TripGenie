@@ -92,6 +92,39 @@ jobs:
             http://127.0.0.1:8085/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/agent-runs \
             | grep -q 'disabled in this environment'
           echo 'Frontend agent review panel shows the disabled state.'
+      - name: Post-commit endpoint tests
+        working-directory: student-5
+        env:
+          STUDENT5_ENDPOINT_BASE_URL: http://127.0.0.1:18005
+        run: python -m pytest tests/endpoint --junitxml=student-5-endpoint-tests.xml -v
+      - name: Endpoint test summary
+        if: always()
+        working-directory: student-5
+        run: |
+          python - <<'EOF' | tee student-5-endpoint-tests.md >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          print("## Student 5 post-commit endpoint tests\n")
+          if not os.path.exists("student-5-endpoint-tests.xml"):
+              print("The endpoint tests did not run.")
+              raise SystemExit
+          print("| Test | Result |\n| --- | --- |")
+          for case in ET.parse("student-5-endpoint-tests.xml").iter("testcase"):
+              outcome = next(
+                  (child.tag for child in case if child.tag in {"failure", "error", "skipped"}),
+                  "passed",
+              )
+              mark = "PASS" if outcome == "passed" else outcome.upper()
+              print(f"| `{case.get('name')}` | {mark} |")
+          EOF
+      - name: Upload endpoint test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-5-endpoint-test-evidence
+          path: |
+            student-5/student-5-endpoint-tests.xml
+            student-5/student-5-endpoint-tests.md
       - name: Compose logs on failure
         if: failure()
         run: docker compose logs --no-color student-5-database student-5-backend student-5-frontend
