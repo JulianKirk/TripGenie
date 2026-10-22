@@ -65,7 +65,13 @@ The constraints already in place:
 6. **Feature prompts lead.** The Worker's system prompt is the feature's own
    prompt followed by the workflow rules, and the feature's context keys are
    sent at the top level of the Worker's message. Live tests showed the
-   reverse order stops the 8b model calling the feature's tools.
+   reverse order stops the 8b model calling the feature's tools. Optional
+   `feature_instructions` carry role-neutral domain policy to all three agents,
+   including revisions. They follow each role's own system instructions; the
+   Worker still leads with its feature prompt, then common policy and workflow
+   rules. Planner/Reviewer never receive Worker-only output/tool instructions.
+   The common policy shares the existing Worker instruction allowance and counts
+   against each stage budget; no additional model calls are introduced.
 
 ## Consequences
 

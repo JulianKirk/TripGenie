@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 from typing import Any
 
 import httpx
@@ -61,6 +62,14 @@ def test_start_sends_feature_owned_contract() -> None:
     assert body["grounding"]["id_paths"] == ["parts[].activity_id"]
     assert "activities_search" in body["allowed_tools"]
     assert "output_schema" in body and "worker_system" in body
+    prompts = files("student4_backend_service").joinpath("prompts")
+    assert body["feature_instructions"] == prompts.joinpath(
+        "activity_planner_rules_v1.md"
+    ).read_text(encoding="utf-8")
+    assert body["worker_system"] == prompts.joinpath(
+        "activity_planner_v1.md"
+    ).read_text(encoding="utf-8")
+    assert body["feature_instructions"] != body["worker_system"]
     assert "actions_path" not in body
 
 

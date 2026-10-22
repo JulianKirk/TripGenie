@@ -64,14 +64,24 @@ All JSON responses use `{"data": ...}`; errors use
 | `feature` | string | One of `student-1` … `student-5` (`MULTI_AGENT_FEATURES`). |
 | `task` | string | The traveller's request, 1–500 characters. |
 | `trip_id` | string? | `trip_…` identifier, when the task is about a trip. |
-| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks` and `reviewer_feedback` are reserved. |
-| `worker_system` | string | The feature's own Worker prompt, at most 6,000 characters. It leads the Worker's system prompt. |
+| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
+| `feature_instructions` | string | Optional trusted domain rules, default empty. Appended to each role's system prompt, including revisions; keep role-neutral and omit Worker output formatting. Shares the 6,000-character allowance with `worker_system`. |
+| `worker_system` | string | The feature's own Worker prompt. It leads the Worker's system prompt, followed by common feature instructions and workflow rules. Combined with `feature_instructions`, at most 6,000 characters. |
 | `output_schema` | JSON Schema | The Worker's result shape. Must be `type: object`, at most 6,000 characters, local `$ref`s only. |
 | `allowed_tools` | string[] | MCP tool names the Worker may use (at most 24, distinct). Empty means no tool checks. |
 | `grounding` | object? | `{source, id_paths, id_keys}`. Every value at an `id_path` (e.g. `suggestions[].transport_id`) must appear under an `id_key` (default `id`) in a successful tool result whose `source` matches. |
 | `actions_path` | string? | Where the result lists changes for the human to approve, e.g. `actions`. |
 | `correlation_id` | string? | `^[A-Za-z0-9][A-Za-z0-9._:-]{0,47}$`; stage calls append `.p1`, `.w1`, `.r1` … |
 | `metadata` | object | Up to 6 string entries, values at most 160 characters. |
+
+Feature backends supply trusted `feature_instructions` separately from user tasks
+and context data. Planner and Reviewer retain their own role/output schemas;
+they do not receive `worker_system`. The optional field adds no model calls or
+tool execution. All stage prompt budgets include the common rules, including
+Reviewer evidence trimming. Instructions are stored privately with the request,
+not echoed in public run/history/export records. Existing callers and persisted
+requests may omit the field. Upgrade the shared server before deploying a feature
+backend that sends it; older servers reject unknown fields.
 
 Unknown fields are rejected (`422 VALIDATION_ERROR`). At most
 `MULTI_AGENT_MAX_ACTIVE_RUNS` (default 4) run at once; beyond that `POST /runs`

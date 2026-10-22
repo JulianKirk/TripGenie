@@ -115,6 +115,7 @@ async def start(
     body: dict[str, object] = {
         "feature": "student-4",
         "task": payload.question,
+        "feature_instructions": _prompt_asset("activity_planner_rules_v1.md"),
         "worker_system": _prompt_asset("activity_planner_v1.md"),
         "output_schema": FinalAction.model_json_schema(),
         "allowed_tools": TOOLS,

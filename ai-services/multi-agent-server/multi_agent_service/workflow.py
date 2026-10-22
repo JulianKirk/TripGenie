@@ -144,6 +144,19 @@ class WorkflowEngine:
                     "issue": f"must be at most {limits.max_system_chars} characters",
                 },
             )
+        if (
+            len(request.worker_system) + len(request.feature_instructions)
+            > limits.max_system_chars
+        ):
+            details.append(
+                {
+                    "field": "feature_instructions",
+                    "issue": (
+                        "combined with worker_system must be at most "
+                        f"{limits.max_system_chars} characters"
+                    ),
+                },
+            )
         if len(json.dumps(request.output_schema)) > limits.max_schema_chars:
             details.append(
                 {

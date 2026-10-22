@@ -804,6 +804,14 @@ calls the shared host-run Multi-Agent Server. No activity persistence changes
 are needed. The shared server owns run storage, Planner/Worker/Reviewer execution
 and human decision history.
 
+The backend sends `activity_planner_rules_v1.md` as trusted
+`feature_instructions` for Planner, Worker and Reviewer. These compact common
+rules cover one-shot interaction, read-only recommendations, group budgets and
+required detail evidence. `activity_planner_v1.md` remains the Worker's separate
+execution/output prompt. User questions cannot supply either prompt. Upgrade the
+shared Multi-Agent Server to support the optional field before this backend;
+existing callers can omit it. This adds no model calls or UI steps.
+
 | Method | Path | Success | Purpose |
 | --- | --- | --- | --- |
 | POST | `/activity/planner/runs` | 202 | Start with `{question, trip_id?}` (same validation as the assistant). |

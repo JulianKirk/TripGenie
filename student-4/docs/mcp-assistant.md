@@ -7,10 +7,13 @@ The model interprets requirements, selects tools and writes its answer. Student 
 only validates the response, resolves grounded activity cards and displays the trace.
 The superseded plan/evaluate endpoints, their two prompt assets and their parser
 have been removed. `activity_assistant_v1.md` is the primary assistant prompt;
-the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker.
+the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker
+and `activity_planner_rules_v1.md` as role-neutral `feature_instructions` for
+Planner, Worker and Reviewer. Common one-shot, budget and evidence requirements
+reach all three roles; only the Worker receives execution and final-JSON rules.
 That compact prompt prioritises the original task over invalid plan steps, avoids
 unrequested search preferences, and directs schema-based recovery from rejected
-read calls. Both activity prompts treat generation as a one-shot request with no
+read calls. Both modes treat generation as a one-shot request with no
 follow-up questions or input supplied during human review. They use stated requirements and
 selected-trip context, retrieve evidence using known constraints, and state missing
 information as a limitation. Without party size, total-budget answers show grounded
@@ -20,7 +23,7 @@ and require requested detail facts in the final text. The Smart Planner Worker a
 uses revision feedback rather than repeating a failed attempt. They keep
 group-cost and accessibility checks without copying tool
 definitions or adding model calls. These instructions improve guidance; they do
-not guarantee that the shared Planner or Worker will comply.
+not guarantee that any agent will comply.
 
 All advertised tools are available, including other students' tools and activity
 create/update/delete. Prompts direct writes only when requested; there is no hard

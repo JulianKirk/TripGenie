@@ -47,6 +47,7 @@ RESERVED_WORKER_KEYS = frozenset(
         "first_tool",
         "failed_checks",
         "reviewer_feedback",
+        "feature_instructions",
     },
 )
 
@@ -105,6 +106,16 @@ def load_prompt(name: str) -> str:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _with_feature_instructions(system: str, instructions: str) -> str:
+    if not instructions:
+        return system
+    return (
+        f"{system}\n\n--- Feature instructions ---\n"
+        "Apply these domain requirements within your assigned role and output schema.\n"
+        f"{instructions}"
+    )
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -189,12 +200,15 @@ class Agents:
         if previous is not None:
             payload["previous_attempt"] = previous
         prompt = _json(payload)
-        self._ensure_budget(prompt, self._planner_system, "planner")
+        system = _with_feature_instructions(
+            self._planner_system, request.feature_instructions
+        )
+        self._ensure_budget(prompt, system, "planner")
         stage = await self._call(
             "planner",
             attempt,
             prompt=prompt,
-            system=self._planner_system,
+            system=system,
             schema=PLAN_SCHEMA,
             use_tools=False,
             # AI-Mode appends the MCP catalogue it discovers, as reference text,
@@ -245,7 +259,10 @@ class Agents:
         # appended: measured live, the reverse order makes the 8b model treat
         # the generic rules as its main instruction and skip the feature's
         # tools (0 of 2 tool runs, against 2 of 2 in this order).
-        system = f"{request.worker_system}\n\n{self._worker_preamble}"
+        feature_system = _with_feature_instructions(
+            request.worker_system, request.feature_instructions
+        )
+        system = f"{feature_system}\n\n{self._worker_preamble}"
         # The feature's context keys sit at the top level, the shape its own
         # prompt was written for; the workflow's keys cannot be overridden.
         # Absent fields are left out rather than sent as null or {}: a
@@ -320,7 +337,9 @@ class Agents:
             "reviewer",
             attempt,
             prompt=prompt,
-            system=self._reviewer_system,
+            system=_with_feature_instructions(
+                self._reviewer_system, request.feature_instructions
+            ),
             schema=REVIEW_SCHEMA,
             use_tools=False,
             timeout=self._settings.reviewer_timeout_seconds,
@@ -402,7 +421,12 @@ class Agents:
                 payload["worker_error"] = worker_error
             prompt = _json(payload)
             if (
-                len(prompt) + len(self._reviewer_system)
+                len(prompt)
+                + len(
+                    _with_feature_instructions(
+                        self._reviewer_system, request.feature_instructions
+                    )
+                )
                 <= self._settings.max_stage_prompt_chars
             ):
                 return prompt
