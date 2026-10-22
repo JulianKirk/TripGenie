@@ -51,6 +51,10 @@ DEFAULT_TOOLS: dict[str, list[str]] = {
     "student-5": ["budgets_list", "budgets_get_summary", "expenses_list"],
 }
 
+GROUNDING_ID_KEYS: dict[str, list[str]] = {
+    "student-5": ["budget_id", "expense_id", "trip_id", "item_id"],
+}
+
 TERMINAL_WORKER_RULES = """\
 You are TripGenie's assistant for one feature's data, answering a question
 asked from the terminal. Use the native MCP functions to obtain every fact.
@@ -172,7 +176,11 @@ def _run(client: MultiAgentClient, arguments: argparse.Namespace) -> int:
         "worker_system": TERMINAL_WORKER_RULES,
         "output_schema": TERMINAL_OUTPUT_SCHEMA,
         "allowed_tools": arguments.tools or DEFAULT_TOOLS[feature],
-        "grounding": {"source": feature, "id_paths": ["items[].id"]},
+        "grounding": {
+            "source": feature,
+            "id_paths": ["items[].id"],
+            "id_keys": GROUNDING_ID_KEYS.get(feature, ["id"]),
+        },
         "metadata": {"service": "multi-agent-cli", "feature": "terminal-run"},
     }
     run = client.start_run(
