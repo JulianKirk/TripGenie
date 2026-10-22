@@ -255,18 +255,13 @@ class Agents:
         run_id: str,
         correlation_id: str,
     ) -> StageResult:
-        # The feature's own prompt comes first and the multi-agent rules are
-        # appended: measured live, the reverse order makes the 8b model treat
-        # the generic rules as its main instruction and skip the feature's
-        # tools (0 of 2 tool runs, against 2 of 2 in this order).
-        # The Worker already receives the feature's complete execution prompt.
-        # Keep it intact: rewriting/reordering it regressed native tool selection
-        # in live tests. Common policy supplements Planner/Reviewer only.
+        # The feature's complete Worker prompt leads; workflow rules follow.
+        # Common policy supplements Planner/Reviewer without duplicating Worker
+        # instructions or changing their order.
         system = f"{request.worker_system}\n\n{self._worker_preamble}"
         # The feature's context keys sit at the top level, the shape its own
         # prompt was written for; the workflow's keys cannot be overridden.
-        # Absent fields are left out rather than sent as null or {}: a
-        # placeholder or a null trip_id was enough for the model to skip tools.
+        # Preserve absent optional fields instead of adding null placeholders.
         payload: dict[str, Any] = {
             key: value
             for key, value in request.context.items()
@@ -275,17 +270,15 @@ class Agents:
         payload.update(
             {
                 "task": request.task,
-                # Goal and steps only: the evidence list and success criteria
-                # are the Reviewer's yardstick, and a model shown "prices from
-                # transport_search" reads it as evidence it already has.
+                # Goal and steps describe the work; evidence requirements and
+                # success criteria remain the Reviewer's validation inputs.
                 "plan": {"goal": plan.goal, "steps": plan.steps},
                 "allowed_tools": request.allowed_tools,
             },
         )
         if request.trip_id is not None:
             payload["trip_id"] = request.trip_id
-        # A small model given a whole catalogue may answer from memory; naming
-        # the first call keeps the evidence flowing from tools.
+        # Name the first planned call as the entry point for tool execution.
         first_tool = next(iter(plan.tools_to_use or request.allowed_tools), None)
         if first_tool is not None:
             payload["first_tool"] = first_tool
@@ -404,9 +397,7 @@ class Agents:
                 if result is not None
                 else None,
                 "tool_evidence": evidence,
-                # An explicit pass/FAIL per check plus a count: given the raw
-                # model with "blocking": true, the 8b Reviewer read every
-                # check as failed (seen live).
+                # Give the Reviewer explicit pass/FAIL outcomes and a count.
                 "checks_passed": f"{sum(c.passed for c in checks)} of {len(checks)}",
                 "checks": [
                     {

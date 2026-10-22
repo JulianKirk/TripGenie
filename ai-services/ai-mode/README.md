@@ -438,5 +438,5 @@ Ollama remains a host prerequisite; Compose and CI do not install, start, or dow
 System instructions and user input use separate chat roles. MCP responses use tool
 messages. Native tool calls run without a final-output JSON grammar; if a caller
 supplies `schema`, final formatting uses that grammar after tool work finishes.
-Tool descriptions are passed directly from MCP. Improve prompts/descriptions for
-model-quality issues rather than implementing domain-specific reasoning in Python.
+Tool descriptions are passed directly from MCP. Domain reasoning belongs in
+feature prompts and tool descriptions; Python owns protocol validation and execution.
