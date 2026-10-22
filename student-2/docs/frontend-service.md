@@ -33,6 +33,7 @@ so something has to render the rows. Two further constraints settle it:
 | `BACKEND_URL`     | `http://student-2-backend:9000` | Base URL of the backend service          |
 | `BACKEND_TIMEOUT` | `5`                             | Seconds to wait on a backend call        |
 | `AI_TIMEOUT`      | `210`                           | Seconds to wait on the ask, guide and assistant boxes, which wait on a model |
+| `AGENTS_TIMEOUT`  | `30`                            | Seconds to wait on the multi-agent page's calls: starting, polling and deciding a run |
 
 ## Running it
 
@@ -59,6 +60,11 @@ These serve HTML, not an API — no other service is a caller.
 | `POST /accommodation`      | Saves a new accommodation from the form body               |
 | `PUT /accommodation/{id}`  | Saves an edit from the form body                           |
 | `DELETE /accommodation/{id}` | Deletes an accommodation                                 |
+| `GET /agents`              | The multi-agent form (Release 2)                           |
+| `POST /agents`             | Starts a run, then `303` to its own page                   |
+| `GET /agents/runs/{runId}` | The run page: plan, each agent's tool calls, the server's checks, the Reviewer's verdict, the suggested listings and the decision form |
+| `GET /agents/runs/{runId}/panel` | Just the run panel, re-fetched every 2 seconds by HTMX while the agents work |
+| `POST /agents/runs/{runId}/review` | The decision, forwarded to the backend; returns the panel with what was added to the trip |
 | `GET /health`              | `{"status", "service", "backend"}`                         |
 
 `/health` reports `degraded` (still `200`) when the backend is unreachable —
@@ -266,6 +272,55 @@ A blank ask is the unfiltered list, not an error, the same answer an empty
 search box gives. An AI failure renders in `partials/error.html` where the
 results would have been, like every other backend failure, and the ask box is
 gone but nothing else on the page is.
+
+### Features a deployment has switched off
+
+The cloud profile has no AI-Mode, RAG server or Multi-Agent Server, and the
+backend reports that on its `/health` (`ai_mode`, `rag` and `multi_agent`, which
+are config only and never probed). The page reads those fields and shows what
+is unavailable instead of offering boxes that can only fail:
+
+- With AI-Mode and RAG both off, the ask box carries a notice ("AI features are
+  switched off in this deployment"), its three modes are greyed out and
+  labelled "unavailable in this deployment", and the input and button are
+  disabled. Filters, listings and trips work as normal.
+- With only some off, only those modes are greyed out and the default moves to
+  the first mode that is on. The MCP assistant rides on AI-Mode, so it follows
+  it.
+- With the Multi-Agent Server off, "Plan with agents" is a greyed-out label
+  rather than a link, and `/agents` explains why and disables its form.
+
+If the backend cannot be asked, or reports nothing, features count as on: the
+page then fails with the backend's own error rather than hiding things on a
+guess.
+
+### Multi-agent planning (Release 2)
+
+"Plan with agents" in the masthead opens `/agents`. A question (and optionally a
+trip id, country and city) starts a run on the shared Multi-Agent Server through
+this service's backend; the browser never talks to anything else. The run has
+its own URL, so a refresh only reads it, and the panel re-fetches itself every
+two seconds with HTMX until the run is waiting for a person or finished -- a
+hiccup from the backend does not stop the polling.
+
+The trip is a drop-down of trip names and dates, loaded through the backend. If
+the trips cannot be loaded the form still works and says the run can only record
+a decision.
+
+The page shows the evidence, not only the answer: the Planner's plan, each
+agent's turn with the MCP calls the Worker made and how many listings each
+returned, the server's automatic checks (pass or fail) and the Reviewer's
+verdict. Suggested listings are re-read from the database. One no tool returned
+is marked "Not verified" with its tick box disabled, because the backend would
+refuse to add it anyway.
+
+The decision form works without a script: **Approve ticked** adds the ticked
+listings (all ticked is an approval, some ticked is sent as a partial
+acceptance, none ticked asks you to tick or reject), **Correct** replaces the
+overview and keeps the ticked listings, **Reject** ends the run. Optional stay
+dates apply to every listing added. Nothing is added to a trip without this
+decision. If the feature is switched off the form comes back with the backend's
+`MULTI_AGENT_DISABLED` message and the rest of the page is unaffected.
 
 ### Filters
 

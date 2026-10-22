@@ -1,11 +1,12 @@
 # Activity guides through shared RAG
 
-The activity assistant panel has two modes. **Activity tools (MCP)** is the
+The activity assistant panel has three modes. **Activity tools (MCP)** is the
 existing shared-generation assistant described in
 [the MCP assistant guide](mcp-assistant.md). **Activity guides (RAG)** answers
 questions using only indexed TripGenie activity knowledge. Each answer shows
 source citations and a confidence category, or a notice that there is not enough
-context to answer.
+context to answer. **Smart Planner** provides the separate reviewed activity
+recommendation workflow described in [the frontend guide](frontend-service.md#smart-planner).
 
 ```text
 Browser ─▶ Student 4 frontend ─▶ Student 4 backend ─▶ host RAG :8011 ─▶ host AI-Mode :8006 ─▶ Ollama
@@ -80,8 +81,8 @@ curl -s -X POST http://127.0.0.1:8011/query -H 'Content-Type: application/json' 
 
 Start the application with
 `docker compose --env-file shared/configuration/.env.example up --build -d`.
-Compose sets `RAG_URL=http://host.docker.internal:8011` and
-`RAG_ENABLED=true`. The backend route can be checked directly:
+Compose sets `STUDENT4_BACKEND_RAG_BASE_URL=http://host.docker.internal:8011` and
+`STUDENT4_BACKEND_RAG_ENABLED=true`. The backend route can be checked directly:
 
 ```bash
 curl -s -X POST http://127.0.0.1:18008/activity/knowledge \
@@ -109,7 +110,7 @@ the itinerary picker keep working.
 ## CI
 
 `student-4-ci.yml` keeps the integration configured but sets
-`STUDENT4_BACKEND_RAG_ENABLED=false` and `STUDENT4_AI_ASSISTANT_ENABLED=false`
+`STUDENT4_BACKEND_RAG_ENABLED=false` and `STUDENT4_BACKEND_MCP_ENABLED=false`
 for its Compose job. A verification step prints the effective backend
 variables, checks that `/activity/knowledge` returns `status: "disabled"` and
 that `/activity/assistant` reports that it is disabled, and checks that the

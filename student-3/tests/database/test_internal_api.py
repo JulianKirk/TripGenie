@@ -68,8 +68,7 @@ def test_options_are_ordered_by_departure_then_price(client: TestClient) -> None
     options = _data(client.get(OPTIONS_PATH))
 
     keys = [
-        (option["departure_time"], option["price"], option["id"])
-        for option in options
+        (option["departure_time"], option["price"], option["id"]) for option in options
     ]
     assert keys == sorted(keys)
 

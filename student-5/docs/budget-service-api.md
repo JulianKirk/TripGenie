@@ -29,11 +29,11 @@ which is Student 1's external trip reference (1-100 characters).
 | `GET /ready` | `200` when the database service is ready, otherwise `503`. Does not depend on AI-Mode, RAG, MCP, or provider services. |
 
 ```json
-{"data": {"status": "healthy", "service": "student-5-backend", "dependencies": {"database": true}, "integrations": {"rag": "disabled", "mcp": "disabled"}}}
+{"data": {"status": "healthy", "service": "student-5-backend", "dependencies": {"database": true}, "integrations": {"rag": "disabled", "mcp": "disabled", "multi_agent": "disabled"}}}
 ```
 
-`integrations.rag` and `integrations.mcp` are `enabled` or `disabled` and
-reflect configuration only (Release 1).
+`integrations.rag`, `integrations.mcp` and `integrations.multi_agent` are
+`enabled` or `disabled` and reflect configuration only.
 
 ## Budgets and expenses (Release 0)
 
@@ -167,6 +167,52 @@ read-only GET calls to this API.
 | `budgets_get_summary` | `budget_id` (UUID) | The summary above; `unavailable` providers are never turned into zero. |
 | `expenses_list` | `trip_id` (1-100), `category?`, `date_from?`, `date_to?` (ISO), `limit?` | `expenses[]` without `notes` or `payment_method`, `count`, `truncated`. |
 
+## Budget review agents (Release 2)
+
+The shared host-run Multi-Agent Server
+([contract](../../docs/architecture/release-2-multi-agent-contract.md)) runs a
+Planner -> Worker -> Reviewer workflow for a budget question, then waits for a
+human decision. Every call here is short: the run executes in the background on
+that server and the UI polls it.
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /budgets/{budget_id}/agent-runs` | Start a run (`202`). Body: `{"question": "1-500 chars"}`. |
+| `GET /budgets/{budget_id}/agent-runs/{run_id}` | The run so far; once it is `completed`, `rejected` or `failed`, also its audit `history`. |
+| `POST /budgets/{budget_id}/agent-runs/{run_id}/review` | The human decision; applies approved allocation changes to this budget. |
+
+The run request carries this feature's own Worker prompt
+(`prompts/budget_agents_v1.md`), its output schema (`budget_id`, `overview`,
+`findings[]`, `actions[]` of `{category, new_allocation, reason}`), the
+read-only tools `budgets_get_summary`, `expenses_list` and `budgets_list`, the
+grounding rule `{source: "student-5", id_paths: ["budget_id"], id_keys:
+["budget_id"]}` and `actions_path: "actions"`. The Worker receives the budget
+id, trip id, currency, total and current allocations as context, never the
+summary itself, so its facts must come from tool calls.
+
+Review body: `{"decision": "approve" | "correct" | "reject", "reviewer":
+"1-60 chars", "notes"?, "accepted": [indexes of proposed actions],
+"corrected_overview"?}`. `approve` with every action ticked is sent as
+`approve`, with some as `partial`, and with none as `correct` with no actions.
+`correct` needs a corrected overview or an unticked action.
+
+The Multi-Agent Server never writes budget data. After the decision this
+backend applies the approved allocations through its own budget update, only
+when the answer names this budget's id and a successful Student 5 tool returned
+it, and only when all allocations still fit within the total. Otherwise the
+response carries `apply_error` and nothing changes. The view adds
+`applied_changes[]` (`category`, `previous`, `new`).
+
+| Situation | HTTP | Code |
+| --- | ---: | --- |
+| Disabled by configuration (no outbound call) | 503 | `MULTI_AGENT_DISABLED` |
+| Run id not `magent_<12 hex>` or invalid review body | 422 | `VALIDATION_ERROR` |
+| Unknown run, or a run of another feature | 404 | `RUN_NOT_FOUND` |
+| Run not awaiting a decision | 409 | `RUN_NOT_AWAITING_REVIEW` |
+| Server full | 503 | `RUN_LIMIT_REACHED` |
+| Server unreachable / timed out | 503 / 504 | `DEPENDENCY_UNAVAILABLE` / `DEPENDENCY_TIMEOUT` |
+| Other server error or unreadable run | 502 | `INVALID_DEPENDENCY_RESPONSE` |
+
 ## Release 1 error codes
 
 | Situation | HTTP | Code |
@@ -193,10 +239,14 @@ duration; never the question, answer, excerpts, or tool payloads.
 | `STUDENT5_BACKEND_RAG_BASE_URL` | `http://host.docker.internal:8011` | same |
 | `STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS` | `130` (connect 3) | `130` |
 | `STUDENT5_BACKEND_MCP_ENABLED` | `false` | `${STUDENT5_BACKEND_MCP_ENABLED:-true}` |
+| `STUDENT5_BACKEND_MULTI_AGENT_ENABLED` | `false` | `${STUDENT5_BACKEND_MULTI_AGENT_ENABLED:-true}` (`false` in CI and `.env.cloud`) |
+| `STUDENT5_BACKEND_MULTI_AGENT_BASE_URL` | `http://host.docker.internal:8013` | same |
+| `STUDENT5_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` (connect 3) | `15` |
 | `STUDENT5_BACKEND_HOST_PORT` (Compose only) | n/a | `127.0.0.1:${STUDENT5_BACKEND_HOST_PORT:-18005}:8005` |
 | `STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS` | `120` | `230` |
 | `STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS` | `150` | `150` |
 | `STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS` | `230` | `230` |
+| `STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS` | `30` | `30` |
 
 Timeouts are ordered so the outer caller always waits longer than the inner
 one: frontend 230 s > backend 200 s > AI-Mode's 180 s MCP tool-loop deadline

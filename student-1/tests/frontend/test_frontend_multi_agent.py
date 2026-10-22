@@ -453,6 +453,53 @@ def test_start_failures_render_in_the_panel(
     assert "Plan my itinerary</button>" in result.text
 
 
+@pytest.mark.parametrize("htmx", [True, False])
+def test_switched_off_planner_is_hidden_and_a_stale_post_gets_no_form(
+    plan_client, plan_backend, backend_api, htmx
+) -> None:
+    backend_api.ai_features["multi_agent"] = False
+    assert 'id="multi-agent-panel"' not in plan_client.get(f"/trips/{TRIP_ID}").text
+
+    plan_backend.responses["start"] = error_response(
+        503, "MULTI_AGENT_DISABLED", "Multi-agent planning is disabled."
+    )
+    response = plan_client.post(
+        START_URL, data={}, headers=HTMX_HEADERS if htmx else {}
+    )
+
+    assert response.status_code == 503
+    assert "The multi-agent itinerary planner is not enabled" in response.text
+    assert "Plan my itinerary</button>" not in response.text
+    assert "Nothing is saved until you approve" not in response.text
+
+
+def test_a_revised_run_shows_each_attempt_and_the_failed_step(
+    plan_client, plan_backend
+) -> None:
+    run = plan_run(attempts=2)
+    worker = run["steps"][0]
+    run["steps"] = [
+        {
+            **worker,
+            "status": "failed",
+            "tools": [],
+            "error": "AI-Mode returned bad JSON.",
+        },
+        {**worker, "agent": "planner", "attempt": 2, "tools": []},
+        {**worker, "attempt": 2},
+    ]
+    plan_backend.responses["get"] = data_response(200, run)
+
+    text = plan_client.get(VIEW_URL, headers=HTMX_HEADERS).text
+
+    assert "2 attempt(s)" in text
+    assert "Agent steps and tool evidence (3)" in text
+    assert '<span class="badge badge--danger">Failed</span>' in text
+    assert "<strong>AI-Mode returned bad JSON.</strong>" in text
+    assert text.count("attempt 2 ·") == 2
+    assert 'name="decision" value="approve"' in text
+
+
 def test_failed_poll_stops_polling_and_offers_a_recheck(
     plan_client, plan_backend
 ) -> None:

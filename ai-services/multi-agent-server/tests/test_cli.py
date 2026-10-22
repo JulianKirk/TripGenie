@@ -135,6 +135,36 @@ def test_server_errors_are_reported_with_their_code(
     assert "RUN_NOT_FOUND" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("feature", "id_keys"),
+    [
+        ("student-3", ["id"]),
+        ("student-5", ["budget_id", "expense_id", "trip_id", "item_id"]),
+    ],
+)
+def test_terminal_grounding_uses_each_feature_id_keys(
+    monkeypatch: pytest.MonkeyPatch, feature: str, id_keys: list[str]
+) -> None:
+    sent: list[dict] = []
+
+    class RecordingClient:
+        def start_run(self, body: dict) -> dict:
+            sent.append(body)
+            return {"run_id": "magent_000000000001", "correlation_id": "c"}
+
+        def wait(self, run_id: str, **_: object) -> dict:
+            return {"status": "failed"}
+
+    monkeypatch.setattr(cli, "_StepPrinter", lambda: None)
+    arguments = cli._parser().parse_args(
+        ["run", "--feature", feature, "--task", "t", "--no-review"]
+    )
+
+    cli._run(RecordingClient(), arguments)  # type: ignore[arg-type]
+
+    assert sent[0]["grounding"]["id_keys"] == id_keys
+
+
 def test_failed_checks_are_shown_before_the_human_decides(
     settings: Settings,
     monkeypatch: pytest.MonkeyPatch,

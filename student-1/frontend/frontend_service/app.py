@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
@@ -20,6 +21,7 @@ from .config import Settings
 from .errors import ApiError, validation_error
 from .models import (
     MULTI_AGENT_RUN_ID_PATTERN,
+    AiFeatures,
     AiSuggestionDraft,
     AiSuggestionReviewPayload,
     AiSuggestionsResponse,
@@ -101,6 +103,8 @@ PLAN_ITEM_FIELDS = (
 PLAN_ITEM_INPUT = re.compile(rf"^item-(\d{{1,2}})-({'|'.join(PLAN_ITEM_FIELDS)})$")
 # Backend detail fields that point at one drafted item, e.g. `items.2`.
 PLAN_ITEM_DETAIL = re.compile(r"^(items|accepted_items|corrected_items)\.(\d+)(.*)$")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -289,6 +293,23 @@ def label_plan_error(error: ApiError, selected: list[int]) -> ApiError:
 
 def get_backend_client(request: Request) -> BackendApiClient:
     return cast(BackendApiClient, request.app.state.backend_client)
+
+
+async def load_ai_features(request: Request) -> AiFeatures | None:
+    """The AI panels the backend's configuration switches on; None if unknown.
+
+    Unknown is not "disabled": the pages keep every AI panel, say so, and let
+    the backend's own guards answer, so a blip never hides AI mode.
+    """
+    try:
+        return await get_backend_client(request).ai_features()
+    except ApiError as exc:
+        logger.warning(
+            "ai_features unavailable status=%s code=%s; showing every AI panel",
+            exc.status_code,
+            exc.code,
+        )
+        return None
 
 
 def envelope(payload: object) -> dict[str, object]:
@@ -831,7 +852,7 @@ def render_screen(
     return response
 
 
-def render_home_screen(
+async def render_home_screen(
     request: Request,
     *,
     trips: list[TripRecord],
@@ -849,6 +870,7 @@ def render_home_screen(
         status_code=status_code,
         push_url=push_url,
         page_error=None,
+        ai_features=await load_ai_features(request),
     )
 
 
@@ -990,7 +1012,7 @@ def render_confirmation_screen(
     )
 
 
-def render_trip_detail_screen(
+async def render_trip_detail_screen(
     request: Request,
     *,
     trip: TripDetail,
@@ -1043,6 +1065,7 @@ def render_trip_detail_screen(
         ai_error=ai_error,
         ai_errors_by_field=error_details_by_field(ai_error),
         ai_result=ai_result,
+        ai_features=await load_ai_features(request),
         **{
             **rag_panel_context(),
             **mcp_panel_context(),
@@ -1071,6 +1094,7 @@ async def render_feature_panel(
             {
                 "trip_id": trip_id,
                 "itinerary_category_options": ITINERARY_CATEGORY_OPTIONS,
+                "ai_features": await load_ai_features(request),
                 **context,
             },
             status_code=status_code,
@@ -1091,7 +1115,7 @@ async def render_feature_panel(
             retry_url=path_for(request, "view_trip", trip_id=trip_id),
             fallback_url=path_for(request, "dashboard"),
         )
-    return render_trip_detail_screen(
+    return await render_trip_detail_screen(
         request,
         trip=trip,
         trips=trips,
@@ -1276,7 +1300,7 @@ def create_app(
             )
 
         if not trips:
-            return render_home_screen(
+            return await render_home_screen(
                 request,
                 trips=trips,
                 trip_list_error=None,
@@ -1297,7 +1321,7 @@ def create_app(
                 fallback_url=path_for(request, "dashboard"),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1378,7 +1402,7 @@ def create_app(
             return RedirectResponse(destination_url, status_code=303)
 
         trips, trip_list_error = await safe_list_trips(client)
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1411,7 +1435,7 @@ def create_app(
                 fallback_url=path_for(request, "dashboard"),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1451,7 +1475,7 @@ def create_app(
                 fallback_url=path_for(request, "view_trip", trip_id=trip_id),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1510,7 +1534,7 @@ def create_app(
                     fallback_url=path_for(request, "dashboard"),
                 )
 
-            return render_trip_detail_screen(
+            return await render_trip_detail_screen(
                 request,
                 trip=trip,
                 trips=trips,
@@ -1549,7 +1573,7 @@ def create_app(
                 fallback_url=path_for(request, "dashboard"),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1810,7 +1834,7 @@ def create_app(
             return RedirectResponse(destination_url, status_code=303)
 
         trips, trip_list_error = await safe_list_trips(client)
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -1902,7 +1926,7 @@ def create_app(
                     fallback_url=path_for(request, "dashboard"),
                 )
 
-            return render_trip_detail_screen(
+            return await render_trip_detail_screen(
                 request,
                 trip=trip,
                 trips=trips,
@@ -1914,7 +1938,7 @@ def create_app(
         if not is_htmx_request(request):
             return RedirectResponse(destination_url, status_code=303)
 
-        return render_home_screen(
+        return await render_home_screen(
             request,
             trips=trips,
             trip_list_error=trip_list_error,
@@ -2124,7 +2148,7 @@ def create_app(
                 fallback_url=path_for(request, "view_trip", trip_id=trip_id),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -2273,7 +2297,7 @@ def create_app(
                 ),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,
@@ -2487,7 +2511,7 @@ def create_app(
                 fallback_url=path_for(request, "dashboard"),
             )
 
-        return render_trip_detail_screen(
+        return await render_trip_detail_screen(
             request,
             trip=trip,
             trips=trips,

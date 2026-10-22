@@ -55,6 +55,24 @@ MCP_MESSAGES = {
     "INVALID_DEPENDENCY_RESPONSE": "The AI service returned an unusable result.",
     "VALIDATION_ERROR": "That MCP action is not available.",
 }
+AGENT_MESSAGES = {
+    "MULTI_AGENT_DISABLED": "Budget review agents are disabled in this environment.",
+    "DEPENDENCY_UNAVAILABLE": "The Multi-Agent Server is currently unavailable.",
+    "DEPENDENCY_TIMEOUT": "The Multi-Agent Server took too long to respond.",
+    "INVALID_DEPENDENCY_RESPONSE": "The Multi-Agent Server returned an unusable run.",
+    "RUN_LIMIT_REACHED": "The Multi-Agent Server is busy. Try again shortly.",
+    "RUN_NOT_FOUND": "That agent run could not be found.",
+    "RUN_NOT_AWAITING_REVIEW": "That agent run is not waiting for a decision.",
+}
+AGENT_STATUS_LABELS = {
+    "planning": "The Planner is writing the plan",
+    "working": "The Worker is calling the budget tools",
+    "reviewing": "The Reviewer is checking the answer",
+    "awaiting_human": "Waiting for your decision",
+    "completed": "Completed after your decision",
+    "rejected": "Rejected by you",
+    "failed": "The run failed",
+}
 FIELD_LABELS = {
     "trip_id": "Trip",
     "currency": "Currency",
@@ -106,6 +124,14 @@ def _mcp_message(error: BackendError) -> str:
     return MCP_MESSAGES.get(error.code, str(error))
 
 
+def _agent_message(error: BackendError) -> str:
+    if error.code == "VALIDATION_ERROR" and error.details:
+        return "; ".join(
+            f"{detail.get('field')}: {detail.get('issue')}" for detail in error.details
+        )
+    return AGENT_MESSAGES.get(error.code, str(error))
+
+
 def _is_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request", "").lower() == "true"
 
@@ -145,6 +171,7 @@ def create_app(
                 "budgets": budgets or [],
                 "categories": CATEGORIES,
                 "mcp_actions": MCP_ACTIONS,
+                "agent_status_labels": AGENT_STATUS_LABELS,
                 **context,
             },
         )
@@ -354,7 +381,95 @@ def create_app(
             )
         return render_detail(request, budget_id, **context)
 
-    @app.get("/budgets/{budget_id}/edit")
+    def agent_panel(request: Request, budget_id: str, **context: Any) -> Response:
+        if _is_htmx(request):
+            return TEMPLATES.TemplateResponse(
+                request,
+                "partials/agent_run.html",
+                {
+                    "budget": {"budget_id": budget_id},
+                    "agent_status_labels": AGENT_STATUS_LABELS,
+                    **context,
+                },
+            )
+        return render_detail(request, budget_id, **context)
+
+    @app.post("/budgets/{budget_id}/agent-runs")
+    async def start_agent_run(request: Request, budget_id: str) -> Response:
+        form = await request.form()
+        question = str(form.get("question", "")).strip()
+        try:
+            run = backend.request(
+                "POST",
+                f"/budgets/{budget_id}/agent-runs",
+                json={"question": question},
+                timeout=settings.agents_timeout_seconds,
+            )
+        except BackendError as error:
+            return agent_panel(
+                request,
+                budget_id,
+                agent_question=question,
+                agent_error=_agent_message(error),
+            )
+        if not _is_htmx(request):
+            return RedirectResponse(
+                f"/budgets/{budget_id}/agent-runs/{run['run_id']}", status_code=303
+            )
+        return agent_panel(request, budget_id, agent_run=run)
+
+    @app.get("/budgets/{budget_id}/agent-runs/{run_id}")
+    def agent_run(request: Request, budget_id: str, run_id: str) -> Response:
+        try:
+            run = backend.request(
+                "GET",
+                f"/budgets/{budget_id}/agent-runs/{run_id}",
+                timeout=settings.agents_timeout_seconds,
+            )
+        except BackendError as error:
+            return agent_panel(request, budget_id, agent_error=_agent_message(error))
+        return agent_panel(request, budget_id, agent_run=run)
+
+    @app.post("/budgets/{budget_id}/agent-runs/{run_id}/review")
+    async def review_agent_run(
+        request: Request, budget_id: str, run_id: str
+    ) -> Response:
+        form = await request.form()
+        body = {
+            "decision": str(form.get("decision", "")),
+            "reviewer": str(form.get("reviewer", "")).strip(),
+            "notes": str(form.get("notes", "")),
+            "accepted": [str(value) for value in form.getlist("accepted")],
+            "corrected_allocations": {
+                key.removeprefix("allocation_"): str(value).strip()
+                for key, value in form.items()
+                if key.startswith("allocation_")
+            },
+            "corrected_overview": str(form.get("corrected_overview", "")),
+        }
+        path = f"/budgets/{budget_id}/agent-runs/{run_id}"
+        try:
+            run = backend.request(
+                "POST",
+                f"{path}/review",
+                json=body,
+                timeout=settings.agents_timeout_seconds,
+            )
+            decision_error = None
+        except BackendError as error:
+            decision_error = _agent_message(error)
+            try:
+                run = backend.request(
+                    "GET", path, timeout=settings.agents_timeout_seconds
+                )
+            except BackendError as reload_error:
+                return agent_panel(
+                    request, budget_id, agent_error=_agent_message(reload_error)
+                )
+        return agent_panel(
+            request, budget_id, agent_run=run, decision_error=decision_error
+        )
+
     def edit_budget(request: Request, budget_id: str) -> Response:
         try:
             budgets = list_budgets()

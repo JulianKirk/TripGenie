@@ -178,7 +178,7 @@ def test_unknown_tool_never_executes():
     assert response.json()["tools"][0]["status"] == "rejected"
 
 
-@pytest.mark.parametrize("failed_attempts", [1, 2, 3])
+@pytest.mark.parametrize("failed_attempts", [1, 2, 3, 4])
 def test_invalid_arguments_can_be_corrected_without_executing_invalid_call(
     failed_attempts,
 ):
@@ -207,11 +207,11 @@ def test_invalid_arguments_can_be_corrected_without_executing_invalid_call(
 
 def test_argument_correction_is_bounded_and_does_not_execute_invalid_writes():
     response, requests, mcp = run(
-        [message(name="activities_delete", arguments={"wrong": 1}) for _ in range(4)]
+        [message(name="activities_delete", arguments={"wrong": 1}) for _ in range(5)]
     )
     assert response.status_code == 502
-    assert len(requests) == 4
-    assert "three correction attempts" in response.json()["error"]["message"]
+    assert len(requests) == 5
+    assert "four correction attempts" in response.json()["error"]["message"]
     assert not mcp.calls
     assert all(t["status"] == "rejected" for t in response.json()["tools"])
 

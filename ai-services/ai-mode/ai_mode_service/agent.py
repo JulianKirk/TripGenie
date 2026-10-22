@@ -302,9 +302,9 @@ class Agent:
                 )
                 if errors:
                     entry.status, entry.error = "rejected", "INVALID_ARGUMENTS"
-                    if argument_corrections >= 3:
+                    if argument_corrections >= 4:
                         raise bad_gateway(
-                            "Tool calls failed after three correction attempts "
+                            "Tool calls failed after four correction attempts "
                             "because the model kept supplying invalid arguments."
                         )
                     argument_corrections += 1

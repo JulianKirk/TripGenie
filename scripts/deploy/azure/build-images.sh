@@ -13,6 +13,9 @@ echo "=== TripGenie Image Build ==="
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-tripgenie}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
+# Stops Git Bash on Windows rewriting Azure resource IDs into file paths, while
+# still converting the compose file paths Docker needs.
+export MSYS2_ARG_CONV_EXCL="/subscriptions/"
 
 # Step 1: Read the registry name from resource group tags
 REGISTRY_NAME=$(az group show --name "$RESOURCE_GROUP" --query "tags.registryName" -o tsv)
@@ -27,8 +30,24 @@ echo "Creating Azure Container Registry..."
 az acr create \
   --resource-group "$RESOURCE_GROUP" \
   --name "$REGISTRY_NAME" \
+  --admin-enabled false \
   --sku Basic -o none
 
+# Step 2a: The identity every container app pulls its image with. It is created
+# and granted AcrPull here, before the slow image build, so the grant has
+# propagated by the time deploy-azure.sh uses it. AcrPull covers only this
+# registry, which is the only thing the identity can reach.
+PULL_IDENTITY_NAME="tripgenie-acr-pull"
+PULL_PRINCIPAL_ID=$(az identity create --name "$PULL_IDENTITY_NAME" --resource-group "$RESOURCE_GROUP" --query principalId -o tsv)
+REGISTRY_ID=$(az acr show --name "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)
+# Idempotent: an existing assignment is returned rather than an error. The
+# principal type saves a Graph lookup CI's identity cannot make.
+az role assignment create \
+  --assignee-object-id "$PULL_PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role AcrPull \
+  --scope "$REGISTRY_ID" -o none
+echo "$PULL_IDENTITY_NAME can pull from $REGISTRY_NAME."
 # Step 2b: Wait for the registry's DNS name to propagate before pushing.
 # A fresh ACR can report "created" before *.azurecr.io resolves.
 LOGIN_SERVER="${REGISTRY_NAME}.azurecr.io"

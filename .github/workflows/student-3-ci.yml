@@ -112,13 +112,14 @@ jobs:
   compose:
     name: Validate Student 3 Compose Integration
     runs-on: ubuntu-latest
-    # The MCP and RAG integrations stay in the image and the Compose wiring,
-    # but no host-run MCP or RAG server exists on a runner, so CI switches
-    # both off and then proves the switch took effect. Shell environment
+    # The MCP, RAG and multi-agent integrations stay in the image and the
+    # Compose wiring, but no host-run server exists on a runner, so CI switches
+    # them off and then proves the switch took effect. Shell environment
     # overrides the Compose default of true.
     env:
       STUDENT3_BACKEND_MCP_ENABLED: "false"
       STUDENT3_BACKEND_RAG_ENABLED: "false"
+      STUDENT3_BACKEND_MULTI_AGENT_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - name: Validate the shared Compose configuration
@@ -154,9 +155,9 @@ jobs:
             exit 1
           fi
           echo "Home page link and published port agree on ${port}."
-      - name: Verify MCP and RAG are disabled
+      - name: Verify MCP, RAG and multi-agent are disabled
         run: |
-          curl --fail --silent --show-error http://127.0.0.1:18003/health             | python -c "import json, sys; i = json.load(sys.stdin)['data']['integrations']; print('backend integrations:', i); assert i == {'rag': 'disabled', 'mcp': 'disabled'}"
+          curl --fail --silent --show-error http://127.0.0.1:18003/health             | python -c "import json, sys; i = json.load(sys.stdin)['data']['integrations']; print('backend integrations:', i); assert i == {'rag': 'disabled', 'mcp': 'disabled', 'multi_agent': 'disabled'}"
           curl --silent --show-error -X POST -H 'Content-Type: application/json'             -d '{"destination": "Melbourne"}'             http://127.0.0.1:18003/api/transport-options/mcp/search             | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend MCP route:', e['code']); assert e['code'] == 'MCP_DISABLED'"
           port=$(docker compose port student-3-frontend 8093 | cut -d: -f2)
           curl --fail --silent --show-error -X POST             --data-urlencode 'destination=Melbourne'             "http://127.0.0.1:${port}/tools/search" | grep -q 'disabled in this environment'
@@ -164,6 +165,54 @@ jobs:
           curl --silent --show-error -X POST -H 'Content-Type: application/json'             -d '{"question": "How is the cost of a car rental estimated?"}'             http://127.0.0.1:18003/api/transport-options/rag-query             | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend RAG route:', e['code']); assert e['code'] == 'RAG_DISABLED'"
           curl --fail --silent --show-error -X POST             --data-urlencode 'question=How is the cost of a car rental estimated?'             "http://127.0.0.1:${port}/guide" | grep -q 'disabled in this environment'
           echo 'Frontend transport guide shows the disabled state.'
+          curl --silent --show-error -X POST -H 'Content-Type: application/json'             -d '{"question": "Cheapest way from Melbourne to Sydney?"}'             http://127.0.0.1:18003/api/transport-options/agent-runs             | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend agent-run route:', e['code']); assert e['code'] == 'MULTI_AGENT_DISABLED'"
+          curl --fail --silent --show-error -X POST             --data-urlencode 'question=Cheapest way from Melbourne to Sydney?'             "http://127.0.0.1:${port}/agents" | grep -q 'disabled in this environment'
+          echo 'Frontend agents page shows the disabled state.'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 3 endpoint test dependencies
+        working-directory: student-3
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      # Release 2 post-commit endpoint tests over HTTP against the slice
+      # started above: create/read a transport option and compare options.
+      # The backend is published on host loopback 18003.
+      - name: Post-commit endpoint tests
+        working-directory: student-3
+        env:
+          STUDENT3_ENDPOINT_BASE_URL: http://127.0.0.1:18003
+        run: python -m pytest tests/endpoint --junitxml=student-3-endpoint-tests.xml -v
+      - name: Endpoint test summary
+        if: always()
+        working-directory: student-3
+        run: |
+          python - <<'EOF' | tee student-3-endpoint-tests.md >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          print("## Student 3 post-commit endpoint tests\n")
+          if not os.path.exists("student-3-endpoint-tests.xml"):
+              print("The endpoint tests did not run.")
+              raise SystemExit
+          print("| Test | Result |\n| --- | --- |")
+          for case in ET.parse("student-3-endpoint-tests.xml").iter("testcase"):
+              outcome = next(
+                  (child.tag for child in case if child.tag in {"failure", "error", "skipped"}),
+                  "passed",
+              )
+              mark = "PASS" if outcome == "passed" else outcome.upper()
+              print(f"| `{case.get('name')}` | {mark} |")
+          EOF
+      - name: Upload endpoint test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-3-endpoint-test-evidence
+          path: |
+            student-3/student-3-endpoint-tests.xml
+            student-3/student-3-endpoint-tests.md
       - name: Compose logs on failure
         if: failure()
         run: docker compose logs --no-color

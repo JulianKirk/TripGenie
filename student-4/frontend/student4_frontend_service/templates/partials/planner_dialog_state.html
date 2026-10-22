@@ -1,0 +1,7 @@
+<input type="hidden" name="reviewer" value="{{ choices.reviewer }}">
+<input type="hidden" name="result_reason" value="{{ choices.result_reason }}">
+{% for prefix, values in [('choice_', choices.decisions), ('reason_', choices.reasons), ('trip_', choices.trip_ids), ('date_', choices.dates), ('start_time_', choices.times)] %}
+  {% for key, value in values.items() %}
+    {% if dialog_cancel or key != dialog_key or (dialog_kind == 'approve' and prefix in ['choice_', 'reason_']) or (dialog_kind == 'reject' and prefix != 'reason_') %}<input type="hidden" name="{{ prefix }}{{ key }}" value="{{ value }}">{% endif %}
+  {% endfor %}
+{% endfor %}

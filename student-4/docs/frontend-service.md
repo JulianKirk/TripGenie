@@ -114,3 +114,53 @@ section, repository path and excerpt, plus request, RAG run and retrieval
 details. Insufficient context, disabled RAG and failures render explicit
 banners without sources, and state that browsing remains available. The trip
 picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).
+
+## Smart Planner
+
+The AI activity assistant offers **Activity tools (MCP)**, **Activity guides
+(RAG)** and **Smart Planner**. Smart Planner stays in the assistant panel on the
+catalogue page. `/?planner_run={run_id}#ai-suggestions` restores a known workflow;
+`/planner/{run_id}` renders that same page or an HTMX workflow partial.
+
+Active runs poll through the feature backend every two seconds. The panel shows
+**Planner**, **Worker**, **Validation checks** and **Reviewer** dropdowns from the
+start, each with a coloured status badge. Agent badges distinguish not yet run,
+running, completed and failed states, including retry attempts. The Worker
+contains nested **Activities found** and **Tools used** dropdowns. Activity names
+come from successful structured Student 4 tool results; tool arguments, results
+and attempts remain available. Validation checks and Reviewer findings precede
+the activity suggestion cards.
+Full cards appear once, after execution and validation finish.
+
+Each card has a light-green **Approve** button and a light-red **Reject** button.
+Both open a dialog through `POST /planner/{run_id}/dialog`, carrying the current
+pending form state. The approval dialog follows the normal itinerary picker:
+choose an itinerary, a required activity date within its dates, and a required
+local start time. **Confirm approval** stages the choice and displays its
+itinerary and schedule alongside the approval mark. Different cards may target
+different itineraries.
+
+The rejection dialog accepts an optional reason. **Confirm rejection** stages a
+red rejected card with the supplied reason or **no reason supplied**. Cancel
+returns to the pending review without changing the card decision. Neither opening
+nor confirming a dialog records the shared human decision or writes itinerary
+data. `POST /planner/{run_id}/choices` validates and stages the selection.
+
+Once every suggestion has a choice, **Apply approvals** sends one combined review
+request through the feature backend. Only approved activities are added to their
+chosen itineraries; existing memberships receive the explicitly chosen schedule.
+When all cards are rejected, **Apply decisions** records the rejections without
+itinerary writes. The shared review audit retains each card's choice, reason,
+itinerary, date and start time. Cards keep these details after refresh. Blocking
+checks prevent approval; rejection remains available.
+
+The form uses ordinary POSTs as well as HTMX, and all full-page responses keep
+the assistant and catalogue together. Review errors retain pending choices and
+read current status without replaying the review or itinerary additions. Added, updated,
+already-present and unconfirmed addition outcomes are displayed from the apply
+response. Completed workflows offer no second apply action.
+
+`/planner/{run_id}/history` downloads the shared workflow and per-suggestion
+review evidence through the feature backend. Model output and reasons are
+HTML-escaped. Ordinary catalogue, MCP and RAG workflows retain their existing
+routes.

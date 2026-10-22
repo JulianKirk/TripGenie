@@ -224,6 +224,105 @@ def test_trip_page_renders_both_panels_alongside_existing_sections(client) -> No
     assert 'id="mcp-result-heading"' not in text
 
 
+def test_trip_page_offers_no_ai_mode_when_configuration_disables_it(
+    client,
+    backend_api,
+) -> None:
+    backend_api.ai_features = {
+        "ai_suggestions": False,
+        "rag": False,
+        "mcp": False,
+        "multi_agent": False,
+    }
+
+    text = client.get(f"/trips/{TRIP_ID}").text
+
+    assert "AI mode" not in text
+    for absent in ("ai-detail-heading", "rag-heading", "mcp-heading"):
+        assert f'id="{absent}"' not in text
+    assert 'id="multi-agent-heading"' not in text
+    for action in ("/ai-suggestions", RAG_URL, MCP_URL, "/multi-agent-plan"):
+        assert action not in text
+    # Ordinary trip and itinerary CRUD is untouched.
+    for heading in (
+        "days-heading",
+        "transport-heading",
+        "activities-heading",
+        "accommodation-heading",
+    ):
+        assert f'id="{heading}"' in text
+    assert "Harbour Walk" in text
+    assert f"/trips/{TRIP_ID}/items/new" in text
+    assert f"/trips/{TRIP_ID}/edit" in text
+
+
+def test_each_ai_panel_follows_its_own_switch(client, backend_api) -> None:
+    # RAG has its own server and flag, so it can stay on without AI-Mode; the
+    # multi-agent planner is a separate host server with its own flag too.
+    backend_api.ai_features = {
+        "ai_suggestions": False,
+        "rag": True,
+        "mcp": False,
+        "multi_agent": True,
+    }
+
+    text = client.get(f"/trips/{TRIP_ID}").text
+
+    assert 'id="rag-heading"' in text
+    assert 'id="multi-agent-heading"' in text
+    assert 'id="ai-detail-heading"' not in text
+    assert 'id="mcp-heading"' not in text
+
+
+def test_unknown_ai_features_keep_every_panel_and_say_so(
+    client_factory, backend_api, caplog
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/ai-features"):
+            raise httpx.ConnectError("backend blip")
+        return backend_api.handle(request)
+
+    with client_factory(handler) as client:
+        text = client.get(f"/trips/{TRIP_ID}").text
+
+    for heading in (
+        "ai-detail-heading",
+        "rag-heading",
+        "mcp-heading",
+        "multi-agent-heading",
+    ):
+        assert f'id="{heading}"' in text
+    assert "could not confirm which AI features are switched on" in text
+    assert "ai_features unavailable" in caplog.text
+
+
+@pytest.mark.parametrize("htmx", [True, False])
+@pytest.mark.parametrize(
+    ("url", "feature", "code", "heading"),
+    [
+        (RAG_URL, "rag", "RAG_DISABLED", "Knowledge base answers are not enabled"),
+        (MCP_URL, "mcp", "MCP_DISABLED", "The MCP trip assistant is not enabled"),
+    ],
+)
+def test_stale_post_to_a_switched_off_panel_shows_why_without_the_form(
+    client_factory, backend_api, htmx, url, feature, code, heading
+) -> None:
+    backend_api.ai_features[feature] = False
+
+    response, _ = post(
+        client_factory,
+        backend_api,
+        url,
+        {"question": "Anything", "request": "Anything"},
+        error_response(503, code, "Switched off here."),
+        htmx=htmx,
+    )
+
+    assert response.status_code == 503
+    assert heading in response.text
+    assert url not in response.text
+
+
 # --- RAG -------------------------------------------------------------------
 
 

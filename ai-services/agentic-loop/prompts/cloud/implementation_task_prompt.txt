@@ -1,0 +1,13 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review the cloud deployment evidence. Say whether the deployment is safe to release (frontends reachable, smoke tests and security configuration passing, AI services disabled by default), then give ONE concrete deployment or release improvement the evidence supports.
+
+Output rules:
+- If the evidence does not support an improvement, write: No evidence-backed improvement identified.
+- Otherwise name the check or file, the improvement, and the evidence behind it.
+- Maximum 60 words.

@@ -296,6 +296,64 @@ def test_ai_mode_not_configured_is_an_explicit_error(client_factory, database_ap
     assert error["details"][0]["field"] == "ai_mode"
 
 
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [
+        (
+            Settings(database_api_base_url="http://database.test"),
+            {"ai_suggestions": False, "rag": False, "mcp": False, "multi_agent": False},
+        ),
+        (
+            Settings(
+                database_api_base_url="http://database.test",
+                rag_enabled=True,
+                mcp_enabled=True,
+                multi_agent_enabled=True,
+            ),
+            # The Multi-Agent Server calls AI-Mode itself, so needs no URL here.
+            {"ai_suggestions": False, "rag": True, "mcp": False, "multi_agent": True},
+        ),
+        (
+            Settings(
+                database_api_base_url="http://database.test",
+                ai_mode_base_url="http://ai-mode.test",
+                rag_enabled=True,
+                mcp_enabled=True,
+            ),
+            {"ai_suggestions": True, "rag": True, "mcp": True, "multi_agent": False},
+        ),
+    ],
+)
+def test_ai_features_mirror_the_route_guards(
+    client_factory, database_api, settings, expected
+) -> None:
+    with client_factory(database_api.handle, settings_override=settings) as client:
+        response = client.get("/api/ai-features")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == expected
+
+
+@pytest.mark.parametrize("raw", [None, "", "   "])
+def test_cloud_style_ai_mode_url_reports_ai_off(
+    client_factory, database_api, monkeypatch, raw
+) -> None:
+    # .env.cloud blanks the URL; the Azure renderer then omits it entirely.
+    monkeypatch.setenv("STUDENT1_BACKEND_DB_API_BASE_URL", "http://database.test")
+    monkeypatch.setenv("STUDENT1_BACKEND_MCP_ENABLED", "true")
+    if raw is None:
+        monkeypatch.delenv("STUDENT1_BACKEND_AI_MODE_BASE_URL", raising=False)
+    else:
+        monkeypatch.setenv("STUDENT1_BACKEND_AI_MODE_BASE_URL", raw)
+
+    settings = Settings.from_env()
+    with client_factory(database_api.handle, settings_override=settings) as client:
+        features = client.get("/api/ai-features").json()["data"]
+
+    assert features["ai_suggestions"] is False
+    assert features["mcp"] is False
+
+
 def test_unknown_trip_is_404_without_calling_ai_mode(make) -> None:
     client, ai = make()
     with client:

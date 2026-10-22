@@ -24,6 +24,7 @@ from .errors import ApiError, bad_request, validation_error
 from .models import (
     AccommodationIdentifier,
     ActivityIdentifier,
+    AiFeatures,
     DataEnvelope,
     ErrorBody,
     ErrorDetail,
@@ -362,6 +363,16 @@ def create_app(
         status_code, payload = service.ready()
         response.status_code = status_code
         return envelope(payload.model_dump(mode="json"))
+
+    @router.get(
+        "/ai-features",
+        dependencies=[no_query_params],
+        response_model=DataEnvelope[AiFeatures],
+    )
+    def ai_features(
+        service: BackendService = Depends(get_service),
+    ) -> dict[str, object]:
+        return envelope(service.ai_features())
 
     @router.get(
         "/trips",

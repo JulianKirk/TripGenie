@@ -1,0 +1,1421 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-22T06:27:55.739641+00:00",
+  "head": "3c471273d3d2028cd8348799423ff98b53fbc36d",
+  "python": "3.12.2 (tags/v3.12.2:6abddd9, Feb  6 2024, 21:26:36) [MSC v.1937 64 bit (AMD64)]",
+  "platform": "win32",
+  "scope": "All tracked and non-ignored new files; pre-commit stashes unstaged edits in commit mode.",
+  "status": "passed",
+  "checks": [
+    {
+      "tool": "ruff",
+      "command": [
+        "ruff",
+        "check",
+        "--no-cache",
+        "--no-respect-gitignore",
+        "--config",
+        "scripts/security/ruff.toml",
+        "--output-format",
+        "concise",
+        "."
+      ],
+      "status": "passed",
+      "version": "0.16.5",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "All checks passed!\n",
+      "duration_seconds": 0.563
+    },
+    {
+      "tool": "detect-secrets",
+      "command": [
+        "detect_secrets",
+        "scan",
+        "--all-files",
+        "--no-verify",
+        "."
+      ],
+      "status": "passed",
+      "version": "1.5.0",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\n  \"version\": \"1.5.0\",\n  \"plugins_used\": [\n    {\n      \"name\": \"ArtifactoryDetector\"\n    },\n    {\n      \"name\": \"AWSKeyDetector\"\n    },\n    {\n      \"name\": \"AzureStorageKeyDetector\"\n    },\n    {\n      \"name\": \"Base64HighEntropyString\",\n      \"limit\": 4.5\n    },\n    {\n      \"name\": \"BasicAuthDetector\"\n    },\n    {\n      \"name\": \"CloudantDetector\"\n    },\n    {\n      \"name\": \"DiscordBotTokenDetector\"\n    },\n    {\n      \"name\": \"GitHubTokenDetector\"\n    },\n    {\n      \"name\": \"GitLabTokenDetector\"\n    },\n    {\n      \"name\": \"HexHighEntropyString\",\n      \"limit\": 3.0\n    },\n    {\n      \"name\": \"IbmCloudIamDetector\"\n    },\n    {\n      \"name\": \"IbmCosHmacDetector\"\n    },\n    {\n      \"name\": \"IPPublicDetector\"\n    },\n    {\n      \"name\": \"JwtTokenDetector\"\n    },\n    {\n      \"name\": \"KeywordDetector\",\n      \"keyword_exclude\": \"\"\n    },\n    {\n      \"name\": \"MailchimpDetector\"\n    },\n    {\n      \"name\": \"NpmDetector\"\n    },\n    {\n      \"name\": \"OpenAIDetector\"\n    },\n    {\n      \"name\": \"PrivateKeyDetector\"\n    },\n    {\n      \"name\": \"PypiTokenDetector\"\n    },\n    {\n      \"name\": \"SendGridDetector\"\n    },\n    {\n      \"name\": \"SlackDetector\"\n    },\n    {\n      \"name\": \"SoftlayerDetector\"\n    },\n    {\n      \"name\": \"SquareOAuthDetector\"\n    },\n    {\n      \"name\": \"StripeDetector\"\n    },\n    {\n      \"name\": \"TelegramBotTokenDetector\"\n    },\n    {\n      \"name\": \"TwilioKeyDetector\"\n    }\n  ],\n  \"filters_used\": [\n    {\n      \"path\": \"detect_secrets.filters.allowlist.is_line_allowlisted\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_indirect_reference\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_likely_id_string\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_lock_file\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_not_alphanumeric_string\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_potential_uuid\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_prefixed_with_dollar_sign\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_sequential_string\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_swagger_file\"\n    },\n    {\n      \"path\": \"detect_secrets.filters.heuristic.is_templated_secret\"\n    }\n  ],\n  \"results\": {\n    \"graphify-out\\\\graph.html\": [\n      {\n        \"type\": \"Base64 High Entropy String\",\n        \"filename\": \"graphify-out\\\\graph.html\",\n        \"hashed_secret\": \"bda12ec76ace5aa149ba7cd86e184812ef50284a\",\n        \"is_verified\": false,\n        \"line_number\": 7\n      }\n    ],\n    \"graphify-out\\\\graph.json\": [\n      {\n        \"type\": \"Hex High Entropy String\",\n        \"filename\": \"graphify-out\\\\graph.json\",\n        \"hashed_secret\": \"3c9f00522d417d8313a53dfc7965405ac9fe9845\",\n        \"is_verified\": false,\n        \"line_number\": 105764\n      }\n    ]\n  },\n  \"generated_at\": \"2026-10-22T06:29:13Z\"\n}\n",
+      "data": {
+        "version": "1.5.0",
+        "plugins_used": [
+          {
+            "name": "ArtifactoryDetector"
+          },
+          {
+            "name": "AWSKeyDetector"
+          },
+          {
+            "name": "AzureStorageKeyDetector"
+          },
+          {
+            "name": "Base64HighEntropyString",
+            "limit": 4.5
+          },
+          {
+            "name": "BasicAuthDetector"
+          },
+          {
+            "name": "CloudantDetector"
+          },
+          {
+            "name": "DiscordBotTokenDetector"
+          },
+          {
+            "name": "GitHubTokenDetector"
+          },
+          {
+            "name": "GitLabTokenDetector"
+          },
+          {
+            "name": "HexHighEntropyString",
+            "limit": 3.0
+          },
+          {
+            "name": "IbmCloudIamDetector"
+          },
+          {
+            "name": "IbmCosHmacDetector"
+          },
+          {
+            "name": "IPPublicDetector"
+          },
+          {
+            "name": "JwtTokenDetector"
+          },
+          {
+            "name": "KeywordDetector",
+            "keyword_exclude": ""
+          },
+          {
+            "name": "MailchimpDetector"
+          },
+          {
+            "name": "NpmDetector"
+          },
+          {
+            "name": "OpenAIDetector"
+          },
+          {
+            "name": "PrivateKeyDetector"
+          },
+          {
+            "name": "PypiTokenDetector"
+          },
+          {
+            "name": "SendGridDetector"
+          },
+          {
+            "name": "SlackDetector"
+          },
+          {
+            "name": "SoftlayerDetector"
+          },
+          {
+            "name": "SquareOAuthDetector"
+          },
+          {
+            "name": "StripeDetector"
+          },
+          {
+            "name": "TelegramBotTokenDetector"
+          },
+          {
+            "name": "TwilioKeyDetector"
+          }
+        ],
+        "filters_used": [
+          {
+            "path": "detect_secrets.filters.allowlist.is_line_allowlisted"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_indirect_reference"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_likely_id_string"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_lock_file"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_not_alphanumeric_string"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_potential_uuid"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_prefixed_with_dollar_sign"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_sequential_string"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_swagger_file"
+          },
+          {
+            "path": "detect_secrets.filters.heuristic.is_templated_secret"
+          }
+        ],
+        "results": {
+          "graphify-out\\graph.html": [
+            {
+              "type": "Base64 High Entropy String",
+              "filename": "graphify-out\\graph.html",
+              "hashed_secret": "bda12ec76ace5aa149ba7cd86e184812ef50284a",
+              "is_verified": false,
+              "line_number": 7
+            }
+          ],
+          "graphify-out\\graph.json": [
+            {
+              "type": "Hex High Entropy String",
+              "filename": "graphify-out\\graph.json",
+              "hashed_secret": "3c9f00522d417d8313a53dfc7965405ac9fe9845",
+              "is_verified": false,
+              "line_number": 105764
+            }
+          ]
+        },
+        "generated_at": "2026-10-22T06:29:13Z"
+      },
+      "new_findings": [],
+      "duration_seconds": 35.781
+    },
+    {
+      "tool": "pip-audit",
+      "command": [
+        "pip_audit",
+        "-r",
+        ".security-project-requirements.txt",
+        "--format",
+        "json",
+        "--progress-spinner",
+        "off",
+        "-r",
+        "ai-services/agentic-loop/requirements.txt",
+        "-r",
+        "scripts/security/requirements.txt"
+      ],
+      "status": "passed",
+      "version": "2.10.0",
+      "returncode": 0,
+      "stderr": "No known vulnerabilities found\n",
+      "stdout": "{\"dependencies\": [{\"name\": \"ruff\", \"version\": \"0.16.5\", \"vulns\": []}, {\"name\": \"mcp\", \"version\": \"1.30.0\", \"vulns\": []}, {\"name\": \"ollama\", \"version\": \"0.6.2\", \"vulns\": []}, {\"name\": \"pre-commit\", \"version\": \"4.5.1\", \"vulns\": []}, {\"name\": \"detect-secrets\", \"version\": \"1.5.0\", \"vulns\": []}, {\"name\": \"pip-audit\", \"version\": \"2.10.0\", \"vulns\": []}, {\"name\": \"fastapi\", \"version\": \"0.159.1\", \"vulns\": []}, {\"name\": \"httpx\", \"version\": \"0.28.1\", \"vulns\": []}, {\"name\": \"jinja2\", \"version\": \"3.1.6\", \"vulns\": []}, {\"name\": \"jsonschema\", \"version\": \"4.26.0\", \"vulns\": []}, {\"name\": \"mypy\", \"version\": \"1.20.2\", \"vulns\": []}, {\"name\": \"pydantic\", \"version\": \"2.14.1\", \"vulns\": []}, {\"name\": \"pydantic-core\", \"version\": \"2.50.1\", \"vulns\": []}, {\"name\": \"pytest\", \"version\": \"9.1.1\", \"vulns\": []}, {\"name\": \"python-multipart\", \"version\": \"0.0.32\", \"vulns\": []}, {\"name\": \"sqlalchemy\", \"version\": \"2.1.6\", \"vulns\": []}, {\"name\": \"uvicorn\", \"version\": \"0.54.0\", \"vulns\": []}, {\"name\": \"cyclonedx-python-lib\", \"version\": \"11.12.0\", \"vulns\": []}, {\"name\": \"httpcore\", \"version\": \"1.0.9\", \"vulns\": []}, {\"name\": \"license-expression\", \"version\": \"30.4.4\", \"vulns\": []}, {\"name\": \"packageurl-python\", \"version\": \"0.17.6\", \"vulns\": []}, {\"name\": \"pluggy\", \"version\": \"1.7.0\", \"vulns\": []}, {\"name\": \"py-serializable\", \"version\": \"2.1.0\", \"vulns\": []}, {\"name\": \"defusedxml\", \"version\": \"0.7.1\", \"vulns\": []}, {\"name\": \"sortedcontainers\", \"version\": \"2.4.0\", \"vulns\": []}, {\"name\": \"typing-extensions\", \"version\": \"4.16.0\", \"vulns\": []}, {\"name\": \"anthropic\", \"version\": \"2.1.0\", \"vulns\": []}, {\"name\": \"anyio\", \"version\": \"4.15.1\", \"vulns\": []}, {\"name\": \"docstring-parser\", \"version\": \"0.18.0\", \"vulns\": []}, {\"name\": \"httpx2\", \"version\": \"2.16.0\", \"vulns\": []}, {\"name\": \"httpcore2\", \"version\": \"2.16.0\", \"vulns\": []}, {\"name\": \"jiter\", \"version\": \"0.17.0\", \"vulns\": []}, {\"name\": \"opentelemetry-api\", \"version\": \"1.45.1\", \"vulns\": []}, {\"name\": \"sniffio\", \"version\": \"1.3.1\", \"vulns\": []}, {\"name\": \"requests\", \"version\": \"2.34.2\", \"vulns\": []}, {\"name\": \"charset-normalizer\", \"version\": \"3.5.2\", \"vulns\": []}, {\"name\": \"idna\", \"version\": \"3.20\", \"vulns\": []}, {\"name\": \"urllib3\", \"version\": \"2.8.0\", \"vulns\": []}, {\"name\": \"annotated-doc\", \"version\": \"0.0.5\", \"vulns\": []}, {\"name\": \"annotated-types\", \"version\": \"0.8.0\", \"vulns\": []}, {\"name\": \"attrs\", \"version\": \"26.1.0\", \"vulns\": []}, {\"name\": \"boolean-py\", \"version\": \"5.0\", \"vulns\": []}, {\"name\": \"cachecontrol\", \"version\": \"0.14.4\", \"vulns\": []}, {\"name\": \"msgpack\", \"version\": \"1.2.3\", \"vulns\": []}, {\"name\": \"certifi\", \"version\": \"2026.10.19\", \"vulns\": []}, {\"name\": \"cfgv\", \"version\": \"3.5.0\", \"vulns\": []}, {\"name\": \"click\", \"version\": \"8.5.0\", \"vulns\": []}, {\"name\": \"colorama\", \"version\": \"0.4.6\", \"vulns\": []}, {\"name\": \"filelock\", \"version\": \"4.2.4\", \"vulns\": []}, {\"name\": \"h11\", \"version\": \"0.16.0\", \"vulns\": []}, {\"name\": \"httptools\", \"version\": \"0.9.0\", \"vulns\": []}, {\"name\": \"httpx-sse\", \"version\": \"0.4.3\", \"vulns\": []}, {\"name\": \"identify\", \"version\": \"2.6.20\", \"vulns\": []}, {\"name\": \"iniconfig\", \"version\": \"2.3.1\", \"vulns\": []}, {\"name\": \"jsonschema-specifications\", \"version\": \"2025.9.1\", \"vulns\": []}, {\"name\": \"librt\", \"version\": \"0.16.0\", \"vulns\": []}, {\"name\": \"markupsafe\", \"version\": \"3.0.4\", \"vulns\": []}, {\"name\": \"mypy-extensions\", \"version\": \"1.1.0\", \"vulns\": []}, {\"name\": \"nodeenv\", \"version\": \"1.11.0\", \"vulns\": []}, {\"name\": \"pathspec\", \"version\": \"1.1.1\", \"vulns\": []}, {\"name\": \"pip-api\", \"version\": \"0.0.35\", \"vulns\": []}, {\"name\": \"pip-requirements-parser\", \"version\": \"32.0.1\", \"vulns\": []}, {\"name\": \"platformdirs\", \"version\": \"4.13.5\", \"vulns\": []}, {\"name\": \"pydantic-settings\", \"version\": \"2.16.1\", \"vulns\": []}, {\"name\": \"pygments\", \"version\": \"2.21.0\", \"vulns\": []}, {\"name\": \"pyjwt\", \"version\": \"2.15.1\", \"vulns\": []}, {\"name\": \"cryptography\", \"version\": \"50.0.2\", \"vulns\": []}, {\"name\": \"cffi\", \"version\": \"2.1.1\", \"vulns\": []}, {\"name\": \"python-dotenv\", \"version\": \"1.2.4\", \"vulns\": []}, {\"name\": \"pywin32\", \"version\": \"312\", \"vulns\": []}, {\"name\": \"pyyaml\", \"version\": \"6.0.3\", \"vulns\": []}, {\"name\": \"referencing\", \"version\": \"0.37.0\", \"vulns\": []}, {\"name\": \"rich\", \"version\": \"15.0.0\", \"vulns\": []}, {\"name\": \"markdown-it-py\", \"version\": \"4.2.0\", \"vulns\": []}, {\"name\": \"mdurl\", \"version\": \"0.1.2\", \"vulns\": []}, {\"name\": \"rpds-py\", \"version\": \"2026.9.1\", \"vulns\": []}, {\"name\": \"sse-starlette\", \"version\": \"3.5.0\", \"vulns\": []}, {\"name\": \"starlette\", \"version\": \"1.9.0\", \"vulns\": []}, {\"name\": \"tomli\", \"version\": \"2.5.0\", \"vulns\": []}, {\"name\": \"tomli-w\", \"version\": \"1.2.0\", \"vulns\": []}, {\"name\": \"truststore\", \"version\": \"0.10.5\", \"vulns\": []}, {\"name\": \"typing-inspection\", \"version\": \"0.4.4\", \"vulns\": []}, {\"name\": \"virtualenv\", \"version\": \"21.14.12\", \"vulns\": []}, {\"name\": \"distlib\", \"version\": \"0.4.4\", \"vulns\": []}, {\"name\": \"python-discovery\", \"version\": \"1.6.4\", \"vulns\": []}, {\"name\": \"watchfiles\", \"version\": \"1.3.0\", \"vulns\": []}, {\"name\": \"websockets\", \"version\": \"17.3\", \"vulns\": []}, {\"name\": \"pycparser\", \"version\": \"3.11\", \"vulns\": []}, {\"name\": \"pyparsing\", \"version\": \"3.3.3\", \"vulns\": []}], \"fixes\": []}\n",
+      "data": {
+        "dependencies": [
+          {
+            "name": "ruff",
+            "version": "0.16.5",
+            "vulns": []
+          },
+          {
+            "name": "mcp",
+            "version": "1.30.0",
+            "vulns": []
+          },
+          {
+            "name": "ollama",
+            "version": "0.6.2",
+            "vulns": []
+          },
+          {
+            "name": "pre-commit",
+            "version": "4.5.1",
+            "vulns": []
+          },
+          {
+            "name": "detect-secrets",
+            "version": "1.5.0",
+            "vulns": []
+          },
+          {
+            "name": "pip-audit",
+            "version": "2.10.0",
+            "vulns": []
+          },
+          {
+            "name": "fastapi",
+            "version": "0.159.1",
+            "vulns": []
+          },
+          {
+            "name": "httpx",
+            "version": "0.28.1",
+            "vulns": []
+          },
+          {
+            "name": "jinja2",
+            "version": "3.1.6",
+            "vulns": []
+          },
+          {
+            "name": "jsonschema",
+            "version": "4.26.0",
+            "vulns": []
+          },
+          {
+            "name": "mypy",
+            "version": "1.20.2",
+            "vulns": []
+          },
+          {
+            "name": "pydantic",
+            "version": "2.14.1",
+            "vulns": []
+          },
+          {
+            "name": "pydantic-core",
+            "version": "2.50.1",
+            "vulns": []
+          },
+          {
+            "name": "pytest",
+            "version": "9.1.1",
+            "vulns": []
+          },
+          {
+            "name": "python-multipart",
+            "version": "0.0.32",
+            "vulns": []
+          },
+          {
+            "name": "sqlalchemy",
+            "version": "2.1.6",
+            "vulns": []
+          },
+          {
+            "name": "uvicorn",
+            "version": "0.54.0",
+            "vulns": []
+          },
+          {
+            "name": "cyclonedx-python-lib",
+            "version": "11.12.0",
+            "vulns": []
+          },
+          {
+            "name": "httpcore",
+            "version": "1.0.9",
+            "vulns": []
+          },
+          {
+            "name": "license-expression",
+            "version": "30.4.4",
+            "vulns": []
+          },
+          {
+            "name": "packageurl-python",
+            "version": "0.17.6",
+            "vulns": []
+          },
+          {
+            "name": "pluggy",
+            "version": "1.7.0",
+            "vulns": []
+          },
+          {
+            "name": "py-serializable",
+            "version": "2.1.0",
+            "vulns": []
+          },
+          {
+            "name": "defusedxml",
+            "version": "0.7.1",
+            "vulns": []
+          },
+          {
+            "name": "sortedcontainers",
+            "version": "2.4.0",
+            "vulns": []
+          },
+          {
+            "name": "typing-extensions",
+            "version": "4.16.0",
+            "vulns": []
+          },
+          {
+            "name": "anthropic",
+            "version": "2.1.0",
+            "vulns": []
+          },
+          {
+            "name": "anyio",
+            "version": "4.15.1",
+            "vulns": []
+          },
+          {
+            "name": "docstring-parser",
+            "version": "0.18.0",
+            "vulns": []
+          },
+          {
+            "name": "httpx2",
+            "version": "2.16.0",
+            "vulns": []
+          },
+          {
+            "name": "httpcore2",
+            "version": "2.16.0",
+            "vulns": []
+          },
+          {
+            "name": "jiter",
+            "version": "0.17.0",
+            "vulns": []
+          },
+          {
+            "name": "opentelemetry-api",
+            "version": "1.45.1",
+            "vulns": []
+          },
+          {
+            "name": "sniffio",
+            "version": "1.3.1",
+            "vulns": []
+          },
+          {
+            "name": "requests",
+            "version": "2.34.2",
+            "vulns": []
+          },
+          {
+            "name": "charset-normalizer",
+            "version": "3.5.2",
+            "vulns": []
+          },
+          {
+            "name": "idna",
+            "version": "3.20",
+            "vulns": []
+          },
+          {
+            "name": "urllib3",
+            "version": "2.8.0",
+            "vulns": []
+          },
+          {
+            "name": "annotated-doc",
+            "version": "0.0.5",
+            "vulns": []
+          },
+          {
+            "name": "annotated-types",
+            "version": "0.8.0",
+            "vulns": []
+          },
+          {
+            "name": "attrs",
+            "version": "26.1.0",
+            "vulns": []
+          },
+          {
+            "name": "boolean-py",
+            "version": "5.0",
+            "vulns": []
+          },
+          {
+            "name": "cachecontrol",
+            "version": "0.14.4",
+            "vulns": []
+          },
+          {
+            "name": "msgpack",
+            "version": "1.2.3",
+            "vulns": []
+          },
+          {
+            "name": "certifi",
+            "version": "2026.10.19",
+            "vulns": []
+          },
+          {
+            "name": "cfgv",
+            "version": "3.5.0",
+            "vulns": []
+          },
+          {
+            "name": "click",
+            "version": "8.5.0",
+            "vulns": []
+          },
+          {
+            "name": "colorama",
+            "version": "0.4.6",
+            "vulns": []
+          },
+          {
+            "name": "filelock",
+            "version": "4.2.4",
+            "vulns": []
+          },
+          {
+            "name": "h11",
+            "version": "0.16.0",
+            "vulns": []
+          },
+          {
+            "name": "httptools",
+            "version": "0.9.0",
+            "vulns": []
+          },
+          {
+            "name": "httpx-sse",
+            "version": "0.4.3",
+            "vulns": []
+          },
+          {
+            "name": "identify",
+            "version": "2.6.20",
+            "vulns": []
+          },
+          {
+            "name": "iniconfig",
+            "version": "2.3.1",
+            "vulns": []
+          },
+          {
+            "name": "jsonschema-specifications",
+            "version": "2025.9.1",
+            "vulns": []
+          },
+          {
+            "name": "librt",
+            "version": "0.16.0",
+            "vulns": []
+          },
+          {
+            "name": "markupsafe",
+            "version": "3.0.4",
+            "vulns": []
+          },
+          {
+            "name": "mypy-extensions",
+            "version": "1.1.0",
+            "vulns": []
+          },
+          {
+            "name": "nodeenv",
+            "version": "1.11.0",
+            "vulns": []
+          },
+          {
+            "name": "pathspec",
+            "version": "1.1.1",
+            "vulns": []
+          },
+          {
+            "name": "pip-api",
+            "version": "0.0.35",
+            "vulns": []
+          },
+          {
+            "name": "pip-requirements-parser",
+            "version": "32.0.1",
+            "vulns": []
+          },
+          {
+            "name": "platformdirs",
+            "version": "4.13.5",
+            "vulns": []
+          },
+          {
+            "name": "pydantic-settings",
+            "version": "2.16.1",
+            "vulns": []
+          },
+          {
+            "name": "pygments",
+            "version": "2.21.0",
+            "vulns": []
+          },
+          {
+            "name": "pyjwt",
+            "version": "2.15.1",
+            "vulns": []
+          },
+          {
+            "name": "cryptography",
+            "version": "50.0.2",
+            "vulns": []
+          },
+          {
+            "name": "cffi",
+            "version": "2.1.1",
+            "vulns": []
+          },
+          {
+            "name": "python-dotenv",
+            "version": "1.2.4",
+            "vulns": []
+          },
+          {
+            "name": "pywin32",
+            "version": "312",
+            "vulns": []
+          },
+          {
+            "name": "pyyaml",
+            "version": "6.0.3",
+            "vulns": []
+          },
+          {
+            "name": "referencing",
+            "version": "0.37.0",
+            "vulns": []
+          },
+          {
+            "name": "rich",
+            "version": "15.0.0",
+            "vulns": []
+          },
+          {
+            "name": "markdown-it-py",
+            "version": "4.2.0",
+            "vulns": []
+          },
+          {
+            "name": "mdurl",
+            "version": "0.1.2",
+            "vulns": []
+          },
+          {
+            "name": "rpds-py",
+            "version": "2026.9.1",
+            "vulns": []
+          },
+          {
+            "name": "sse-starlette",
+            "version": "3.5.0",
+            "vulns": []
+          },
+          {
+            "name": "starlette",
+            "version": "1.9.0",
+            "vulns": []
+          },
+          {
+            "name": "tomli",
+            "version": "2.5.0",
+            "vulns": []
+          },
+          {
+            "name": "tomli-w",
+            "version": "1.2.0",
+            "vulns": []
+          },
+          {
+            "name": "truststore",
+            "version": "0.10.5",
+            "vulns": []
+          },
+          {
+            "name": "typing-inspection",
+            "version": "0.4.4",
+            "vulns": []
+          },
+          {
+            "name": "virtualenv",
+            "version": "21.14.12",
+            "vulns": []
+          },
+          {
+            "name": "distlib",
+            "version": "0.4.4",
+            "vulns": []
+          },
+          {
+            "name": "python-discovery",
+            "version": "1.6.4",
+            "vulns": []
+          },
+          {
+            "name": "watchfiles",
+            "version": "1.3.0",
+            "vulns": []
+          },
+          {
+            "name": "websockets",
+            "version": "17.3",
+            "vulns": []
+          },
+          {
+            "name": "pycparser",
+            "version": "3.11",
+            "vulns": []
+          },
+          {
+            "name": "pyparsing",
+            "version": "3.3.3",
+            "vulns": []
+          }
+        ],
+        "fixes": []
+      },
+      "duration_seconds": 122.578
+    }
+  ],
+  "files": [
+    ".github/tests/test_workflow_self_triggers.py",
+    ".github/workflows/ai-mode-ci.yml",
+    ".github/workflows/cloud-deployment.yml",
+    ".github/workflows/graphify-update.yml",
+    ".github/workflows/multi-agent-ci.yml",
+    ".github/workflows/non-functional-ci.yml",
+    ".github/workflows/shared-ci.yml",
+    ".github/workflows/student-1-ci.yml",
+    ".github/workflows/student-2-ci.yml",
+    ".github/workflows/student-3-ci.yml",
+    ".github/workflows/student-4-ci.yml",
+    ".github/workflows/student-5-ci.yml",
+    ".github/workflows/workflow-policy-ci.yml",
+    ".gitignore",
+    ".pre-commit-config.yaml",
+    "AGENTS.md",
+    "README.md",
+    "ai-services/AGENTS.md",
+    "ai-services/agentic-loop/README.md",
+    "ai-services/agentic-loop/agentic_loop.py",
+    "ai-services/agentic-loop/checks/ci.json",
+    "ai-services/agentic-loop/checks/mcp.json",
+    "ai-services/agentic-loop/checks/rag.json",
+    "ai-services/agentic-loop/checks/shared.json",
+    "ai-services/agentic-loop/checks/student-1.json",
+    "ai-services/agentic-loop/checks/student-2-release-1.json",
+    "ai-services/agentic-loop/checks/student-2.json",
+    "ai-services/agentic-loop/checks/student-3-release-1.json",
+    "ai-services/agentic-loop/checks/student-3.json",
+    "ai-services/agentic-loop/checks/student-4.json",
+    "ai-services/agentic-loop/checks/student-5-release-1.json",
+    "ai-services/agentic-loop/checks/student-5.json",
+    "ai-services/agentic-loop/docker-compose.agentic.yml",
+    "ai-services/agentic-loop/prompts/ci/implementation_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/ci/implementation_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/ci/review_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/ci/review_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/mcp/implementation_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/mcp/implementation_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/mcp/review_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/mcp/review_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/rag/implementation_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/rag/implementation_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/rag/review_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/rag/review_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/services/implementation_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/services/implementation_task_prompt.txt",
+    "ai-services/agentic-loop/prompts/services/review_system_prompt.txt",
+    "ai-services/agentic-loop/prompts/services/review_task_prompt.txt",
+    "ai-services/agentic-loop/requirements.txt",
+    "ai-services/agentic-loop/run-local.sh",
+    "ai-services/agentic-loop/services.json",
+    "ai-services/agentic-loop/test_agentic_loop.py",
+    "ai-services/ai-mode/Dockerfile",
+    "ai-services/ai-mode/README.md",
+    "ai-services/ai-mode/ai_mode_service/__init__.py",
+    "ai-services/ai-mode/ai_mode_service/agent.py",
+    "ai-services/ai-mode/ai_mode_service/app.py",
+    "ai-services/ai-mode/ai_mode_service/config.py",
+    "ai-services/ai-mode/ai_mode_service/errors.py",
+    "ai-services/ai-mode/ai_mode_service/models.py",
+    "ai-services/ai-mode/ai_mode_service/provider.py",
+    "ai-services/ai-mode/ai_mode_service/schema.py",
+    "ai-services/ai-mode/ai_mode_service/service.py",
+    "ai-services/ai-mode/examples/python_httpx_consumer.py",
+    "ai-services/ai-mode/pyproject.toml",
+    "ai-services/ai-mode/tests/conftest.py",
+    "ai-services/ai-mode/tests/test_agent.py",
+    "ai-services/ai-mode/tests/test_config.py",
+    "ai-services/ai-mode/tests/test_plain_generation.py",
+    "ai-services/ai-mode/tests/test_public_api.py",
+    "ai-services/mcp-server/README.md",
+    "ai-services/mcp-server/pyproject.toml",
+    "ai-services/mcp-server/tests/test_activity_assistant_integration.py",
+    "ai-services/mcp-server/tests/test_activity_crud.py",
+    "ai-services/mcp-server/tests/test_tools.py",
+    "ai-services/mcp-server/tripgenie_mcp/__init__.py",
+    "ai-services/mcp-server/tripgenie_mcp/__main__.py",
+    "ai-services/mcp-server/tripgenie_mcp/activity_models.py",
+    "ai-services/mcp-server/tripgenie_mcp/config.py",
+    "ai-services/mcp-server/tripgenie_mcp/provider.py",
+    "ai-services/mcp-server/tripgenie_mcp/server.py",
+    "ai-services/mcp-server/tripgenie_mcp/tools.py",
+    "ai-services/multi-agent-server/.gitkeep",
+    "ai-services/multi-agent-server/README.md",
+    "ai-services/multi-agent-server/multi_agent_service/__init__.py",
+    "ai-services/multi-agent-server/multi_agent_service/__main__.py",
+    "ai-services/multi-agent-server/multi_agent_service/agents.py",
+    "ai-services/multi-agent-server/multi_agent_service/ai_mode_client.py",
+    "ai-services/multi-agent-server/multi_agent_service/app.py",
+    "ai-services/multi-agent-server/multi_agent_service/checks.py",
+    "ai-services/multi-agent-server/multi_agent_service/cli.py",
+    "ai-services/multi-agent-server/multi_agent_service/client.py",
+    "ai-services/multi-agent-server/multi_agent_service/config.py",
+    "ai-services/multi-agent-server/multi_agent_service/errors.py",
+    "ai-services/multi-agent-server/multi_agent_service/export.py",
+    "ai-services/multi-agent-server/multi_agent_service/models.py",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/planner_v1.md",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/reviewer_v1.md",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/worker_v1.md",
+    "ai-services/multi-agent-server/multi_agent_service/store.py",
+    "ai-services/multi-agent-server/multi_agent_service/workflow.py",
+    "ai-services/multi-agent-server/pyproject.toml",
+    "ai-services/multi-agent-server/tests/conftest.py",
+    "ai-services/multi-agent-server/tests/test_api.py",
+    "ai-services/multi-agent-server/tests/test_checks.py",
+    "ai-services/multi-agent-server/tests/test_cli.py",
+    "ai-services/multi-agent-server/tests/test_config.py",
+    "ai-services/multi-agent-server/tests/test_human_review.py",
+    "ai-services/multi-agent-server/tests/test_store.py",
+    "ai-services/multi-agent-server/tests/test_workflow.py",
+    "ai-services/rag-server/README.md",
+    "ai-services/rag-server/config/calibration-queries.json",
+    "ai-services/rag-server/config/sources.json",
+    "ai-services/rag-server/knowledge/README.md",
+    "ai-services/rag-server/knowledge/accommodation/choosing-accommodation.md",
+    "ai-services/rag-server/knowledge/accommodation/pricing-and-costs.md",
+    "ai-services/rag-server/knowledge/accommodation/stays-and-itineraries.md",
+    "ai-services/rag-server/knowledge/activities/accessibility-guide.md",
+    "ai-services/rag-server/knowledge/activities/booking-and-pricing.md",
+    "ai-services/rag-server/knowledge/activities/choosing-activities.md",
+    "ai-services/rag-server/knowledge/activities/safety-and-preparation.md",
+    "ai-services/rag-server/knowledge/transport/choosing-transport.md",
+    "ai-services/rag-server/knowledge/transport/planning-and-availability.md",
+    "ai-services/rag-server/knowledge/transport/pricing-and-costs.md",
+    "ai-services/rag-server/knowledge/travel/destination-guides.md",
+    "ai-services/rag-server/knowledge/travel/itinerary-planning-guide.md",
+    "ai-services/rag-server/knowledge/travel/logistics-and-documents.md",
+    "ai-services/rag-server/knowledge/travel/seasons-and-events.md",
+    "ai-services/rag-server/pyproject.toml",
+    "ai-services/rag-server/rag_service/__init__.py",
+    "ai-services/rag-server/rag_service/__main__.py",
+    "ai-services/rag-server/rag_service/ai_mode_client.py",
+    "ai-services/rag-server/rag_service/app.py",
+    "ai-services/rag-server/rag_service/cli.py",
+    "ai-services/rag-server/rag_service/config.py",
+    "ai-services/rag-server/rag_service/errors.py",
+    "ai-services/rag-server/rag_service/index.py",
+    "ai-services/rag-server/rag_service/models.py",
+    "ai-services/rag-server/rag_service/service.py",
+    "ai-services/rag-server/tests/conftest.py",
+    "ai-services/rag-server/tests/test_client_and_api.py",
+    "ai-services/rag-server/tests/test_config.py",
+    "ai-services/rag-server/tests/test_index.py",
+    "ai-services/rag-server/tests/test_service.py",
+    "docker-compose.yml",
+    "docs/architecture/decisions/0001-student-1-service-mapping.md",
+    "docs/architecture/decisions/0002-student-1-internal-api-and-observability.md",
+    "docs/architecture/decisions/0003-activity-assistant-mcp-boundary.md",
+    "docs/architecture/decisions/0004-shared-mcp-generation.md",
+    "docs/architecture/decisions/0005-shared-multi-agent-server.md",
+    "docs/architecture/release-1-ai-rag-mcp-flow.md",
+    "docs/architecture/release-1-rag-contract.md",
+    "docs/architecture/release-1-shared-rag-architecture.md",
+    "docs/architecture/release-2-multi-agent-contract.md",
+    "docs/architecture/student-1-data-models.md",
+    "docs/architecture/student-1-release-0-architecture.md",
+    "docs/architecture/student-1-runtime-ai-mode.md",
+    "docs/designs/Release 1 Agentic Loop Integration with MCP and RAG.md",
+    "docs/reports/release-0/.gitkeep",
+    "docs/reports/release-0/README.md",
+    "docs/reports/release-0/Student4/Architecture/README.md",
+    "docs/reports/release-0/Student4/Architecture/backend-api.md",
+    "docs/reports/release-0/Student4/Architecture/database.md",
+    "docs/reports/release-0/Student4/Architecture/frontend.md",
+    "docs/reports/release-0/Student4/Architecture/overview.md",
+    "docs/reports/release-0/Student4/Architecture/overview.png",
+    "docs/reports/release-0/Student4/DataDesign/README.md",
+    "docs/reports/release-0/Student4/DataDesign/conceptual.md",
+    "docs/reports/release-0/Student4/DataDesign/conceptual.png",
+    "docs/reports/release-0/Student4/DataDesign/erd.md",
+    "docs/reports/release-0/Student4/DataDesign/logical.md",
+    "docs/reports/release-0/Student4/DataDesign/logical.png",
+    "docs/reports/release-0/Student4/DataDesign/physical.md",
+    "docs/reports/release-0/Student4/DataDesign/physical.png",
+    "docs/reports/release-0/Student4/Plans.md",
+    "docs/reports/release-0/Student5/DataDesign/conceptual.md",
+    "docs/reports/release-0/Student5/DataDesign/conceptual.png",
+    "docs/reports/release-0/Student5/DataDesign/logical.md",
+    "docs/reports/release-0/Student5/DataDesign/logical.png",
+    "docs/reports/release-0/Student5/DataDesign/physical.md",
+    "docs/reports/release-0/Student5/DataDesign/physical.png",
+    "docs/reports/release-0/evidence/student-1/README.md",
+    "docs/reports/release-0/integrated-architecture.md",
+    "docs/reports/release-0/integrated-architecture.png",
+    "docs/reports/release-0/student-1-demo-runbook.md",
+    "docs/reports/release-0/student-1-evidence-register.md",
+    "docs/reports/release-0/student-1-release-0-plan.md",
+    "docs/reports/release-0/student-1-report-contribution.md",
+    "docs/reports/release-1/.gitkeep",
+    "docs/reports/release-1/README.md",
+    "docs/reports/release-1/Student4/showcase-prompts.md",
+    "docs/reports/release-1/local-host-services-runbook.md",
+    "docs/reports/release-1/student-1-release-1-plan.md",
+    "docs/reports/release-2/.gitkeep",
+    "docs/reports/release-2/student-1-post-commit-testing-report.md",
+    "docs/reports/release-2/student-1-pre-commit-security-report.md",
+    "graphify-out/GRAPH_REPORT.md",
+    "graphify-out/graph.html",
+    "graphify-out/graph.json",
+    "ruff.toml",
+    "scripts/ci/wait_for_http.py",
+    "scripts/deploy/.gitkeep",
+    "scripts/deploy/azure/README.md",
+    "scripts/deploy/azure/build-images.sh",
+    "scripts/deploy/azure/cleanup.sh",
+    "scripts/deploy/azure/compose_to_azure.py",
+    "scripts/deploy/azure/deploy-azure-env.sh",
+    "scripts/deploy/azure/deploy-azure.sh",
+    "scripts/deploy/azure/deployment-testing.sh",
+    "scripts/deploy/azure/env-setup.sh",
+    "scripts/deploy/azure/gh-secrets-setup.sh",
+    "scripts/deploy/azure/smoke_test.py",
+    "scripts/run-app.sh",
+    "scripts/security/requirements.txt",
+    "scripts/security/ruff.toml",
+    "scripts/security/scan.py",
+    "scripts/security/secret-allowlist.toml",
+    "scripts/test/.gitkeep",
+    "scripts/test/test_graphify_workflow.py",
+    "shared/AGENTS.md",
+    "shared/backend/Dockerfile",
+    "shared/backend/pyproject.toml",
+    "shared/backend/shared_backend_service/__init__.py",
+    "shared/backend/shared_backend_service/app.py",
+    "shared/backend/shared_backend_service/client.py",
+    "shared/backend/shared_backend_service/config.py",
+    "shared/backend/shared_backend_service/dependencies.py",
+    "shared/backend/shared_backend_service/errors.py",
+    "shared/backend/shared_backend_service/ids.py",
+    "shared/backend/shared_backend_service/routers/__init__.py",
+    "shared/backend/shared_backend_service/routers/currency.py",
+    "shared/backend/shared_backend_service/routers/health.py",
+    "shared/backend/shared_backend_service/routers/location.py",
+    "shared/backend/shared_backend_service/schemas.py",
+    "shared/configuration/.env.cloud",
+    "shared/configuration/.env.example",
+    "shared/database/Dockerfile",
+    "shared/database/pyproject.toml",
+    "shared/database/shared_database_service/__init__.py",
+    "shared/database/shared_database_service/app.py",
+    "shared/database/shared_database_service/config.py",
+    "shared/database/shared_database_service/database.py",
+    "shared/database/shared_database_service/dependencies.py",
+    "shared/database/shared_database_service/errors.py",
+    "shared/database/shared_database_service/ids.py",
+    "shared/database/shared_database_service/models.py",
+    "shared/database/shared_database_service/repository.py",
+    "shared/database/shared_database_service/routers/__init__.py",
+    "shared/database/shared_database_service/routers/currency.py",
+    "shared/database/shared_database_service/routers/health.py",
+    "shared/database/shared_database_service/routers/location.py",
+    "shared/database/shared_database_service/schemas.py",
+    "shared/database/shared_database_service/seed_data.py",
+    "shared/docs/backend-service-api.md",
+    "shared/docs/database-service-api.md",
+    "shared/docs/object-model.md",
+    "shared/frontend/Dockerfile",
+    "shared/frontend/default.conf.template",
+    "shared/frontend/index.html",
+    "shared/frontend/theme.css",
+    "shared/pyproject.toml",
+    "shared/shared-service.md",
+    "shared/tests/__init__.py",
+    "shared/tests/backend/__init__.py",
+    "shared/tests/backend/test_backend.py",
+    "shared/tests/database/__init__.py",
+    "shared/tests/database/conftest.py",
+    "shared/tests/database/test_internal_api.py",
+    "shared/tests/database/test_repository.py",
+    "shared/tests/e2e/__init__.py",
+    "shared/tests/e2e/conftest.py",
+    "shared/tests/e2e/test_public_api.py",
+    "student-1/AGENTS.md",
+    "student-1/Dockerfile",
+    "student-1/backend/Dockerfile",
+    "student-1/backend/README.md",
+    "student-1/backend/backend_service/__init__.py",
+    "student-1/backend/backend_service/accommodation_client.py",
+    "student-1/backend/backend_service/activity_client.py",
+    "student-1/backend/backend_service/ai_contract.py",
+    "student-1/backend/backend_service/ai_mode_client.py",
+    "student-1/backend/backend_service/ai_suggestions.py",
+    "student-1/backend/backend_service/app.py",
+    "student-1/backend/backend_service/client.py",
+    "student-1/backend/backend_service/config.py",
+    "student-1/backend/backend_service/errors.py",
+    "student-1/backend/backend_service/models.py",
+    "student-1/backend/backend_service/prompt_assets.py",
+    "student-1/backend/backend_service/prompts/runtime_ai_suggestions_test.md",
+    "student-1/backend/backend_service/prompts/runtime_ai_suggestions_v1.md",
+    "student-1/backend/backend_service/prompts/runtime_ai_suggestions_v2.md",
+    "student-1/backend/backend_service/prompts/trip_tools_assistant_v1.md",
+    "student-1/backend/backend_service/rag_client.py",
+    "student-1/backend/backend_service/service.py",
+    "student-1/backend/backend_service/transport_client.py",
+    "student-1/backend/backend_service/trip_rules.py",
+    "student-1/backend/pyproject.toml",
+    "student-1/database/Dockerfile",
+    "student-1/database/database_service/__init__.py",
+    "student-1/database/database_service/app.py",
+    "student-1/database/database_service/config.py",
+    "student-1/database/database_service/errors.py",
+    "student-1/database/database_service/models.py",
+    "student-1/database/database_service/repository.py",
+    "student-1/database/database_service/seed_data.py",
+    "student-1/database/pyproject.toml",
+    "student-1/frontend/Dockerfile",
+    "student-1/frontend/README.md",
+    "student-1/frontend/frontend_service/__init__.py",
+    "student-1/frontend/frontend_service/app.py",
+    "student-1/frontend/frontend_service/client.py",
+    "student-1/frontend/frontend_service/config.py",
+    "student-1/frontend/frontend_service/errors.py",
+    "student-1/frontend/frontend_service/models.py",
+    "student-1/frontend/frontend_service/static/css/styles.css",
+    "student-1/frontend/frontend_service/static/js/app.js",
+    "student-1/frontend/frontend_service/static/js/htmx.LICENSE.txt",
+    "student-1/frontend/frontend_service/static/js/htmx.min.js",
+    "student-1/frontend/frontend_service/templates/base.html",
+    "student-1/frontend/frontend_service/templates/macros/forms.html",
+    "student-1/frontend/frontend_service/templates/page.html",
+    "student-1/frontend/frontend_service/templates/partials/ai_mode_panel.html",
+    "student-1/frontend/frontend_service/templates/partials/app_shell.html",
+    "student-1/frontend/frontend_service/templates/partials/delete_confirmation.html",
+    "student-1/frontend/frontend_service/templates/partials/error_state.html",
+    "student-1/frontend/frontend_service/templates/partials/home_empty.html",
+    "student-1/frontend/frontend_service/templates/partials/item_form.html",
+    "student-1/frontend/frontend_service/templates/partials/mcp_panel.html",
+    "student-1/frontend/frontend_service/templates/partials/rag_panel.html",
+    "student-1/frontend/frontend_service/templates/partials/trip_detail.html",
+    "student-1/frontend/frontend_service/templates/partials/trip_form.html",
+    "student-1/frontend/frontend_service/templates/partials/trip_list.html",
+    "student-1/frontend/pyproject.toml",
+    "student-1/pyproject.toml",
+    "student-1/tests/backend/conftest.py",
+    "student-1/tests/backend/test_activity_client.py",
+    "student-1/tests/backend/test_ai_mode.py",
+    "student-1/tests/backend/test_ai_mode_integration.py",
+    "student-1/tests/backend/test_mcp_options.py",
+    "student-1/tests/backend/test_public_api.py",
+    "student-1/tests/backend/test_rag_query.py",
+    "student-1/tests/backend/test_trip_accommodation_api.py",
+    "student-1/tests/backend/test_trip_activity_api.py",
+    "student-1/tests/database/conftest.py",
+    "student-1/tests/database/test_internal_api.py",
+    "student-1/tests/database/test_repository_regressions.py",
+    "student-1/tests/database/test_trip_accommodation_storage.py",
+    "student-1/tests/database/test_trip_activity_storage.py",
+    "student-1/tests/endpoint/test_post_commit_endpoints.py",
+    "student-1/tests/frontend/__init__.py",
+    "student-1/tests/frontend/conftest.py",
+    "student-1/tests/frontend/test_frontend_ai_mode.py",
+    "student-1/tests/frontend/test_frontend_pages.py",
+    "student-1/tests/frontend/test_frontend_rag_mcp.py",
+    "student-1/tests/frontend/test_trip_accommodation_section.py",
+    "student-1/tests/frontend/test_trip_activity_section.py",
+    "student-1/tests/frontend/test_trip_detail_contract.py",
+    "student-1/tests/frontend/test_trip_transport_section.py",
+    "student-2/AGENTS.md",
+    "student-2/Dockerfile",
+    "student-2/accommodation-service.md",
+    "student-2/backend/Dockerfile",
+    "student-2/backend/backend_service/__init__.py",
+    "student-2/backend/backend_service/ai_client.py",
+    "student-2/backend/backend_service/ai_search.py",
+    "student-2/backend/backend_service/app.py",
+    "student-2/backend/backend_service/assistant.py",
+    "student-2/backend/backend_service/client.py",
+    "student-2/backend/backend_service/config.py",
+    "student-2/backend/backend_service/dependencies.py",
+    "student-2/backend/backend_service/enums.py",
+    "student-2/backend/backend_service/errors.py",
+    "student-2/backend/backend_service/itinerary_client.py",
+    "student-2/backend/backend_service/knowledge.py",
+    "student-2/backend/backend_service/location_client.py",
+    "student-2/backend/backend_service/prompts/accommodation_assistant_v1.md",
+    "student-2/backend/backend_service/prompts/accommodation_search_v1.md",
+    "student-2/backend/backend_service/rag_client.py",
+    "student-2/backend/backend_service/routers/__init__.py",
+    "student-2/backend/backend_service/routers/accommodation.py",
+    "student-2/backend/backend_service/routers/ai.py",
+    "student-2/backend/backend_service/routers/health.py",
+    "student-2/backend/backend_service/routers/itinerary.py",
+    "student-2/backend/backend_service/schemas.py",
+    "student-2/backend/pyproject.toml",
+    "student-2/database/Dockerfile",
+    "student-2/database/database_service/__init__.py",
+    "student-2/database/database_service/app.py",
+    "student-2/database/database_service/config.py",
+    "student-2/database/database_service/database.py",
+    "student-2/database/database_service/dependencies.py",
+    "student-2/database/database_service/enums.py",
+    "student-2/database/database_service/errors.py",
+    "student-2/database/database_service/models.py",
+    "student-2/database/database_service/repository.py",
+    "student-2/database/database_service/routers/__init__.py",
+    "student-2/database/database_service/routers/accommodation.py",
+    "student-2/database/database_service/routers/health.py",
+    "student-2/database/database_service/schemas.py",
+    "student-2/database/database_service/seed_data.py",
+    "student-2/database/pyproject.toml",
+    "student-2/docs/backend-service-api.md",
+    "student-2/docs/database-service-api.md",
+    "student-2/docs/frontend-service.md",
+    "student-2/docs/object-model.md",
+    "student-2/frontend/Dockerfile",
+    "student-2/frontend/frontend_service/__init__.py",
+    "student-2/frontend/frontend_service/app.py",
+    "student-2/frontend/frontend_service/config.py",
+    "student-2/frontend/frontend_service/static/css/styles.css",
+    "student-2/frontend/frontend_service/templates/page.html",
+    "student-2/frontend/frontend_service/templates/partials/ai_answer.html",
+    "student-2/frontend/frontend_service/templates/partials/ai_results.html",
+    "student-2/frontend/frontend_service/templates/partials/assistant_results.html",
+    "student-2/frontend/frontend_service/templates/partials/error.html",
+    "student-2/frontend/frontend_service/templates/partials/filters.html",
+    "student-2/frontend/frontend_service/templates/partials/form_modal.html",
+    "student-2/frontend/frontend_service/templates/partials/knowledge_results.html",
+    "student-2/frontend/frontend_service/templates/partials/modal.html",
+    "student-2/frontend/frontend_service/templates/partials/results.html",
+    "student-2/frontend/frontend_service/templates/partials/saved.html",
+    "student-2/frontend/frontend_service/templates/partials/search_results.html",
+    "student-2/frontend/frontend_service/templates/partials/stay_done.html",
+    "student-2/frontend/frontend_service/templates/partials/stay_modal.html",
+    "student-2/frontend/pyproject.toml",
+    "student-2/pyproject.toml",
+    "student-2/tests/__init__.py",
+    "student-2/tests/backend/__init__.py",
+    "student-2/tests/backend/test_ai_search.py",
+    "student-2/tests/backend/test_assistant.py",
+    "student-2/tests/backend/test_backend.py",
+    "student-2/tests/backend/test_itinerary.py",
+    "student-2/tests/backend/test_knowledge.py",
+    "student-2/tests/backend/test_location.py",
+    "student-2/tests/database/__init__.py",
+    "student-2/tests/database/conftest.py",
+    "student-2/tests/database/test_internal_api.py",
+    "student-2/tests/database/test_repository.py",
+    "student-2/tests/e2e/__init__.py",
+    "student-2/tests/e2e/conftest.py",
+    "student-2/tests/e2e/test_public_api.py",
+    "student-2/tests/frontend/__init__.py",
+    "student-2/tests/frontend/conftest.py",
+    "student-2/tests/frontend/test_ask_box.py",
+    "student-2/tests/frontend/test_crud_panel.py",
+    "student-2/tests/frontend/test_frontend.py",
+    "student-2/tests/frontend/test_guide_and_assistant.py",
+    "student-2/tests/frontend/test_stay_panel.py",
+    "student-3/AGENTS.md",
+    "student-3/Dockerfile",
+    "student-3/backend/.gitkeep",
+    "student-3/backend/Dockerfile",
+    "student-3/backend/README.md",
+    "student-3/backend/pyproject.toml",
+    "student-3/backend/student3_backend_service/__init__.py",
+    "student-3/backend/student3_backend_service/agent_runs.py",
+    "student-3/backend/student3_backend_service/ai_mode_client.py",
+    "student-3/backend/student3_backend_service/ai_suggestions.py",
+    "student-3/backend/student3_backend_service/app.py",
+    "student-3/backend/student3_backend_service/client.py",
+    "student-3/backend/student3_backend_service/config.py",
+    "student-3/backend/student3_backend_service/errors.py",
+    "student-3/backend/student3_backend_service/mcp_client.py",
+    "student-3/backend/student3_backend_service/models.py",
+    "student-3/backend/student3_backend_service/multi_agent_client.py",
+    "student-3/backend/student3_backend_service/prompts/transport_recommendations_v2.md",
+    "student-3/backend/student3_backend_service/rag_client.py",
+    "student-3/backend/student3_backend_service/service.py",
+    "student-3/backend/student3_backend_service/transport_rules.py",
+    "student-3/backend/student3_backend_service/trips_client.py",
+    "student-3/database/Dockerfile",
+    "student-3/database/README.md",
+    "student-3/database/pyproject.toml",
+    "student-3/database/student3_database_service/__init__.py",
+    "student-3/database/student3_database_service/app.py",
+    "student-3/database/student3_database_service/config.py",
+    "student-3/database/student3_database_service/errors.py",
+    "student-3/database/student3_database_service/models.py",
+    "student-3/database/student3_database_service/repository.py",
+    "student-3/database/student3_database_service/seed_data.py",
+    "student-3/frontend/.gitkeep",
+    "student-3/frontend/Dockerfile",
+    "student-3/frontend/README.md",
+    "student-3/frontend/pyproject.toml",
+    "student-3/frontend/student3_frontend_service/__init__.py",
+    "student-3/frontend/student3_frontend_service/app.py",
+    "student-3/frontend/student3_frontend_service/client.py",
+    "student-3/frontend/student3_frontend_service/config.py",
+    "student-3/frontend/student3_frontend_service/errors.py",
+    "student-3/frontend/student3_frontend_service/models.py",
+    "student-3/frontend/student3_frontend_service/static/css/styles.css",
+    "student-3/frontend/student3_frontend_service/static/js/app.js",
+    "student-3/frontend/student3_frontend_service/templates/base.html",
+    "student-3/frontend/student3_frontend_service/templates/macros/forms.html",
+    "student-3/frontend/student3_frontend_service/templates/page.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/agent_run_panel.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/agent_runs.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/ai_recommendations.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/app_shell.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/delete_confirmation.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/error_state.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/mcp_tools.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/option_compare.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/option_detail.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/option_form.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/option_list.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/option_sidebar.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/rag_guide.html",
+    "student-3/frontend/student3_frontend_service/templates/partials/trip_transport.html",
+    "student-3/pyproject.toml",
+    "student-3/tests/backend/conftest.py",
+    "student-3/tests/backend/test_agent_runs.py",
+    "student-3/tests/backend/test_ai_recommendations.py",
+    "student-3/tests/backend/test_config.py",
+    "student-3/tests/backend/test_mcp_tools.py",
+    "student-3/tests/backend/test_public_api.py",
+    "student-3/tests/backend/test_rag_query.py",
+    "student-3/tests/database/conftest.py",
+    "student-3/tests/database/test_internal_api.py",
+    "student-3/tests/database/test_repository_regressions.py",
+    "student-3/tests/endpoint/test_post_commit_endpoints.py",
+    "student-3/tests/frontend/__init__.py",
+    "student-3/tests/frontend/conftest.py",
+    "student-3/tests/frontend/test_frontend_agents.py",
+    "student-3/tests/frontend/test_frontend_mcp.py",
+    "student-3/tests/frontend/test_frontend_pages.py",
+    "student-3/tests/frontend/test_frontend_rag.py",
+    "student-4/.dockerignore",
+    "student-4/AGENTS.md",
+    "student-4/backend/.gitkeep",
+    "student-4/backend/Dockerfile",
+    "student-4/backend/pyproject.toml",
+    "student-4/backend/student4_backend_service/__init__.py",
+    "student-4/backend/student4_backend_service/activity_routes.py",
+    "student-4/backend/student4_backend_service/ai_mode_client.py",
+    "student-4/backend/student4_backend_service/app.py",
+    "student-4/backend/student4_backend_service/assistant.py",
+    "student-4/backend/student4_backend_service/assistant_models.py",
+    "student-4/backend/student4_backend_service/client.py",
+    "student-4/backend/student4_backend_service/config.py",
+    "student-4/backend/student4_backend_service/dependencies.py",
+    "student-4/backend/student4_backend_service/errors.py",
+    "student-4/backend/student4_backend_service/itinerary_client.py",
+    "student-4/backend/student4_backend_service/itinerary_routes.py",
+    "student-4/backend/student4_backend_service/knowledge.py",
+    "student-4/backend/student4_backend_service/knowledge_models.py",
+    "student-4/backend/student4_backend_service/location_client.py",
+    "student-4/backend/student4_backend_service/prompts/activity_assistant_v1.md",
+    "student-4/backend/student4_backend_service/rag_client.py",
+    "student-4/backend/student4_backend_service/schemas.py",
+    "student-4/database/.gitkeep",
+    "student-4/database/Dockerfile",
+    "student-4/database/README.md",
+    "student-4/database/activities.db",
+    "student-4/database/pyproject.toml",
+    "student-4/database/student4_database_service/__init__.py",
+    "student-4/database/student4_database_service/app.py",
+    "student-4/database/student4_database_service/config.py",
+    "student-4/database/student4_database_service/database.py",
+    "student-4/database/student4_database_service/dependencies.py",
+    "student-4/database/student4_database_service/enums.py",
+    "student-4/database/student4_database_service/errors.py",
+    "student-4/database/student4_database_service/models.py",
+    "student-4/database/student4_database_service/repository.py",
+    "student-4/database/student4_database_service/routers/__init__.py",
+    "student-4/database/student4_database_service/routers/activity.py",
+    "student-4/database/student4_database_service/routers/health.py",
+    "student-4/database/student4_database_service/schemas.py",
+    "student-4/database/student4_database_service/seed_data.py",
+    "student-4/docs/backend-service-api.md",
+    "student-4/docs/database-service-api.md",
+    "student-4/docs/frontend-service.md",
+    "student-4/docs/mcp-assistant.md",
+    "student-4/docs/object-model.md",
+    "student-4/docs/rag-knowledge.md",
+    "student-4/frontend/.gitkeep",
+    "student-4/frontend/Dockerfile",
+    "student-4/frontend/README.md",
+    "student-4/frontend/pyproject.toml",
+    "student-4/frontend/student4_frontend_service/__init__.py",
+    "student-4/frontend/student4_frontend_service/app.py",
+    "student-4/frontend/student4_frontend_service/assistant_models.py",
+    "student-4/frontend/student4_frontend_service/client.py",
+    "student-4/frontend/student4_frontend_service/config.py",
+    "student-4/frontend/student4_frontend_service/errors.py",
+    "student-4/frontend/student4_frontend_service/forms.py",
+    "student-4/frontend/student4_frontend_service/knowledge_models.py",
+    "student-4/frontend/student4_frontend_service/models.py",
+    "student-4/frontend/student4_frontend_service/presenters.py",
+    "student-4/frontend/student4_frontend_service/query.py",
+    "student-4/frontend/student4_frontend_service/static/css/styles.css",
+    "student-4/frontend/student4_frontend_service/static/js/app.js",
+    "student-4/frontend/student4_frontend_service/templates/assistant_page.html",
+    "student-4/frontend/student4_frontend_service/templates/base.html",
+    "student-4/frontend/student4_frontend_service/templates/macros/forms.html",
+    "student-4/frontend/student4_frontend_service/templates/manage.html",
+    "student-4/frontend/student4_frontend_service/templates/page.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/activity_detail.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/activity_form.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/ai_panel.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/assistant_results.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/delete_confirmation.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/error_state.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/filters.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/itinerary_dialog.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/itinerary_picker.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/knowledge_results.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/management_results.html",
+    "student-4/frontend/student4_frontend_service/templates/partials/results.html",
+    "student-4/pyproject.toml",
+    "student-4/tests/.gitkeep",
+    "student-4/tests/__init__.py",
+    "student-4/tests/backend/__init__.py",
+    "student-4/tests/backend/test_activity_api.py",
+    "student-4/tests/backend/test_ai_client.py",
+    "student-4/tests/backend/test_assistant.py",
+    "student-4/tests/backend/test_itinerary_api.py",
+    "student-4/tests/backend/test_knowledge.py",
+    "student-4/tests/database/__init__.py",
+    "student-4/tests/database/conftest.py",
+    "student-4/tests/database/test_config.py",
+    "student-4/tests/database/test_internal_api.py",
+    "student-4/tests/database/test_repository.py",
+    "student-4/tests/database/test_schemas.py",
+    "student-4/tests/e2e/__init__.py",
+    "student-4/tests/e2e/test_backend_database_contract.py",
+    "student-4/tests/frontend/__init__.py",
+    "student-4/tests/frontend/conftest.py",
+    "student-4/tests/frontend/test_accessibility.py",
+    "student-4/tests/frontend/test_activity_crud.py",
+    "student-4/tests/frontend/test_activity_forms.py",
+    "student-4/tests/frontend/test_ai_panel.py",
+    "student-4/tests/frontend/test_assistant.py",
+    "student-4/tests/frontend/test_catalogue_pages.py",
+    "student-4/tests/frontend/test_client.py",
+    "student-4/tests/frontend/test_config.py",
+    "student-4/tests/frontend/test_itinerary_picker.py",
+    "student-4/tests/frontend/test_knowledge.py",
+    "student-4/tests/frontend/test_portal_navigation.py",
+    "student-4/tests/frontend/test_presenters.py",
+    "student-4/tests/frontend/test_query.py",
+    "student-4/tests/test_compose_contract.py",
+    "student-5/AGENTS.md",
+    "student-5/backend/.gitkeep",
+    "student-5/backend/Dockerfile",
+    "student-5/backend/pyproject.toml",
+    "student-5/backend/student5_backend_service/__init__.py",
+    "student-5/backend/student5_backend_service/accommodation_client.py",
+    "student-5/backend/student5_backend_service/activity_client.py",
+    "student-5/backend/student5_backend_service/agent_runs.py",
+    "student-5/backend/student5_backend_service/ai_analysis.py",
+    "student-5/backend/student5_backend_service/ai_mode_client.py",
+    "student-5/backend/student5_backend_service/app.py",
+    "student-5/backend/student5_backend_service/calculations.py",
+    "student-5/backend/student5_backend_service/client.py",
+    "student-5/backend/student5_backend_service/config.py",
+    "student-5/backend/student5_backend_service/errors.py",
+    "student-5/backend/student5_backend_service/models.py",
+    "student-5/backend/student5_backend_service/multi_agent_client.py",
+    "student-5/backend/student5_backend_service/prompts/budget_agents_v1.md",
+    "student-5/backend/student5_backend_service/prompts/budget_analysis_v1.md",
+    "student-5/backend/student5_backend_service/prompts/budget_tools_v1.md",
+    "student-5/backend/student5_backend_service/rag_client.py",
+    "student-5/backend/student5_backend_service/service.py",
+    "student-5/backend/student5_backend_service/transport_client.py",
+    "student-5/backend/student5_backend_service/trips_client.py",
+    "student-5/database/.gitkeep",
+    "student-5/database/Dockerfile",
+    "student-5/database/README.md",
+    "student-5/database/pyproject.toml",
+    "student-5/database/student5_database_service/__init__.py",
+    "student-5/database/student5_database_service/app.py",
+    "student-5/database/student5_database_service/config.py",
+    "student-5/database/student5_database_service/errors.py",
+    "student-5/database/student5_database_service/models.py",
+    "student-5/database/student5_database_service/repository.py",
+    "student-5/database/student5_database_service/seed_data.py",
+    "student-5/docs/budget-rules.md",
+    "student-5/docs/budget-service-api.md",
+    "student-5/frontend/.gitkeep",
+    "student-5/frontend/Dockerfile",
+    "student-5/frontend/pyproject.toml",
+    "student-5/frontend/student5_frontend_service/__init__.py",
+    "student-5/frontend/student5_frontend_service/app.py",
+    "student-5/frontend/student5_frontend_service/client.py",
+    "student-5/frontend/student5_frontend_service/config.py",
+    "student-5/frontend/student5_frontend_service/static/css/styles.css",
+    "student-5/frontend/student5_frontend_service/static/js/app.js",
+    "student-5/frontend/student5_frontend_service/templates/base.html",
+    "student-5/frontend/student5_frontend_service/templates/page.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/agent_run.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/ai_analysis.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/app_shell.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/budget_detail.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/budget_form.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/budget_list.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/delete_confirmation.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/error_state.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/expense_form.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/mcp_tools.html",
+    "student-5/frontend/student5_frontend_service/templates/partials/rag_answer.html",
+    "student-5/pyproject.toml",
+    "student-5/tests/.gitkeep",
+    "student-5/tests/backend/__init__.py",
+    "student-5/tests/backend/conftest.py",
+    "student-5/tests/backend/test_agent_runs.py",
+    "student-5/tests/backend/test_ai_mode.py",
+    "student-5/tests/backend/test_backend_health.py",
+    "student-5/tests/backend/test_calculations.py",
+    "student-5/tests/backend/test_mcp.py",
+    "student-5/tests/backend/test_public_api.py",
+    "student-5/tests/backend/test_rag.py",
+    "student-5/tests/database/conftest.py",
+    "student-5/tests/database/test_database_health.py",
+    "student-5/tests/database/test_internal_api.py",
+    "student-5/tests/database/test_models.py",
+    "student-5/tests/endpoint/test_post_commit_endpoints.py",
+    "student-5/tests/frontend/test_frontend.py",
+    "tests/ci/test_azure_deploy_scripts.py",
+    "tests/ci/test_compose_proxy_headers.py",
+    "tests/ci/test_compose_to_azure.py",
+    "tests/ci/test_security_scan.py",
+    "tests/ci/test_wait_for_http.py"
+  ],
+  "content_sha256": "b09b8f4e152c46e09835d22607cf005be6e8d29df0e61666ee4de571462785e7",
+  "dependency_manifests": [
+    "ai-services/agentic-loop/requirements.txt",
+    "ai-services/ai-mode/pyproject.toml",
+    "ai-services/mcp-server/pyproject.toml",
+    "ai-services/multi-agent-server/pyproject.toml",
+    "ai-services/rag-server/pyproject.toml",
+    "scripts/security/requirements.txt",
+    "shared/backend/pyproject.toml",
+    "shared/database/pyproject.toml",
+    "shared/pyproject.toml",
+    "student-1/backend/pyproject.toml",
+    "student-1/database/pyproject.toml",
+    "student-1/frontend/pyproject.toml",
+    "student-1/pyproject.toml",
+    "student-2/backend/pyproject.toml",
+    "student-2/database/pyproject.toml",
+    "student-2/frontend/pyproject.toml",
+    "student-2/pyproject.toml",
+    "student-3/backend/pyproject.toml",
+    "student-3/database/pyproject.toml",
+    "student-3/frontend/pyproject.toml",
+    "student-3/pyproject.toml",
+    "student-4/backend/pyproject.toml",
+    "student-4/database/pyproject.toml",
+    "student-4/frontend/pyproject.toml",
+    "student-4/pyproject.toml",
+    "student-5/backend/pyproject.toml",
+    "student-5/database/pyproject.toml",
+    "student-5/frontend/pyproject.toml",
+    "student-5/pyproject.toml"
+  ],
+  "finished_at": "2026-10-22T06:31:16.690093+00:00"
+}

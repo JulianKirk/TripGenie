@@ -6,6 +6,7 @@
 <section id="mcp-panel" class="mode-panel mode-panel--ai" aria-labelledby="mcp-heading">
   <p class="section-eyebrow">AI mode · MCP tools</p>
   <h3 id="mcp-heading">Ask the trip assistant</h3>
+  {% if ai_features is none or ai_features.mcp %}
   <p>
     The AI assistant looks up accommodation, activities, transport and budgets for this trip by calling TripGenie's shared MCP tools itself, and shows you each call it made.
     <strong>Nothing here is saved.</strong>
@@ -72,6 +73,7 @@
   <div id="mcp-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
     The AI assistant is choosing and calling trip tools — this can take one to three minutes with a local model.
   </div>
+  {% endif %}
 
   {% if mcp_error %}
     {{ forms.panel_error(mcp_error, 'mcp-result-heading') }}

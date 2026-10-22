@@ -1,0 +1,19 @@
+{
+  "goal": "Review the Release 2 cloud deployment report: the deployment workflow run, the deployed frontends, the smoke tests, the cloud security configuration, and that the AI services stay disabled by default",
+  "_note": "The report is the cloud-deployment-evidence artifact of the latest cloud-deployment.yml run (gh auth login first), else docs/reports/release-2/cloud-deployment-results.md. CLOUD_URL optionally names a deployed frontend to probe.",
+  "rules": [
+    "The deployment is Azure Container Apps; only shared-ui and the frontends are public, backends and databases are internal.",
+    "Images are pulled with a managed identity, never a registry password.",
+    "AI-Mode, MCP, RAG and the Multi-Agent Server are not deployed; the cloud profile turns every AI feature off by default.",
+    "The deploy job runs in the `production` environment, whose required reviewer is the human release decision.",
+    "A deployment that succeeded is not automatically ready to release: the checks and the human decide."
+  ],
+  "required_files": [
+    "scripts/deploy/azure/deploy-azure.sh",
+    "scripts/deploy/azure/deployment-testing.sh",
+    "scripts/deploy/azure/smoke_test.py",
+    "scripts/deploy/azure/security_check.py",
+    ".github/workflows/cloud-deployment.yml",
+    "shared/configuration/.env.cloud"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "goal": "Review every student's Release 2 testing evidence: the pre-commit security scan report and the post-commit CI/CD endpoint test results",
+  "_note": "Pre-commit evidence is read from docs/reports/release-2/student-N-pre-commit-security-{scan.json,report.md}. Post-commit evidence is the latest student-N-ci.yml run on CI_BRANCH (default: the checked-out branch) and its student-N-endpoint-test-evidence artifact; gh auth login first.",
+  "rules": [
+    "The pre-commit hook runs scripts/security/scan.py (Ruff security rules, detect-secrets and pip-audit) when code is committed.",
+    "Post-commit endpoint tests run in each student's own student-N-ci.yml, two endpoint functions per student, against the live Compose stack.",
+    "A failed or missing scan, workflow run or endpoint-test artifact is a gap in the evidence, not something to excuse.",
+    "Each student owns their own report; a missing report is that student's gap, not the shared pipeline's."
+  ]
+}

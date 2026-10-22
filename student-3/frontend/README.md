@@ -36,6 +36,7 @@ Plan states are shown in the traveller's language rather than raw enum values:
 | `STUDENT3_FRONTEND_AI_TIMEOUT_SECONDS` | `210` | Timeout for the AI suggestion route only; outlasts the backend's 200 s budget. |
 | `STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS` | `60` | Timeout for the MCP tools page only; outlasts the backend's 40 s MCP budget. |
 | `STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS` | `150` | Timeout for the transport guide only; outlasts the backend's 130 s RAG budget. |
+| `STUDENT3_FRONTEND_AGENTS_TIMEOUT_SECONDS` | `30` | Timeout for multi-agent planning calls (start, poll, decide). |
 | `STUDENT3_FRONTEND_SERVICE_NAME` | `student-3-frontend` | Name reported by health endpoints. |
 
 ## Ports
@@ -59,6 +60,10 @@ Student 3.
 | `GET,POST /suggestions` | Ask for AI transport suggestions. Saves nothing |
 | `GET,POST /guide` | Release 1 transport guide: grounded RAG answers with sources. Saves nothing |
 | `GET /tools`, `POST /tools/{action}` | Release 1 MCP lookups (`search`, `compare`, `trip-costs`). Saves nothing |
+| `GET,POST /agents` | Release 2: ask the Planner, Worker and Reviewer agents a transport question |
+| `GET /agents/runs/{runId}` | One run: plan, agent steps with tool calls, checks, review, answer and the human decision |
+| `GET /agents/runs/{runId}/panel` | The run panel alone, polled by HTMX every 2 s while the agents work |
+| `POST /agents/runs/{runId}/review` | The human decision; approved options are added to the run's trip |
 | `GET /health` | Service status plus the backend dependency. Always `200`. |
 | `GET /ready` | `200` when the backend is reachable, `503` otherwise. |
 
@@ -152,6 +157,29 @@ correlation id. When the knowledge base does not cover the question the page
 says **Not enough context** and shows no answer or sources. A disabled or
 unreachable RAG server shows the backend's error with a plain-language hint;
 the rest of the feature keeps working.
+
+## Plan with agents
+
+`/agents` takes the same inputs as AI suggestions and starts a run on the shared
+Multi-Agent Server through this feature's backend, then redirects to the run's
+own page so a refresh only reads it. While the Planner, Worker and Reviewer
+work, the run panel polls itself every 2 seconds (`hx-trigger="every 2s"`, only
+on that panel) and stops once the run waits for a decision, completes or
+fails; without JavaScript a **Refresh now** link reloads the page. The panel
+shows the plan, each agent stage with its attempt, duration and the Worker's
+MCP calls (the same "Tools used" detail as AI suggestions), every
+deterministic check, the Reviewer's verdict, issues, risks and
+recommendations, and the draft answer.
+
+When the run waits for a human, the decision form lists only the grounded
+suggestions as ticked boxes. **Approve** with every box ticked approves the
+answer; with some unticked it is a partial acceptance of the ticked ones.
+**Correct** keeps the ticked suggestions and can replace the overview.
+**Reject** adds nothing. With a trip, the ticked options are added to it for
+the chosen number of travellers, and the page lists what was added and
+anything that could not be. A warning shows above the form when any automatic
+check failed. A disabled or unreachable Multi-Agent Server shows the backend's
+error with a plain-language hint; the rest of the feature keeps working.
 
 ## Design notes
 

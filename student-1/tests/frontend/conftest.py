@@ -155,6 +155,12 @@ class FakeBackendApi:
         }
         self.ready_payload = deepcopy(self.health_payload)
         self.ready_status_code = 200
+        self.ai_features = {
+            "ai_suggestions": True,
+            "rag": True,
+            "mcp": True,
+            "multi_agent": True,
+        }
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path_parts = request.url.path.strip("/").split("/")
@@ -165,6 +171,9 @@ class FakeBackendApi:
 
         if path_parts == ["ready"] and method == "GET":
             return data_response(self.ready_status_code, deepcopy(self.ready_payload))
+
+        if path_parts == ["api", "ai-features"] and method == "GET":
+            return data_response(200, dict(self.ai_features))
 
         if path_parts == ["api", "trips"]:
             if method == "GET":

@@ -23,12 +23,36 @@ from backend_service.schemas import (
     ItinerarySelection,
     ItinerarySelectionResponse,
     StayDates,
+    TripListResponse,
+    TripSummary,
 )
 
 if TYPE_CHECKING:
     from backend_service.itinerary_client import ItineraryClient
 
 router = APIRouter(prefix="/accommodation", tags=["itinerary"])
+
+
+@router.get("/trips", response_model=TripListResponse)
+async def list_trips(itinerary: ItineraryDep) -> TripListResponse:
+    """Every trip student 1 holds, for pickers such as the multi-agent form. The
+    frontend reaches student 1 only through this service."""
+    try:
+        return TripListResponse(
+            trips=[
+                TripSummary(
+                    itinerary_id=record["id"],
+                    name=record["name"],
+                    start_date=record.get("start_date"),
+                    end_date=record.get("end_date"),
+                )
+                for record in await itinerary.list_itineraries()
+            ]
+        )
+    except (KeyError, TypeError) as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "bad response from itinerary service"
+        ) from exc
 
 
 @router.get(

@@ -397,3 +397,30 @@ class TestPicker:
 
         assert response.status_code == 404
         assert itinerary_api.writes == []
+
+
+class TestListingTrips:
+    def test_every_trip_is_offered_by_name_and_window(self, client):
+        response = client.get("/accommodation/trips")
+        assert response.status_code == 200
+        assert response.json()["trips"][0] == {
+            "itinerary_id": "trip_sydney",
+            "name": "Sydney Getaway",
+            "start_date": "2027-04-01",
+            "end_date": "2027-04-03",
+        }
+        assert [trip["itinerary_id"] for trip in response.json()["trips"]] == [
+            "trip_sydney",
+            "trip_tokyo",
+        ]
+
+    def test_an_unreachable_itinerary_service_is_a_503(self, itinerary_api):
+        def down(request):
+            raise httpx.ConnectError(NO_ROUTE, request=request)
+
+        app = create_app(
+            Settings(itinerary_url=ITINERARY_URL),
+            itinerary_transport=httpx.MockTransport(down),
+        )
+        with TestClient(app) as client:
+            assert client.get("/accommodation/trips").status_code == 503

@@ -8,6 +8,7 @@
     <a class="button button--primary" href="{{ request.url_for('new_trip_form') }}">Create trip</a>
   </div>
 
+  {% if ai_features is none or ai_features.ai_suggestions %}
   <section class="mode-panel mode-panel--ai" aria-labelledby="ai-mode-heading">
     <p class="section-eyebrow">AI mode</p>
     <h3 id="ai-mode-heading">AI draft suggestions unlock after you create a trip</h3>
@@ -18,4 +19,5 @@
       TripGenie returns drafts only: nothing is persisted until you confirm it in the itinerary form.
     </p>
   </section>
+  {% endif %}
 </section>

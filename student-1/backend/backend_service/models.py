@@ -497,6 +497,15 @@ class HealthResponse(StrictModel):
     dependencies: HealthDependencies
 
 
+class AiFeatures(StrictModel):
+    """Which AI routes this deployment's configuration switches on."""
+
+    ai_suggestions: bool
+    rag: bool
+    mcp: bool
+    multi_agent: bool
+
+
 class RagQueryRequest(StrictModel):
     # The shared RAG contract bounds a query to 2,000 characters.
     question: Annotated[str, StringConstraints(min_length=1, max_length=2000)]

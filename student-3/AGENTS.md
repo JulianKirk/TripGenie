@@ -19,6 +19,13 @@ This file supplements the repository-level `AGENTS.md` for `student-3/`.
 - Release 1 MCP lookups call the shared MCP server's read-only transport tools
   through allow-listed backend actions. Those tools read this backend back on
   `127.0.0.1:18003`, so MCP route handlers must stay synchronous (`def`).
+- Release 2 multi-agent planning runs on the shared host-run Multi-Agent
+  Server with this feature's own prompt, schema and transport tools. The
+  server never writes Student 3 data: after a human approves, the backend
+  adds only grounded suggestions through the normal plan-entry rules.
+- `tests/endpoint` holds the Release 2 post-commit endpoint tests. They run
+  only in `student-3-ci.yml` against the live Compose slice, so `testpaths`
+  leaves them out of ordinary pytest runs.
 - Read the README in each layer before changing its behavior or contract.
 
 ## Development and verification

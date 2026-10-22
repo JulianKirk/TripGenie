@@ -19,6 +19,10 @@ DEFAULT_BACKEND_TIMEOUT = 5.0
 # so quickly.
 DEFAULT_AI_TIMEOUT = 210.0
 DEFAULT_PORTAL_URL = "http://localhost:8080"
+# The multi-agent page starts, polls and decides a run. The agents work in the
+# background, so each call is short; this only has to outlast the backend's own
+# call to the Multi-Agent Server (15s) plus the lookups around it.
+DEFAULT_AGENTS_TIMEOUT = 30.0
 
 
 @dataclass(slots=True)
@@ -28,6 +32,7 @@ class Settings:
     backend_url: str = DEFAULT_BACKEND_URL
     backend_timeout: float = DEFAULT_BACKEND_TIMEOUT
     ai_timeout: float = DEFAULT_AI_TIMEOUT
+    agents_timeout: float = DEFAULT_AGENTS_TIMEOUT
     service_name: str = "student-2-frontend"
     # The shared portal, as the browser reaches it: the Home link.
     portal_url: str = DEFAULT_PORTAL_URL
@@ -40,6 +45,9 @@ class Settings:
                 os.environ.get("BACKEND_TIMEOUT", DEFAULT_BACKEND_TIMEOUT)
             ),
             ai_timeout=float(os.environ.get("AI_TIMEOUT", DEFAULT_AI_TIMEOUT)),
+            agents_timeout=float(
+                os.environ.get("AGENTS_TIMEOUT", DEFAULT_AGENTS_TIMEOUT)
+            ),
             portal_url=os.environ.get(
                 "TRIPGENIE_PORTAL_URL", DEFAULT_PORTAL_URL
             ).rstrip("/"),

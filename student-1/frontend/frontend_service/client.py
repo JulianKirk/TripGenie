@@ -7,6 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
+    AiFeatures,
     AiSuggestionsResponse,
     BackendHealthPayload,
     DataEnvelope,
@@ -66,6 +67,16 @@ class BackendApiClient:
             expected_statuses={200, 503},
             response_type=DataEnvelope[BackendHealthPayload],
             malformed_message="Backend API returned a malformed readiness response.",
+        )
+        return envelope.data
+
+    async def ai_features(self) -> AiFeatures:
+        envelope = await self._request_model(
+            "GET",
+            f"{self._api_prefix}/ai-features",
+            expected_statuses={200},
+            response_type=DataEnvelope[AiFeatures],
+            malformed_message="Backend API returned a malformed AI features response.",
         )
         return envelope.data
 

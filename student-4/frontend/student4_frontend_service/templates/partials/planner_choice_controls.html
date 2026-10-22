@@ -1,0 +1,17 @@
+{% if item_choice == 'approve' %}
+  <p class="planner-choice planner-choice--approved"><strong>✓ Approved{% if can_review %} · pending{% endif %}</strong></p>
+  <p>{{ trip_names.get(choices.trip_ids.get(key), choices.trip_ids.get(key, '')) }}{% if choices.dates.get(key) %} · {{ choices.dates[key] }}{% endif %}{% if choices.times.get(key) %} at {{ choices.times[key] }}{% endif %}</p>
+{% elif item_choice == 'reject' %}
+  <p class="planner-choice planner-choice--rejected"><strong>✕ Rejected{% if can_review %} · pending{% endif %}</strong> — {{ choices.reasons.get(key) or 'no reason supplied' }}</p>
+{% endif %}
+{% if can_review %}
+  {% if item_choice %}<input type="hidden" name="choice_{{ key }}" value="{{ item_choice }}">{% endif %}
+  <input type="hidden" name="reason_{{ key }}" value="{{ choices.reasons.get(key, '') }}">
+  <input type="hidden" name="trip_{{ key }}" value="{{ choices.trip_ids.get(key, '') }}">
+  <input type="hidden" name="date_{{ key }}" value="{{ choices.dates.get(key, '') }}">
+  <input type="hidden" name="start_time_{{ key }}" value="{{ choices.times.get(key, '') }}">
+  <div class="actions">
+    <button class="button button--approve" type="submit" name="dialog_approve" value="{{ key }}" formaction="/planner/{{ run.run_id }}/dialog" formnovalidate hx-post="/planner/{{ run.run_id }}/dialog" hx-target="#activity-dialog" hx-swap="innerHTML"{% if failed_checks or not activity or not activity.is_active %} disabled{% endif %}>Approve</button>
+    <button class="button button--reject" type="submit" name="dialog_reject" value="{{ key }}" formaction="/planner/{{ run.run_id }}/dialog" formnovalidate hx-post="/planner/{{ run.run_id }}/dialog" hx-target="#activity-dialog" hx-swap="innerHTML">Reject</button>
+  </div>
+{% endif %}

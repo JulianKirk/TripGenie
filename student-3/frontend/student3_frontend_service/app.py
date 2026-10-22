@@ -14,8 +14,9 @@ from fastapi.templating import Jinja2Templates
 
 from .client import BackendApiClient
 from .config import Settings
-from .errors import ApiError
+from .errors import ApiError, validation_error
 from .models import (
+    AgentRun,
     AvailabilityStatus,
     DependencyStatus,
     FrontendHealthDependencies,
@@ -75,6 +76,38 @@ MCP_MESSAGES = {
     "BAD_GATEWAY": "The shared MCP server sent back a result that could not be used.",
 }
 
+AGENT_RUN_ID_PATTERN = re.compile(r"^magent_[0-9a-f]{12}$")
+AGENT_DECISIONS = ("approve", "correct", "reject")
+# Plain-language guidance shown under the backend's own message.
+AGENT_MESSAGES = {
+    "MULTI_AGENT_DISABLED": (
+        "Multi-agent planning is switched off for this deployment. Browsing, "
+        "comparing and planning still work as normal."
+    ),
+    "DEPENDENCY_UNAVAILABLE": (
+        "The shared Multi-Agent Server is not reachable. Start it on the host "
+        "(python -m multi_agent_service serve) after AI-Mode and MCP."
+    ),
+    "DEPENDENCY_TIMEOUT": "The shared Multi-Agent Server took too long to answer.",
+    "RUN_LIMIT_REACHED": (
+        "The Multi-Agent Server is busy with other runs. Try again in a minute."
+    ),
+    "RUN_NOT_FOUND": "That agent run does not exist on the Multi-Agent Server.",
+    "RUN_NOT_AWAITING_REVIEW": "This run has already been decided.",
+    "BAD_GATEWAY": "The Multi-Agent Server sent back a run that could not be used.",
+}
+AGENT_STATUS_LABELS = {
+    "planning": "The Planner is writing a plan",
+    "working": "The Worker is looking transport up with the MCP tools",
+    "reviewing": "The Reviewer is checking the answer",
+    "awaiting_human": "Waiting for your decision",
+    "completed": "Completed",
+    "rejected": "Rejected",
+    "failed": "Failed",
+}
+# Errors worth polling through: the server may come back. Anything else stops.
+AGENT_TRANSIENT_ERRORS = frozenset({"DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"})
+
 TYPE_OPTIONS = [
     (item.value, item.value.replace("_", " ").title()) for item in TransportType
 ]
@@ -84,9 +117,45 @@ AVAILABILITY_OPTIONS = [
 # Real civil UTC offsets, including the half and quarter hour ones, so the
 # field is a pick rather than a number of minutes the user has to work out.
 _UTC_OFFSET_MINUTES = (
-    -720, -660, -600, -570, -540, -480, -420, -360, -300, -240, -210, -180,
-    -120, -60, 0, 60, 120, 180, 210, 240, 270, 300, 330, 345, 360, 390, 420,
-    480, 525, 540, 570, 600, 630, 660, 690, 720, 765, 780, 840,
+    -720,
+    -660,
+    -600,
+    -570,
+    -540,
+    -480,
+    -420,
+    -360,
+    -300,
+    -240,
+    -210,
+    -180,
+    -120,
+    -60,
+    0,
+    60,
+    120,
+    180,
+    210,
+    240,
+    270,
+    300,
+    330,
+    345,
+    360,
+    390,
+    420,
+    480,
+    525,
+    540,
+    570,
+    600,
+    630,
+    660,
+    690,
+    720,
+    765,
+    780,
+    840,
 )
 
 
@@ -269,7 +338,8 @@ def option_to_form(option: TransportOptionRecord) -> dict[str, str]:
         "departure_time": option.departure_time,
         "arrival_time": option.arrival_time,
         "departure_utc_offset": (
-            "" if option.departure_utc_offset is None
+            ""
+            if option.departure_utc_offset is None
             else str(option.departure_utc_offset)
         ),
         "arrival_utc_offset": (
@@ -780,6 +850,205 @@ def create_app(
             error=error,
         )
 
+    # ------------------------------------------------- multi-agent planning
+
+    def empty_agent_form() -> dict[str, str]:
+        return {"trip_id": "", "origin": "", "destination": "", "question": ""}
+
+    def agent_context(
+        run: AgentRun | None, error: ApiError | None
+    ) -> dict[str, object]:
+        return {
+            "run": run,
+            "agent_error": error,
+            "agent_error_hint": AGENT_MESSAGES.get(error.code) if error else None,
+            "agent_status_labels": AGENT_STATUS_LABELS,
+            "agent_poll": run is not None and run.active,
+        }
+
+    async def render_agents(
+        request: Request,
+        client: BackendApiClient,
+        *,
+        form: dict[str, str] | None = None,
+        run: AgentRun | None = None,
+        error: ApiError | None = None,
+        decision_error: ApiError | None = None,
+    ) -> Response:
+        options, list_error = await safe_list_options(client)
+        directory = await client.trip_directory()
+        return render(
+            request,
+            "partials/agent_runs.html",
+            page_title="Plan with agents",
+            options=options,
+            option_list_error=list_error,
+            selected_option_id=None,
+            filters={},
+            form=form or empty_agent_form(),
+            errors_by_field=error_details_by_field(error),
+            decision_error=decision_error,
+            decision_errors_by_field=error_details_by_field(decision_error),
+            **ai_context(options, directory),
+            **agent_context(run, error),
+        )
+
+    def unknown_run(run_id: str) -> ApiError:
+        return ApiError(
+            status_code=404,
+            code="RUN_NOT_FOUND",
+            message=f"Agent run '{run_id}' was not found.",
+            details=[{"field": "run_id", "issue": "is not an agent run id"}],
+        )
+
+    @app.get("/agents", name="agents_form", response_model=None)
+    async def agents_form(
+        request: Request,
+        client: ClientDep,
+        trip_id: Annotated[str | None, Query()] = None,
+        origin: Annotated[str | None, Query()] = None,
+        destination: Annotated[str | None, Query()] = None,
+    ) -> Response:
+        form = empty_agent_form() | {
+            "trip_id": (trip_id or "").strip(),
+            "origin": (origin or "").strip(),
+            "destination": (destination or "").strip(),
+        }
+        return await render_agents(request, client, form=form)
+
+    @app.post("/agents", name="agents_start", response_model=None)
+    async def agents_start(request: Request, client: ClientDep) -> Response:
+        """Start a run, then show it on its own page so a refresh only reads it."""
+        submitted = {
+            key: str(value) for key, value in dict(await request.form()).items()
+        }
+        payload: dict[str, object] = {}
+        for name in ("trip_id", "origin", "destination", "question"):
+            value = (submitted.get(name) or "").strip()
+            if value:
+                payload[name] = value
+        try:
+            run = await client.start_agent_run(payload)
+        except ApiError as exc:
+            return await render_agents(
+                request,
+                client,
+                form=empty_agent_form() | submitted,
+                error=exc,
+            )
+        return RedirectResponse(
+            path_for(request, "agents_run", run_id=run.run_id),
+            status_code=303,
+        )
+
+    @app.get("/agents/runs/{run_id}", name="agents_run", response_model=None)
+    async def agents_run(request: Request, run_id: str, client: ClientDep) -> Response:
+        run: AgentRun | None = None
+        error: ApiError | None = None
+        try:
+            if AGENT_RUN_ID_PATTERN.fullmatch(run_id) is None:
+                raise unknown_run(run_id)
+            run = await client.get_agent_run(run_id)
+        except ApiError as exc:
+            error = exc
+        return await render_agents(request, client, run=run, error=error)
+
+    @app.get(
+        "/agents/runs/{run_id}/panel",
+        name="agents_run_panel",
+        response_model=None,
+    )
+    async def agents_run_panel(
+        request: Request,
+        run_id: str,
+        client: ClientDep,
+    ) -> Response:
+        """Just the run panel, for HTMX polling while the agents work."""
+        run: AgentRun | None = None
+        error: ApiError | None = None
+        try:
+            if AGENT_RUN_ID_PATTERN.fullmatch(run_id) is None:
+                raise unknown_run(run_id)
+            run = await client.get_agent_run(run_id)
+        except ApiError as exc:
+            error = exc
+        context = agent_context(run, error)
+        if error is not None and error.code in AGENT_TRANSIENT_ERRORS:
+            context["agent_poll"] = True
+        return TEMPLATES.TemplateResponse(
+            request,
+            "partials/agent_run_panel.html",
+            {
+                "run_id": run_id,
+                "decision_error": None,
+                "decision_errors_by_field": {},
+                **context,
+            },
+        )
+
+    @app.post(
+        "/agents/runs/{run_id}/review",
+        name="agents_review",
+        response_model=None,
+    )
+    async def agents_review(
+        request: Request,
+        run_id: str,
+        client: ClientDep,
+    ) -> Response:
+        """The human decision. Approving with only some options ticked is a
+        partial acceptance; the backend adds what was accepted to the trip.
+        """
+        form = await request.form()
+        decision = str(form.get("decision") or "").strip()
+        accepted = [
+            int(value) for value in form.getlist("accepted") if str(value).isdigit()
+        ]
+        offered = {
+            int(value) for value in form.getlist("offered") if str(value).isdigit()
+        }
+        payload: dict[str, object] = {
+            "decision": decision,
+            "reviewer": str(form.get("reviewer") or "").strip() or "traveller",
+        }
+        if decision == "approve" and set(accepted) != offered:
+            payload["decision"] = "partial"
+        if payload["decision"] in {"partial", "correct"}:
+            payload["accepted"] = accepted
+        for name in ("notes", "corrected_overview"):
+            value = str(form.get(name) or "").strip()
+            if value and (name == "notes" or decision == "correct"):
+                payload[name] = value
+        travellers = str(form.get("traveller_count") or "").strip()
+        if travellers and decision != "reject":
+            payload["traveller_count"] = (
+                int(travellers) if travellers.isdigit() else travellers
+            )
+
+        if AGENT_RUN_ID_PATTERN.fullmatch(run_id) is None:
+            return await render_agents(request, client, error=unknown_run(run_id))
+        if decision not in AGENT_DECISIONS:
+            invalid = validation_error(
+                "Choose approve, correct or reject.",
+                [{"field": "decision", "issue": "is not a decision"}],
+            )
+            run = await client.get_agent_run(run_id)
+            return await render_agents(
+                request,
+                client,
+                run=run,
+                decision_error=invalid,
+            )
+        try:
+            run = await client.review_agent_run(run_id, payload)
+        except ApiError as exc:
+            try:
+                run = await client.get_agent_run(run_id)
+            except ApiError:
+                return await render_agents(request, client, error=exc)
+            return await render_agents(request, client, run=run, decision_error=exc)
+        return await render_agents(request, client, run=run)
+
     # ------------------------------------------------------------ MCP tools
 
     def empty_mcp_form() -> dict[str, str]:
@@ -842,9 +1111,7 @@ def create_app(
         """
         raw_form = await request.form()
         submitted = {
-            key: str(value).strip()
-            for key, value in raw_form.items()
-            if key != "ids"
+            key: str(value).strip() for key, value in raw_form.items() if key != "ids"
         }
         form = empty_mcp_form() | submitted
         # Checkboxes repeat the field, so read every value rather than the last.

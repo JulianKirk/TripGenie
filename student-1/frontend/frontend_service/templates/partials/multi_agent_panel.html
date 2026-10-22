@@ -65,15 +65,18 @@
 >
   <p class="section-eyebrow">AI mode · Multi-agent planner</p>
   <h3 id="multi-agent-heading">Plan my itinerary</h3>
+  {% set offered = ai_features is none or ai_features.multi_agent %}
+  {% if offered %}
   <p>
     Three AI agents draft itinerary items from this trip's saved accommodation, transport and activities: a Planner decides what to look up, a Worker drafts the items using TripGenie's trip tools, and a Reviewer flags clashes, dates outside the trip and unsupported items.
     <strong>Nothing is saved until you approve, correct or partially accept the plan.</strong>
     Rejecting it saves nothing.
   </p>
+  {% endif %}
 
   {% if ma_error %}
     {{ forms.panel_error(ma_error, 'multi-agent-result-heading', {"NOT_FOUND": "This trip or plan could not be found."}) }}
-    {% if view_url and not run %}
+    {% if offered and view_url and not run %}
       <p>
         <a href="{{ view_url }}" hx-get="{{ view_url }}" hx-target="#multi-agent-panel" hx-swap="outerHTML">Check this plan again</a>
       </p>
@@ -359,7 +362,7 @@
     </section>
   {% endif %}
 
-  {% if not run or run.status in ["completed", "rejected", "failed"] %}
+  {% if offered and (not run or run.status in ["completed", "rejected", "failed"]) %}
     {% set request_errors = ma_errors_by_field.get('request') %}
     <form
       class="form-grid"

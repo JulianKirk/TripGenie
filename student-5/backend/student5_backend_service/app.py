@@ -18,6 +18,9 @@ from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError
 from .models import (
+    AgentReviewRequest,
+    AgentRunId,
+    AgentRunRequest,
     BudgetAnalysisRequest,
     BudgetCreate,
     BudgetUpdate,
@@ -26,6 +29,7 @@ from .models import (
     ExpenseUpdate,
     RagQueryRequest,
 )
+from .multi_agent_client import MultiAgentClient
 from .rag_client import RagClient
 from .service import BackendService
 from .transport_client import TransportApiClient
@@ -76,6 +80,7 @@ def create_app(
     activity_transport: httpx.BaseTransport | None = None,
     ai_mode_transport: httpx.BaseTransport | None = None,
     rag_transport: httpx.BaseTransport | None = None,
+    multi_agent_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     database = DatabaseApiClient(settings, transport=database_transport)
@@ -85,6 +90,7 @@ def create_app(
     activities = ActivityApiClient(settings, transport=activity_transport)
     ai_mode = AiModeClient(settings, transport=ai_mode_transport)
     rag = RagClient(settings, transport=rag_transport)
+    multi_agent = MultiAgentClient(settings, transport=multi_agent_transport)
     service = BackendService(
         database,
         trips,
@@ -94,6 +100,7 @@ def create_app(
         ai_mode,
         settings,
         rag,
+        multi_agent,
     )
 
     @asynccontextmanager
@@ -106,6 +113,7 @@ def create_app(
         activities.close()
         ai_mode.close()
         rag.close()
+        multi_agent.close()
 
     app = FastAPI(title="TripGenie Student 5 Backend", lifespan=lifespan)
 
@@ -204,6 +212,23 @@ def create_app(
     @app.post(f"{prefix}/rag/query")
     def rag_query(payload: RagQueryRequest) -> dict[str, Any]:
         return _json_data(service.rag_query(payload))
+
+    @app.post(
+        f"{prefix}/budgets/{{budget_id}}/agent-runs",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def start_agent_run(budget_id: UUID, payload: AgentRunRequest) -> dict[str, Any]:
+        return _json_data(service.start_agent_run(budget_id, payload))
+
+    @app.get(f"{prefix}/budgets/{{budget_id}}/agent-runs/{{run_id}}")
+    def get_agent_run(budget_id: UUID, run_id: AgentRunId) -> dict[str, Any]:
+        return _json_data(service.get_agent_run(budget_id, run_id))
+
+    @app.post(f"{prefix}/budgets/{{budget_id}}/agent-runs/{{run_id}}/review")
+    def review_agent_run(
+        budget_id: UUID, run_id: AgentRunId, payload: AgentReviewRequest
+    ) -> dict[str, Any]:
+        return _json_data(service.review_agent_run(budget_id, run_id, payload))
 
     @app.get(f"{prefix}/expenses")
     def list_expenses(

@@ -3,9 +3,13 @@
 A run is a small state machine persisted after every transition:
 
     planning → working → reviewing → awaiting_human → completed | rejected
-                  ↑          │  (verdict "revise", at most max_revisions)
-                  └──────────┘
+       ↑                     │  (revise: the Reviewer asked, a check failed or
+       └─────────────────────┘   the Worker's call failed; max_revisions times)
     any stage → failed (the steps it completed are kept)
+
+A revision goes back to the Planner with the previous attempt (its plan, the
+Worker's tool calls and errors, failed checks and the review), so a plan that
+led the Worker to wrong tool arguments is corrected before the next attempt.
 
 Runs execute in the background so no HTTP request has to outlive a three-agent
 chain; callers poll the run. Every transition is also written to the
@@ -21,8 +25,14 @@ import logging
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from .agents import Agents, StageFailedError
-from .checks import run_checks, schema_errors, validate_schema, walk
+from .agents import Agents, StageFailedError, previous_attempt
+from .checks import (
+    is_write_tool,
+    run_checks,
+    schema_errors,
+    validate_schema,
+    walk,
+)
 from .errors import (
     VALIDATION_ERROR_MESSAGE,
     AgentError,
@@ -35,9 +45,11 @@ from .models import (
     AgentReview,
     Check,
     HumanReview,
+    Plan,
     ReviewRequest,
     RunRecord,
     RunRequest,
+    Step,
     StoredRun,
 )
 from .store import RunStore, utc_now
@@ -48,6 +60,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_PROPOSED_ACTIONS = 10
+# AI-Mode's code when the model, not a dependency, went wrong: invalid tool
+# arguments after its correction attempts, an invalid or repeated tool call,
+# the turn limit or an unusable final answer. Another plan can fix these;
+# outages and timeouts cannot, so they still fail the run.
+RECOVERABLE_WORKER_CODES = frozenset({"BAD_GATEWAY"})
 
 
 class WorkflowEngine:
@@ -127,6 +144,19 @@ class WorkflowEngine:
                     "issue": f"must be at most {limits.max_system_chars} characters",
                 },
             )
+        if (
+            len(request.worker_system) + len(request.feature_instructions)
+            > limits.max_system_chars
+        ):
+            details.append(
+                {
+                    "field": "feature_instructions",
+                    "issue": (
+                        "combined with worker_system must be at most "
+                        f"{limits.max_system_chars} characters"
+                    ),
+                },
+            )
         if len(json.dumps(request.output_schema)) > limits.max_schema_chars:
             details.append(
                 {
@@ -162,25 +192,7 @@ class WorkflowEngine:
 
     async def _pipeline(self, run: StoredRun) -> None:
         request = run.request
-        self._event(run, "planner", "stage_started", {"agent": "planner"})
-        step, plan = await self._agents.plan(
-            request,
-            run_id=run.run_id,
-            correlation_id=run.correlation_id,
-        )
-        run.steps.append(step)
-        run.plan = plan
-        self._transition(run, "working")
-        self._event(
-            run,
-            "planner",
-            "stage_completed",
-            {
-                "agent": "planner",
-                "duration_ms": step.duration_ms,
-                "steps": len(plan.steps),
-            },
-        )
+        plan = await self._plan(run, attempt=1)
 
         attempt = 1
         feedback: AgentReview | None = None
@@ -189,34 +201,45 @@ class WorkflowEngine:
             self._event(
                 run, "worker", "stage_started", {"agent": "worker", "attempt": attempt}
             )
-            stage = await self._agents.work(
-                request,
-                plan,
-                attempt=attempt,
-                feedback=feedback,
-                failed_checks=failed,
-                run_id=run.run_id,
-                correlation_id=run.correlation_id,
-            )
-            run.steps.append(stage.step)
             run.attempts = attempt
-            run.result = stage.output
+            worker_error: dict[str, str] | None = None
+            try:
+                stage = await self._agents.work(
+                    request,
+                    plan,
+                    attempt=attempt,
+                    feedback=feedback,
+                    failed_checks=failed,
+                    run_id=run.run_id,
+                    correlation_id=run.correlation_id,
+                )
+                step, output = stage.step, stage.output
+            except StageFailedError as exc:
+                if not self._worker_can_retry(exc, attempt):
+                    raise
+                # The failed attempt is reviewed and replanned instead of
+                # ending the run; its partial tool trace is the evidence.
+                step, output = exc.step, None
+                worker_error = {"code": exc.code, "message": exc.message}
+            run.steps.append(step)
+            run.result = output
             run.checks = run_checks(
                 request,
-                stage.output,
-                stage.step.tools,
+                output,
+                step.tools,
                 self._settings.write_tool_markers,
             )
             self._transition(run, "reviewing")
             self._event(
                 run,
                 "worker",
-                "stage_completed",
+                "stage_failed" if worker_error else "stage_completed",
                 {
                     "agent": "worker",
                     "attempt": attempt,
-                    "duration_ms": stage.step.duration_ms,
-                    "tool_calls": [f"{t.tool}:{t.status}" for t in stage.step.tools],
+                    "duration_ms": step.duration_ms,
+                    "tool_calls": [f"{t.tool}:{t.status}" for t in step.tools],
+                    **({"error": worker_error["code"]} if worker_error else {}),
                 },
             )
             self._event(
@@ -238,12 +261,13 @@ class WorkflowEngine:
             review_step, review = await self._agents.review(
                 request,
                 plan,
-                stage.output,
-                stage.step.tools,
+                output,
+                step.tools,
                 run.checks,
                 attempt=attempt,
                 run_id=run.run_id,
                 correlation_id=run.correlation_id,
+                worker_error=worker_error,
             )
             review = _apply_check_floor(review, run.checks)
             review_step.output = review.model_dump(mode="json")
@@ -264,15 +288,40 @@ class WorkflowEngine:
             )
 
             failed = [c for c in run.checks if c.blocking and not c.passed]
-            # A failed hard check is fixable by another attempt (most often:
-            # the Worker answered without calling a tool), whatever verdict
-            # the Reviewer reached; the human still has the final say.
-            retry = review.verdict == "revise" or bool(failed)
+            # A failed hard check or a failed Worker call is fixable by another
+            # attempt, whatever verdict the Reviewer reached; the human still
+            # has the final say.
+            retry = review.verdict == "revise" or bool(failed) or bool(worker_error)
             if retry and attempt <= self._settings.max_revisions:
+                if self._wrote_data(step):
+                    # Never repeat an attempt that may have changed data.
+                    self._event(
+                        run,
+                        "system",
+                        "revision_skipped",
+                        {"attempt": attempt, "reason": "write_tool_executed"},
+                    )
+                    break
                 attempt += 1
                 feedback = review
-                self._transition(run, "working")
-                self._event(run, "reviewer", "revision_requested", {"attempt": attempt})
+                self._event(
+                    run,
+                    "reviewer",
+                    "revision_requested",
+                    {
+                        "attempt": attempt,
+                        "reason": "worker_failed"
+                        if worker_error
+                        else "checks_failed"
+                        if failed
+                        else "reviewer_revise",
+                    },
+                )
+                plan = await self._plan(
+                    run,
+                    attempt=attempt,
+                    previous=previous_attempt(plan, step, run.checks, review),
+                )
                 continue
             break
 
@@ -283,6 +332,56 @@ class WorkflowEngine:
             "system",
             "awaiting_human",
             {"verdict": review.verdict, "proposed_actions": len(run.proposed_actions)},
+        )
+
+    async def _plan(
+        self,
+        run: StoredRun,
+        *,
+        attempt: int,
+        previous: dict[str, Any] | None = None,
+    ) -> Plan:
+        if attempt > 1:
+            self._transition(run, "planning")
+        self._event(
+            run, "planner", "stage_started", {"agent": "planner", "attempt": attempt}
+        )
+        step, plan = await self._agents.plan(
+            run.request,
+            run_id=run.run_id,
+            correlation_id=run.correlation_id,
+            attempt=attempt,
+            previous=previous,
+        )
+        run.steps.append(step)
+        run.plan = plan
+        self._transition(run, "working")
+        self._event(
+            run,
+            "planner",
+            "stage_completed",
+            {
+                "agent": "planner",
+                "attempt": attempt,
+                "duration_ms": step.duration_ms,
+                "steps": len(plan.steps),
+            },
+        )
+        return plan
+
+    def _worker_can_retry(self, exc: StageFailedError, attempt: int) -> bool:
+        return (
+            exc.code in RECOVERABLE_WORKER_CODES
+            and attempt <= self._settings.max_revisions
+            and not self._wrote_data(exc.step)
+        )
+
+    def _wrote_data(self, step: Step) -> bool:
+        """Whether a write tool may have run (anything but a rejected call)."""
+        return any(
+            trace.status != "rejected"
+            and is_write_tool(trace.tool, self._settings.write_tool_markers)
+            for trace in step.tools
         )
 
     # -------------------------------------------------------------- human
