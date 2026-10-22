@@ -26,4 +26,13 @@ separately.
   vectors/indexes, personal trip data, or machine-specific absolute paths.
 - Keep individual contribution records traceable to GitHub commits and PRs.
 
-Runtime evidence will be added as implementation issues are completed.
+## Student 1 Release 1 evidence and report material
+
+- [Evidence register](./student-1-evidence-register.md): requirement →
+  evidence → command → expected → actual → status.
+- [Captured evidence](./evidence/student-1/): versions, Compose and
+  container-to-host checks, terminal RAG/MCP, backend API, Release 0 CRUD,
+  frontend screenshots, CI with MCP/RAG disabled.
+- [Contribution log](./student-1-contribution-log.md)
+- [Report contribution](./student-1-report-contribution.md)
+- [Demo runbook and Q&A notes](./student-1-demo-runbook.md)
