@@ -1,0 +1,26 @@
+{# The human decision. Ticking only some listings and approving is a partial
+   acceptance (the page turns it into one); a run with a trip pins what is
+   accepted there. #}
+<fieldset class="agents__decide">
+  <legend>Your decision</legend>
+  {% if run.trip_id %}
+    <div class="stay__pair">
+      <label class="stay__field">Check in <span class="stay__optional">(optional)</span>
+        <input type="date" name="check_in"></label>
+      <label class="stay__field">Check out <span class="stay__optional">(optional)</span>
+        <input type="date" name="check_out"></label>
+    </div>
+    <p class="stay__note">Approved listings are added to {{ run.trip_id }}. Without dates the trip's first day is used.</p>
+  {% else %}
+    <p class="stay__note">This run has no trip, so approving records your decision and adds nothing.</p>
+  {% endif %}
+  <label class="stay__field">Corrected overview <span class="stay__optional">(only for "Correct")</span>
+    <textarea name="corrected_overview" rows="2" maxlength="400"></textarea></label>
+  <label class="stay__field">Notes <span class="stay__optional">(optional)</span>
+    <textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+  <p class="stay__actions">
+    <button class="button button--primary" type="submit" name="decision" value="approve">Approve ticked</button>
+    <button class="button" type="submit" name="decision" value="correct">Correct</button>
+    <button class="button button--danger" type="submit" name="decision" value="reject">Reject</button>
+  </p>
+</fieldset>

@@ -1,0 +1,60 @@
+{#
+  The multi-agent page: ask a question, watch the Planner, Worker and Reviewer
+  work, then decide. A run has its own URL (/agents/runs/<id>) so a refresh only
+  reads it; the panel inside is what HTMX re-fetches while the agents work.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plan with agents · TripGenie Student 2</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <p class="masthead__eyebrow">TripGenie Student 2</p>
+    <h1 class="masthead__title">Plan accommodation with agents</h1>
+    <p class="masthead__subtitle">Multi-agent planning. Nothing is added to a trip until you approve it.</p>
+    <a class="masthead__home" href="{{ request.app.state.settings.portal_url }}">Home</a>
+    <a class="masthead__home" href="/">Accommodation</a>
+  </header>
+
+  <main class="layout">
+    <p class="ai-notice">
+      Your question goes to the shared TripGenie Multi-Agent Server. A
+      <strong>Planner</strong> writes a plan, a <strong>Worker</strong> carries
+      it out with the shared MCP accommodation tools, automatic checks confirm
+      every listing came from a tool, and a <strong>Reviewer</strong> checks the
+      answer against the plan. <strong>You make the final decision.</strong>
+    </p>
+
+    {% if run or (agent_error and not form) %}
+      {% set run_id = run.run_id if run else '' %}
+      {% include "partials/agent_run_panel.html" %}
+    {% else %}
+      {% if agent_error %}<p class="error" role="alert">{{ agent_error }}</p>{% endif %}
+      <form class="agents__form" method="post" action="/agents">
+        <label for="agent-question">What do you need?</label>
+        <textarea id="agent-question" name="question" rows="3" maxlength="500"
+                  placeholder="a well-rated stay in Sydney under 200 a night">{{ form.get("question", "") }}</textarea>
+        <div class="agents__fields">
+          <label>Trip id (optional)
+            <input name="trip_id" value="{{ form.get('trip_id', '') }}" maxlength="100" placeholder="trip_…">
+          </label>
+          <label>Country (optional)
+            <input name="country" value="{{ form.get('country', '') }}" maxlength="100">
+          </label>
+          <label>City (optional)
+            <input name="city" value="{{ form.get('city', '') }}" maxlength="100">
+          </label>
+        </div>
+        <p class="stay__note">Give a trip to add the listings you approve to it.</p>
+        <p><button class="button button--primary" type="submit">Start the agents</button>
+           <a class="button" href="/">Cancel</a></p>
+      </form>
+    {% endif %}
+  </main>
+</body>
+</html>

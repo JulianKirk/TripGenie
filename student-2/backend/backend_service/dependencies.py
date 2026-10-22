@@ -10,6 +10,7 @@ from backend_service.ai_client import AiClient
 from backend_service.client import DatabaseClient
 from backend_service.itinerary_client import ItineraryClient
 from backend_service.location_client import LocationClient
+from backend_service.multi_agent_client import MultiAgentClient
 from backend_service.rag_client import RagClient
 
 
@@ -56,3 +57,12 @@ def get_rag(request: Request) -> RagClient:
 
 
 RagDep = Annotated[RagClient, Depends(get_rag)]
+
+
+def get_multi_agent(request: Request) -> MultiAgentClient:
+    """The one Multi-Agent Server client, built once in the app lifespan. It
+    exists even when the feature is off; the routes check `enabled`."""
+    return request.app.state.multi_agent
+
+
+MultiAgentDep = Annotated[MultiAgentClient, Depends(get_multi_agent)]

@@ -278,3 +278,5 @@ class HealthResponse(BaseModel):
     # answer -- see routers/health.py.
     ai_mode: str
     rag: str
+    # "enabled" or "disabled": config only, like `rag`.
+    multi_agent: str = "disabled"

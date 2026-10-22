@@ -75,17 +75,27 @@ jobs:
         # with a 200 -- that is the documented behaviour and what is under test
         # here: the service itself starts and serves.
         run: |
-          # MCP and RAG stay disabled in CI: AI_MODE_URL (which the MCP
-          # assistant rides on) and RAG_URL are empty, so both boxes answer
-          # "disabled" and nothing reaches for a host service.
+          # MCP, RAG and multi-agent stay disabled in CI: AI_MODE_URL (which
+          # the MCP assistant rides on) and RAG_URL are empty and
+          # MULTI_AGENT_ENABLED is false, so those boxes answer "disabled" and
+          # nothing reaches for a host service.
           docker run -d --name student-2-backend -p 9000:9000 \
-            -e AI_MODE_URL= -e RAG_URL= student-2-backend
+            -e AI_MODE_URL= -e RAG_URL= -e MULTI_AGENT_ENABLED=false \
+            student-2-backend
           if ! python scripts/ci/wait_for_http.py \
             --label "student 2 backend" \
             http://localhost:9000/health; then
             docker logs student-2-backend
             exit 1
           fi
+      - name: Check multi-agent is disabled in CI
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:9000/health \
+            | python -c "import json, sys; h = json.load(sys.stdin); print('multi_agent:', h['multi_agent']); assert h['multi_agent'] == 'disabled'"
+          curl --silent --show-error -X POST -H 'Content-Type: application/json' \
+            -d '{"question": "A cheap stay in Sydney"}' \
+            http://127.0.0.1:9000/accommodation/agent-runs \
+            | python -c "import json, sys; d = json.load(sys.stdin)['detail']; print('agent-run route:', d); assert d.startswith('MULTI_AGENT_DISABLED')"
       - name: Build frontend service image
         run: docker build -f student-2/frontend/Dockerfile -t student-2-frontend student-2
       - name: Health check frontend service

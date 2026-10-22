@@ -232,6 +232,13 @@ services:
       # only AI_MODE_URL above, since AI-Mode runs the MCP loop.
       RAG_URL: ${STUDENT2_BACKEND_RAG_URL-http://host.docker.internal:8011}
       RAG_TIMEOUT: "130"
+      # Release 2 multi-agent planning: Planner -> Worker -> Reviewer runs on
+      # the host-run shared Multi-Agent Server, then a human decision. Off in
+      # CI and the cloud profile (.env.cloud); the rest of the service never
+      # depends on it.
+      MULTI_AGENT_ENABLED: "${STUDENT2_BACKEND_MULTI_AGENT_ENABLED:-true}"
+      MULTI_AGENT_BASE_URL: ${STUDENT2_BACKEND_MULTI_AGENT_BASE_URL:-http://host.docker.internal:8013}
+      MULTI_AGENT_TIMEOUT: "${STUDENT2_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS:-15}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -252,6 +259,8 @@ services:
       # so this sits above that. Every other call the page makes keeps the
       # ordinary 5 seconds.
       AI_TIMEOUT: "210"
+      # The multi-agent page only: starting, polling and deciding a run.
+      AGENTS_TIMEOUT: "30"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.

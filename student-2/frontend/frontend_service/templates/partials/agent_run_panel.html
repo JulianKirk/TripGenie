@@ -1,0 +1,129 @@
+{#
+  One run, as the page shows it. While the agents are working this root polls
+  itself; once the run is waiting for a person or finished, the trigger is gone
+  and the decision form (or the outcome) takes over.
+#}
+<section id="agent-run" class="agents__run"
+  {% if agent_poll %}hx-get="/agents/runs/{{ run_id }}/panel" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if agent_error %}<p class="error" role="alert">{{ agent_error }}</p>{% endif %}
+  {% if run %}
+    <h2>{{ run.task }}</h2>
+    <p class="agents__status agents__status--{{ run.status }}" role="status">
+      {{ status_label }}{% if agent_poll %}…{% endif %}
+    </p>
+
+    {% if run.plan %}
+      <h3>Plan</h3>
+      <p>{{ run.plan.goal }}</p>
+      <ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+    {% endif %}
+
+    {% if run.stages %}
+      <h3>What each agent did</h3>
+      <ul class="agents__stages">
+        {% for stage in run.stages %}
+          <li>
+            <strong>{{ stage.agent|capitalize }}</strong> (attempt {{ stage.attempt }}):
+            {{ stage.status }}, {{ stage.duration_ms }} ms
+            {% if stage.error_message %}<span class="error">{{ stage.error_message }}</span>{% endif %}
+            {% if stage.tools %}
+              <ul>
+                {% for tool in stage.tools %}
+                  <li><code>{{ tool.tool }}</code> {{ tool.status }}
+                    {% if tool.accommodation_ids %}, returned {{ tool.accommodation_ids|length }} listing(s){% endif %}
+                    {% if tool.error %}<span class="error">{{ tool.error }}</span>{% endif %}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if run.checks %}
+      <h3>Automatic checks</h3>
+      <ul class="agents__checks">
+        {% for check in run.checks %}
+          <li class="agents__check agents__check--{{ 'pass' if check.passed else 'fail' }}">
+            <strong>{{ 'Passed' if check.passed else 'Failed' }}:</strong> {{ check.name }}: {{ check.detail }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if run.review %}
+      <h3>Reviewer: {{ run.review.verdict }}</h3>
+      <p>{{ run.review.summary }}</p>
+      {% for label, items in (("Issues", run.review.issues), ("Risks", run.review.risks), ("Recommendations", run.review.recommendations)) %}
+        {% if items %}<p><strong>{{ label }}</strong></p><ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if run.error %}
+      <p class="error" role="alert"><strong>{{ run.error.code }}</strong>: {{ run.error.message }}</p>
+    {% endif %}
+
+    {% if run.overview %}
+      <h3>Answer</h3>
+      <p>{{ run.overview }}</p>
+      {% if run.considerations %}<ul>{% for note in run.considerations %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    {% endif %}
+
+    {% set deciding = run.status == "awaiting_human" and not run.human %}
+    {% if run.suggestions %}
+      <h3>Suggested listings</h3>
+      <form {% if deciding %}hx-post="/agents/runs/{{ run_id }}/review" hx-target="#agent-run" hx-swap="outerHTML"{% endif %}>
+        <table class="results__table">
+          <thead><tr>
+            {% if deciding %}<th>Add</th>{% endif %}
+            <th>Listing</th><th>Type</th><th>Per night</th><th>Rating</th><th>Why</th>
+          </tr></thead>
+          <tbody>
+          {% for item in run.suggestions %}
+            {% set acc = item.accommodation %}
+            <tr>
+              {% if deciding %}
+                <td>
+                  <input type="hidden" name="offered" value="{{ item.index }}">
+                  <input type="checkbox" name="accepted" value="{{ item.index }}"
+                         aria-label="Add {{ acc.name if acc else 'this listing' }}"
+                         {% if item.grounded %}checked{% else %}disabled{% endif %}>
+                </td>
+              {% endif %}
+              <td>
+                {% if acc %}<a href="/?accommodation={{ item.accommodation_id }}">{{ acc.name }}</a>
+                {% else %}<span class="pill pill--sold_out">Not verified</span> <code>{{ item.accommodation_id }}</code>{% endif %}
+              </td>
+              <td>{{ acc.type if acc else "" }}</td>
+              <td>{% if acc and acc.price_per_night is not none %}${{ "%.2f"|format(acc.price_per_night) }}{% endif %}</td>
+              <td>{{ acc.rating if acc and acc.rating is not none else "" }}</td>
+              <td>{{ item.reason }}{% if not item.grounded %} <em>(No accommodation tool returned this listing, so it cannot be added.)</em>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if deciding %}{% include "partials/agent_decision_fields.html" %}{% endif %}
+      </form>
+    {% elif deciding %}
+      <form hx-post="/agents/runs/{{ run_id }}/review" hx-target="#agent-run" hx-swap="outerHTML">
+        {% include "partials/agent_decision_fields.html" %}
+      </form>
+    {% endif %}
+
+    {% if run.human %}
+      <h3>Your decision: {{ run.human.decision }}</h3>
+      <p>Decided by {{ run.human.reviewer }}{% if run.human.notes %}: {{ run.human.notes }}{% endif %}</p>
+    {% endif %}
+    {% if run.saved %}
+      <p class="toast">Added to {{ run.trip_id }}:</p>
+      <ul>{% for stay in run.saved %}<li>{{ stay.accommodation_id }}{% if stay.check_in %}, check in {{ stay.check_in }}{% endif %}{% if stay.check_out %}, check out {{ stay.check_out }}{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    {% for failure in run.save_errors %}
+      <p class="error" role="alert">Not added ({{ failure.accommodation_id }}): {{ failure.message }}</p>
+    {% endfor %}
+
+    <p><a class="button" href="/agents">Ask another question</a></p>
+  {% else %}
+    <p><a class="button" href="/agents">Start a new run</a></p>
+  {% endif %}
+</section>

@@ -12,6 +12,7 @@
   - [POST /accommodation/ai-search](#post-accommodationai-search)
   - [POST /accommodation/knowledge](#post-accommodationknowledge)
   - [POST /accommodation/assistant](#post-accommodationassistant)
+  - [Multi-agent planning (Release 2)](#multi-agent-planning-release-2)
   - [POST /accommodation](#post-accommodation)
   - [PUT /accommodation/{id}](#put-accommodationid)
   - [DELETE /accommodation/{id}](#delete-accommodationid)
@@ -112,6 +113,9 @@ published beyond it.
 | `AI_MAX_ATTEMPTS` | `2`                           | How many times the model may be asked before giving up |
 | `RAG_URL`      | *(unset)*                        | Base URL of the shared RAG server. Unset or empty switches [the knowledge box](#post-accommodationknowledge) off |
 | `RAG_TIMEOUT`  | `130`                            | Seconds to wait on a RAG `/query` -- retrieval plus a grounded model answer |
+| `MULTI_AGENT_ENABLED` | `false`                   | `true` switches on [multi-agent planning](#multi-agent-planning-release-2). Compose sets it from `STUDENT2_BACKEND_MULTI_AGENT_ENABLED`; CI and the cloud profile leave it off |
+| `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013`  | Base URL of the host-run shared Multi-Agent Server (`http://host.docker.internal:8013` under Compose) |
+| `MULTI_AGENT_TIMEOUT` | `15`                      | Seconds to wait on one call to the Multi-Agent Server. Runs work in the background, so each call is short |
 
 ### Running it
 
@@ -213,6 +217,9 @@ that cannot say where they are, and without AI-Mode it serves everything except
 
 `rag` is `"configured"` or `"not_configured"` from `RAG_URL` alone. It is never
 probed and never makes the service degraded: the knowledge box is an extra.
+
+`multi_agent` is `"enabled"` or `"disabled"` from `MULTI_AGENT_ENABLED` alone,
+with the same rules: never probed, never degrades the service.
 
 ### Error Responses
 
@@ -727,6 +734,64 @@ curl -X POST "http://localhost:9000/accommodation/assistant" \
 | Status | Description |
 |---|---|
 | 400 | `question` missing, blank or over 500 characters |
+
+## Multi-agent planning (Release 2)
+
+A question answered by the shared Multi-Agent Server's Planner, Worker and
+Reviewer, with a person making the final decision. Contract:
+[release-2-multi-agent-contract.md](../../docs/architecture/release-2-multi-agent-contract.md).
+
+The server never writes accommodation data. This service sends it the question,
+this feature's Worker prompt, the JSON Schema of the answer, the read-only
+accommodation tools and a grounding rule (`suggestions[].accommodation_id` must
+be an id a tool returned, `source: "student-2"`). It reads the run back,
+re-reads every suggested listing from its own database, and only after a
+person decides does it pin what was approved to the run's trip -- through the
+same itinerary call as [the stay panel](#put-accommodationiditinerariesitinerary_id).
+
+An id is only ever added if a successful `accommodations_search` or
+`accommodations_get` call in the Worker's **final** attempt returned it, so an
+invented id cannot reach a trip even if a person approves it.
+
+| Method | Path | Purpose | Success |
+|---|---|---|---|
+| `POST` | `/accommodation/agent-runs` | Start a run; answers at once, still `planning` | `202` |
+| `GET` | `/accommodation/agent-runs/{run_id}` | The run, for polling | `200` |
+| `POST` | `/accommodation/agent-runs/{run_id}/review` | The human decision; pins approved listings to the trip | `200` |
+
+### Request Body (`POST /accommodation/agent-runs`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `question` | string | Required, 1 to 500 characters |
+| `trip_id` | string | Optional. Must exist in student 1's service; approved listings are added to it |
+| `country`, `city` | string | Optional hints for the Worker |
+
+### Request Body (`POST /accommodation/agent-runs/{run_id}/review`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `decision` | `approve` \| `partial` \| `correct` \| `reject` | Required |
+| `accepted` | integer[] | Indexes of the run's suggestions: those to keep for `partial`, and the corrected answer's suggestions for `correct` |
+| `corrected_overview` | string | For `correct`, up to 400 characters |
+| `check_in`, `check_out` | string | Stay dates for the listings added to the trip; student 1 defaults a missing check-in to the trip's first day |
+| `reviewer`, `notes` | string | Optional; `reviewer` defaults to `traveller` |
+
+The response is the run: `status`, `plan`, `stages` (each agent's turn and tool
+calls), `checks` (the server's deterministic checks), `review`, `overview`,
+`suggestions` (each with `grounded` and the listing re-read from the database),
+`human`, and -- on a decision -- `saved` and `save_errors`. One failed save does
+not undo the decision or the other saves.
+
+### Error Responses
+
+| Status | Description |
+|---|---|
+| 400 | Invalid body, or a decision that makes no sense (`partial` with nothing accepted, an index past the suggestions, check-out before check-in) |
+| 404 | `trip_id` not found, or `RUN_NOT_FOUND` (an id that is not `magent_` plus 12 hex digits is refused without calling the server) |
+| 409 | `RUN_NOT_AWAITING_REVIEW`, passed on from the server |
+| 502 | The server's reply is not the run contract |
+| 503 | `MULTI_AGENT_DISABLED`, the server is unreachable or timed out, or `RUN_LIMIT_REACHED` |
 
 ## POST /accommodation
 

@@ -19,6 +19,10 @@ DEFAULT_AI_MAX_ATTEMPTS = 2
 # Retrieval plus a local model's grounded answer; the shared RAG server's own
 # generation budget sits under this.
 DEFAULT_RAG_TIMEOUT = 130.0
+# The shared host-run Multi-Agent Server. It answers a run request at once and
+# works in the background, so this only bounds each short call to it.
+DEFAULT_MULTI_AGENT_URL = "http://127.0.0.1:8013"
+DEFAULT_MULTI_AGENT_TIMEOUT = 15.0
 
 
 @dataclass(slots=True)
@@ -53,6 +57,12 @@ class Settings:
     # switches the knowledge box off (as CI does) and nothing else changes.
     rag_url: str | None = None
     rag_timeout: float = DEFAULT_RAG_TIMEOUT
+    # The shared Multi-Agent Server (Release 2). Off by default and in CI, like
+    # the other host-run services: every other endpoint behaves exactly as
+    # before and the agent-run routes answer 503 MULTI_AGENT_DISABLED.
+    multi_agent_enabled: bool = False
+    multi_agent_base_url: str = DEFAULT_MULTI_AGENT_URL
+    multi_agent_timeout: float = DEFAULT_MULTI_AGENT_TIMEOUT
     service_name: str = "student-2-backend"
 
     def __post_init__(self) -> None:
@@ -92,4 +102,14 @@ class Settings:
             ),
             rag_url=os.environ.get("RAG_URL") or None,
             rag_timeout=float(os.environ.get("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)),
+            multi_agent_enabled=os.environ.get("MULTI_AGENT_ENABLED", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on"},
+            multi_agent_base_url=os.environ.get(
+                "MULTI_AGENT_BASE_URL", DEFAULT_MULTI_AGENT_URL
+            ),
+            multi_agent_timeout=float(
+                os.environ.get("MULTI_AGENT_TIMEOUT", DEFAULT_MULTI_AGENT_TIMEOUT)
+            ),
         )
