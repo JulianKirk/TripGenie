@@ -525,6 +525,7 @@ services:
       STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "230"
       STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS: "230"
+      STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS: "${STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS:-30}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.
@@ -564,6 +565,9 @@ services:
       STUDENT5_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
       STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS: "130"
       STUDENT5_BACKEND_MCP_ENABLED: "${STUDENT5_BACKEND_MCP_ENABLED:-true}"
+      STUDENT5_BACKEND_MULTI_AGENT_ENABLED: "${STUDENT5_BACKEND_MULTI_AGENT_ENABLED:-true}"
+      STUDENT5_BACKEND_MULTI_AGENT_BASE_URL: http://host.docker.internal:8013
+      STUDENT5_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS: "15"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
