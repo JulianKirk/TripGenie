@@ -139,7 +139,7 @@ are not MCP calls. Missing records are reported without inventing card data.
 The model interprets budgets, party sizes, dates and accessibility, decides which
 search/detail tools to use, and writes a one-shot answer without follow-up
 questions. It uses selected-trip context where needed and states missing inputs
-as limitations. Without party size, a total-budget answer must not claim
+as unavailable context. Without party size, a total-budget answer must not claim
 affordability or return recommendation cards. The backend does not parse these
 requirements, rewrite filters, reject recommendations
 on their behalf, force detail reads or replace model prose. Prices on cards are

@@ -118,8 +118,8 @@ group-price semantics), not Worker JSON formatting or tool-execution commands.
 Planner and Reviewer receive it in their system prompts on every attempt and
 retain their own roles and schemas. Keep the complete Worker policy in
 `worker_system`; the server does not append these rules again or change that
-prompt's order. This avoids duplicate Worker context and preserves its tested
-tool-selection behavior. The two fields share the 6,000-character limit, and
+prompt's order. This keeps Worker context concise and preserves the feature's
+execution instructions. The two fields share the 6,000-character limit, and
 Planner/Reviewer stage budgets count the common rules. Omitting it
 preserves existing behavior. Upgrade the shared server before a feature starts
 sending the field; older servers reject it as unknown. Trusted feature backends

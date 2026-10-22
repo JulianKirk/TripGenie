@@ -124,8 +124,8 @@ Activity guides (RAG) remain separate modes.
 The activity MCP and Smart Planner prompts treat each submission as a one-shot
 request. They must not ask follow-up questions or expect human review to supply
 missing inputs. Human review only accepts, corrects or rejects the finished draft.
-Missing information is stated as a limitation, using catalogue evidence for the
-known constraints; an unknown party size must not produce a verified total-budget
+Unspecified inputs are identified in the response, using catalogue evidence for
+the known constraints; an unknown party size must not produce a verified total-budget
 recommendation.
 
 The new flow is:
@@ -188,4 +188,4 @@ verified identities. No per-user authentication is introduced by this feature.
 Local and cloud-disabled states remain understandable without breaking catalogue
 browsing. Smart Planner is enabled by default locally and explicitly disabled in
 CI and the cloud profile. See the backend API documentation for configuration and the
-shared service's limitation around retrospective tool checks.
+shared service's retrospective tool-check contract.
