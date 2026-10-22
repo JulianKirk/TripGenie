@@ -145,7 +145,11 @@ def _ask(client: TestClient, payload: object) -> httpx.Response:
 def test_health_reports_rag_disabled_by_default(disabled_client: TestClient) -> None:
     body = disabled_client.get("/health").json()["data"]
 
-    assert body["integrations"] == {"rag": "disabled", "mcp": "disabled"}
+    assert body["integrations"] == {
+        "rag": "disabled",
+        "mcp": "disabled",
+        "multi_agent": "disabled",
+    }
 
 
 def test_readiness_never_contacts_rag(

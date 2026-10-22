@@ -130,6 +130,10 @@ services:
       STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Whose X-Forwarded-Proto uvicorn believes when building page URLs.
+      # Uvicorn's own default locally; the cloud profile trusts the HTTPS
+      # ingress (see shared/configuration/.env.cloud).
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "8081:8081"
     depends_on:
@@ -239,6 +243,8 @@ services:
       AI_TIMEOUT: "210"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     depends_on:
       - student-2-backend
 
@@ -280,9 +286,13 @@ services:
       STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_MCP_TIMEOUT_SECONDS:-60}"
       # The transport guide (RAG) only; outlasts the backend's 130 s RAG budget.
       STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS:-150}"
+      # Multi-agent planning: short calls, as the agents run in the background.
+      STUDENT3_FRONTEND_AGENTS_TIMEOUT_SECONDS: "${STUDENT3_FRONTEND_AGENTS_TIMEOUT_SECONDS:-30}"
       STUDENT3_FRONTEND_SERVICE_NAME: "${STUDENT3_FRONTEND_SERVICE_NAME:-student-3-frontend}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
     depends_on:
@@ -335,6 +345,11 @@ services:
       STUDENT3_BACKEND_RAG_ENABLED: "${STUDENT3_BACKEND_RAG_ENABLED:-true}"
       STUDENT3_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
       STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS: "130"
+      # Release 2 shared Multi-Agent Server, also host-run. Each call is short:
+      # a run executes in the background there and the transport page polls it.
+      STUDENT3_BACKEND_MULTI_AGENT_ENABLED: "${STUDENT3_BACKEND_MULTI_AGENT_ENABLED:-true}"
+      STUDENT3_BACKEND_MULTI_AGENT_BASE_URL: http://host.docker.internal:8013
+      STUDENT3_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS: "15"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -449,6 +464,8 @@ services:
       AI_TIMEOUT: "${STUDENT4_FRONTEND_AI_TIMEOUT:-210}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "${STUDENT4_FRONTEND_HOST_PORT:-8084}:8084"
     depends_on:
@@ -512,8 +529,11 @@ services:
       STUDENT5_FRONTEND_AI_ANALYSIS_TIMEOUT_SECONDS: "230"
       STUDENT5_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS: "230"
+      STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS: "${STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS:-30}"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
+      # Proxy-header trust for page URLs; see student-1-frontend.
+      FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     ports:
       - "8085:8085"
     depends_on:
@@ -549,6 +569,9 @@ services:
       STUDENT5_BACKEND_RAG_BASE_URL: http://host.docker.internal:8011
       STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS: "130"
       STUDENT5_BACKEND_MCP_ENABLED: "${STUDENT5_BACKEND_MCP_ENABLED:-true}"
+      STUDENT5_BACKEND_MULTI_AGENT_ENABLED: "${STUDENT5_BACKEND_MULTI_AGENT_ENABLED:-true}"
+      STUDENT5_BACKEND_MULTI_AGENT_BASE_URL: http://host.docker.internal:8013
+      STUDENT5_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS: "15"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

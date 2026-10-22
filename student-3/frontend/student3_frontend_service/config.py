@@ -61,6 +61,10 @@ class Settings:
     mcp_timeout_seconds: float = 60.0
     # The transport guide (RAG) only; clears the backend's 130 s RAG budget.
     rag_timeout_seconds: float = 150.0
+    # Multi-agent planning: starting, reading and deciding a run are short
+    # calls (the agents run in the background), but a decision may add
+    # several options to a trip through Student 1.
+    agents_timeout_seconds: float = 30.0
     service_name: str = "student-3-frontend"
     # The shared portal, as the browser reaches it: theme.css and Home.
     portal_url: str = "http://localhost:8080"
@@ -97,6 +101,11 @@ class Settings:
                 os.getenv("STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_FRONTEND_RAG_TIMEOUT_SECONDS",
                 default=150.0,
+            ),
+            agents_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_FRONTEND_AGENTS_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_FRONTEND_AGENTS_TIMEOUT_SECONDS",
+                default=30.0,
             ),
             portal_url=_normalise_base_url(
                 os.getenv("TRIPGENIE_PORTAL_URL"),

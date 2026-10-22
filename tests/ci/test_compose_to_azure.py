@@ -10,6 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "deploy" / "azure" / "compose_to_azure.py"
 DOMAIN = "env.example.io"
+PULL_IDENTITY = (
+    "/subscriptions/s/resourceGroups/rg"
+    "/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pull"
+)
 
 
 def load():
@@ -52,7 +56,14 @@ def rendered_apps():
 
 
 def az_args(name):
-    return load().az_args(rendered_apps()[name], "env", "r.io", "0")
+    return load().az_args(rendered_apps()[name], "env", "r.io", PULL_IDENTITY, "0")
+
+
+def test_apps_pull_with_the_given_identity_not_a_system_one():
+    # `--registry-identity system` makes the CLI deploy a placeholder image first.
+    args = az_args("student-1-frontend")
+    assert args[args.index("--registry-identity") + 1] == PULL_IDENTITY
+    assert args[args.index("--image") + 1] == "r.io/tripgenie-student-1-frontend:abc"
 
 
 def test_only_built_services_are_deployed():

@@ -31,7 +31,8 @@ include = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# tests/endpoint runs only against the live Compose slice (student-3-ci.yml).
+testpaths = ["tests/database", "tests/backend", "tests/frontend"]
 addopts = "-q"
 
 [tool.setuptools.package-data]

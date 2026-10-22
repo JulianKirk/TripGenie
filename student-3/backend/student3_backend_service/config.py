@@ -10,6 +10,7 @@ DEFAULT_AI_MODE_BASE_URL = "http://ai-mode:8006"
 DEFAULT_AI_PROMPT_ASSET = "transport_recommendations_v2.md"
 DEFAULT_MCP_BASE_URL = "http://127.0.0.1:8012/mcp"
 DEFAULT_RAG_BASE_URL = "http://127.0.0.1:8011"
+DEFAULT_MULTI_AGENT_BASE_URL = "http://127.0.0.1:8013"
 
 
 def _parse_timeout(value: str | None, *, env_name: str, default: float) -> float:
@@ -119,6 +120,12 @@ class Settings:
     rag_enabled: bool = False
     rag_base_url: str = DEFAULT_RAG_BASE_URL
     rag_timeout_seconds: float = 130.0
+    # Release 2 host-run Multi-Agent Server, off unless Compose turns it on.
+    # Each call is short: a run executes in the background on that server and
+    # the UI polls it, so no request here waits for the agents.
+    multi_agent_enabled: bool = False
+    multi_agent_base_url: str = DEFAULT_MULTI_AGENT_BASE_URL
+    multi_agent_timeout_seconds: float = 15.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -220,5 +227,19 @@ class Settings:
                 os.getenv("STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS"),
                 env_name="STUDENT3_BACKEND_RAG_TIMEOUT_SECONDS",
                 default=130.0,
+            ),
+            multi_agent_enabled=_parse_bool(
+                os.getenv("STUDENT3_BACKEND_MULTI_AGENT_ENABLED"),
+                default=False,
+            ),
+            multi_agent_base_url=_normalise_base_url(
+                os.getenv("STUDENT3_BACKEND_MULTI_AGENT_BASE_URL"),
+                env_name="STUDENT3_BACKEND_MULTI_AGENT_BASE_URL",
+                default=DEFAULT_MULTI_AGENT_BASE_URL,
+            ),
+            multi_agent_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT3_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS"),
+                env_name="STUDENT3_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS",
+                default=15.0,
             ),
         )

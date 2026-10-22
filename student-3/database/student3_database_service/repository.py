@@ -158,6 +158,7 @@ SET
 WHERE id = :id
 """
 
+
 def duration_minutes(
     departure_time: str,
     arrival_time: str,

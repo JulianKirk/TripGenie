@@ -303,3 +303,15 @@ td.actions-cell { display: table-cell; }
 .ai-tools__list { padding-left: 1.25rem; }
 .ai-tools__list p { margin: 0.2rem 0; }
 .ai-tools pre { max-height: 16rem; overflow: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
+
+/* Release 2: a multi-agent run and its human decision */
+.agent-run h4 { margin: 1rem 0 0.3rem; font-size: 0.95rem; }
+.agent-run__status { font-weight: 600; margin: 0.2rem 0; }
+.agent-run__plan, .agent-stages { padding-left: 1.25rem; }
+.agent-stages__item p { margin: 0.2rem 0; }
+.agent-checks { list-style: none; padding-left: 0; }
+.agent-checks li { margin: 0.25rem 0; }
+.agent-decision fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 0.9rem; }
+.agent-decision legend { font-weight: 600; padding: 0 0.3rem; }
+.field--checkbox label { display: flex; gap: 0.5rem; align-items: center; font-weight: 400; }
+.banner--success { background: var(--ok-bg, #e9f6ee); border: 1px solid var(--ok); }

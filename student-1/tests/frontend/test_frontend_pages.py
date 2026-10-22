@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from frontend_service.app import create_app
 from frontend_service.config import Settings
@@ -51,6 +52,41 @@ def test_portal_url_comes_from_the_environment(monkeypatch, backend_api) -> None
 
     assert 'href="https://portal.example/theme.css"' in page.text
     assert 'href="https://portal.example">Home</a>' in page.text
+
+
+@pytest.mark.parametrize(
+    ("forwarded_allow_ips", "scheme"),
+    [
+        # docker-compose.yml's local value (uvicorn's own default): a forwarded
+        # header from anyone but loopback is ignored.
+        ("127.0.0.1", "http"),
+        # shared/configuration/.env.cloud: trust the Azure HTTPS ingress.
+        ("*", "https"),
+    ],
+)
+def test_page_urls_follow_the_forwarded_scheme_uvicorn_is_told_to_trust(
+    monkeypatch, client_factory, forwarded_allow_ips, scheme
+) -> None:
+    # The Dockerfile starts the app with the uvicorn CLI, which reads this
+    # variable and wraps the app exactly as config.loaded_app does here.
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", forwarded_allow_ips)
+    config = uvicorn.Config(client_factory().app, log_config=None)
+    config.load()
+    host = "student-1-frontend.example.io"
+
+    with TestClient(config.loaded_app, base_url=f"http://{host}") as client:
+        page = client.get(
+            "/trips/trip_2027_sydney_getaway",
+            headers={"X-Forwarded-Proto": "https"},
+        )
+
+    assert page.status_code == 200
+    base = f"{scheme}://{host}"
+    assert f'href="{base}/static/css/styles.css"' in page.text
+    assert f'src="{base}/static/js/htmx.min.js"' in page.text
+    ai_url = f"{base}/trips/trip_2027_sydney_getaway/ai-suggestions"
+    assert f'action="{ai_url}"' in page.text
+    assert f'hx-post="{ai_url}"' in page.text
 
 
 def test_theme_and_local_assets_follow_the_shared_contract(

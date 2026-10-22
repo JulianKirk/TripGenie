@@ -689,3 +689,259 @@ def test_mcp_structured_result_is_escaped() -> None:
         )
 
     assert "<script>" not in result.text
+
+
+RUN_ID = "magent_0123456789ab"
+AGENT_RUN = {
+    "run_id": RUN_ID,
+    "status": "awaiting_human",
+    "active": False,
+    "task": "Where should I move money?",
+    "attempts": 1,
+    "created_at": "2026-10-22T01:00:00Z",
+    "updated_at": "2026-10-22T01:02:00Z",
+    "plan": {"goal": "Review food spending.", "steps": ["Read the summary"]},
+    "stages": [
+        {"agent": "planner", "attempt": 1, "status": "completed", "duration_ms": 900},
+        {
+            "agent": "worker",
+            "attempt": 1,
+            "status": "completed",
+            "duration_ms": 4000,
+            "tools": [
+                {
+                    "tool": "budgets_get_summary",
+                    "arguments": {"budget_id": BUDGET_ID},
+                    "status": "success",
+                    "duration_ms": 31,
+                    "result": {"structuredContent": {"ok": True, "data": {}}},
+                    "error": None,
+                }
+            ],
+        },
+    ],
+    "checks": [{"name": "grounding", "passed": False, "detail": "ids missing"}],
+    "review": {
+        "verdict": "approve",
+        "summary": "Grounded in the summary.",
+        "issues": [],
+        "risks": ["Provider costs may change."],
+        "recommendations": [],
+    },
+    "budget_id": BUDGET_ID,
+    "grounded": True,
+    "overview": "AUD 1625.00 remains.",
+    "findings": ["Food spending is AUD 75.00."],
+    "actions": [
+        {
+            "index": 0,
+            "category": "food",
+            "current_allocation": "300.00",
+            "new_allocation": "350.00",
+            "reason": "Food is close to its allocation.",
+        }
+    ],
+    "human": None,
+    "error": None,
+    "history": [],
+    "applied_changes": [],
+    "apply_error": None,
+}
+AGENT_PATH = f"/api/v1/budgets/{BUDGET_ID}/agent-runs"
+
+
+def agent_backend(run: dict[str, Any], captured: list[httpx.Request] | None = None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith(AGENT_PATH):
+            if captured is not None:
+                captured.append(request)
+            status_code = 202 if request.url.path == AGENT_PATH else 200
+            return response(request, {"data": run}, status_code)
+        return backend(request)
+
+    return handler
+
+
+def test_budget_detail_includes_the_agent_review_panel() -> None:
+    with make_client() as client:
+        page = client.get(f"/budgets/{BUDGET_ID}")
+
+    assert 'id="agent-run"' in page.text
+    assert f'hx-post="/budgets/{BUDGET_ID}/agent-runs"' in page.text
+    assert "Start agent review" in page.text
+
+
+def test_starting_a_run_returns_a_polling_panel() -> None:
+    planning = AGENT_RUN | {
+        "status": "planning",
+        "active": True,
+        "plan": None,
+        "stages": [],
+        "checks": [],
+        "review": None,
+        "overview": None,
+        "actions": [],
+    }
+    captured: list[httpx.Request] = []
+    with make_client(agent_backend(planning, captured)) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/agent-runs",
+            data={"question": " Where should I move money? "},
+            headers={"HX-Request": "true"},
+        )
+
+    assert result.text.lstrip().startswith('<div id="agent-run"')
+    assert f'hx-get="/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}"' in result.text
+    assert 'hx-trigger="every 2s"' in result.text
+    assert "The Planner is writing the plan" in result.text
+    assert "Start agent review" not in result.text
+    assert json.loads(captured[0].read()) == {"question": "Where should I move money?"}
+
+
+def test_starting_without_javascript_redirects_to_the_run() -> None:
+    with make_client(agent_backend(AGENT_RUN)) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/agent-runs",
+            data={"question": "Q?"},
+            follow_redirects=False,
+        )
+
+    assert result.status_code == 303
+    assert result.headers["location"] == f"/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}"
+
+
+def test_an_awaiting_run_shows_stages_checks_review_and_decision_form() -> None:
+    with make_client(agent_backend(AGENT_RUN)) as client:
+        page = client.get(f"/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}")
+
+    assert "<html" in page.text
+    assert "Planned allocations" in page.text
+    assert "Review food spending." in page.text
+    assert "<code>budgets_get_summary</code>" in page.text
+    assert "<code>grounding</code>" in page.text
+    assert "Some automatic checks failed" in page.text
+    assert "Provider costs may change." in page.text
+    assert "AUD 1625.00 remains." in page.text
+    assert 'name="accepted" value="0" checked' in page.text
+    assert "<strong>Food</strong>: 300.00 &rarr; proposed 350.00" in page.text
+    assert 'name="allocation_0" value="350.00"' in page.text
+    assert 'name="decision" value="approve"' in page.text
+    assert 'name="decision" value="reject"' in page.text
+    assert 'hx-trigger="every 2s"' not in page.text
+
+
+def test_a_decision_is_forwarded_and_the_outcome_shown() -> None:
+    decided = AGENT_RUN | {
+        "status": "completed",
+        "human": {
+            "decision": "approve",
+            "reviewer": "Caleb",
+            "notes": "Looks right",
+            "decided_at": "2026-10-22T01:03:00Z",
+        },
+        "applied_changes": [
+            {"category": "food", "previous": "300.00", "new": "350.00"}
+        ],
+        "history": [
+            {
+                "sequence": 1,
+                "at": "2026-10-22T01:00:00Z",
+                "actor": "api",
+                "event": "run_created",
+            }
+        ],
+    }
+    captured: list[httpx.Request] = []
+    with make_client(agent_backend(decided, captured)) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}/review",
+            data={
+                "decision": "approve",
+                "reviewer": "Caleb",
+                "notes": "Looks right",
+                "accepted": ["0"],
+                "allocation_0": "375.00",
+                "corrected_overview": "",
+            },
+            headers={"HX-Request": "true"},
+        )
+
+    assert json.loads(captured[0].read()) == {
+        "decision": "approve",
+        "reviewer": "Caleb",
+        "notes": "Looks right",
+        "accepted": ["0"],
+        "corrected_allocations": {"0": "375.00"},
+        "corrected_overview": "",
+    }
+    assert "Human decision: approve" in result.text
+    assert "Applied: Food allocation 300.00 &rarr; 350.00." in result.text
+    assert "Coordination and audit history (1 events)" in result.text
+    assert "run_created" in result.text
+    assert 'name="decision"' not in result.text
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "message"),
+    [
+        (503, "MULTI_AGENT_DISABLED", "disabled in this environment"),
+        (503, "DEPENDENCY_UNAVAILABLE", "Multi-Agent Server is currently unavailable"),
+        (503, "RUN_LIMIT_REACHED", "Multi-Agent Server is busy"),
+    ],
+)
+def test_agent_failures_keep_the_question_and_budget_usable(
+    status_code: int, code: str, message: str
+) -> None:
+    handler, _ = with_route(AGENT_PATH, error_body(code, "raw"), status_code)
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/agent-runs",
+            data={"question": "Keep this question"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert message in result.text
+    assert "Keep this question</textarea>" in result.text
+    assert "Budget and expense actions remain available." in result.text
+
+
+def test_a_rejected_decision_reloads_the_run_with_the_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/review"):
+            return response(
+                request,
+                error_body(
+                    "VALIDATION_ERROR",
+                    "raw",
+                    [
+                        {
+                            "field": "corrected_overview",
+                            "issue": "give a corrected answer",
+                        }
+                    ],
+                ),
+                422,
+            )
+        return agent_backend(AGENT_RUN)(request)
+
+    with make_client(handler) as client:
+        result = client.post(
+            f"/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}/review",
+            data={"decision": "correct", "reviewer": "Caleb"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert "corrected_overview: give a corrected answer" in result.text
+    assert 'name="decision" value="correct"' in result.text
+
+
+def test_agent_output_is_escaped() -> None:
+    hostile = AGENT_RUN | {"overview": "<script>alert(1)</script>"}
+    with make_client(agent_backend(hostile)) as client:
+        result = client.get(
+            f"/budgets/{BUDGET_ID}/agent-runs/{RUN_ID}",
+            headers={"HX-Request": "true"},
+        )
+
+    assert "<script>" not in result.text
+    assert "&lt;script&gt;" in result.text

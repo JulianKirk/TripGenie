@@ -1,0 +1,50 @@
+{% import "macros/forms.html" as forms %}
+<section class="panel" aria-labelledby="agents-heading">
+  <div class="panel__header">
+    <div>
+      <p class="section-eyebrow">Multi-agent planning</p>
+      <h2 id="agents-heading">Plan transport with agents</h2>
+    </div>
+    {% if run %}
+      <a class="button" href="{{ request.url_for('agents_form') }}">Ask another question</a>
+    {% endif %}
+  </div>
+
+  <p class="helper-copy">
+    Your question goes to the shared TripGenie Multi-Agent Server. A
+    <strong>Planner</strong> writes a plan, a <strong>Worker</strong> carries it
+    out with the shared MCP transport tools, automatic checks confirm every
+    option came from a tool, and a <strong>Reviewer</strong> checks the answer
+    against the plan. <strong>You make the final decision</strong>: nothing is
+    added to a trip until you approve it.
+  </p>
+
+  {% if run or (agent_error and not form.get("question")) %}
+    {% include "partials/agent_run_panel.html" %}
+  {% else %}
+    {% if agent_error %}
+      <div class="banner banner--error" role="alert">
+        <p><strong>{{ agent_error.code }}</strong></p>
+        <p>{{ agent_error.message }}</p>
+        {% if agent_error_hint %}<p>{{ agent_error_hint }}</p>{% endif %}
+      </div>
+    {% endif %}
+
+    <form method="post" action="{{ request.url_for('agents_start') }}">
+      {{ forms.select_or_text_field("trip_id", "Trip (optional)", trip_options, form.get("trip_id", ""), errors_by_field, trips_available, trips_unavailable_hint, hint="Pick a trip and you can add the options you approve to it.") }}
+      {{ forms.text_field("origin", "From (optional)", form.get("origin", ""), errors_by_field) }}
+      {{ forms.text_field("destination", "To (optional)", form.get("destination", ""), errors_by_field) }}
+      <p class="field">
+        <label for="question">What do you need?</label>
+        <textarea id="question" name="question" rows="3" maxlength="500">{{ form.get("question", "") }}</textarea>
+        <span class="field__hint">For example: the cheapest way from Melbourne to Sydney for two travellers.</span>
+        {{ forms.field_errors("question", errors_by_field) }}
+      </p>
+      {{ forms.field_errors("body", errors_by_field) }}
+      <p class="actions">
+        <button class="button button--primary" type="submit">Start the agents</button>
+        <a class="button" href="{{ request.url_for('browse') }}">Cancel</a>
+      </p>
+    </form>
+  {% endif %}
+</section>

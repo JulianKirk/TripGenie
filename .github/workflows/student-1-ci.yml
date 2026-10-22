@@ -194,6 +194,50 @@ jobs:
           }
           check rag-query '{"question":"x"}' RAG_DISABLED
           check mcp-options '{}' MCP_DISABLED
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Student 1 endpoint test dependencies
+        working-directory: student-1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      # POST /api/trips and POST /api/trips/{trip_id}/itinerary-items over HTTP
+      # against the stack started above; the backend is published on 18001.
+      - name: Post-commit endpoint tests
+        working-directory: student-1
+        env:
+          STUDENT1_ENDPOINT_BASE_URL: http://127.0.0.1:18001
+        run: python -m pytest tests/endpoint --junitxml=student-1-endpoint-tests.xml -v
+      - name: Endpoint test summary
+        if: always()
+        working-directory: student-1
+        run: |
+          python - <<'EOF' | tee student-1-endpoint-tests.md >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          print("## Student 1 post-commit endpoint tests\n")
+          if not os.path.exists("student-1-endpoint-tests.xml"):
+              print("The endpoint tests did not run.")
+              raise SystemExit
+          print("| Test | Result |\n| --- | --- |")
+          for case in ET.parse("student-1-endpoint-tests.xml").iter("testcase"):
+              outcome = next(
+                  (child.tag for child in case if child.tag in {"failure", "error", "skipped"}),
+                  "passed",
+              )
+              mark = "PASS" if outcome == "passed" else outcome.upper()
+              print(f"| `{case.get('name')}` | {mark} |")
+          EOF
+      - name: Upload endpoint test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-1-endpoint-test-evidence
+          path: |
+            student-1/student-1-endpoint-tests.xml
+            student-1/student-1-endpoint-tests.md
       - name: Compose logs on failure
         if: failure()
         run: |
