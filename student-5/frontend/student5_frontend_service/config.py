@@ -21,6 +21,7 @@ class Settings:
     ai_analysis_timeout_seconds: float = 120.0
     rag_timeout_seconds: float = 150.0
     mcp_timeout_seconds: float = 230.0
+    agents_timeout_seconds: float = 30.0
     # The shared portal, as the browser reaches it: theme.css and Home.
     portal_url: str = "http://localhost:8080"
 
@@ -43,6 +44,9 @@ class Settings:
             ),
             mcp_timeout_seconds=_timeout(
                 "STUDENT5_FRONTEND_MCP_TIMEOUT_SECONDS", 230.0
+            ),
+            agents_timeout_seconds=_timeout(
+                "STUDENT5_FRONTEND_AGENTS_TIMEOUT_SECONDS", 30.0
             ),
             portal_url=os.getenv(
                 "TRIPGENIE_PORTAL_URL", "http://localhost:8080"
