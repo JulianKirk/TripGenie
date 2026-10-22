@@ -18,6 +18,7 @@
   - [DELETE /accommodation/{id}](#delete-accommodationid)
 - [Itinerary Endpoints](#itinerary-endpoints)
   - [GET /accommodation/trips/{itinerary_id}/committed-costs](#get-accommodationtripsitinerary_idcommitted-costs)
+  - [GET /accommodation/trips](#get-accommodationtrips)
   - [GET /accommodation/{id}/itineraries](#get-accommodationiditineraries)
   - [PUT /accommodation/{id}/itineraries/{itinerary_id}](#put-accommodationiditinerariesitinerary_id)
   - [DELETE /accommodation/{id}/itineraries/{itinerary_id}](#delete-accommodationiditinerariesitinerary_id)
@@ -764,7 +765,7 @@ invented id cannot reach a trip even if a person approves it.
 | Field | Type | Notes |
 |---|---|---|
 | `question` | string | Required, 1 to 500 characters |
-| `trip_id` | string | Optional. Must exist in student 1's service; approved listings are added to it |
+| `trip_id` | string | Optional (the page offers it as a drop-down of trips from [`GET /accommodation/trips`](#get-accommodationtrips)). Must exist in student 1's service; approved listings are added to it |
 | `country`, `city` | string | Optional hints for the Worker |
 
 ### Request Body (`POST /accommodation/agent-runs/{run_id}/review`)
@@ -1070,6 +1071,19 @@ zero.
 | 404    | Trip or accommodation not found                  |
 | 502    | Stay cost data or an upstream response is unusable |
 | 503    | Itinerary or database service unavailable        |
+
+## GET /accommodation/trips
+
+Every trip student 1 holds, as `{"trips": [{"itinerary_id", "name", "start_date", "end_date"}]}`.
+It exists so a page can offer a trip as a drop-down of names rather than an id;
+the frontend reaches student 1 only through this service.
+
+### Error Responses
+
+| Status | Description |
+|---|---|
+| 502 | Student 1 answered with something that is not a trip list |
+| 503 | Student 1's service is unreachable |
 
 ## GET /accommodation/{id}/itineraries
 

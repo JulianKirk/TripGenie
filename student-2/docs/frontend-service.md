@@ -282,6 +282,10 @@ its own URL, so a refresh only reads it, and the panel re-fetches itself every
 two seconds with HTMX until the run is waiting for a person or finished -- a
 hiccup from the backend does not stop the polling.
 
+The trip is a drop-down of trip names and dates, loaded through the backend. If
+the trips cannot be loaded the form still works and says the run can only record
+a decision.
+
 The page shows the evidence, not only the answer: the Planner's plan, each
 agent's turn with the MCP calls the Worker made and how many listings each
 returned, the server's automatic checks (pass or fail) and the Reviewer's

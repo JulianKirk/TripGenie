@@ -265,6 +265,21 @@ class AccommodationCostResponse(BaseModel):
     items: list[AccommodationCostItem]
 
 
+class TripSummary(BaseModel):
+    """One of student 1's trips, as a picker needs it: which, and when."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    itinerary_id: str
+    name: str
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class TripListResponse(BaseModel):
+    trips: list[TripSummary]
+
+
 class ItinerarySelectionResponse(BaseModel):
     itineraries: list[ItinerarySelection]
 

@@ -96,11 +96,27 @@ class FakeBackend:
         self.start_response: httpx.Response | None = None
         self.read_response: httpx.Response | None = None
         self.review_response: httpx.Response | None = None
+        self.trips_response: httpx.Response | None = None
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(f"{request.method} {request.url.path}")
         self.timeouts.append(request.extensions["timeout"]["read"])
         body = json.loads(request.content) if request.content else None
+        if request.url.path == "/accommodation/trips":
+            return self.trips_response or httpx.Response(
+                200,
+                json={
+                    "trips": [
+                        {
+                            "itinerary_id": "trip_sydney",
+                            "name": "Sydney Getaway",
+                            "start_date": "2027-04-01",
+                            "end_date": "2027-04-05",
+                        },
+                        {"itinerary_id": "trip_tokyo", "name": "Tokyo City Break"},
+                    ]
+                },
+            )
         if request.method == "POST" and request.url.path == BASE:
             self.started.append(body)
             return self.start_response or httpx.Response(202, json=self.run)
@@ -139,6 +155,29 @@ class TestStarting:
         html = client.get("/agents").text
         assert 'name="question"' in html
         assert "Start the agents" in html
+
+    def test_the_trip_is_picked_from_a_list_of_names(self, client):
+        html = client.get("/agents").text
+        assert '<select name="trip_id">' in html
+        assert "Sydney Getaway (2027-04-01 to 2027-04-05)" in html
+        assert "Tokyo City Break" in html
+        assert "No trip" in html
+
+    def test_a_trip_passed_in_the_link_is_preselected(self, client):
+        html = client.get("/agents?trip_id=trip_tokyo").text
+        assert 'value="trip_tokyo" selected' in html
+
+    def test_the_form_still_works_when_the_trips_cannot_be_loaded(
+        self, client, backend
+    ):
+        backend.trips_response = httpx.Response(503, json={"detail": "down"})
+        html = client.get("/agents").text
+        assert "No trips could be loaded" in html
+        assert 'name="question"' in html
+
+    def test_the_chosen_trip_is_what_starts_the_run(self, client, backend):
+        post(client, "/agents", question="cheap stay", trip_id="trip_tokyo")
+        assert backend.started == [{"question": "cheap stay", "trip_id": "trip_tokyo"}]
 
     def test_a_blank_question_is_refused_without_calling_the_backend(
         self, client, backend

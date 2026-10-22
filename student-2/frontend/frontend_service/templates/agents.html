@@ -40,8 +40,15 @@
         <textarea id="agent-question" name="question" rows="3" maxlength="500"
                   placeholder="a well-rated stay in Sydney under 200 a night">{{ form.get("question", "") }}</textarea>
         <div class="agents__fields">
-          <label>Trip id (optional)
-            <input name="trip_id" value="{{ form.get('trip_id', '') }}" maxlength="100" placeholder="trip_…">
+          <label>Add approved listings to a trip (optional)
+            <select name="trip_id">
+              <option value="">No trip</option>
+              {% for trip in trips or [] %}
+                <option value="{{ trip.itinerary_id }}" {% if trip.itinerary_id == form.get('trip_id') %}selected{% endif %}>
+                  {{ trip.name }}{% if trip.start_date %} ({{ trip.start_date }} to {{ trip.end_date }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
           </label>
           <label>Country (optional)
             <input name="country" value="{{ form.get('country', '') }}" maxlength="100">
@@ -50,7 +57,10 @@
             <input name="city" value="{{ form.get('city', '') }}" maxlength="100">
           </label>
         </div>
-        <p class="stay__note">Give a trip to add the listings you approve to it.</p>
+        <p class="stay__note">
+          {% if trips %}Pick a trip to add the listings you approve to it.
+          {% else %}No trips could be loaded, so this run can only record your decision.{% endif %}
+        </p>
         <p><button class="button button--primary" type="submit">Start the agents</button>
            <a class="button" href="/">Cancel</a></p>
       </form>

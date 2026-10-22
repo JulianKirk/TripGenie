@@ -620,10 +620,23 @@ async def _agent_run(request: Request, run_id: str) -> dict[str, Any]:
     )
 
 
+async def _trips(request: Request) -> list[dict[str, Any]]:
+    """The trips to pick from, or none. A student 1 outage must not take the
+    form down: the run still works, it just has no trip to add listings to."""
+    try:
+        return (await call(request, "GET", f"{PATH}/trips"))["trips"]
+    except (BackendError, KeyError, TypeError):
+        return []
+
+
 @router.get(AGENTS)
 async def agents_form(request: Request):
     form = {key: request.query_params.get(key, "") for key in ("question", "trip_id")}
-    return render(request, "agents.html", {"run": None, "form": form})
+    return render(
+        request,
+        "agents.html",
+        {"run": None, "form": form, "trips": await _trips(request)},
+    )
 
 
 @router.post(AGENTS)
@@ -638,7 +651,12 @@ async def agents_start(request: Request):
         return render(
             request,
             "agents.html",
-            {"run": None, "form": form, "agent_error": "Type a question."},
+            {
+                "run": None,
+                "form": form,
+                "trips": await _trips(request),
+                "agent_error": "Type a question.",
+            },
         )
     try:
         run = await call(
@@ -650,7 +668,14 @@ async def agents_start(request: Request):
         )
     except BackendError as exc:
         return render(
-            request, "agents.html", {"run": None, "form": form, "agent_error": str(exc)}
+            request,
+            "agents.html",
+            {
+                "run": None,
+                "form": form,
+                "trips": await _trips(request),
+                "agent_error": str(exc),
+            },
         )
     return RedirectResponse(f"{AGENTS}/runs/{run['run_id']}", status_code=303)
 
