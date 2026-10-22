@@ -27,7 +27,6 @@ from .models import (
 
 FEATURE = "student-5"
 WORKER_PROMPT_ASSET = "budget_agents_v1.md"
-BUDGET_TOOLS = ["budgets_get_summary", "expenses_list", "budgets_list"]
 ACTIVE_STATUSES = {"planning", "working", "reviewing"}
 TERMINAL_STATUSES = {"completed", "rejected", "failed"}
 ALLOCATION_CATEGORIES = ("accommodation", "transport", "activities", "food", "other")
@@ -54,7 +53,6 @@ def build_run_request(
         },
         "worker_system": worker_system,
         "output_schema": BudgetAgentDraft.model_json_schema(),
-        "allowed_tools": BUDGET_TOOLS,
         "grounding": {
             "source": FEATURE,
             "id_paths": ["budget_id"],

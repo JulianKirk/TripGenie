@@ -64,11 +64,10 @@ All JSON responses use `{"data": ...}`; errors use
 | `feature` | string | One of `student-1` … `student-5` (`MULTI_AGENT_FEATURES`). |
 | `task` | string | The traveller's request, 1–500 characters. |
 | `trip_id` | string? | `trip_…` identifier, when the task is about a trip. |
-| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
+| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
 | `feature_instructions` | string | Optional trusted domain rules, default empty. Appended to Planner and Reviewer system prompts, including revisions; keep role-neutral and omit Worker output formatting. Worker policy remains in `worker_system`. Shares the 6,000-character allowance with `worker_system`. |
 | `worker_system` | string | The feature's own Worker prompt. It leads the Worker's system prompt, followed by workflow rules; common rules are not appended again. Combined with `feature_instructions`, at most 6,000 characters. |
 | `output_schema` | JSON Schema | The Worker's result shape. Must be `type: object`, at most 6,000 characters, local `$ref`s only. |
-| `allowed_tools` | string[] | Deprecated compatibility field (at most 24, distinct). Accepted for old callers/stored requests but ignored; `feature` selects MCP-owned availability. |
 | `grounding` | object? | `{source, id_paths, id_keys}`. Every value at an `id_path` (e.g. `suggestions[].transport_id`) must appear under an `id_key` (default `id`) in a successful tool result whose `source` matches. |
 | `actions_path` | string? | Where the result lists changes for the human to approve, e.g. `actions`. |
 | `correlation_id` | string? | `^[A-Za-z0-9][A-Za-z0-9._:-]{0,47}$`; stage calls append `.p1`, `.w1`, `.r1` … |
@@ -168,8 +167,8 @@ last attempt the run always goes to the human, whatever the verdict.
 | Check | Passes when |
 | --- | --- |
 | `output_schema` | The Worker returned JSON matching `output_schema`. |
-| `allowed_tools` | Every tool call appears in the Worker's `available_tools` catalogue snapshot returned by AI-Mode. Always checked. |
-| `tool_evidence` | At least one tool call succeeded. Always checked, including when the legacy caller list is empty or absent. |
+| `tool_scope` | Every tool call appears in the Worker's `available_tools` catalogue snapshot returned by AI-Mode. Always checked. |
+| `tool_evidence` | At least one tool call succeeded. Always checked. |
 | `no_writes` | No called tool name contains `create`, `update`, `delete`, `remove`, `add` or `set`. |
 | `grounding` | Every value at `grounding.id_paths` came from a successful tool result from `grounding.source`. |
 

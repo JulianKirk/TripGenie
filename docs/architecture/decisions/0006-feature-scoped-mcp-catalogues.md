@@ -31,9 +31,9 @@ of maintaining lists in each feature backend.
    catalogue snapshots in its steps. Planner tool names are checked against its
    snapshot; deterministic Worker membership checks use the Worker's snapshot.
    Successful catalogue/tool stages require a nonempty valid snapshot. The
-   `allowed_tools` request field is accepted only for compatibility with older
-   clients and stored requests, and does not select availability or disable
-   evidence checks. Feature backends no longer need to send it.
+   request contract uses feature membership only; caller-maintained tool lists
+   are rejected. Existing saved requests are migrated at startup without
+   changing their workflow or audit history.
 6. Student 4 sends its feature on normal MCP generation and Smart Planner requests.
    Its backend and frontend retain stage snapshots in workflow history. The
    Worker's feature prompt remains unchanged.
@@ -41,7 +41,9 @@ of maintaining lists in each feature backend.
 ## Integration
 
 Roll out MCP metadata first, then AI-Mode, the Multi-Agent Server, and feature
-clients. Existing clients can continue without the optional AI-Mode selector.
+clients. Deploy the updated Student 3 and Student 5 callers with the shared
+server so they use the feature-only request contract. Normal generation clients
+can continue without the optional AI-Mode selector.
 Other feature backends can opt into normal generation scoping with their own
 student identifier; multi-agent callers already supply that identifier.
 

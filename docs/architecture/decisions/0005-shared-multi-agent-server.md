@@ -32,8 +32,7 @@ The constraints already in place:
    uses the same MCP discovery, limits and traces as other feature clients.
    The request's `feature` is forwarded to AI-Mode, which selects MCP-owned
    feature membership before supplying definitions to either agent. Callers do
-   not maintain tool lists; legacy `allowed_tools` remains accepted for stored
-   requests and older clients but does not determine availability. Stage
+   not maintain tool lists. Stage
    `available_tools` snapshots supply planning and deterministic membership checks.
    The Planner sets `tool_catalogue: true`: AI-Mode discovers the MCP
    catalogue exactly as for `/generate` and appends the tool names,

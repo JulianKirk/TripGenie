@@ -75,7 +75,7 @@ def test_each_agent_uses_the_right_ai_mode_endpoint(
     assert catalogue == {"planner": True, "worker": None, "reviewer": None}
 
 
-def test_the_planner_sees_the_task_but_only_allowed_tools_survive(
+def test_the_planner_sees_the_task_but_only_catalogue_tools_survive(
     client: TestClient, fake: FakeAiMode
 ) -> None:
     run = start_and_settle(client)
@@ -133,7 +133,7 @@ def test_the_reviewer_gets_plan_result_evidence_and_checks(
     assert {check["result"] for check in prompt["checks"]} == {"pass"}
     assert {check["check"] for check in prompt["checks"]} == {
         "output_schema",
-        "allowed_tools",
+        "tool_scope",
         "tool_evidence",
         "no_writes",
         "grounding",

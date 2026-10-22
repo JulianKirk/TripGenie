@@ -113,7 +113,7 @@ def tool_scope_check(tools: list[ToolTrace], available_tools: list[str]) -> Chec
         {trace.tool for trace in tools if trace.tool not in available_tools}
     )
     return Check(
-        name="allowed_tools",
+        name="tool_scope",
         passed=not outside,
         blocking=True,
         detail=(

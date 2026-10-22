@@ -109,12 +109,6 @@ class RunRequest(StrictModel):
     feature_instructions: str = ""
     worker_system: Annotated[str, StringConstraints(min_length=1)]
     output_schema: dict[str, Any]
-    allowed_tools: list[Annotated[str, StringConstraints(pattern=TOOL_NAME)]] = Field(
-        default_factory=list,
-        max_length=24,
-        deprecated=True,
-        description="Deprecated caller list; availability comes from AI-Mode.",
-    )
     grounding: Grounding | None = None
     # Where the Worker's result lists changes the human may approve, e.g.
     # `actions`. The server never performs them; the feature backend does,
@@ -127,14 +121,6 @@ class RunRequest(StrictModel):
         Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.-]{1,40}$")],
         Annotated[str, StringConstraints(max_length=160)],
     ] = Field(default_factory=dict, max_length=6)
-
-    @field_validator("allowed_tools")
-    @classmethod
-    def distinct_tools(cls, value: list[str]) -> list[str]:
-        if len(set(value)) != len(value):
-            message = "must not repeat a tool"
-            raise ValueError(message)
-        return value
 
     @field_validator("actions_path")
     @classmethod

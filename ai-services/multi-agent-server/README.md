@@ -121,8 +121,8 @@ sending the field; older servers reject it as unknown. Trusted feature backends
 load these instructions from assets, never from user request text.
 
 The server forwards `feature` to AI-Mode for each agent. MCP owns feature
-membership; callers do not supply tool lists. `allowed_tools` is accepted only
-for older clients/stored requests and does not select availability. Each stage
+membership; callers do not supply tool lists. Retired caller-list fields are
+rejected in new requests and removed from saved requests at startup. Each stage
 records `available_tools` from AI-Mode; the Planner uses its catalogue snapshot
 and deterministic tool checks use the Worker's snapshot. Tool evidence remains
 required. Upgrade MCP and AI-Mode before the Multi-Agent Server.

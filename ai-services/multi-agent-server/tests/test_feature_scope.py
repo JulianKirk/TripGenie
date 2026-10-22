@@ -22,7 +22,7 @@ def scoped(body, names, tools=None):
     return httpx.Response(200, json=data)
 
 
-def test_gateway_snapshot_overrides_legacy_caller_list(settings):
+def test_feature_selects_gateway_snapshot_without_caller_list(settings):
     fake = FakeAiMode(
         planner=[lambda _: scoped(PLAN, ["transport_search"])],
         worker=[lambda _: scoped(WORKER_RESULT, ["transport_search"], [tool_trace()])],
@@ -30,7 +30,7 @@ def test_gateway_snapshot_overrides_legacy_caller_list(settings):
     with TestClient(
         create_app(settings, ai_mode_transport=httpx.MockTransport(fake.handle))
     ) as client:
-        run = start_and_settle(client, allowed_tools=["activities_delete"])
+        run = start_and_settle(client)
     assert run["status"] == "awaiting_human"
     assert all(check["passed"] for check in run["checks"])
     for call in fake.calls:
@@ -62,9 +62,9 @@ def test_successful_scoped_response_requires_valid_catalogue(settings, agent, na
     )
 
 
-def test_empty_legacy_list_does_not_disable_evidence_check(client, fake):
+def test_feature_request_requires_tool_evidence(client, fake):
     fake.worker = [lambda _: scoped(WORKER_RESULT, ["transport_search"])]
-    run = start_and_settle(client, allowed_tools=[])
+    run = start_and_settle(client)
     checks = {check["name"]: check for check in run["checks"]}
     assert checks["tool_evidence"]["passed"] is False
 
@@ -81,9 +81,7 @@ def test_foreign_worker_call_blocks_human_acceptance_but_allows_rejection(settin
         create_app(settings, ai_mode_transport=httpx.MockTransport(fake.handle))
     ) as client:
         run = start_and_settle(client)
-        assert any(
-            c["name"] == "allowed_tools" and not c["passed"] for c in run["checks"]
-        )
+        assert any(c["name"] == "tool_scope" and not c["passed"] for c in run["checks"])
         path = f"/runs/{run['run_id']}/review"
         response = client.post(path, json={"decision": "approve", "reviewer": "test"})
         assert response.status_code == 422

@@ -42,7 +42,6 @@ RESERVED_WORKER_KEYS = frozenset(
     {
         "task",
         "plan",
-        "allowed_tools",
         "trip_id",
         "first_tool",
         "failed_checks",

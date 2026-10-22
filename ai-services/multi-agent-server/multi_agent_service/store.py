@@ -58,6 +58,21 @@ class RunStore:
         with self._lock, closing(self._connect()) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.executescript(SCHEMA)
+            # Retire the old caller catalogue from persisted requests as well
+            # as the public schema. Keep all other history and audit data.
+            rows = connection.execute(
+                "SELECT run_id, record FROM runs WHERE instr(record, ?) > 0",
+                ('"allowed_tools"',),
+            ).fetchall()
+            for row in rows:
+                record = json.loads(row["record"])
+                request = record.get("request")
+                if isinstance(request, dict) and "allowed_tools" in request:
+                    del request["allowed_tools"]
+                    connection.execute(
+                        "UPDATE runs SET record = ? WHERE run_id = ?",
+                        (json.dumps(record), row["run_id"]),
+                    )
             connection.commit()
 
     def _connect(self) -> sqlite3.Connection:

@@ -23,7 +23,6 @@ def _request(**overrides) -> RunRequest:
         "task": "t",
         "worker_system": "rules",
         "output_schema": OUTPUT_SCHEMA,
-        "allowed_tools": ["transport_search"],
         "grounding": {"source": "student-3", "id_paths": ["items[].id"]},
     }
     body.update(overrides)
@@ -98,8 +97,8 @@ def test_each_check_catches_its_own_failure() -> None:
 
     assert not checks["grounding"].passed
     assert TRANSPORT_A in checks["grounding"].detail
-    assert not checks["allowed_tools"].passed
-    assert "activities_delete" in checks["allowed_tools"].detail
+    assert not checks["tool_scope"].passed
+    assert "activities_delete" in checks["tool_scope"].detail
     assert not checks["no_writes"].passed
     assert all(check.blocking for check in checks.values())
 
@@ -126,10 +125,10 @@ def test_schema_violations_are_reported() -> None:
     assert "required" in checks["output_schema"].detail
 
 
-def test_legacy_empty_list_does_not_skip_evidence_checks() -> None:
+def test_evidence_is_required_without_grounding() -> None:
     checks = _by_name(
         run_checks(
-            _request(allowed_tools=[], grounding=None),
+            _request(grounding=None),
             WORKER_RESULT,
             [],
             MARKERS,
@@ -140,7 +139,7 @@ def test_legacy_empty_list_does_not_skip_evidence_checks() -> None:
     assert set(checks) == {
         "output_schema",
         "no_writes",
-        "allowed_tools",
+        "tool_scope",
         "tool_evidence",
     }
     assert not checks["tool_evidence"].passed
