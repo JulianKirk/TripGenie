@@ -1,0 +1,132 @@
+{
+  "mode": "multi-agent",
+  "generated_at": "2026-10-22T13:20:26Z",
+  "human_decision": "Accept",
+  "failed": [],
+  "checks": [
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/app.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/agents.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/workflow.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/checks.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/store.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/export.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/prompts/planner_v1.md",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/prompts/worker_v1.md",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file ai-services/multi-agent-server/multi_agent_service/prompts/reviewer_v1.md",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file docs/architecture/release-2-multi-agent-contract.md",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "file docs/architecture/decisions/0005-shared-multi-agent-server.md",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "GET /health",
+      "outcome": "OK: HTTP 200"
+    },
+    {
+      "check": "GET /ready",
+      "outcome": "OK: HTTP 200"
+    },
+    {
+      "check": "run under review",
+      "outcome": "OK: magent_4d6c1f968ef4 (student-3), status completed, 1 attempt(s)"
+    },
+    {
+      "check": "planner stage completed",
+      "outcome": "OK: completed"
+    },
+    {
+      "check": "worker stage completed",
+      "outcome": "OK: completed"
+    },
+    {
+      "check": "reviewer stage completed",
+      "outcome": "OK: completed"
+    },
+    {
+      "check": "worker tool calls",
+      "outcome": "OK: 1 call(s)"
+    },
+    {
+      "check": "check output_schema",
+      "outcome": "OK: result matches the feature's schema"
+    },
+    {
+      "check": "check allowed_tools",
+      "outcome": "OK: every tool call was in the allowed set"
+    },
+    {
+      "check": "check tool_evidence",
+      "outcome": "OK: 1 of 1 tool call(s) succeeded"
+    },
+    {
+      "check": "check no_writes",
+      "outcome": "OK: no tool that changes data was called"
+    },
+    {
+      "check": "check grounding",
+      "outcome": "OK: all 1 referenced id(s) came from tool results"
+    },
+    {
+      "check": "reviewer verdict",
+      "outcome": "OK: approve"
+    },
+    {
+      "check": "human decision",
+      "outcome": "OK: approve by mark"
+    },
+    {
+      "check": "final status matches decision",
+      "outcome": "OK: completed"
+    },
+    {
+      "check": "audit trail starts with run_created",
+      "outcome": "OK: run_created"
+    },
+    {
+      "check": "audit sequence increasing",
+      "outcome": "OK: ordered"
+    },
+    {
+      "check": "human decision follows awaiting_human",
+      "outcome": "OK: in order"
+    },
+    {
+      "check": "human decision attributed to a person",
+      "outcome": "OK: human:mark"
+    },
+    {
+      "check": "audit trail ends with the final event",
+      "outcome": "OK: run_completed"
+    }
+  ]
+}
