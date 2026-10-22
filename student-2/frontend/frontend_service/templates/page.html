@@ -19,7 +19,12 @@
     <h1 class="masthead__title">Accommodation</h1>
     <p class="masthead__subtitle">Search, filter and open any listing for the full detail.</p>
     <a class="masthead__home" href="{{ request.app.state.settings.portal_url }}">Home</a>
-    <a class="masthead__home" href="/agents">Plan with agents</a>
+    {% if ai.agents %}
+      <a class="masthead__home" href="/agents">Plan with agents</a>
+    {% else %}
+      <span class="masthead__home masthead__home--off" aria-disabled="true"
+            title="The Multi-Agent Server is not available in this deployment">Plan with agents (unavailable)</span>
+    {% endif %}
     <button type="button" class="button button--primary"
             hx-get="{{ request.url_for('new_accommodation') }}"
             hx-target="#form-modal" hx-swap="innerHTML">Add accommodation</button>
@@ -39,11 +44,20 @@
          accommodation knowledge base with sources and a confidence level; MCP
          lets the model look up live listings with the shared MCP tools and
          shows each call and the data it returned. #}
+      {# A deployment can switch the AI features off (the cloud profile does).
+         Say so, rather than offering a box that can only fail. #}
+      {% if not (ai.ask or ai.rag) %}
+        <p class="ai-notice ai-notice--off" role="note">
+          AI features are switched off in this deployment, so the AI assisted
+          search, the guide and the assistant are unavailable here. Searching
+          with the filters below works as normal.
+        </p>
+      {% endif %}
       <fieldset class="ask__modes">
         <legend class="visually-hidden">Answer with</legend>
-        <label><input type="radio" name="mode" value="search" checked> Default</label>
-        <label><input type="radio" name="mode" value="rag"> RAG <span class="ask__hint">knowledge base</span></label>
-        <label><input type="radio" name="mode" value="mcp"> MCP <span class="ask__hint">live data, with tool calls</span></label>
+        <label class="{{ '' if ai.ask else 'is-unavailable' }}"><input type="radio" name="mode" value="search" {% if ai.ask %}checked{% else %}disabled{% endif %}> Default{% if not ai.ask %} <span class="ask__hint">unavailable in this deployment</span>{% endif %}</label>
+        <label class="{{ '' if ai.rag else 'is-unavailable' }}"><input type="radio" name="mode" value="rag" {% if not ai.rag %}disabled{% elif not ai.ask %}checked{% endif %}> RAG <span class="ask__hint">{{ 'knowledge base' if ai.rag else 'unavailable in this deployment' }}</span></label>
+        <label class="{{ '' if ai.mcp else 'is-unavailable' }}"><input type="radio" name="mode" value="mcp" {% if not ai.mcp %}disabled{% endif %}> MCP <span class="ask__hint">{{ 'live data, with tool calls' if ai.mcp else 'unavailable in this deployment' }}</span></label>
       </fieldset>
       <p class="ai-notice ask__desc ask__desc--search">
         Describe what you are after in plain English. The AI turns it into the
@@ -67,9 +81,9 @@
       </p>
       <div class="ask__row">
         <input id="ask-query" name="query" type="search" autocomplete="off"
-               maxlength="500"
-               placeholder="good accommodation around japan under 100 a night">
-        <button class="button button--primary" type="submit">Ask</button>
+               maxlength="500" {% if not (ai.ask or ai.rag) %}disabled{% endif %}
+               placeholder="{{ 'good accommodation around japan under 100 a night' if (ai.ask or ai.rag) else 'AI features are unavailable in this deployment' }}">
+        <button class="button button--primary" type="submit" {% if not (ai.ask or ai.rag) %}disabled{% endif %}>Ask</button>
       </div>
       {# htmx makes this visible for the duration of the request. The bar
          does not track progress -- a model gives no progress to track -- it
