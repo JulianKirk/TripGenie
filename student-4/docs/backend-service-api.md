@@ -915,8 +915,12 @@ a separate `corrected_result`.
 Applying choices records one shared human review before any itinerary additions.
 The backend sends only the approved subset as the corrected final result.
 Per-suggestion choices and reasons are retained in shared human notes as compact
-JSON: `{"activity_reviews": [["activity-uuid", "approve", null],
-["other-uuid", "reject", "Reason"]]}`. Optional general notes use the `notes`
+JSON: `{"activity_reviews": [["activity-uuid", "approve", null, "trip_sydney",
+"2027-04-02", "09:30"], ["other-uuid", "reject", "Reason"]]}`.
+Previously recorded three-field rows remain readable. New approval rows retain
+the selected itinerary and required schedule. Staged approval of an existing
+membership applies the chosen schedule and returns saved status `updated`;
+new memberships return `added`. Optional general notes use the `notes`
 key. The encoded audit must fit the shared 1,000-character notes contract;
 validation returns 400 before submission if reasons need shortening.
 

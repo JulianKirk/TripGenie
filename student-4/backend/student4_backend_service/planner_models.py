@@ -90,7 +90,7 @@ class Run(BaseModel):
 class SavedSelection(StrictModel):
     activity_id: UUID
     trip_id: str
-    status: Literal["added", "already_present"]
+    status: Literal["added", "already_present", "updated"]
 
 
 class SaveError(StrictModel):
@@ -99,7 +99,10 @@ class SaveError(StrictModel):
     message: str
 
 
-class SuggestionDecision(StrictModel):
+class SuggestionDecision(ActivitySchedule):
+    trip_id: str | None = Field(
+        default=None, pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+    )
     activity_id: UUID
     decision: Literal["approve", "reject"]
     notes: str | None = Field(default=None, max_length=1000)
@@ -121,6 +124,9 @@ class PlannerResponse(StrictModel):
 
 class PlannerSelection(ActivitySchedule):
     activity_id: UUID
+    trip_id: str | None = Field(
+        default=None, pattern=r"^trip_[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+    )
 
 
 class Decision(StrictModel):

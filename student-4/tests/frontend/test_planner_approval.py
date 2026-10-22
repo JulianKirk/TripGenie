@@ -23,6 +23,8 @@ def test_unresolved_suggestions_cannot_be_applied() -> None:
                 "reviewer": "Alex",
                 f"choice_{ACTIVITY_ID}": "approve",
                 "trip_id": "trip_sydney",
+                f"date_{ACTIVITY_ID}": "2027-04-02",
+                f"start_time_{ACTIVITY_ID}": "09:30",
             },
             headers={"HX-Request": "true"},
         )
@@ -74,8 +76,8 @@ def test_failed_checks_disable_approval_but_allow_rejection() -> None:
     with TestClient(create_app(Settings(), transport=handler_for(data, []))) as client:
         page = client.get(f"/planner/{RUN}", headers={"HX-Request": "true"})
     assert " disabled>Approve</button>" in page.text
-    assert ">Reject without reason</button>" in page.text
-    assert " disabled>Reject without reason" not in page.text
+    assert ">Reject</button>" in page.text
+    assert " disabled>Reject</button>" not in page.text
 
 
 def test_lost_apply_response_reads_authoritative_status_without_replay() -> None:
@@ -107,6 +109,8 @@ def test_lost_apply_response_reads_authoritative_status_without_replay() -> None
                 f"choice_{ACTIVITY_ID}": "approve",
                 f"choice_{OTHER}": "reject",
                 "trip_id": "trip_sydney",
+                f"date_{ACTIVITY_ID}": "2027-04-02",
+                f"start_time_{ACTIVITY_ID}": "09:30",
             },
             headers={"HX-Request": "true"},
         )

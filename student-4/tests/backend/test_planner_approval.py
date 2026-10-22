@@ -376,9 +376,21 @@ def test_staged_choices_record_full_audit_and_save_only_approved() -> None:
                 "decision": "approve",
                 "reviewer": "Julian",
                 "trip_id": SYDNEY,
-                "selections": [{"activity_id": ACTIVITY_ID, "date": "2027-04-02"}],
+                "selections": [
+                    {
+                        "activity_id": ACTIVITY_ID,
+                        "date": "2027-04-02",
+                        "start_time": "09:30",
+                    }
+                ],
                 "item_decisions": [
-                    {"activity_id": ACTIVITY_ID, "decision": "approve"},
+                    {
+                        "activity_id": ACTIVITY_ID,
+                        "decision": "approve",
+                        "trip_id": SYDNEY,
+                        "date": "2027-04-02",
+                        "start_time": "09:30",
+                    },
                     {
                         "activity_id": OTHER,
                         "decision": "reject",
@@ -433,7 +445,13 @@ def test_incomplete_duplicate_or_mismatched_choices_are_not_submitted() -> None:
         [{"activity_id": ACTIVITY_ID, "decision": "reject"}],
         [{"activity_id": ACTIVITY_ID, "decision": "reject"}] * 2,
         [
-            {"activity_id": ACTIVITY_ID, "decision": "approve"},
+            {
+                "activity_id": ACTIVITY_ID,
+                "decision": "approve",
+                "trip_id": SYDNEY,
+                "date": "2027-04-02",
+                "start_time": "09:30",
+            },
             {"activity_id": OTHER, "decision": "reject"},
         ],
         [
@@ -486,9 +504,21 @@ def test_staged_review_requires_shared_audit_confirmation_before_additions() -> 
                     "decision": "approve",
                     "reviewer": "Julian",
                     "trip_id": SYDNEY,
-                    "selections": [{"activity_id": ACTIVITY_ID, "date": "2027-04-02"}],
+                    "selections": [
+                        {
+                            "activity_id": ACTIVITY_ID,
+                            "date": "2027-04-02",
+                            "start_time": "09:30",
+                        }
+                    ],
                     "item_decisions": [
-                        {"activity_id": ACTIVITY_ID, "decision": "approve"},
+                        {
+                            "activity_id": ACTIVITY_ID,
+                            "decision": "approve",
+                            "trip_id": SYDNEY,
+                            "date": "2027-04-02",
+                            "start_time": "09:30",
+                        },
                         {
                             "activity_id": OTHER,
                             "decision": "reject",
@@ -501,3 +531,138 @@ def test_staged_review_requires_shared_audit_confirmation_before_additions() -> 
         assert "audit" in response.json()["detail"]
         assert len(workflow.posts) == 1
         assert itinerary.rows == {}
+
+
+def test_staged_approval_requires_schedule_and_retains_per_card_trip() -> None:
+    workflow, itinerary = Workflow(), FakeItinerary()
+    with app(workflow, itinerary) as client:
+        assert client.post("/activity", json=public_payload()).status_code == 201
+        base = {"activity_id": ACTIVITY_ID, "trip_id": SYDNEY}
+        body = {
+            "decision": "approve",
+            "reviewer": "Julian",
+            "selections": [base],
+            "item_decisions": [
+                {**base, "decision": "approve"},
+                {"activity_id": OTHER, "decision": "reject"},
+            ],
+        }
+        assert client.post(f"{PATH}/review", json=body).status_code == 400
+        assert not workflow.posts and not itinerary.rows
+        selected = {**base, "date": "2027-04-02", "start_time": "09:30"}
+        body["selections"] = [selected]
+        body["item_decisions"] = [
+            {**selected, "decision": "approve"},
+            {"activity_id": OTHER, "decision": "reject"},
+        ]
+        response = client.post(f"{PATH}/review", json=body)
+        assert response.status_code == 200, response.text
+        choice = client.get(PATH).json()["item_decisions"][0]
+        assert choice["trip_id"] == SYDNEY and choice["date"] == "2027-04-02"
+        assert choice["start_time"] == "09:30"
+
+
+def test_two_approved_cards_use_their_own_trips_after_one_shared_gate() -> None:
+    from copy import deepcopy
+
+    from tests.backend.test_itinerary_api import TOKYO
+
+    workflow, itinerary, database = Workflow(), FakeItinerary(), FakeDatabase()
+
+    def db(request: httpx.Request) -> httpx.Response:
+        if request.url.path == f"/internal/activity/{OTHER}":
+            row = deepcopy(database.records[ACTIVITY_ID])
+            row["id"] = OTHER
+            return httpx.Response(200, json=row)
+        return database.handle(request)
+
+    def trip(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            assert len(workflow.posts) == 1
+            trip_id, activity_id = request.url.path.split("/")[-3::2]
+            row = {
+                "trip_id": trip_id,
+                "activity_id": activity_id,
+                **json.loads(request.content),
+            }
+            itinerary.rows[(trip_id, activity_id)] = row
+            return httpx.Response(200, json={"data": row})
+        return itinerary.handle(request)
+
+    selections = [
+        {
+            "activity_id": ACTIVITY_ID,
+            "trip_id": SYDNEY,
+            "date": "2027-04-02",
+            "start_time": "09:30",
+        },
+        {
+            "activity_id": OTHER,
+            "trip_id": TOKYO,
+            "date": "2027-05-11",
+            "start_time": "10:15",
+        },
+    ]
+    with TestClient(
+        create_app(
+            Settings(multi_agent_enabled=True),
+            multi_agent_transport=httpx.MockTransport(workflow.handle),
+            itinerary_transport=httpx.MockTransport(trip),
+            database_transport=httpx.MockTransport(db),
+            location_transport=httpx.MockTransport(location_handler),
+        )
+    ) as client:
+        assert client.post("/activity", json=public_payload()).status_code == 201
+        payload = {
+            "decision": "approve",
+            "reviewer": "Julian",
+            "selections": selections,
+            "item_decisions": [{**row, "decision": "approve"} for row in selections],
+        }
+        invalid = json.loads(json.dumps(payload))
+        invalid["selections"][1]["date"] = "2028-01-01"
+        invalid["item_decisions"][1]["date"] = "2028-01-01"
+        assert client.post(f"{PATH}/review", json=invalid).status_code == 400
+        assert not workflow.posts and not itinerary.rows
+        response = client.post(f"{PATH}/review", json=payload)
+        assert response.status_code == 200, response.text
+        assert len(response.json()["saved"]) == 2
+        assert itinerary.rows[(SYDNEY, ACTIVITY_ID)]["start_time"] == "09:30"
+        assert itinerary.rows[(TOKYO, OTHER)]["start_time"] == "10:15"
+        assert client.post(f"{PATH}/review", json=payload).status_code == 409
+        assert len(workflow.posts) == 1
+        refreshed = client.get(PATH).json()["item_decisions"]
+        assert [row["trip_id"] for row in refreshed] == [SYDNEY, TOKYO]
+
+
+def test_staged_approval_applies_chosen_schedule_to_existing_membership() -> None:
+    workflow, itinerary = Workflow(), FakeItinerary()
+    itinerary.rows[(SYDNEY, ACTIVITY_ID)] = {
+        "activity_id": ACTIVITY_ID,
+        "trip_id": SYDNEY,
+        "date": "2027-04-01",
+        "start_time": "08:00",
+    }
+    choice = {
+        "activity_id": ACTIVITY_ID,
+        "trip_id": SYDNEY,
+        "date": "2027-04-02",
+        "start_time": "10:30",
+    }
+    with app(workflow, itinerary) as client:
+        assert client.post("/activity", json=public_payload()).status_code == 201
+        response = client.post(
+            f"{PATH}/review",
+            json={
+                "decision": "approve",
+                "reviewer": "Julian",
+                "selections": [choice],
+                "item_decisions": [
+                    {**choice, "decision": "approve"},
+                    {"activity_id": OTHER, "decision": "reject"},
+                ],
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert itinerary.rows[(SYDNEY, ACTIVITY_ID)]["date"] == "2027-04-02"
+    assert response.json()["saved"][0]["status"] == "updated"

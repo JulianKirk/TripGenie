@@ -118,3 +118,8 @@ legend { font: 700 .86rem var(--tg-font-ui, sans-serif); }
 .planner-status--running { color: #175cd3; background: #eff8ff; border-color: #84caff; }
 .planner-status--completed { color: #146c32; background: #ecfdf3; border-color: #86d7a1; }
 .planner-status--failed { color: #9b1c16; background: #fff1f0; border-color: #f0a6a0; }
+
+.button--approve { color: #146c32; background: #dcfce7; border-color: #86d7a1; }
+.button--approve:hover, .button--approve:focus-visible { color: #10552a; background: #bbf7d0; }
+.button--reject { color: #9b1c16; background: #fee2e2; border-color: #f0a6a0; }
+.button--reject:hover, .button--reject:focus-visible { color: #7f1d1d; background: #fecaca; }

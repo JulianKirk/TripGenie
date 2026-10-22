@@ -29,13 +29,13 @@
         <section class="planner-apply" aria-label="Apply review decisions">
           {% if suggestion_ids %}<p role="status">{{ choices.decisions|length }} of {{ suggestion_ids|length }} suggestions reviewed · {{ approved_count }} approved · {{ choices.decisions|length - approved_count }} rejected</p>{% endif %}
           <label class="field" for="planner-reviewer">Your name<input id="planner-reviewer" name="reviewer" value="{{ choices.reviewer }}" required maxlength="60" autocomplete="name"></label>
-          {% if suggestion_ids %}<label class="field" for="planner-itinerary">Itinerary for approved activities<select id="planner-itinerary" name="trip_id"><option value="">Choose an itinerary</option>{% for trip in trips %}<option value="{{ trip.id }}"{% if trip.id == choices.trip_id %} selected{% endif %}>{{ trip.name }} · {{ trip.start_date }} to {{ trip.end_date }}</option>{% endfor %}</select></label>{% else %}<label class="field">Reason (optional)<textarea name="result_reason" maxlength="1000">{{ choices.result_reason }}</textarea></label>{% endif %}
+          {% if not suggestion_ids %}<label class="field">Reason (optional)<textarea name="result_reason" maxlength="1000">{{ choices.result_reason }}</textarea></label>{% endif %}
           {% if trip_error %}<p role="status">{{ trip_error }}</p>{% endif %}
           <button class="button button--primary" type="submit"{% if choices.decisions|length != suggestion_ids|length or (approved_count and (failed_checks or trip_error or not trips)) %} disabled{% endif %}>{{ 'Apply approvals' if approved_count else ('Apply decisions' if suggestion_ids else 'Reject result') }}</button>
           <p class="field-hint">This records all card decisions together. Rejected activities will not be added.</p>
         </section>
       </form>{% endif %}
-      {% if planner.saved %}<section aria-label="Added to itinerary"><h4>Itinerary updated</h4><ul>{% for saved in planner.saved %}<li>{{ decision_names.get(saved.activity_id, saved.activity_id) }} — {{ 'Added' if saved.status == 'added' else 'Already in itinerary' }}</li>{% endfor %}</ul></section>{% endif %}
+      {% if planner.saved %}<section aria-label="Added to itinerary"><h4>Itinerary updated</h4><ul>{% for saved in planner.saved %}<li>{{ decision_names.get(saved.activity_id, saved.activity_id) }} — {{ {'added':'Added', 'already_present':'Already in itinerary', 'updated':'Updated schedule'}[saved.status] }}</li>{% endfor %}</ul></section>{% endif %}
       {% if planner.save_errors %}<section class="banner banner--error" role="alert"><h4>Some additions could not be confirmed</h4><p>Your decisions were recorded. Check the itinerary before adding these activities again.</p><ul>{% for item in planner.save_errors %}<li>{{ decision_names.get(item.activity_id, item.activity_id) }} — {{ item.message }}</li>{% endfor %}</ul></section>{% endif %}
       {% if run.human %}<p><strong>Human decisions recorded</strong> · {{ run.human.reviewer }}{% if run.human.decided_at %} · {{ run.human.decided_at }}{% endif %}</p>{% endif %}
       {% if not can_review and run.status == 'completed' and not planner.saved and not planner.save_errors %}<p role="status">Approval was recorded. Check your itinerary for additions; refreshing never repeats them.</p>{% endif %}
@@ -44,3 +44,5 @@
   <p class="field-hint"><a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a> · Run: <code>{{ run.run_id }}</code></p>
 {% endif %}
 </section>
+
+{% if close_dialog %}<div id="activity-dialog" hx-swap-oob="innerHTML"></div>{% endif %}

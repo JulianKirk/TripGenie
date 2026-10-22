@@ -128,9 +128,11 @@ async def _save(
     trip_id: str,
     existing: set[str],
     itinerary: ItineraryDep,
+    *,
+    update_existing: bool = False,
 ) -> None:
     for item in selections:
-        if str(item.activity_id) in existing:
+        if str(item.activity_id) in existing and not update_existing:
             response.saved.append(
                 SavedSelection(
                     activity_id=item.activity_id,
@@ -148,7 +150,9 @@ async def _save(
             )
             response.saved.append(
                 SavedSelection(
-                    activity_id=item.activity_id, trip_id=trip_id, status="added"
+                    activity_id=item.activity_id,
+                    trip_id=trip_id,
+                    status="updated" if str(item.activity_id) in existing else "added",
                 )
             )
         except HTTPException:
@@ -206,6 +210,39 @@ def _rejected_ids(run: Run, payload: Regenerate) -> list[str]:
     return sorted(str(key) for key in _card_ids(original))
 
 
+def _audit_row(
+    row: SuggestionDecision,
+    selection: PlannerSelection | None,
+    default_trip: str | None,
+) -> list[object]:
+    result: list[object] = [str(row.activity_id), row.decision, row.notes]
+    if row.decision == "approve":
+        if selection is None:
+            raise HTTPException(
+                400, "An approved suggestion needs an itinerary selection."
+            )
+        trip_id = selection.trip_id or default_trip
+        if (
+            not trip_id
+            or row.trip_id != trip_id
+            or row.date is None
+            or row.start_time is None
+        ):
+            raise HTTPException(
+                400, "Choose a trip, date and start time for each approval."
+            )
+        if row.date != selection.date or row.start_time != selection.start_time:
+            raise HTTPException(
+                400, "Approval schedules must match the selected additions."
+            )
+        result.extend([trip_id, row.date.isoformat(), row.start_time.strftime("%H:%M")])
+    elif row.trip_id is not None or row.date is not None or row.start_time is not None:
+        raise HTTPException(
+            400, "Rejected suggestions cannot contain itinerary additions."
+        )
+    return result
+
+
 def _item_audit(run: Run, payload: Decision) -> str | None:
     """Validate a complete staged choice set and fit the shared review contract."""
     if payload.item_decisions is None:
@@ -233,9 +270,13 @@ def _item_audit(run: Run, payload: Decision) -> str | None:
         raise HTTPException(
             400, "The overall decision must match the suggestion choices."
         )
+    selections = {item.activity_id: item for item in payload.selections or []}
     data: dict[str, object] = {
         "activity_reviews": [
-            [str(row.activity_id), row.decision, row.notes] for row in rows
+            _audit_row(
+                row, selections.get(row.activity_id), payload.trip_id or run.trip_id
+            )
+            for row in rows
         ]
     }
     if payload.notes:
@@ -262,11 +303,20 @@ def _recorded_choices(run: Run) -> list[SuggestionDecision]:
         ):
             return []
         rows = data["activity_reviews"]
-        if any(not isinstance(row, list) or len(row) != 3 for row in rows):
+        if any(not isinstance(row, list) or len(row) not in {3, 6} for row in rows):
             return []
         result = [
             SuggestionDecision.model_validate(
-                {"activity_id": row[0], "decision": row[1], "notes": row[2]}
+                {
+                    "activity_id": row[0],
+                    "decision": row[1],
+                    "notes": row[2],
+                    **(
+                        {"trip_id": row[3], "date": row[4], "start_time": row[5]}
+                        if len(row) == 6
+                        else {}
+                    ),
+                }
             )
             for row in rows
         ]
@@ -300,3 +350,28 @@ def _confirm_item_audit(run: Run, payload: Decision, notes: str | None) -> None:
             "Smart Planner did not confirm the complete suggestion review audit. "
             "No itinerary additions were attempted.",
         )
+
+
+async def _preflight_groups(
+    run: Run,
+    payload: Decision,
+    itinerary: ItineraryDep,
+    db: DbDep,
+    location: LocationDep,
+) -> list[tuple[list[PlannerSelection], str, set[str]]]:
+    groups: dict[str, list[PlannerSelection]] = {}
+    for item in payload.selections or []:
+        trip_id = item.trip_id or payload.trip_id or run.trip_id
+        if trip_id is None:
+            raise HTTPException(
+                400, "Choose an itinerary for each approved suggestion."
+            )
+        groups.setdefault(trip_id, []).append(item)
+    validated = []
+    for trip_id, selections in groups.items():
+        grouped = payload.model_copy(
+            update={"trip_id": trip_id, "selections": selections}
+        )
+        _, existing = await _preflight(run, grouped, itinerary, db, location)
+        validated.append((selections, trip_id, existing))
+    return validated

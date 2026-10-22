@@ -76,7 +76,8 @@ def test_inline_workflow_orders_evidence_checks_and_single_review_cards() -> Non
     )
     assert page.text.count("Sydney Harbour guided walk</h3>") == 1
     assert page.text.count(">Approve</button>") == 2
-    assert "Reject with reason" in page.text and "Reject without reason" in page.text
+    assert page.text.count(">Reject</button>") == 2
+    assert "Reject without reason</button>" not in page.text
     assert "Restore all suggestions" not in page.text
     assert "Reject and regenerate" not in page.text
     assert "Add to itinerary" not in page.text
@@ -122,8 +123,10 @@ def test_staging_approval_only_reads_and_shows_pending_symbol() -> None:
             f"/planner/{RUN}/choices",
             data={
                 "approve_id": ACTIVITY_ID,
+                f"date_{ACTIVITY_ID}": "2027-04-02",
+                f"start_time_{ACTIVITY_ID}": "09:15",
                 "reviewer": "Alex",
-                "trip_id": "trip_sydney",
+                f"trip_{ACTIVITY_ID}": "trip_sydney",
             },
             headers={"HX-Request": "true"},
         )
@@ -143,17 +146,17 @@ def test_reject_without_reason_keeps_red_card_and_clears_old_reason() -> None:
             f"/planner/{RUN}/choices",
             data={
                 "reject_id": ACTIVITY_ID,
-                f"reason_{ACTIVITY_ID}": "Old reason",
+                f"reason_{ACTIVITY_ID}": "",
             },
             headers={"HX-Request": "true"},
         )
     assert 'class="activity-card activity-card--rejected"' in page.text
     assert "Sydney Harbour guided walk</h3>" in page.text
-    assert "Rejected without reason · pending" in page.text
+    assert "Rejected · pending" in page.text and "no reason supplied" in page.text
     assert "Old reason" not in page.text
 
 
-def test_rejection_needs_reason_without_sending_a_decision() -> None:
+def test_blank_rejection_reason_stages_without_sending_a_decision() -> None:
     requests: list[httpx.Request] = []
     with TestClient(
         create_app(Settings(), transport=handler_for(cards(), requests))
@@ -168,7 +171,7 @@ def test_rejection_needs_reason_without_sending_a_decision() -> None:
             headers={"HX-Request": "true"},
         )
     assert all(r.method == "GET" for r in requests)
-    assert "Enter a reason" in page.text
+    assert "no reason supplied" in page.text
     assert 'value="Alex"' in page.text
 
 
@@ -184,14 +187,14 @@ def test_rejection_with_reason_keeps_other_pending_choices_and_schedule() -> Non
                 f"choice_{ACTIVITY_ID}": "approve",
                 f"date_{ACTIVITY_ID}": "2027-04-02",
                 f"start_time_{ACTIVITY_ID}": "09:15",
-                "trip_id": "trip_sydney",
+                f"trip_{ACTIVITY_ID}": "trip_sydney",
             },
             headers={"HX-Request": "true"},
         )
     assert "Too strenuous &lt;script&gt;bad&lt;/script&gt;" in page.text
     assert "2 of 2 suggestions reviewed · 1 approved · 1 rejected" in page.text
     assert 'value="2027-04-02"' in page.text and 'value="09:15"' in page.text
-    assert 'value="trip_sydney" selected' in page.text
+    assert 'value="trip_sydney"' in page.text
     assert "Apply approvals</button>" in page.text
 
 
@@ -207,7 +210,7 @@ def test_apply_sends_all_choices_but_only_approved_schedule_once() -> None:
                 f"choice_{OTHER}": "reject",
                 f"reason_{OTHER}": "Too strenuous",
                 "reviewer": "Alex",
-                "trip_id": "trip_sydney",
+                f"trip_{ACTIVITY_ID}": "trip_sydney",
                 f"date_{ACTIVITY_ID}": "2027-04-02",
                 f"start_time_{ACTIVITY_ID}": "09:15",
             },
@@ -219,12 +222,23 @@ def test_apply_sends_all_choices_but_only_approved_schedule_once() -> None:
     assert json.loads(posts[0].content) == {
         "decision": "approve",
         "reviewer": "Alex",
-        "trip_id": "trip_sydney",
         "selections": [
-            {"activity_id": ACTIVITY_ID, "date": "2027-04-02", "start_time": "09:15"}
+            {
+                "activity_id": ACTIVITY_ID,
+                "trip_id": "trip_sydney",
+                "date": "2027-04-02",
+                "start_time": "09:15",
+            }
         ],
         "item_decisions": [
-            {"activity_id": ACTIVITY_ID, "decision": "approve", "notes": None},
+            {
+                "activity_id": ACTIVITY_ID,
+                "decision": "approve",
+                "notes": None,
+                "trip_id": "trip_sydney",
+                "date": "2027-04-02",
+                "start_time": "09:15",
+            },
             {"activity_id": OTHER, "decision": "reject", "notes": "Too strenuous"},
         ],
     }

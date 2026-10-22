@@ -136,7 +136,9 @@ def test_planner_ui_resolves_real_catalogue_cards_and_records_human_review(
                 "decision": "approve",
                 "reviewer": "Test traveller",
                 f"choice_{activity_id}": "approve",
-                "trip_id": SYDNEY,
+                f"trip_{activity_id}": SYDNEY,
+                f"date_{activity_id}": "2027-04-02",
+                f"start_time_{activity_id}": "09:30",
             },
         )
         assert "Human decisions recorded" in accepted.text

@@ -89,7 +89,7 @@ class Run(BaseModel):
 class SavedSelection(StrictModel):
     activity_id: str
     trip_id: str
-    status: Literal["added", "already_present"]
+    status: Literal["added", "already_present", "updated"]
 
 
 class SaveError(StrictModel):
@@ -99,6 +99,9 @@ class SaveError(StrictModel):
 
 
 class ItemDecision(StrictModel):
+    trip_id: str | None = None
+    date: str | None = None
+    start_time: str | None = None
     activity_id: str
     decision: Literal["approve", "reject"]
     notes: str | None = None

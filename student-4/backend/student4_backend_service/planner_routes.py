@@ -28,6 +28,7 @@ from .planner_models import (
     Evidence,
     HistoryEvent,
     PlannerResponse,
+    PlannerSelection,
     Regenerate,
     Run,
     RunId,
@@ -37,7 +38,7 @@ from .planner_review import (
     _confirm_approval,
     _confirm_item_audit,
     _item_audit,
-    _preflight,
+    _preflight_groups,
     _recorded_choices,
     _rejected_ids,
     _save,
@@ -167,8 +168,7 @@ async def review(
     if notes is not None:
         body["notes"] = notes
     action: FinalAction | None = None
-    trip_id: str | None = None
-    existing: set[str] = set()
+    additions: list[tuple[list[PlannerSelection], str, set[str]]] = []
     if payload.decision != "reject":
         if any(check.blocking and not check.passed for check in run.checks):
             raise HTTPException(
@@ -176,7 +176,7 @@ async def review(
                 "This run has failed checks. Reject it and start a revised request.",
             )
         action = _accepted(run, payload)
-        trip_id, existing = await _preflight(run, payload, itinerary, db, location)
+        additions = await _preflight_groups(run, payload, itinerary, db, location)
         if (
             payload.decision == "correct"
             or action.model_dump(mode="json") != run.result
@@ -188,8 +188,16 @@ async def review(
     if action is not None:
         _confirm_approval(updated, action, str(body["decision"]))
     response = await _present(updated, partial(get_activity, db=db, location=location))
-    if action is not None and payload.selections and trip_id:
-        await _save(response, payload.selections, trip_id, existing, itinerary)
+    if action is not None:
+        for selections, trip_id, existing in additions:
+            await _save(
+                response,
+                selections,
+                trip_id,
+                existing,
+                itinerary,
+                update_existing=payload.item_decisions is not None,
+            )
     return response
 
 

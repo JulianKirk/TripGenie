@@ -132,26 +132,31 @@ and attempts remain available. Validation checks and Reviewer findings precede
 the activity suggestion cards.
 Full cards appear once, after execution and validation finish.
 
-Each card supports **Approve**, **Reject without reason**, and **Reject with
-reason**. Approval displays a check mark. Rejected cards remain visible with a
-red background and their optional reason. These are pending choices:
-`POST /planner/{run_id}/choices` reads the current run and updates form state
-without recording a shared decision or adding activities. Users may change their
-choices before applying them. The form retains reviewer, reasons, itinerary and
-per-activity schedule fields across choice actions.
+Each card has a light-green **Approve** button and a light-red **Reject** button.
+Both open a dialog through `POST /planner/{run_id}/dialog`, carrying the current
+pending form state. The approval dialog follows the normal itinerary picker:
+choose an itinerary, a required activity date within its dates, and a required
+local start time. **Confirm approval** stages the choice and displays its
+itinerary and schedule alongside the approval mark. Different cards may target
+different itineraries.
 
-Once every suggestion has a choice, **Apply approvals** sends one review request
-through the feature backend. Only approved activities are added to the chosen
-itinerary, with optional per-card date and local start time. If all suggestions
-are rejected, **Apply decisions** records the rejections without itinerary
-writes. The shared human-review audit records every card's choice and reason in
-one decision. Recorded cards retain their approval symbols or rejection styling
-when the page is refreshed. Blocking checks prevent approval; rejection remains
-available.
+The rejection dialog accepts an optional reason. **Confirm rejection** stages a
+red rejected card with the supplied reason or **no reason supplied**. Cancel
+returns to the pending review without changing the card decision. Neither opening
+nor confirming a dialog records the shared human decision or writes itinerary
+data. `POST /planner/{run_id}/choices` validates and stages the selection.
+
+Once every suggestion has a choice, **Apply approvals** sends one combined review
+request through the feature backend. Only approved activities are added to their
+chosen itineraries; existing memberships receive the explicitly chosen schedule.
+When all cards are rejected, **Apply decisions** records the rejections without
+itinerary writes. The shared review audit retains each card's choice, reason,
+itinerary, date and start time. Cards keep these details after refresh. Blocking
+checks prevent approval; rejection remains available.
 
 The form uses ordinary POSTs as well as HTMX, and all full-page responses keep
 the assistant and catalogue together. Review errors retain pending choices and
-read current status without replaying the review or itinerary additions. Added,
+read current status without replaying the review or itinerary additions. Added, updated,
 already-present and unconfirmed addition outcomes are displayed from the apply
 response. Completed workflows offer no second apply action.
 

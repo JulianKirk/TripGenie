@@ -19,6 +19,7 @@ class Choices:
     reasons: dict[str, str] = field(default_factory=dict)
     dates: dict[str, str] = field(default_factory=dict)
     times: dict[str, str] = field(default_factory=dict)
+    trip_ids: dict[str, str] = field(default_factory=dict)
     reviewer: str = ""
     trip_id: str = ""
     result_reason: str = ""
@@ -31,6 +32,7 @@ class Choices:
             result_reason=str(form.get("result_reason", "")).strip(),
         )
         for name, target in (
+            ("trip_", state.trip_ids),
             ("choice_", state.decisions),
             ("reason_", state.reasons),
             ("date_", state.dates),
@@ -62,6 +64,13 @@ class Choices:
             self.reasons = {
                 item.activity_id: item.notes or "" for item in result.item_decisions
             }
+            for item in result.item_decisions:
+                if item.trip_id:
+                    self.trip_ids[item.activity_id] = item.trip_id
+                if item.date:
+                    self.dates[item.activity_id] = item.date
+                if item.start_time:
+                    self.times[item.activity_id] = item.start_time
             if result.run.human:
                 self.reviewer = result.run.human.reviewer
         self.trip_id = self.trip_id or result.run.trip_id or ""
@@ -102,20 +111,33 @@ class Choices:
             ],
         }
         if approved:
-            if not self.trip_id:
-                msg = "Choose an itinerary before applying approvals."
-                raise ValueError(msg)
-            body["trip_id"] = self.trip_id
-            body["selections"] = [
+            selections = []
+            for key in approved:
+                trip_id = self.trip_ids.get(key) or self.trip_id
+                if not trip_id:
+                    msg = "Choose an itinerary for each approved activity."
+                    raise ValueError(msg)
+                if not self.dates.get(key) or not self.times.get(key):
+                    msg = "Choose a date and start time for each approved activity."
+                    raise ValueError(msg)
+                schedule = ItinerarySelectionWrite.model_validate(
+                    {
+                        "date": self.dates[key],
+                        "start_time": self.times[key],
+                    }
+                ).model_dump(mode="json", exclude_none=True)
+                selections.append({"activity_id": key, "trip_id": trip_id, **schedule})
+            body["selections"] = selections
+            body["item_decisions"] = [
+                {**selection, "decision": "approve", "notes": None}
+                for selection in selections
+            ] + [
                 {
                     "activity_id": key,
-                    **ItinerarySelectionWrite.model_validate(
-                        {
-                            "date": self.dates.get(key) or None,
-                            "start_time": self.times.get(key) or None,
-                        }
-                    ).model_dump(mode="json", exclude_none=True),
+                    "decision": "reject",
+                    "notes": self.reasons.get(key) or None,
                 }
-                for key in approved
+                for key in ids
+                if self.decisions[key] == "reject"
             ]
         return body
