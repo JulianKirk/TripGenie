@@ -32,6 +32,16 @@ else
   STATUS="Failed"
 fi
 
+# Step 2a: Validate the cloud security configuration
+REGISTRY_NAME=$(az group show --name "$RESOURCE_GROUP" --query "tags.registryName" -o tsv)
+CONFIG=$(mktemp -d)
+trap 'rm -rf "$CONFIG"' EXIT
+az containerapp list --resource-group "$RESOURCE_GROUP" -o json > "$CONFIG/apps.json"
+az acr show --name "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" -o json > "$CONFIG/registry.json"
+if ! SECURITY=$(python3 "$ROOT/scripts/deploy/azure/security_check.py" "$CONFIG/apps.json" "$CONFIG/registry.json"); then
+  STATUS="Failed"
+fi
+
 # Step 3: Write cloud-deployment-results.md
 mkdir -p "$(dirname "$REPORT_FILE")"
 cat > "$REPORT_FILE" <<EOF
@@ -52,6 +62,10 @@ $(echo "$URLS" | sed 's/^/- /')
 Validation Results:
 
 $RESULTS
+
+Security Configuration:
+
+$SECURITY
 
 AI-Mode, MCP, RAG and the Multi-Agent Server are not deployed; the cloud
 profile (shared/configuration/.env.cloud) turns every AI feature off.
