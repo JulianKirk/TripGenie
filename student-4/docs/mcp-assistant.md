@@ -10,7 +10,11 @@ have been removed. `activity_assistant_v1.md` is the primary assistant prompt;
 the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker.
 That compact prompt prioritises the original task over invalid plan steps, avoids
 unrequested search preferences, and directs schema-based recovery from rejected
-read calls. It keeps group-cost and accessibility checks without copying tool
+read calls. Both activity prompts put missing-party-size clarification before
+search, distinguish group totals from per-person prices, check participant minimums,
+and require requested detail facts in the final text. The Smart Planner Worker also
+uses revision feedback rather than repeating a failed attempt. They keep
+group-cost and accessibility checks without copying tool
 definitions or adding model calls. These instructions improve guidance; they do
 not guarantee that the shared Planner or Worker will comply.
 

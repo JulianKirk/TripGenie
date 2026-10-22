@@ -1,15 +1,15 @@
 <section id="planner-result" aria-label="Smart Planner workflow" aria-live="polite"
-{% if planner and planner.run.status in ['planning', 'working', 'reviewing'] %}hx-get="/planner/{{ planner.run.run_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+{% if planner and not recovering and planner.run.status in ['planning', 'working', 'reviewing'] %}hx-get="/planner/{{ planner.run.run_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
 {% if error %}
-  <div class="banner banner--error" role="alert"><strong>Smart Planner unavailable</strong><p>{{ error }}</p></div>
-  {% if run_id %}<p><a class="button" href="/planner/{{ run_id }}" hx-get="/planner/{{ run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh this run</a></p>{% endif %}
+  <div class="banner banner--error" role="alert"><strong>Smart Planner request failed</strong><p>{{ error }}</p></div>
+  {% if run_id and not recovering %}<p><a class="button" href="/planner/{{ run_id }}" hx-get="/planner/{{ run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh this run</a></p>{% endif %}
 {% endif %}
 {% if planner %}
   {% set run = planner.run %}
   <h3>Smart Planner · {{ {'planning':'Planning', 'working':'Finding activities', 'reviewing':'Reviewing', 'awaiting_human':'Your decision', 'completed':'Accepted', 'rejected':'Rejected', 'failed':'Failed'}[run.status] }}</h3>
   <p>{{ run.task }}</p>
   <p class="field-hint">Planning → Finding activities → Reviewing → Your decision</p>
-  <p><a href="/planner/{{ run.run_id }}" hx-get="/planner/{{ run.run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh progress</a> · <a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a></p>
+  <p>{% if not recovering and run.status != 'awaiting_human' %}<a href="/planner/{{ run.run_id }}" hx-get="/planner/{{ run.run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh progress</a> · {% endif %}<a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a></p>
   {% if run.plan %}<details open><summary>Planner’s approach</summary><p>{{ run.plan.goal }}</p><ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>
     {% if run.plan.required_evidence %}<p>Required evidence:</p><ul>{% for item in run.plan.required_evidence %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
   </details>{% endif %}
@@ -20,23 +20,10 @@
   {% if run.review %}<section aria-label="Reviewer findings"><h4>Reviewer: {{ run.review.verdict }}</h4><p>{{ run.review.summary }}</p>
     {% for label, entries in [('Issues', run.review.issues), ('Risks', run.review.risks), ('Recommendations', run.review.recommendations)] %}{% if entries %}<h5>{{ label }}</h5><ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>{% endif %}{% endfor %}
   </section>{% endif %}
-  {% if run.status == 'awaiting_human' %}
-  {% set failed_checks = run.checks|selectattr('blocking')|rejectattr('passed')|list %}
-  {% if failed_checks %}<p class="banner banner--error" role="alert">This draft failed validation checks and cannot be accepted. Reject it and start a revised request.</p>{% endif %}
-  <form method="post" action="/planner/{{ run.run_id }}/review" hx-post="/planner/{{ run.run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-disabled-elt="find button">
-    <p>Approval records your acceptance of these recommendations. It does not add them to your itinerary or book anything.</p>
-    <label class="field">Your name<input name="reviewer" required maxlength="60" autocomplete="name"></label>
-    <label class="field">Review notes (optional)<textarea name="notes" maxlength="1000"></textarea></label>
-    <div class="actions"><button class="button button--primary" name="decision" value="approve"{% if failed_checks %} disabled{% endif %}>Approve</button><button class="button" name="decision" value="reject">Reject</button></div>
-    <details><summary>Correct the recommendation</summary>
-      <p>Edit the text and choose which suggested activities to keep. This records your edit; it does not ask the AI to run again.</p>
-      <label class="field">Corrected recommendation<textarea name="correction" maxlength="1000">{% for part in planner.answer.parts if part.type == 'text' %}{{ part.text }}{% if not loop.last %}&#10;{% endif %}{% endfor %}</textarea></label>
-      {% for key, activity in planner.answer.activities.items() %}<label><input type="checkbox" name="activity_ids" value="{{ key }}" checked> Keep {{ activity.name }}</label>{% endfor %}
-      <button class="button" name="decision" value="correct"{% if failed_checks %} disabled{% endif %}>Save correction</button>
-    </details>
-  </form>
-  {% endif %}
   {% if run.human %}<p><strong>Human decision: {{ run.human.decision }}</strong> · {{ run.human.reviewer }}</p>{% if run.human.notes %}<p>{{ run.human.notes }}</p>{% endif %}{% endif %}
   <p class="field-hint">Run: <code>{{ run.run_id }}</code>. Check recorded tool results for any actions performed; rejecting a proposal does not undo tool calls.</p>
+{% endif %}
+{% if review_form and (recovering or (planner and planner.run.status == 'awaiting_human')) %}
+  {% include "partials/planner_review_form.html" %}
 {% endif %}
 </section>

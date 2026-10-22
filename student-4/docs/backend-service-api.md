@@ -824,7 +824,9 @@ A decision body is `{decision: "approve"|"correct"|"reject", reviewer, notes?}`.
 `corrected_result` using the Worker shape:
 `{"type":"final","parts":[{"type":"text","text":"Edited recommendation"}]}`.
 Activity parts may be retained only with IDs grounded in the run's tool results.
-Correction records a human edit; it does not restart the agents. Failed blocking
+Approval validates and accepts the original draft; `corrected_result` is used only
+for a `correct` decision. Correction records a human edit; it does not restart the
+agents. Failed blocking
 checks prevent approval/correction through this backend; rejection remains possible.
 Partial acceptance is not exposed because this workflow proposes no executable actions.
 

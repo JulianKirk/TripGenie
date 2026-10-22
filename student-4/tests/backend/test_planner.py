@@ -293,3 +293,59 @@ def test_planner_can_be_disabled_for_ci_and_cloud(
 ) -> None:
     monkeypatch.setenv("STUDENT4_BACKEND_MULTI_AGENT_ENABLED", enabled)
     assert Settings.from_env().multi_agent_enabled is False
+
+
+@pytest.mark.parametrize("with_correction", [False, True])
+def test_approval_cannot_substitute_a_correction_for_an_invalid_original(
+    with_correction: bool,
+) -> None:
+    activity_id = "00000000-0000-0000-0000-000000000001"
+    data = record(
+        result={
+            "type": "final",
+            "parts": [{"type": "activity", "activity_id": activity_id}] * 7,
+        },
+        steps=[
+            {
+                "agent": "worker",
+                "attempt": 1,
+                "status": "completed",
+                "tools": [
+                    {
+                        "tool": "activities_search",
+                        "arguments": {},
+                        "status": "success",
+                        "duration_ms": 1,
+                        "result": {
+                            "structuredContent": {
+                                "source": "student-4",
+                                "ok": True,
+                                "data": {"items": [{"id": activity_id}]},
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    )
+    methods: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        return httpx.Response(200, json={"data": data})
+
+    body: dict[str, Any] = {"decision": "approve", "reviewer": "Julian"}
+    if with_correction:
+        body["corrected_result"] = {
+            "type": "final",
+            "parts": [{"type": "text", "text": "A separate valid correction."}],
+        }
+    with TestClient(
+        create_app(
+            Settings(multi_agent_enabled=True),
+            multi_agent_transport=httpx.MockTransport(handle),
+        )
+    ) as client:
+        response = client.post(f"{PATH}/review", json=body)
+    assert response.status_code == 400
+    assert methods == ["GET"]

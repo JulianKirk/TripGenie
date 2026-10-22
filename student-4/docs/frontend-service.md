@@ -149,14 +149,27 @@ sequenceDiagram
 `/planner/{run_id}` is a bookmarkable full page and an HTMX partial endpoint.
 Active runs poll; awaiting-human and terminal states stop polling. Refresh links
 work without JavaScript. Errors stop automatic polling and provide a refresh
-link for known runs. A start timeout has no guaranteed run ID: do not assume the
-server did not start work or automatically resubmit it.
+link for known runs. Failed review submissions preserve the entered reviewer,
+notes, correction text parts and card selections in both HTMX and full-page
+responses. The frontend safely reads current run status after a failure; it never
+retries the decision. If status is unavailable or no longer awaiting review, the
+submitted form remains editable with decision controls disabled. **Refresh status
+and keep edits** posts the fields to `/planner/{run_id}/recover`, which only reads
+the backend run and repopulates the form; it never submits a review decision.
+The preserved form is request-local, not durable draft storage: navigating away
+or opening a fresh run URL discards unsaved edits. A start timeout has no
+guaranteed run ID: do not assume the server did not start work or automatically
+resubmit it.
 
 The results show the plan, tool calls/results, stage attempts, validation checks,
 reviewer findings and human decision. Model text is escaped. Draft cards do not
 show Add to itinerary. Approval records acceptance only; accepted cards expose
 the existing manual itinerary control. Correction edits recommendation text and
-selects which grounded cards to keep; it is not an agent rerun. Failed blocking
+selects which grounded cards to keep; it is not an agent rerun. Each original
+text part gets its own correction textarea (up to 1000 characters), preserving
+longer multi-part narratives without truncation. Clearing a text part removes it;
+at least one nonempty text part is required. Corrected output retains the
+backend limits of twelve total parts and six activity cards. Failed blocking
 checks disable approval and correction; they must be resolved in a new run or the
 proposal rejected. Rejection remains available.
 

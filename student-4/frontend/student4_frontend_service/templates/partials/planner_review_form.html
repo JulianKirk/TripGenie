@@ -1,0 +1,20 @@
+{% set can_review = planner and planner.run.status == 'awaiting_human' %}
+{% set failed_checks = planner.run.checks|selectattr('blocking')|rejectattr('passed')|list if planner else [] %}
+{% if failed_checks %}<p class="banner banner--error" role="alert">This draft failed validation checks and cannot be accepted. Reject it and start a revised request.</p>{% endif %}
+{% if recovering %}<p role="status">Your submitted edits are preserved below. A failed response may still have recorded your decision. Check the current status before submitting another decision. Refresh status only reads this run; it does not send your decision again.</p>{% endif %}
+{% if not can_review %}<p role="status">Decision controls are disabled because this run is not confirmed as awaiting review. Refresh its status to check.</p>{% endif %}
+<form method="post" action="/planner/{{ run_id }}/review" hx-post="/planner/{{ run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-disabled-elt="find button">
+  <p>Approval records your acceptance of these recommendations. It does not add them to your itinerary or book anything.</p>
+  <label class="field">Your name<input name="reviewer" value="{{ review_form.reviewer }}" required maxlength="60" autocomplete="name"></label>
+  <label class="field">Review notes (optional)<textarea name="notes" maxlength="1000">{{ review_form.notes }}</textarea></label>
+  <div class="actions"><button class="button button--primary" name="decision" value="approve"{% if not can_review or failed_checks %} disabled{% endif %}>Approve</button><button class="button" name="decision" value="reject"{% if not can_review %} disabled{% endif %}>Reject</button></div>
+  <details{% if recovering %} open{% endif %}><summary>Correct the recommendation</summary>
+    <p>Edit each text part and choose which suggested activities to keep. Clear a text part to remove it; keep at least one nonempty text part. Each text part allows 1000 characters; keep at most twelve parts including up to six activities. This records your edit; it does not ask the AI to run again.</p>
+    {% for text in review_form.corrections %}<label class="field">Corrected recommendation, part {{ loop.index }}<textarea name="correction" maxlength="1000">{{ text }}</textarea></label>{% endfor %}
+    {% set activities = planner.answer.activities if planner else {} %}
+    {% for key, activity in activities.items() %}<label><input type="checkbox" name="activity_ids" value="{{ key }}"{% if key in review_form.activity_ids %} checked{% endif %}> Keep {{ activity.name }}</label>{% endfor %}
+    {% for key in review_form.activity_ids if key not in activities %}<label><input type="checkbox" name="activity_ids" value="{{ key }}" checked> Keep activity {{ key }} (details unavailable; acceptance still requires this run's tool evidence)</label>{% endfor %}
+    <button class="button" name="decision" value="correct"{% if not can_review or failed_checks %} disabled{% endif %}>Save correction</button>
+  </details>
+  <button class="button" type="submit" formaction="/planner/{{ run_id }}/recover" formnovalidate hx-post="/planner/{{ run_id }}/recover" hx-validate="false">Refresh status and keep edits</button>
+</form>

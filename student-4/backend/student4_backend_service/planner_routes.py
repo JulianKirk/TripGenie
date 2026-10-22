@@ -157,7 +157,7 @@ async def review(
             )
         data = (
             payload.corrected_result.model_dump(mode="json")
-            if payload.corrected_result
+            if payload.decision == "correct" and payload.corrected_result is not None
             else run.result
         )
         if payload.decision == "correct" and payload.corrected_result is None:
