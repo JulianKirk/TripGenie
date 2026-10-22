@@ -127,7 +127,7 @@ All tools are executable; prompts should direct writes only for explicit request
 This is a trusted local service, not a new authorization layer. Unknown tool names,
 invalid arguments, external schema references, duplicate non-read-only calls and
 excessive execution are rejected. A known tool's invalid arguments are returned
-to the model with tools still available for up to three correction attempts
+to the model with tools still available for up to four correction attempts
 per run, within the existing turn and time limits. Invalid arguments are never
 sent to MCP. If arguments remain invalid after those attempts, the run returns
 an explicit tool-call failure with its trace. This does not retry completed or uncertain writes. Protocol validation does not interpret user intent.
