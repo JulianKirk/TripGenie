@@ -266,6 +266,29 @@ async def results_context(request: Request) -> dict[str, Any]:
     }
 
 
+async def features(request: Request) -> dict[str, bool]:
+    """Which AI features this deployment has switched on, from the backend's own
+    `/health`. Those fields are config only (never probed), so asking is cheap
+    and says "off by design" rather than "broken".
+
+    Anything the backend does not report counts as on, and so does a backend that
+    cannot be reached: the page then fails the way it always did, with the
+    error, instead of hiding features behind a guess.
+    """
+    try:
+        body = await call(request, "GET", "/health")
+    except BackendError:
+        body = {}
+    ask = body.get("ai_mode") != "not_configured"
+    return {
+        "ask": ask,
+        # The assistant box is the model calling MCP tools through AI-Mode.
+        "mcp": ask,
+        "rag": body.get("rag") != "not_configured",
+        "agents": body.get("multi_agent") != "disabled",
+    }
+
+
 @router.get("/health")
 async def health(request: Request) -> dict[str, str]:
     """Reports this service and the backend behind it, the same way the backend
@@ -293,6 +316,7 @@ async def index(request: Request):
     so a bare link to it would give the browser a page with no page around it.
     """
     context: dict[str, Any] = {
+        "ai": await features(request),
         "page_sizes": PAGE_SIZES,
         "limit": DEFAULT_LIMIT,
         # Also set by results_context, but the form still has to render with
@@ -635,7 +659,12 @@ async def agents_form(request: Request):
     return render(
         request,
         "agents.html",
-        {"run": None, "form": form, "trips": await _trips(request)},
+        {
+            "run": None,
+            "form": form,
+            "trips": await _trips(request),
+            "ai": await features(request),
+        },
     )
 
 
@@ -655,6 +684,7 @@ async def agents_start(request: Request):
                 "run": None,
                 "form": form,
                 "trips": await _trips(request),
+                "ai": await features(request),
                 "agent_error": "Type a question.",
             },
         )
@@ -674,6 +704,7 @@ async def agents_start(request: Request):
                 "run": None,
                 "form": form,
                 "trips": await _trips(request),
+                "ai": await features(request),
                 "agent_error": str(exc),
             },
         )

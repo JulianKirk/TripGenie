@@ -30,12 +30,22 @@
       answer against the plan. <strong>You make the final decision.</strong>
     </p>
 
+    {% set agents_on = ai is not defined or ai.agents %}
+    {% if not agents_on %}
+      <p class="ai-notice ai-notice--off" role="note">
+        Multi-agent planning is switched off in this deployment: the shared
+        Multi-Agent Server is not available here, so runs cannot be started.
+        Accommodation search and trips work as normal.
+      </p>
+    {% endif %}
+
     {% if run or (agent_error and not form) %}
       {% set run_id = run.run_id if run else '' %}
       {% include "partials/agent_run_panel.html" %}
     {% else %}
       {% if agent_error %}<p class="error" role="alert">{{ agent_error }}</p>{% endif %}
       <form class="agents__form" method="post" action="/agents">
+        <fieldset class="agents__fieldset" {% if not agents_on %}disabled{% endif %}>
         <label for="agent-question">What do you need?</label>
         <textarea id="agent-question" name="question" rows="3" maxlength="500"
                   placeholder="a well-rated stay in Sydney under 200 a night">{{ form.get("question", "") }}</textarea>
@@ -63,6 +73,7 @@
         </p>
         <p><button class="button button--primary" type="submit">Start the agents</button>
            <a class="button" href="/">Cancel</a></p>
+        </fieldset>
       </form>
     {% endif %}
   </main>

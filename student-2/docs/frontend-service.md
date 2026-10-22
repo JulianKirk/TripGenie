@@ -273,6 +273,27 @@ search box gives. An AI failure renders in `partials/error.html` where the
 results would have been, like every other backend failure, and the ask box is
 gone but nothing else on the page is.
 
+### Features a deployment has switched off
+
+The cloud profile has no AI-Mode, RAG server or Multi-Agent Server, and the
+backend reports that on its `/health` (`ai_mode`, `rag` and `multi_agent`, which
+are config only and never probed). The page reads those fields and shows what
+is unavailable instead of offering boxes that can only fail:
+
+- With AI-Mode and RAG both off, the ask box carries a notice ("AI features are
+  switched off in this deployment"), its three modes are greyed out and
+  labelled "unavailable in this deployment", and the input and button are
+  disabled. Filters, listings and trips work as normal.
+- With only some off, only those modes are greyed out and the default moves to
+  the first mode that is on. The MCP assistant rides on AI-Mode, so it follows
+  it.
+- With the Multi-Agent Server off, "Plan with agents" is a greyed-out label
+  rather than a link, and `/agents` explains why and disables its form.
+
+If the backend cannot be asked, or reports nothing, features count as on: the
+page then fails with the backend's own error rather than hiding things on a
+guess.
+
 ### Multi-agent planning (Release 2)
 
 "Plan with agents" in the masthead opens `/agents`. A question (and optionally a
