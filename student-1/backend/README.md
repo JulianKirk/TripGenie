@@ -298,12 +298,20 @@ activities). Starts one run with `feature="student-1"`, the trip id, a
 correlation id `student1-plan-…`, bounded trip context (trip, items, saved
 accommodation/activities/transport, trimmed deterministically to fit the
 server's 4,000-character limit with `truncated: true`), the worker prompt
-`prompts/itinerary_planner_agents_v1.md`, an output schema of at most 8 items
+`prompts/itinerary_planner_agents_v1.md`, role-neutral rules for the Planner
+and Reviewer as `feature_instructions` (`prompts/itinerary_planner_rules_v1.md`;
+the two share the server's 6,000-character allowance), `allowed_tools`
+`trip_get_context` and `trips_list_itinerary_items`, an output schema of at most 8 items
 (`date, start_time, end_time, title, location, description, category,
 source_id`), `actions_path: "items"`, and grounding on `items[].source_id`. It
 returns at once with `status: "planning"`; the agents keep working on the
 server. A returned run with another feature, trip or correlation id is
 `502 BAD_GATEWAY`.
+
+`feature_instructions` needs the server from main after #191; an older server
+rejects the unknown field with `422`. A shared-server change that removes
+`allowed_tools` from the request (proposed in PR #197) needs this request
+updated at the same time.
 
 ### `GET /api/trips/{tripId}/multi-agent-plan/{runId}`
 
@@ -321,7 +329,11 @@ Once the plan is ready each drafted item in `items` carries:
 
 `steps` lists every agent step with its MCP tool trace; `checks` and `review`
 are the server's deterministic checks and the Reviewer's verdict, issues and
-risks. A decided run also shows `persistence` (below) read back from the
+risks. When the Reviewer asks for a revision, a blocking check fails or the
+Worker's model call returns unusable output, the server plans again (by
+default once), so `attempts` can be 2 and `steps` then holds both attempts; a
+failed Worker step keeps `status: "failed"` and its `error` message. Only the
+final draft is offered for a decision. A decided run also shows `persistence` (below) read back from the
 database, so a reload never re-saves anything.
 
 ### `POST /api/trips/{tripId}/multi-agent-plan/{runId}/review`

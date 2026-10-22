@@ -13,7 +13,12 @@ from copy import deepcopy
 import httpx
 import pytest
 from backend_service.config import Settings
-from backend_service.multi_agent_plan import CONTEXT_MAX_CHARS, bounded_context
+from backend_service.multi_agent_plan import (
+    CONTEXT_MAX_CHARS,
+    RULES_ASSET,
+    bounded_context,
+)
+from backend_service.prompt_assets import load_prompt_asset
 from conftest import error_response
 
 TRIP = "trip_2027_sydney_getaway"
@@ -248,6 +253,11 @@ def test_start_sends_the_student_1_run_contract(api, multi_agent) -> None:
     assert sent["output_schema"]["type"] == "object"
     assert sent["correlation_id"].startswith("student1-plan-")
     assert "trip_get_context" in sent["worker_system"]
+    # Planner/Reviewer rules ride in feature_instructions, sharing the server's
+    # 6,000-character system allowance with the Worker prompt.
+    assert sent["feature_instructions"] == load_prompt_asset(RULES_ASSET)
+    assert sent["feature_instructions"] != sent["worker_system"]
+    assert len(sent["feature_instructions"]) + len(sent["worker_system"]) <= 6000
     assert len(sent["task"]) <= 500
     context = sent["context"]
     assert context["trip"]["start_date"] == "2027-04-01"
@@ -342,6 +352,38 @@ def test_poll_shows_the_plan_evidence_checks_and_item_problems(
     ]
     assert malformed["title"] == ""
     assert len(malformed["problems"]) == 3
+
+
+def test_a_revised_run_shows_the_failed_attempt_and_saves_the_final_draft(
+    api, multi_agent, database_api
+) -> None:
+    # The server re-plans after a Worker failure; the failed step stays in the
+    # audit trail with an error and no result, and only the result is saved.
+    run_id = awaiting(api, multi_agent)
+    run = multi_agent.runs[run_id]
+    worker = run["steps"][0]
+    failed = {
+        **deepcopy(worker),
+        "status": "failed",
+        "error": {"code": "BAD_GATEWAY", "message": "AI-Mode returned bad JSON."},
+    }
+    replan = {"agent": "planner", "attempt": 2, "status": "completed", "tools": []}
+    run.update(attempts=2, steps=[failed, replan, {**worker, "attempt": 2}])
+
+    data = api.get(f"/api/trips/{TRIP}/multi-agent-plan/{run_id}").json()["data"]
+
+    assert data["attempts"] == 2
+    assert [(s["agent"], s["attempt"], s["status"]) for s in data["steps"]] == [
+        ("worker", 1, "failed"),
+        ("planner", 2, "completed"),
+        ("worker", 2, "completed"),
+    ]
+    assert data["steps"][0]["error"] == "AI-Mode returned bad JSON."
+    assert review(api, run_id, decision="approve").status_code == 200
+    assert set(plan_items(database_api, run_id)) == {
+        f"item_{run_id}_0",
+        f"item_{run_id}_1",
+    }
 
 
 def test_disabled_planner_is_an_explicit_503_and_never_calls_the_server(

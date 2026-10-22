@@ -78,6 +78,7 @@ from .multi_agent_plan import (
     DECIDED_STATUSES,
     FEATURE,
     PROMPT_ASSET,
+    RULES_ASSET,
     build_run_request,
     clashes,
     plan_item_id,
@@ -809,6 +810,7 @@ class BackendService:
                 detail,
                 task=payload.request,
                 worker_system=load_prompt_asset(PROMPT_ASSET),
+                feature_instructions=load_prompt_asset(RULES_ASSET),
                 correlation_id=correlation_id,
             ),
         )

@@ -114,7 +114,9 @@ feature. To turn Student 1's RAG or MCP client off explicitly, set
 `STUDENT1_BACKEND_RAG_ENABLED=false` or `STUDENT1_BACKEND_MCP_ENABLED=false`;
 Student 1's Release 2 "Plan my itinerary" is `STUDENT1_BACKEND_MULTI_AGENT_ENABLED`
 (Compose default `true`; `false` in Student 1 CI and `.env.cloud`, where it
-answers `503 MULTI_AGENT_DISABLED`)
+answers `503 MULTI_AGENT_DISABLED` and the trip page leaves the panel out; it
+needs the Multi-Agent Server from main after #191, which accepts
+`feature_instructions`)
 (Student 5 has matching `STUDENT5_BACKEND_*` flags, and Student 3 has
 `STUDENT3_BACKEND_MCP_ENABLED` and `STUDENT3_BACKEND_RAG_ENABLED`). Student 2
 turns its RAG guide off with an empty `STUDENT2_BACKEND_RAG_URL=` and its MCP

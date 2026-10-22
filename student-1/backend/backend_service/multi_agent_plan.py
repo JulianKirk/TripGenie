@@ -13,6 +13,9 @@ from typing import Any
 
 FEATURE = "student-1"
 PROMPT_ASSET = "itinerary_planner_agents_v1.md"
+# Role-neutral rules the server gives the Planner and Reviewer as
+# `feature_instructions`; the Worker's prompt above already carries them.
+RULES_ASSET = "itinerary_planner_rules_v1.md"
 CORRELATION_PREFIX = "student1-plan-"
 ALLOWED_TOOLS = ["trip_get_context", "trips_list_itinerary_items"]
 MAX_PLAN_ITEMS = 8
@@ -212,6 +215,7 @@ def build_run_request(
     *,
     task: str,
     worker_system: str,
+    feature_instructions: str,
     correlation_id: str,
 ) -> dict[str, Any]:
     trip_id = str(detail["id"])
@@ -220,6 +224,7 @@ def build_run_request(
         "task": task,
         "trip_id": trip_id,
         "context": bounded_context(detail),
+        "feature_instructions": feature_instructions,
         "worker_system": worker_system,
         "output_schema": OUTPUT_SCHEMA,
         "allowed_tools": ALLOWED_TOOLS,
