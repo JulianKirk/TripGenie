@@ -47,7 +47,10 @@ def _embed_response(
     }
 
 
-def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
+@pytest.mark.parametrize("catalogue_snapshot", [None, [], ["activities_search"]])
+def test_ai_mode_client_validates_health_embed_and_generate(
+    settings, catalogue_snapshot: list[str] | None
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/ready":
             return httpx.Response(200, json=_ready_response())
@@ -67,6 +70,11 @@ def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
                     "provider": "ollama",
                     "response": '{"answer":"Yes","citation_ids":["c1"]}',
                     "done": True,
+                    **(
+                        {"available_tools": catalogue_snapshot}
+                        if catalogue_snapshot is not None
+                        else {}
+                    ),
                 }
             },
         )
@@ -82,6 +90,7 @@ def test_ai_mode_client_validates_health_embed_and_generate(settings) -> None:
     assert health.status == "ok"
     assert embedded.embeddings == [[1.0, 0.0]]
     assert generated.done is True
+    assert generated.available_tools == (catalogue_snapshot or [])
 
 
 @pytest.mark.parametrize(
