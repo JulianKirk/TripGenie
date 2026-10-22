@@ -805,10 +805,11 @@ are needed. The shared server owns run storage, Planner/Worker/Reviewer executio
 and human decision history.
 
 The backend sends `activity_planner_rules_v1.md` as trusted
-`feature_instructions` for Planner, Worker and Reviewer. These compact common
-rules cover one-shot interaction, read-only recommendations, group budgets and
-required detail evidence. `activity_planner_v1.md` remains the Worker's separate
-execution/output prompt. User questions cannot supply either prompt. Upgrade the
+`feature_instructions` for Planner and Reviewer. These compact common rules
+cover one-shot interaction, read-only recommendations, group budgets and required
+detail evidence. The Worker keeps the complete `activity_planner_v1.md` prompt,
+which already includes this policy as well as execution/output instructions.
+The rules are not appended again to the Worker. User questions cannot supply either prompt. Upgrade the
 shared Multi-Agent Server to support the optional field before this backend;
 existing callers can omit it. This adds no model calls or UI steps.
 

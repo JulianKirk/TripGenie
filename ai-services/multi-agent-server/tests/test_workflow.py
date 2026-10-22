@@ -485,7 +485,7 @@ def test_a_completed_attempt_that_ran_a_write_tool_goes_to_the_human(settings) -
     assert skipped["detail"]["reason"] == "write_tool_executed"
 
 
-def test_common_feature_rules_reach_each_role_without_worker_instructions(
+def test_common_feature_rules_reach_planner_and_reviewer_only(
     client: TestClient, fake: FakeAiMode
 ) -> None:
     common = "Feature policy sentinel: one shot, no clarification questions."
@@ -497,11 +497,12 @@ def test_common_feature_rules_reach_each_role_without_worker_instructions(
     assert len(fake.calls) == 3
     for call in fake.calls:
         body = call["body"]
-        assert common in body["system"]
         assert common not in body["prompt"]
         if call["agent"] == "worker":
             assert body["system"].startswith(worker_only)
+            assert common not in body["system"]
         else:
+            assert common in body["system"]
             assert worker_only not in body["system"]
     assert common not in str(run)
     history = client.get(f"/runs/{run['run_id']}/history").json()
@@ -519,7 +520,13 @@ def test_common_feature_rules_survive_replanning(settings) -> None:
     assert run["attempts"] == 2
     assert len(fake.calls) == 6
     assert all(
-        "Keep feature rules on retry." in call["body"]["system"] for call in fake.calls
+        "Keep feature rules on retry." in call["body"]["system"]
+        for call in fake.calls
+        if call["agent"] != "worker"
+    )
+    assert all(
+        "Keep feature rules on retry." not in body["system"]
+        for body in fake.bodies("worker")
     )
 
 
@@ -533,3 +540,12 @@ def test_reviewer_budget_counts_common_feature_instructions(settings) -> None:
     (reviewer,) = fake.bodies("reviewer")
     assert len(reviewer["system"]) + len(reviewer["prompt"]) <= 8000
     assert len(json.loads(reviewer["prompt"])["result"]) < 4000
+
+
+def test_common_rules_do_not_change_existing_worker_prompt(
+    client: TestClient, fake: FakeAiMode
+) -> None:
+    start_and_settle(client)
+    original = fake.bodies("worker")[0]["system"]
+    start_and_settle(client, feature_instructions="One-shot feature rules.")
+    assert fake.bodies("worker")[1]["system"] == original

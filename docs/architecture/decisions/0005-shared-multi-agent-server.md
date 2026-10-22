@@ -66,12 +66,14 @@ The constraints already in place:
    prompt followed by the workflow rules, and the feature's context keys are
    sent at the top level of the Worker's message. Live tests showed the
    reverse order stops the 8b model calling the feature's tools. Optional
-   `feature_instructions` carry role-neutral domain policy to all three agents,
-   including revisions. They follow each role's own system instructions; the
-   Worker still leads with its feature prompt, then common policy and workflow
-   rules. Planner/Reviewer never receive Worker-only output/tool instructions.
-   The common policy shares the existing Worker instruction allowance and counts
-   against each stage budget; no additional model calls are introduced.
+   `feature_instructions` supplement Planner and Reviewer with role-neutral
+   domain policy, including revisions; they never receive Worker-only output/tool
+   instructions. The Worker retains its complete feature prompt unchanged rather
+   than receiving the common rules again. A live split/reordering experiment
+   regressed native tool selection, while the original prompt succeeded against
+   the same task, plan and gateway. The common policy shares the existing Worker
+   instruction allowance and counts against Planner/Reviewer stage budgets;
+   no additional model calls are introduced.
 
 ## Consequences
 

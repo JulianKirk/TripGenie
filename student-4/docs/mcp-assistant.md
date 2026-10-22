@@ -9,8 +9,11 @@ The superseded plan/evaluate endpoints, their two prompt assets and their parser
 have been removed. `activity_assistant_v1.md` is the primary assistant prompt;
 the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker
 and `activity_planner_rules_v1.md` as role-neutral `feature_instructions` for
-Planner, Worker and Reviewer. Common one-shot, budget and evidence requirements
-reach all three roles; only the Worker receives execution and final-JSON rules.
+Planner and Reviewer. The Worker retains its complete tested prompt, which
+already contains these policies plus execution and final-JSON rules. All roles
+therefore receive the relevant domain policy without duplicating Worker context.
+A live attempt to split/reorder the Worker prompt skipped tool calls; retaining
+its original prompt recovered discovery in a control against the same request.
 That compact prompt prioritises the original task over invalid plan steps, avoids
 unrequested search preferences, and directs schema-based recovery from rejected
 read calls. Both modes treat generation as a one-shot request with no

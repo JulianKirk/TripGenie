@@ -259,10 +259,10 @@ class Agents:
         # appended: measured live, the reverse order makes the 8b model treat
         # the generic rules as its main instruction and skip the feature's
         # tools (0 of 2 tool runs, against 2 of 2 in this order).
-        feature_system = _with_feature_instructions(
-            request.worker_system, request.feature_instructions
-        )
-        system = f"{feature_system}\n\n{self._worker_preamble}"
+        # The Worker already receives the feature's complete execution prompt.
+        # Keep it intact: rewriting/reordering it regressed native tool selection
+        # in live tests. Common policy supplements Planner/Reviewer only.
+        system = f"{request.worker_system}\n\n{self._worker_preamble}"
         # The feature's context keys sit at the top level, the shape its own
         # prompt was written for; the workflow's keys cannot be overridden.
         # Absent fields are left out rather than sent as null or {}: a
