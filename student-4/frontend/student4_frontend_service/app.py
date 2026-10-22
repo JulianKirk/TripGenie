@@ -20,6 +20,8 @@ from .models import (
     ItinerarySelectionWrite,
     TripDirectory,
 )
+from .planner import router as planner_router
+from .planner import start as start_planner
 from .presenters import (
     accessibility_label,
     format_duration,
@@ -278,6 +280,8 @@ async def results(request: Request, client: ClientDep) -> Any:
 @router.post("/suggestions/ask")
 async def suggestion_ask(request: Request, client: ClientDep) -> Any:
     form = await request.form()
+    if str(form.get("mode", "")) == "planner":
+        return await start_planner(request, client, form)
     question = str(form.get("question", "")).strip()
     knowledge = str(form.get("mode", "")) == "knowledge"
     result: AssistantResponse | KnowledgeResponse | None = None
@@ -635,6 +639,8 @@ def create_app(
     application.mount(
         "/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static"
     )
+    application.state.templates = TEMPLATES
+    application.include_router(planner_router)
     application.include_router(router)
     return application
 

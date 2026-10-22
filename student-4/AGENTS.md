@@ -39,6 +39,14 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
 - Preserve ordinary browsing/CRUD when shared generation is unavailable. Show the
   returned tool trace, including partial execution on failure, and never claim
   that no changes were saved when write tools may have executed.
+- Smart Planner is a separate Release 2 mode over the shared Multi-Agent Server.
+  Keep its HTTP boundary and routes in `planner_client.py` and `planner_routes.py`;
+  frontend orchestration lives in `planner.py`. Feature backends own prompt/schema
+  and grounded card presentation; shared agents own planning/execution/review.
+  Approval records acceptance of recommendations; it must not automatically
+  modify activities or itinerary items. Preserve partial traces, validate the
+  run's feature before reads/reviews, and never retry ambiguous start/review calls.
+  Keep `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=false` in CI and the cloud baseline.
 - The RAG activity-guides mode is a thin client of the shared host RAG `/query`
   with the feature fixed to `student-4`. Display the RAG answer, confidence and
   index-resolved citations as returned; never compute confidence, add citations

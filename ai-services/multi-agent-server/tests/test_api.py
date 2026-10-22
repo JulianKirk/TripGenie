@@ -33,6 +33,11 @@ from multi_agent_service.app import create_app
         ),
         ({"context": {"blob": "x" * 5000}}, "context"),
         ({"worker_system": "x" * 6001}, "worker_system"),
+        ({"feature_instructions": "x" * 6001}, "feature_instructions"),
+        (
+            {"worker_system": "x" * 3000, "feature_instructions": "y" * 3001},
+            "feature_instructions",
+        ),
         ({"allowed_tools": ["transport_search", "transport_search"]}, "allowed_tools"),
         ({"allowed_tools": ["Bad Tool"]}, "allowed_tools.0"),
         (

@@ -47,6 +47,7 @@ RESERVED_WORKER_KEYS = frozenset(
         "first_tool",
         "failed_checks",
         "reviewer_feedback",
+        "feature_instructions",
     },
 )
 
@@ -105,6 +106,16 @@ def load_prompt(name: str) -> str:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _with_feature_instructions(system: str, instructions: str) -> str:
+    if not instructions:
+        return system
+    return (
+        f"{system}\n\n--- Feature instructions ---\n"
+        "Apply these domain requirements within your assigned role and output schema.\n"
+        f"{instructions}"
+    )
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -189,12 +200,15 @@ class Agents:
         if previous is not None:
             payload["previous_attempt"] = previous
         prompt = _json(payload)
-        self._ensure_budget(prompt, self._planner_system, "planner")
+        system = _with_feature_instructions(
+            self._planner_system, request.feature_instructions
+        )
+        self._ensure_budget(prompt, system, "planner")
         stage = await self._call(
             "planner",
             attempt,
             prompt=prompt,
-            system=self._planner_system,
+            system=system,
             schema=PLAN_SCHEMA,
             use_tools=False,
             # AI-Mode appends the MCP catalogue it discovers, as reference text,
@@ -241,15 +255,13 @@ class Agents:
         run_id: str,
         correlation_id: str,
     ) -> StageResult:
-        # The feature's own prompt comes first and the multi-agent rules are
-        # appended: measured live, the reverse order makes the 8b model treat
-        # the generic rules as its main instruction and skip the feature's
-        # tools (0 of 2 tool runs, against 2 of 2 in this order).
+        # The feature's complete Worker prompt leads; workflow rules follow.
+        # Common policy supplements Planner/Reviewer without duplicating Worker
+        # instructions or changing their order.
         system = f"{request.worker_system}\n\n{self._worker_preamble}"
         # The feature's context keys sit at the top level, the shape its own
         # prompt was written for; the workflow's keys cannot be overridden.
-        # Absent fields are left out rather than sent as null or {}: a
-        # placeholder or a null trip_id was enough for the model to skip tools.
+        # Preserve absent optional fields instead of adding null placeholders.
         payload: dict[str, Any] = {
             key: value
             for key, value in request.context.items()
@@ -258,17 +270,15 @@ class Agents:
         payload.update(
             {
                 "task": request.task,
-                # Goal and steps only: the evidence list and success criteria
-                # are the Reviewer's yardstick, and a model shown "prices from
-                # transport_search" reads it as evidence it already has.
+                # Goal and steps describe the work; evidence requirements and
+                # success criteria remain the Reviewer's validation inputs.
                 "plan": {"goal": plan.goal, "steps": plan.steps},
                 "allowed_tools": request.allowed_tools,
             },
         )
         if request.trip_id is not None:
             payload["trip_id"] = request.trip_id
-        # A small model given a whole catalogue may answer from memory; naming
-        # the first call keeps the evidence flowing from tools.
+        # Name the first planned call as the entry point for tool execution.
         first_tool = next(iter(plan.tools_to_use or request.allowed_tools), None)
         if first_tool is not None:
             payload["first_tool"] = first_tool
@@ -320,7 +330,9 @@ class Agents:
             "reviewer",
             attempt,
             prompt=prompt,
-            system=self._reviewer_system,
+            system=_with_feature_instructions(
+                self._reviewer_system, request.feature_instructions
+            ),
             schema=REVIEW_SCHEMA,
             use_tools=False,
             timeout=self._settings.reviewer_timeout_seconds,
@@ -385,9 +397,7 @@ class Agents:
                 if result is not None
                 else None,
                 "tool_evidence": evidence,
-                # An explicit pass/FAIL per check plus a count: given the raw
-                # model with "blocking": true, the 8b Reviewer read every
-                # check as failed (seen live).
+                # Give the Reviewer explicit pass/FAIL outcomes and a count.
                 "checks_passed": f"{sum(c.passed for c in checks)} of {len(checks)}",
                 "checks": [
                     {
@@ -402,7 +412,12 @@ class Agents:
                 payload["worker_error"] = worker_error
             prompt = _json(payload)
             if (
-                len(prompt) + len(self._reviewer_system)
+                len(prompt)
+                + len(
+                    _with_feature_instructions(
+                        self._reviewer_system, request.feature_instructions
+                    )
+                )
                 <= self._settings.max_stage_prompt_chars
             ):
                 return prompt

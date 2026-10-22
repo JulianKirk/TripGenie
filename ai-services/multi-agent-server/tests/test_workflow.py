@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -482,3 +483,69 @@ def test_a_completed_attempt_that_ran_a_write_tool_goes_to_the_human(settings) -
     assert no_writes["passed"] is False
     skipped = next(e for e in history if e["event"] == "revision_skipped")
     assert skipped["detail"]["reason"] == "write_tool_executed"
+
+
+def test_common_feature_rules_reach_planner_and_reviewer_only(
+    client: TestClient, fake: FakeAiMode
+) -> None:
+    common = "Feature policy sentinel: one shot, no clarification questions."
+    worker_only = "Worker-only sentinel: return activity parts JSON."
+    run = start_and_settle(
+        client, feature_instructions=common, worker_system=worker_only
+    )
+    assert run["status"] == "awaiting_human"
+    assert len(fake.calls) == 3
+    for call in fake.calls:
+        body = call["body"]
+        assert common not in body["prompt"]
+        if call["agent"] == "worker":
+            assert body["system"].startswith(worker_only)
+            assert common not in body["system"]
+        else:
+            assert common in body["system"]
+            assert worker_only not in body["system"]
+    assert common not in str(run)
+    history = client.get(f"/runs/{run['run_id']}/history").json()
+    assert common not in str(history)
+
+
+def test_common_feature_rules_survive_replanning(settings) -> None:
+    fake = FakeAiMode(
+        reviewer=[lambda _: generation(REVISE), lambda _: generation(APPROVE)]
+    )
+    with _client(settings, fake) as client:
+        run = start_and_settle(
+            client, feature_instructions="Keep feature rules on retry."
+        )
+    assert run["attempts"] == 2
+    assert len(fake.calls) == 6
+    assert all(
+        "Keep feature rules on retry." in call["body"]["system"]
+        for call in fake.calls
+        if call["agent"] != "worker"
+    )
+    assert all(
+        "Keep feature rules on retry." not in body["system"]
+        for body in fake.bodies("worker")
+    )
+
+
+def test_reviewer_budget_counts_common_feature_instructions(settings) -> None:
+    settings = replace(settings, max_stage_prompt_chars=8000)
+    result = {**WORKER_RESULT, "answer": "Evidence-backed answer. " * 220}
+    fake = FakeAiMode(worker=[lambda _: generation(result, [tool_trace()])])
+    with _client(settings, fake) as client:
+        run = start_and_settle(client, feature_instructions="Policy. " * 300)
+    assert run["status"] == "awaiting_human", run
+    (reviewer,) = fake.bodies("reviewer")
+    assert len(reviewer["system"]) + len(reviewer["prompt"]) <= 8000
+    assert len(json.loads(reviewer["prompt"])["result"]) < 4000
+
+
+def test_common_rules_do_not_change_existing_worker_prompt(
+    client: TestClient, fake: FakeAiMode
+) -> None:
+    start_and_settle(client)
+    original = fake.bodies("worker")[0]["system"]
+    start_and_settle(client, feature_instructions="One-shot feature rules.")
+    assert fake.bodies("worker")[1]["system"] == original

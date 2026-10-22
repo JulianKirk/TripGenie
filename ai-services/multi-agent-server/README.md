@@ -112,6 +112,19 @@ native MCP functions … actually invoke them", which tool to call first and
 with which `context` fields. The server appends its own workflow rules after
 it; keep your instructions first (see ADR 0005).
 
+For rules needed by every role, send optional `feature_instructions` alongside
+`worker_system`. Use concise domain policy (for example, one-shot interaction and
+group-price semantics), not Worker JSON formatting or tool-execution commands.
+Planner and Reviewer receive it in their system prompts on every attempt and
+retain their own roles and schemas. Keep the complete Worker policy in
+`worker_system`; the server does not append these rules again or change that
+prompt's order. This keeps Worker context concise and preserves the feature's
+execution instructions. The two fields share the 6,000-character limit, and
+Planner/Reviewer stage budgets count the common rules. Omitting it
+preserves existing behavior. Upgrade the shared server before a feature starts
+sending the field; older servers reject it as unknown. Trusted feature backends
+load these instructions from assets, never from user request text.
+
 ### 3. Poll and show each stage
 
 `GET /runs/{run_id}` is cheap; poll every 2 s from the UI (HTMX:

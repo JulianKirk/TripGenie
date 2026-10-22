@@ -147,7 +147,8 @@ jobs:
     # stay configured in Compose but are switched off in CI; no host services
     # or models exist on the runner.
     env:
-      STUDENT4_AI_ASSISTANT_ENABLED: "false"
+      STUDENT4_BACKEND_MULTI_AGENT_ENABLED: "false"
+      STUDENT4_BACKEND_MCP_ENABLED: "false"
       STUDENT4_BACKEND_RAG_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
@@ -170,7 +171,7 @@ jobs:
       - name: Verify MCP and RAG are disabled
         run: |
           docker compose exec -T student-4-backend env \
-            | grep -E '^(AI_ASSISTANT_ENABLED|RAG_ENABLED|AI_MODE_URL|RAG_URL)=' \
+            | grep -E '^(STUDENT4_BACKEND_MCP_ENABLED|STUDENT4_BACKEND_RAG_ENABLED|STUDENT4_BACKEND_AI_MODE_BASE_URL|STUDENT4_BACKEND_RAG_BASE_URL)=' \
             | sort
           curl --fail --silent --show-error \
             -H 'Content-Type: application/json' \
@@ -189,6 +190,13 @@ jobs:
             http://127.0.0.1:8084/suggestions/ask \
             | grep -q 'Activity guides disabled'
           echo 'Frontend knowledge mode shows the disabled state.'
+      - name: Verify Smart Planner is disabled
+        run: |
+          curl --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"Plan outdoor activities"}' \
+            http://127.0.0.1:18008/activity/planner/runs \
+            | python -c "import json, sys; assert 'disabled' in json.load(sys.stdin)['detail']"
       - name: Compose logs on failure
         if: failure()
         run: |
