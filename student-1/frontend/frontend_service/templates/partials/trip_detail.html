@@ -328,9 +328,22 @@
     {% endif %}
   </section>
 
-  {% include "partials/ai_mode_panel.html" %}
+  {# A panel that configuration switched off is left out; one is still shown
+     when a stale page posted to it, with the error but without its form. #}
+  {% if ai_features is none %}
+    <div class="banner banner--info" role="status">
+      <p>TripGenie could not confirm which AI features are switched on here, so every AI panel is shown. A panel that is off says so when you use it.</p>
+    </div>
+  {% endif %}
+  {% if ai_features is none or ai_features.ai_suggestions or ai_error %}
+    {% include "partials/ai_mode_panel.html" %}
+  {% endif %}
   {% with trip_id = trip.id %}
-    {% include "partials/rag_panel.html" %}
-    {% include "partials/mcp_panel.html" %}
+    {% if ai_features is none or ai_features.rag or rag_error %}
+      {% include "partials/rag_panel.html" %}
+    {% endif %}
+    {% if ai_features is none or ai_features.mcp or mcp_error %}
+      {% include "partials/mcp_panel.html" %}
+    {% endif %}
   {% endwith %}
 </article>

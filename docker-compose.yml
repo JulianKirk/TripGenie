@@ -88,7 +88,9 @@ services:
     environment:
       STUDENT1_BACKEND_DB_API_BASE_URL: http://student-1-database:8002
       STUDENT1_BACKEND_ACCOMMODATION_API_BASE_URL: http://student-2-backend:9000
-      STUDENT1_BACKEND_AI_MODE_BASE_URL: http://host.docker.internal:8006
+      # Blank turns off AI suggestions and MCP, and the frontend stops offering
+      # them. No colon in the interpolation, so an env file can blank it.
+      STUDENT1_BACKEND_AI_MODE_BASE_URL: ${STUDENT1_BACKEND_AI_MODE_BASE_URL-http://host.docker.internal:8006}
       # AI-Mode's /generate runs the MCP tool loop on a local 8b model; 15 s
       # (the code default) timed out every live request.
       STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS: "120"

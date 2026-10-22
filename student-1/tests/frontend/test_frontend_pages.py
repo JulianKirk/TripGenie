@@ -153,6 +153,21 @@ def test_empty_state_renders_when_no_trips(client, backend_api) -> None:
     assert "AI draft suggestions unlock after you create a trip" in response.text
 
 
+def test_empty_state_omits_ai_mode_when_ai_mode_is_disabled(
+    client, backend_api
+) -> None:
+    backend_api.trips.clear()
+    backend_api.items.clear()
+    backend_api.ai_features["ai_suggestions"] = False
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Create trip" in response.text
+    assert "AI mode" not in response.text
+    assert 'id="ai-mode-heading"' not in response.text
+
+
 def test_trip_create_success_redirects_for_full_page_and_swaps_for_htmx(client) -> None:
     full_page_response = client.post(
         "/trips",

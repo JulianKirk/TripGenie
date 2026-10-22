@@ -5,6 +5,7 @@
 <section id="rag-panel" class="mode-panel mode-panel--ai" aria-labelledby="rag-heading">
   <p class="section-eyebrow">AI mode · knowledge base</p>
   <h3 id="rag-heading">Ask the TripGenie knowledge base</h3>
+  {% if ai_features is none or ai_features.rag %}
   <p>
     Ask a question about planning trips and itineraries. Answers come only from TripGenie's travel-planning knowledge base, such as destination guides, seasons and events, and itinerary planning advice, and always list their sources. If the knowledge base does not cover the question, TripGenie says so instead of guessing.
   </p>
@@ -44,6 +45,7 @@
   <div id="rag-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
     Searching the knowledge base — this can take up to a minute with a local model.
   </div>
+  {% endif %}
 
   {% if rag_error %}
     {{ forms.panel_error(rag_error, 'rag-result-heading') }}

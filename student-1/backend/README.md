@@ -10,7 +10,7 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_DB_API_BASE_URL` | `http://student-1-database:8002` | Base URL for the internal Student 1 database API. |
 | `STUDENT1_BACKEND_DB_API_PREFIX` | `/internal` | Internal Student 1 database API prefix. |
 | `STUDENT1_BACKEND_DB_API_TIMEOUT_SECONDS` | `5` | Timeout for backend-to-database HTTP calls. |
-| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` injects `http://ai-mode:8006`. |
+| `STUDENT1_BACKEND_AI_MODE_BASE_URL` | blank / disabled when unset | Shared Release 0 AI-Mode base URL. Leave unset for native runs; `docker-compose.yml` defaults it to `http://host.docker.internal:8006`, and an env file can blank it (the cloud profile does). |
 | `STUDENT1_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `15` | Timeout for backend-to-shared-AI-Mode HTTP calls. |
 | `STUDENT1_BACKEND_AI_MODE_MAX_PROMPT_CHARS` | `12000` | Consumer-side prompt budget. Keep it aligned with the shared `AI_MODE_MAX_PROMPT_CHARS` contract. |
 | `STUDENT1_BACKEND_AI_PROMPT_ASSET` | `runtime_ai_suggestions_v2.md` | Versioned runtime prompt asset loaded from `backend_service/prompts/`. |
@@ -185,6 +185,15 @@ Both routes are off unless enabled (above). Disabled returns `503` with
 never probe RAG or MCP, and never call `/generate`. Each request generates
 one correlation id (`student1-rag-…` / `student1-mcp-…`), sent as
 `correlation_id` (plus `X-Request-ID` to RAG). An unknown trip is the usual `404 NOT_FOUND`.
+
+### `GET /api/ai-features`
+
+Returns `{"data": {"ai_suggestions": bool, "rag": bool, "mcp": bool}}`, read
+from the same settings the routes check: `ai_suggestions` needs
+`STUDENT1_BACKEND_AI_MODE_BASE_URL`, `rag` needs `STUDENT1_BACKEND_RAG_ENABLED`,
+and `mcp` needs both `STUDENT1_BACKEND_MCP_ENABLED` and the AI-Mode URL. It
+never probes a live service. The frontend uses it to hide panels the
+configuration switches off; the routes still refuse when called anyway.
 
 ### `POST /api/trips/{tripId}/rag-query`
 

@@ -116,19 +116,47 @@ def test_images_are_amd64_registry_builds_without_grouping_links():
 
 
 def test_renders_the_real_compose_file():
+    config = compose_config()
+    apps = load().apps(config, "r.io", "abc", DOMAIN)
+    assert len(apps) == 18
+    assert sum(a["external"] for a in apps) == 6
+    # The image build file must itself be a valid compose project.
+    images = load().images(config, "r.io", "abc")
+    assert set(images["volumes"]) >= {"student-1-db", "student-5-sqlite"}
+
+
+def compose_config(*env_file):
     compose = ["docker", "compose", "-f", str(ROOT / "docker-compose.yml")]
+    for name in env_file:
+        compose += ["--env-file", str(ROOT / "shared" / "configuration" / name)]
     config = subprocess.run(  # noqa: S603 - fixed argv, no user input
         [*compose, "config", "--format", "json"],
         check=True,
         capture_output=True,
         text=True,
     ).stdout
-    apps = load().apps(json.loads(config), "r.io", "abc", DOMAIN)
-    assert len(apps) == 18
-    assert sum(a["external"] for a in apps) == 6
-    # The image build file must itself be a valid compose project.
-    images = load().images(json.loads(config), "r.io", "abc")
-    assert set(images["volumes"]) >= {"student-1-db", "student-5-sqlite"}
+    return json.loads(config)
+
+
+def test_cloud_student_1_backend_gets_no_ai_mode_url_and_locals_keep_it():
+    # Blank in .env.cloud must survive compose (no ":-" fallback) and then be
+    # dropped here, leaving the backend's default: AI-Mode not configured.
+    apps = {
+        a["name"]: a
+        for a in load().apps(compose_config(".env.cloud"), "r.io", "abc", DOMAIN)
+    }
+    backend_env = apps["student-1-backend"]["env"]
+    assert "STUDENT1_BACKEND_AI_MODE_BASE_URL" not in backend_env
+    assert backend_env["STUDENT1_BACKEND_RAG_ENABLED"] == "false"
+    assert backend_env["STUDENT1_BACKEND_MCP_ENABLED"] == "false"
+    for local in ((), (".env.example",)):
+        environment = compose_config(*local)["services"]["student-1-backend"][
+            "environment"
+        ]
+        assert (
+            environment["STUDENT1_BACKEND_AI_MODE_BASE_URL"]
+            == "http://host.docker.internal:8006"
+        )
 
 
 def test_only_public_ports_map_to_cloud_addresses():

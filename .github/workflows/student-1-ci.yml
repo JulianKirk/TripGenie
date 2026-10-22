@@ -33,7 +33,7 @@ on:
 
 # Release 1 keeps the RAG and MCP integrations in the code but CI never reaches
 # a host service: both are switched off here and the compose job proves it.
-# AI-Mode has no switch; its compose URL points at the host and nothing in CI
+# AI-Mode keeps its compose URL (it points at the host) and nothing in CI
 # calls it.
 env:
   STUDENT1_BACKEND_RAG_ENABLED: "false"
