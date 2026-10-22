@@ -119,7 +119,14 @@ picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).
 
 The existing AI activity assistant has a third radio option, **Smart Planner**,
 using the same question box and optional trip selector. Activity tools (MCP) and
-Activity guides (RAG) keep their existing behaviour.
+Activity guides (RAG) remain separate modes.
+
+The activity MCP and Smart Planner prompts treat each submission as a one-shot
+request. They must not ask follow-up questions or expect human review to supply
+missing inputs. Human review only accepts, corrects or rejects the finished draft.
+Missing information is stated as a limitation, using catalogue evidence for the
+known constraints; an unknown party size must not produce a verified total-budget
+recommendation.
 
 The new flow is:
 

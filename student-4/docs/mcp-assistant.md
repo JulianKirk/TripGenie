@@ -10,8 +10,12 @@ have been removed. `activity_assistant_v1.md` is the primary assistant prompt;
 the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker.
 That compact prompt prioritises the original task over invalid plan steps, avoids
 unrequested search preferences, and directs schema-based recovery from rejected
-read calls. Both activity prompts put missing-party-size clarification before
-search, distinguish group totals from per-person prices, check participant minimums,
+read calls. Both activity prompts treat generation as a one-shot request with no
+follow-up questions or input supplied during human review. They use stated requirements and
+selected-trip context, retrieve evidence using known constraints, and state missing
+information as a limitation. Without party size, total-budget answers show grounded
+unit prices as text, omit activity cards, and do not claim affordability. They
+distinguish group totals from per-person prices, check participant minimums,
 and require requested detail facts in the final text. The Smart Planner Worker also
 uses revision feedback rather than repeating a failed attempt. They keep
 group-cost and accessibility checks without copying tool
@@ -73,8 +77,9 @@ Expand **Tools used** and **Returned tool data**. Verify actual search/detail ca
 and whether the answer accurately reflects those records. Card lookups use the
 ordinary backend and do not appear as MCP calls. A missing model-selected detail
 call is a model-quality failure, not a trigger for backend answer rewriting.
-Also exercise natural-language budgets/dates, clarification, cross-domain tools,
-ordinary catalogue actions and MCP outage/recovery. Use isolated test data for writes.
+Also exercise natural-language budgets/dates, missing-input limitations without
+follow-up questions, cross-domain tools, ordinary catalogue actions and MCP
+outage/recovery. Use isolated test data for writes.
 
 ## Checks
 
