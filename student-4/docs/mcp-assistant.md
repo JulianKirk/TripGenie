@@ -2,7 +2,8 @@
 
 The frontend calls its backend, which sends the question, optional selected trip,
 trusted system prompt and final-answer schema to shared AI-Mode `/generate`.
-AI-Mode discovers the complete shared MCP catalogue and runs the model/tool loop.
+AI-Mode receives `feature: "student-4"`, selects activity and shared trip tools
+using MCP feature metadata, and runs the model/tool loop.
 The model interprets requirements, selects tools and writes its answer. Student 4
 only validates the response, resolves grounded activity cards and displays the trace.
 The superseded plan/evaluate endpoints, their two prompt assets and their parser
@@ -26,10 +27,16 @@ uses revision feedback rather than repeating a failed attempt. They keep
 group-cost and accessibility checks without copying tool
 definitions or adding model calls.
 
-All advertised tools are available, including other students' tools and activity
-create/update/delete. Prompts direct writes only when requested. Tool traces
+The selected catalogue includes activity tools (including create/update/delete)
+and shared trip context/itinerary tools. Prompts direct writes only when requested. Tool traces
 record executed actions and their outcomes; inspect these when reviewing a result.
 No conversation history is retained. Ordinary browsing and CRUD work without AI.
+
+Smart Planner sends `feature: "student-4"` without a duplicate `allowed_tools`
+list. The shared server forwards the feature to both Planner catalogue discovery
+and Worker execution. Stage history retains AI-Mode's `available_tools` snapshots.
+Normal MCP mode uses the same top-level feature field. Other callers that omit
+`feature` retain their existing full-catalogue behavior.
 
 ## Local setup
 
@@ -68,7 +75,8 @@ docker compose --env-file shared/configuration/.env.example up --build -d
 Compose publishes Student 4's public backend at `127.0.0.1:18008` and Student 1's
 at `127.0.0.1:18001` (Student 3 `18003`, Student 5 `18005`) for host MCP; databases remain private. Other tool providers
 must be reachable at the URLs configured on MCP. An unavailable provider produces
-an explicit tool error. All catalogue definitions are still discoverable.
+an explicit tool error. MCP continues to publish the full catalogue to direct clients; generation uses
+the selected feature definitions.
 
 ## Functional checks
 
@@ -82,7 +90,7 @@ and whether the answer accurately reflects those records. Card lookups use the
 ordinary backend and do not appear as MCP calls. Check that the model-selected
 calls supply the requested detail evidence. Also exercise natural-language
 budgets/dates, handling of unspecified inputs without follow-up questions,
-cross-domain tools, ordinary catalogue actions and MCP outage/recovery. Use
+shared trip tools, ordinary catalogue actions and MCP outage/recovery. Use
 isolated test data for writes.
 
 ## Checks

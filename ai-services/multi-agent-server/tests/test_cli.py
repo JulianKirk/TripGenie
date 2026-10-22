@@ -163,6 +163,7 @@ def test_terminal_grounding_uses_each_feature_id_keys(
     cli._run(RecordingClient(), arguments)  # type: ignore[arg-type]
 
     assert sent[0]["grounding"]["id_keys"] == id_keys
+    assert "allowed_tools" not in sent[0]
 
 
 def test_failed_checks_are_shown_before_the_human_decides(
@@ -218,3 +219,19 @@ def test_a_terminal_with_nothing_to_read_does_not_crash_the_prompt(
     monkeypatch.setattr("builtins.input", no_input)
 
     assert cli._ask("Notes: ") is None
+
+
+def test_cli_rejects_obsolete_tool_selector_before_starting_a_run() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli._parser().parse_args(
+            [
+                "run",
+                "--feature",
+                "student-4",
+                "--task",
+                "Find an activity",
+                "--tool",
+                "activities_search",
+            ]
+        )
+    assert exc.value.code == 2

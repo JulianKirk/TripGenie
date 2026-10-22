@@ -30,6 +30,7 @@ from .checks import (
     is_write_tool,
     run_checks,
     schema_errors,
+    tool_scope_check,
     validate_schema,
     walk,
 )
@@ -102,7 +103,6 @@ class WorkflowEngine:
             {
                 "feature": request.feature,
                 "correlation_id": run.correlation_id,
-                "allowed_tools": request.allowed_tools,
                 "trip_id": request.trip_id,
             },
         )
@@ -228,6 +228,7 @@ class WorkflowEngine:
                 output,
                 step.tools,
                 self._settings.write_tool_markers,
+                step.available_tools,
             )
             self._transition(run, "reviewing")
             self._event(
@@ -386,6 +387,28 @@ class WorkflowEngine:
 
     # -------------------------------------------------------------- human
 
+    @staticmethod
+    def _review_scope_errors(
+        run: StoredRun, decision: ReviewRequest
+    ) -> list[dict[str, str]]:
+        if decision.decision == "reject":
+            return []
+        worker = next(
+            (step for step in reversed(run.steps) if step.agent == "worker"), None
+        )
+        # Completed pre-snapshot records retain their original review contract.
+        # New completed Worker stages always have a validated nonempty snapshot.
+        if worker is None or (
+            worker.status == "completed" and not worker.available_tools
+        ):
+            return []
+        check = tool_scope_check(worker.tools, worker.available_tools)
+        return (
+            []
+            if check.passed
+            else [{"field": "available_tools", "issue": check.detail}]
+        )
+
     def review(self, run_id: str, decision: ReviewRequest) -> RunRecord:
         run = self._load(run_id)
         if run.status != "awaiting_human":
@@ -446,6 +469,7 @@ class WorkflowEngine:
                 approved = [run.proposed_actions[index] for index in accepted]
         else:
             final = None
+        details.extend(self._review_scope_errors(run, decision))
         if details:
             raise validation_error(VALIDATION_ERROR_MESSAGE, details)
 

@@ -108,11 +108,28 @@ def schema_errors(result: Any, schema: dict[str, Any], limit: int = 3) -> list[s
     ]
 
 
+def tool_scope_check(tools: list[ToolTrace], available_tools: list[str]) -> Check:
+    outside = sorted(
+        {trace.tool for trace in tools if trace.tool not in available_tools}
+    )
+    return Check(
+        name="allowed_tools",
+        passed=not outside,
+        blocking=True,
+        detail=(
+            "tools outside the feature catalogue: " + ", ".join(outside)
+            if outside
+            else "every tool call was in the feature catalogue"
+        ),
+    )
+
+
 def run_checks(
     request: RunRequest,
     result: dict[str, Any] | None,
     tools: list[ToolTrace],
     markers: tuple[str, ...],
+    available_tools: list[str],
 ) -> list[Check]:
     checks: list[Check] = []
 
@@ -137,29 +154,16 @@ def run_checks(
         )
 
     called = [trace.tool for trace in tools]
-    if request.allowed_tools:
-        outside = sorted({name for name in called if name not in request.allowed_tools})
-        checks.append(
-            Check(
-                name="allowed_tools",
-                passed=not outside,
-                blocking=True,
-                detail=(
-                    "tools outside the allowed set: " + ", ".join(outside)
-                    if outside
-                    else "every tool call was in the allowed set"
-                ),
-            ),
-        )
-        succeeded = sum(1 for trace in tools if trace.status == "success")
-        checks.append(
-            Check(
-                name="tool_evidence",
-                passed=succeeded > 0,
-                blocking=True,
-                detail=f"{succeeded} of {len(tools)} tool call(s) succeeded",
-            ),
-        )
+    checks.append(tool_scope_check(tools, available_tools))
+    succeeded = sum(1 for trace in tools if trace.status == "success")
+    checks.append(
+        Check(
+            name="tool_evidence",
+            passed=succeeded > 0,
+            blocking=True,
+            detail=f"{succeeded} of {len(tools)} tool call(s) succeeded",
+        ),
+    )
 
     writes = sorted({name for name in called if is_write_tool(name, markers)})
     checks.append(

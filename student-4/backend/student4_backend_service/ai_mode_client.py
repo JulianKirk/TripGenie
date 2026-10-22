@@ -96,6 +96,7 @@ class AiModeClient:
                 if request_timeout is not None
                 else self._client.timeout,
                 json={
+                    "feature": "student-4",
                     "prompt": prompt,
                     **({"system": system} if system is not None else {}),
                     "schema": schema,

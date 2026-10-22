@@ -83,7 +83,7 @@ def test_the_planner_sees_the_task_but_only_allowed_tools_survive(
     (planner,) = fake.bodies("planner")
     prompt = json.loads(planner["prompt"])
     assert prompt["task"].startswith("Cheapest way")
-    assert prompt["allowed_tools"] == ["transport_search", "transport_get"]
+    assert "allowed_tools" not in prompt
     assert prompt["output_fields"] == ["actions", "answer", "items"]
     assert planner["schema"]["required"][0] == "goal"
     # The Planner named a delete tool; it is dropped, not passed to the Worker.
@@ -350,7 +350,7 @@ def test_absent_fields_are_left_out_of_the_worker_prompt(
 
     (worker,) = fake.bodies("worker")
     prompt = json.loads(worker["prompt"])
-    assert set(prompt) == {"task", "plan", "allowed_tools", "first_tool"}
+    assert set(prompt) == {"task", "plan", "first_tool"}
 
 
 def test_feature_context_cannot_override_the_workflow_fields(

@@ -109,6 +109,7 @@ def generation(body: Any, tools: list[dict[str, Any]] | None = None) -> httpx.Re
                 "response": body if isinstance(body, str) else json.dumps(body),
                 "done": True,
                 "tools": tools or [],
+                "available_tools": ["transport_search", "transport_get"],
             },
         },
     )

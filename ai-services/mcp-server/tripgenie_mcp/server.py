@@ -71,6 +71,18 @@ CATALOGUE = {
     },
 }
 
+ADDITIONAL_FEATURES = {
+    "trip_get_context": set(CATALOGUE),
+    "trips_list_itinerary_items": set(CATALOGUE),
+    "accommodations_search": {"student-1"},
+    "activities_search": {"student-1"},
+    "transport_search": {"student-1"},
+    "budgets_list": {"student-1"},
+    "accommodations_committed_costs": {"student-5"},
+    "activities_committed_costs": {"student-5"},
+    "transport_trip_costs": {"student-5"},
+}
+
 
 def create_server(
     settings: Settings | None = None, provider: ProviderClient | None = None
@@ -124,6 +136,14 @@ def create_server(
                 name=name,
                 description=description,
                 structured_output=True,
+                meta={
+                    "tripgenie": {
+                        "owner": owner,
+                        "features": sorted(
+                            {owner} | ADDITIONAL_FEATURES.get(name, set())
+                        ),
+                    }
+                },
                 annotations=ToolAnnotations(
                     readOnlyHint=name
                     not in {

@@ -91,11 +91,11 @@ class AiModeService:
 
         try:
             if use_tools:
-                response, tools = await self._agent.generate(
+                response, tools, available_tools = await self._agent.generate(
                     payload, resolved_model, correlation_id
                 )
             else:
-                response = await self._agent.generate_plain(
+                response, available_tools = await self._agent.generate_plain(
                     payload, resolved_model, correlation_id
                 )
                 tools = []
@@ -118,6 +118,7 @@ class AiModeService:
                 provider="ollama",
                 response=response,
                 tools=tools,
+                available_tools=available_tools,
                 done=True,
             )
         except ValidationError as exc:

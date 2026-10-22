@@ -26,31 +26,6 @@ import uvicorn
 from .client import MultiAgentClient, MultiAgentClientError
 from .config import Settings
 
-# The read-only tools each feature owns on the shared MCP server, used as the
-# default allow-list for terminal runs. Names only: MCP owns the definitions,
-# and `--tool` overrides this list.
-DEFAULT_TOOLS: dict[str, list[str]] = {
-    "student-1": ["trip_get_context", "trips_list_itinerary_items"],
-    "student-2": [
-        "accommodations_search",
-        "accommodations_get",
-        "accommodations_committed_costs",
-    ],
-    "student-3": [
-        "transport_search",
-        "transport_get",
-        "transport_compare",
-        "transport_trip_costs",
-    ],
-    "student-4": [
-        "activities_search",
-        "activities_get",
-        "activities_list_categories",
-        "activities_committed_costs",
-    ],
-    "student-5": ["budgets_list", "budgets_get_summary", "expenses_list"],
-}
-
 GROUNDING_ID_KEYS: dict[str, list[str]] = {
     "student-5": ["budget_id", "expense_id", "trip_id", "item_id"],
 }
@@ -106,12 +81,9 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser(
         "run", help="Start a Planner → Worker → Reviewer workflow"
     )
-    run.add_argument("--feature", required=True, choices=sorted(DEFAULT_TOOLS))
+    run.add_argument("--feature", required=True, choices=Settings().features)
     run.add_argument("--task", required=True)
     run.add_argument("--trip-id")
-    run.add_argument(
-        "--tool", action="append", dest="tools", help="Allowed tool (repeatable)"
-    )
     run.add_argument("--decision", choices=sorted(set(DECISIONS.values())))
     run.add_argument("--reviewer", default=None)
     run.add_argument("--notes")
@@ -175,7 +147,6 @@ def _run(client: MultiAgentClient, arguments: argparse.Namespace) -> int:
         "trip_id": arguments.trip_id,
         "worker_system": TERMINAL_WORKER_RULES,
         "output_schema": TERMINAL_OUTPUT_SCHEMA,
-        "allowed_tools": arguments.tools or DEFAULT_TOOLS[feature],
         "grounding": {
             "source": feature,
             "id_paths": ["items[].id"],

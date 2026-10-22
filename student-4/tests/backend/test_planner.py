@@ -60,7 +60,7 @@ def test_start_sends_feature_owned_contract() -> None:
     assert body["feature"] == "student-4"
     assert body["trip_id"] == "trip_sydney"
     assert body["grounding"]["id_paths"] == ["parts[].activity_id"]
-    assert "activities_search" in body["allowed_tools"]
+    assert "allowed_tools" not in body
     assert "output_schema" in body and "worker_system" in body
     prompts = files("student4_backend_service").joinpath("prompts")
     assert body["feature_instructions"] == prompts.joinpath(
@@ -174,6 +174,7 @@ def test_history_keeps_agent_outputs_and_human_audit() -> None:
                 "attempt": 1,
                 "status": "completed",
                 "output": {"goal": "Find a walk"},
+                "available_tools": ["activities_search", "trip_get_context"],
                 "duration_ms": 42,
             }
         ]
@@ -203,6 +204,10 @@ def test_history_keeps_agent_outputs_and_human_audit() -> None:
     assert response.status_code == 200
     assert response.json()["run"]["steps"][0]["output"] == {"goal": "Find a walk"}
     assert response.json()["history"][0]["actor"] == "planner"
+    assert response.json()["run"]["steps"][0]["available_tools"] == [
+        "activities_search",
+        "trip_get_context",
+    ]
 
 
 @pytest.mark.parametrize("decision", ["approve", "correct", "reject"])

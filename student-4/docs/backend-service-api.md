@@ -143,10 +143,10 @@ as unavailable context. Without party size, a total-budget answer must not claim
 affordability or return recommendation cards. The backend does not parse these
 requirements, rewrite filters, reject recommendations
 on their behalf, force detail reads or replace model prose. Prices on cards are
-fresh catalogue values; narrative correctness remains model-dependent.
+fresh catalogue values, while the model supplies the narrative.
 
-All tools discovered by shared AI-Mode are available, including other students'
-tools and activity writes. The prompt directs writes only for explicit user requests;
+The backend sends top-level `feature: "student-4"` to shared AI-Mode. MCP metadata
+selects activity tools and shared trip context/itinerary tools, including activity writes. The prompt directs writes only for explicit user requests;
 this replaces the earlier hard read-only allowlist. The ordinary itinerary button
 and CRUD workflows remain available independently.
 
@@ -809,7 +809,9 @@ The backend sends `activity_planner_rules_v1.md` as trusted
 cover one-shot interaction, read-only recommendations, group budgets and required
 detail evidence. The Worker keeps the complete `activity_planner_v1.md` prompt,
 which already includes this policy as well as execution/output instructions.
-The rules are not appended again to the Worker. User questions cannot supply either prompt. Upgrade the
+The rules are not appended again to the Worker. Both agent requests use the
+Student 4 feature scope instead of a caller-maintained `allowed_tools` list.
+Stage history preserves the discovered `available_tools` names. User questions cannot supply either prompt. Upgrade the
 shared Multi-Agent Server to support the optional field before this backend;
 existing callers can omit it. This adds no model calls or UI steps.
 
@@ -844,8 +846,9 @@ Partial acceptance is not exposed because this workflow proposes no executable a
 
 Approval does not write activities, book anything, or add itinerary items. The
 ordinary Add to itinerary control remains available on accepted cards. Prompts
-instruct the Worker to use read-only tools, but the shared server's `allowed_tools`
-and `no_writes` checks are retrospective, not a pre-execution authorization gate.
+instruct the Worker to use read-only tools. AI-Mode enforces feature membership
+before tool execution; the shared server checks the actual `available_tools`
+snapshot and performs its `no_writes` check on the recorded trace.
 Tool traces remain visible: rejection cannot undo any tool calls already executed.
 
 Configuration (read by backend `Settings.from_env`):

@@ -28,7 +28,9 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
   dates. Enforce the aggregate invariants documented in the object model.
 - The primary AI panel is a one-shot client of shared AI-Mode `/generate`.
   Send the question and selected-trip data separately from the trusted system
-  prompt. Shared AI-Mode discovers and executes all MCP tools, including writes.
+  prompt. Send top-level `feature: "student-4"`; shared AI-Mode selects the
+  MCP-owned activity scope and shared trip tools, including activity writes.
+  Do not maintain a duplicate feature-side `allowed_tools` list.
 - Keep Student 4 limited to wire validation, tool-result display and resolving
   model-selected activity references through its ordinary activity lookup.
   Card IDs must originate in successful activity tool results from this request.

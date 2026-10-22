@@ -181,7 +181,8 @@ checks disable approval and correction; they must be resolved in a new run or th
 proposal rejected. Rejection remains available.
 
 `/planner/{run_id}/history` downloads JSON evidence through the backend. History
-includes the run, stage outputs/tool traces and coordination/audit events. It is
+includes the run, stage outputs/tool traces, discovered `available_tools`
+snapshots and coordination/audit events. It is
 not published automatically. Reviewer names are user-entered audit labels, not
 verified identities. No per-user authentication is introduced by this feature.
 

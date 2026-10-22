@@ -9,12 +9,14 @@ trace.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from .errors import AgentError
+from .models import TOOL_NAME
 
 if TYPE_CHECKING:
     from .config import Settings
@@ -26,6 +28,7 @@ class Generation:
     ai_run_id: str
     model: str
     tools: list[dict[str, Any]] = field(default_factory=list)
+    available_tools: list[str] = field(default_factory=list)
 
 
 class AiModeError(AgentError):
@@ -54,6 +57,31 @@ def _timeout() -> AiModeError:
 def _malformed(what: str) -> AiModeError:
     message = f"AI-Mode returned a malformed {what}."
     return AiModeError("BAD_GATEWAY", message)
+
+
+def _available_tools(data: dict[str, Any], *, required: bool) -> list[str]:
+    available = data.get("available_tools", [])
+    if (
+        not isinstance(available, list)
+        or len(available) > 256
+        or any(
+            not isinstance(name, str) or not re.fullmatch(TOOL_NAME, name)
+            for name in available
+        )
+        or len(set(available)) != len(available)
+        or (required and not available)
+    ):
+        tools = data.get("tools")
+        code = "BAD_GATEWAY"
+        message = "AI-Mode returned an invalid available tool catalogue."
+        raise AiModeError(
+            code,
+            message,
+            [tool for tool in tools if isinstance(tool, dict)]
+            if isinstance(tools, list)
+            else [],
+        )
+    return available
 
 
 class AiModeClient:
@@ -90,6 +118,7 @@ class AiModeClient:
         *,
         prompt: str,
         system: str,
+        feature: str,
         schema: dict[str, Any],
         correlation_id: str,
         metadata: dict[str, str],
@@ -98,6 +127,7 @@ class AiModeClient:
         tool_catalogue: bool = False,
     ) -> Generation:
         body: dict[str, Any] = {
+            "feature": feature,
             "prompt": prompt,
             "system": system,
             "schema": schema,
@@ -138,11 +168,13 @@ class AiModeClient:
         try:
             data = payload["data"]
             tools = data.get("tools") or []
+            available = _available_tools(data, required=use_tools or tool_catalogue)
             generation = Generation(
                 response=str(data["response"]),
                 ai_run_id=str(data["run_id"]),
                 model=str(data["model"]),
                 tools=[tool for tool in tools if isinstance(tool, dict)],
+                available_tools=available,
             )
             finished = data.get("done") is not False and isinstance(tools, list)
         except (KeyError, TypeError, ValueError, AttributeError) as exc:

@@ -75,7 +75,13 @@ def test_tool_ids_only_trust_successful_calls_from_the_source() -> None:
 
 def test_a_grounded_answer_passes_every_check() -> None:
     checks = _by_name(
-        run_checks(_request(), WORKER_RESULT, _traces(tool_trace()), MARKERS)
+        run_checks(
+            _request(),
+            WORKER_RESULT,
+            _traces(tool_trace()),
+            MARKERS,
+            ["transport_search"],
+        )
     )
 
     assert all(check.passed for check in checks.values()), checks
@@ -86,7 +92,9 @@ def test_each_check_catches_its_own_failure() -> None:
     result = {**WORKER_RESULT, "items": [{"id": TRANSPORT_A, "reason": "r"}]}
     traces = _traces(tool_trace(ids=(TRANSPORT_B,)), tool_trace("activities_delete"))
 
-    checks = _by_name(run_checks(_request(), result, traces, MARKERS))
+    checks = _by_name(
+        run_checks(_request(), result, traces, MARKERS, ["transport_search"])
+    )
 
     assert not checks["grounding"].passed
     assert TRANSPORT_A in checks["grounding"].detail
@@ -97,7 +105,7 @@ def test_each_check_catches_its_own_failure() -> None:
 
 
 def test_no_result_and_no_evidence_fail() -> None:
-    checks = _by_name(run_checks(_request(), None, [], MARKERS))
+    checks = _by_name(run_checks(_request(), None, [], MARKERS, ["transport_search"]))
 
     assert not checks["output_schema"].passed
     assert not checks["tool_evidence"].passed
@@ -105,21 +113,37 @@ def test_no_result_and_no_evidence_fail() -> None:
 
 def test_schema_violations_are_reported() -> None:
     checks = _by_name(
-        run_checks(_request(), {"answer": ""}, _traces(tool_trace()), MARKERS)
+        run_checks(
+            _request(),
+            {"answer": ""},
+            _traces(tool_trace()),
+            MARKERS,
+            ["transport_search"],
+        )
     )
 
     assert not checks["output_schema"].passed
     assert "required" in checks["output_schema"].detail
 
 
-def test_no_allowed_tools_skips_the_tool_checks() -> None:
+def test_legacy_empty_list_does_not_skip_evidence_checks() -> None:
     checks = _by_name(
         run_checks(
-            _request(allowed_tools=[], grounding=None), WORKER_RESULT, [], MARKERS
+            _request(allowed_tools=[], grounding=None),
+            WORKER_RESULT,
+            [],
+            MARKERS,
+            ["transport_search"],
         )
     )
 
-    assert set(checks) == {"output_schema", "no_writes"}
+    assert set(checks) == {
+        "output_schema",
+        "no_writes",
+        "allowed_tools",
+        "tool_evidence",
+    }
+    assert not checks["tool_evidence"].passed
 
 
 @pytest.mark.parametrize(

@@ -194,7 +194,6 @@ class Agents:
             "task": request.task,
             "trip_id": request.trip_id,
             "context": request.context,
-            "allowed_tools": request.allowed_tools,
             "output_fields": sorted(properties) if isinstance(properties, dict) else [],
         }
         if previous is not None:
@@ -233,12 +232,10 @@ class Agents:
                 "PLANNER_INVALID_OUTPUT",
                 "The Planner's reply did not match the plan schema.",
             ) from exc
-        # The plan may only name tools the feature allowed; anything else is
-        # dropped rather than passed on to the Worker as an instruction.
-        if request.allowed_tools:
-            plan.tools_to_use = [
-                tool for tool in plan.tools_to_use if tool in request.allowed_tools
-            ]
+        # Only names actually discovered by the gateway may guide the Worker.
+        plan.tools_to_use = [
+            tool for tool in plan.tools_to_use if tool in stage.step.available_tools
+        ]
         stage.step.output = plan.model_dump(mode="json")
         return stage.step, plan
 
@@ -273,13 +270,12 @@ class Agents:
                 # Goal and steps describe the work; evidence requirements and
                 # success criteria remain the Reviewer's validation inputs.
                 "plan": {"goal": plan.goal, "steps": plan.steps},
-                "allowed_tools": request.allowed_tools,
             },
         )
         if request.trip_id is not None:
             payload["trip_id"] = request.trip_id
         # Name the first planned call as the entry point for tool execution.
-        first_tool = next(iter(plan.tools_to_use or request.allowed_tools), None)
+        first_tool = next(iter(plan.tools_to_use), None)
         if first_tool is not None:
             payload["first_tool"] = first_tool
         if failed_checks:
@@ -458,6 +454,7 @@ class Agents:
             generation: Generation = await self._ai_mode.generate(
                 prompt=prompt,
                 system=system,
+                feature=feature,
                 schema=schema,
                 correlation_id=f"{correlation_id}.{agent[0]}{attempt}",
                 metadata=metadata,
@@ -493,6 +490,7 @@ class Agents:
             model=generation.model,
             output=output,
             tools=[ToolTrace.model_validate(tool) for tool in generation.tools],
+            available_tools=generation.available_tools,
         )
         if output is None and strict_json:
             step.status = "failed"

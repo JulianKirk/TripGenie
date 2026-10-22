@@ -29,7 +29,12 @@ The constraints already in place:
 1. **Agents are roles over AI-Mode, not new model adapters.** The Planner and
    Reviewer each make one `/generate-plain` call with their own versioned
    prompt and response schema. The Worker makes one `/generate` call, so it
-   uses the same MCP catalogue, limits and traces as every other feature.
+   uses the same MCP discovery, limits and traces as other feature clients.
+   The request's `feature` is forwarded to AI-Mode, which selects MCP-owned
+   feature membership before supplying definitions to either agent. Callers do
+   not maintain tool lists; legacy `allowed_tools` remains accepted for stored
+   requests and older clients but does not determine availability. Stage
+   `available_tools` snapshots supply planning and deterministic membership checks.
    The Planner sets `tool_catalogue: true`: AI-Mode discovers the MCP
    catalogue exactly as for `/generate` and appends the tool names,
    descriptions and argument schemas to its system message as reference
@@ -41,7 +46,7 @@ The constraints already in place:
 2. **Deterministic checks sit between the Worker and the Reviewer**: the
    feature's output schema, grounding of every declared id against successful
    tool results from that feature's source, allowed tools only, no write
-   tools, and at least one successful tool call. A failed check stops the
+   tools from the Worker's discovered catalogue, and at least one successful tool call. A failed check stops the
    Reviewer approving and triggers the one permitted revision, so a model's
    opinion is never the only safeguard.
    A revision goes back to the Planner, not only the Worker. AI-Mode validates

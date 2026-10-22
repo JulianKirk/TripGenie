@@ -92,8 +92,8 @@ class Settings:
     features: tuple[str, ...] = DEFAULT_FEATURES
     # The Planner and Reviewer make one tool-free AI-Mode call each. The Worker
     # runs AI-Mode's MCP tool loop, whose own budget defaults to 180 s.
-    # The Planner reads AI-Mode's full MCP catalogue (~20k characters), so it
-    # needs about 30 s warm on llama3.1:8b; the margin covers a cold load.
+    # The Planner reads AI-Mode's feature-scoped MCP catalogue; this deadline
+    # includes initial inference and model startup.
     planner_timeout_seconds: float = 90.0
     worker_timeout_seconds: float = 200.0
     reviewer_timeout_seconds: float = 60.0

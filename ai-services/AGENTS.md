@@ -19,7 +19,9 @@ This file supplements the repository-level `AGENTS.md` for `ai-services/`.
   Compose or call Ollama directly.
 - `mcp-server/` is the shared host-run tool server over public backend APIs.
   It exposes Student 4 activity CRUD for trusted local external clients.
-  Shared AI-Mode discovers every tool for `/generate`, including writes;
+  Shared AI-Mode filters discovered tools by request `feature` using MCP-owned
+  `_meta.tripgenie.features`; unscoped requests retain the full catalogue,
+  including writes;
   MCP annotations and model instructions alone are not authorization.
 - Shared AI-Mode owns the native model/MCP tool loop behind `/generate`. Keep
   natural-language interpretation in the model and tool descriptions in MCP.

@@ -112,6 +112,8 @@ class RunRequest(StrictModel):
     allowed_tools: list[Annotated[str, StringConstraints(pattern=TOOL_NAME)]] = Field(
         default_factory=list,
         max_length=24,
+        deprecated=True,
+        description="Deprecated caller list; availability comes from AI-Mode.",
     )
     grounding: Grounding | None = None
     # Where the Worker's result lists changes the human may approve, e.g.
@@ -226,6 +228,7 @@ class Step(StrictModel):
     model: str | None = None
     output: dict[str, Any] | None = None
     tools: list[ToolTrace] = Field(default_factory=list)
+    available_tools: list[str] = Field(default_factory=list)
     error: dict[str, str] | None = None
 
 
