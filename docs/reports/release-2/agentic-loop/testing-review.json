@@ -1,0 +1,85 @@
+{
+  "mode": "testing",
+  "generated_at": "2026-10-22T12:59:41Z",
+  "human_decision": "Partially Accept",
+  "failed": [
+    "Pre-commit security / student-2 pre-commit security report",
+    "Pre-commit security / student-3 pre-commit security report",
+    "Pre-commit security / student-4 pre-commit security report",
+    "Post-commit CI/CD endpoints / student-2 post-commit testing report",
+    "Post-commit CI/CD endpoints / student-3 post-commit testing report",
+    "Post-commit CI/CD endpoints / student-4 post-commit testing report",
+    "Post-commit CI/CD endpoints / student-2 post-commit endpoint tests",
+    "Post-commit CI/CD endpoints / student-4 post-commit endpoint tests"
+  ],
+  "checks": [
+    {
+      "check": "Pre-commit security / pre-commit hook runs the security scan",
+      "outcome": "OK: security hook -> scripts/security/scan.py"
+    },
+    {
+      "check": "Pre-commit security / scripts/security/scan.py",
+      "outcome": "OK: present"
+    },
+    {
+      "check": "Pre-commit security / student-1 pre-commit security report",
+      "outcome": "OK: student-1-pre-commit-security-report.md covers ruff, detect-secrets, pip-audit"
+    },
+    {
+      "check": "Pre-commit security / student-2 pre-commit security report",
+      "outcome": "FAIL: no student-2-pre-commit-security-report.md or student-2-pre-commit-security-scan.json in docs/reports/release-2"
+    },
+    {
+      "check": "Pre-commit security / student-3 pre-commit security report",
+      "outcome": "FAIL: no student-3-pre-commit-security-report.md or student-3-pre-commit-security-scan.json in docs/reports/release-2"
+    },
+    {
+      "check": "Pre-commit security / student-4 pre-commit security report",
+      "outcome": "FAIL: no student-4-pre-commit-security-report.md or student-4-pre-commit-security-scan.json in docs/reports/release-2"
+    },
+    {
+      "check": "Pre-commit security / student-5 pre-commit security report",
+      "outcome": "OK: student-5-pre-commit-security-scan.json passed (ruff, detect-secrets, pip-audit)"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-1 post-commit testing report",
+      "outcome": "OK: student-1-post-commit-testing-report.md"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-2 post-commit testing report",
+      "outcome": "FAIL: no student-2-post-commit-testing-report.md in docs/reports/release-2"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-3 post-commit testing report",
+      "outcome": "FAIL: no student-3-post-commit-testing-report.md in docs/reports/release-2"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-4 post-commit testing report",
+      "outcome": "FAIL: no student-4-post-commit-testing-report.md in docs/reports/release-2"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-5 post-commit testing report",
+      "outcome": "OK: student-5-post-commit-testing-report.md"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-1 post-commit endpoint tests",
+      "outcome": "OK: 7 test(s), 0 failed, 0 errors, 0 skipped; run 39763433570 at 8ac19b9 on main"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-2 post-commit endpoint tests",
+      "outcome": "FAIL: run 39763433319 at 8ac19b9 on main (success) has no endpoint-test evidence artifact"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-3 post-commit endpoint tests",
+      "outcome": "OK: 11 test(s), 0 failed, 0 errors, 0 skipped; run 39763433316 at 8ac19b9 on main"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-4 post-commit endpoint tests",
+      "outcome": "FAIL: run 39763433496 at 8ac19b9 on main (success) has no endpoint-test evidence artifact"
+    },
+    {
+      "check": "Post-commit CI/CD endpoints / student-5 post-commit endpoint tests",
+      "outcome": "OK: 13 test(s), 0 failed, 0 errors, 0 skipped; run 39763433424 at 8ac19b9 on main"
+    }
+  ]
+}

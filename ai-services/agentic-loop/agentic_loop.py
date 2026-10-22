@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,7 +43,7 @@ import requests
 HERE = Path(__file__).parent
 REPORTS = HERE / "reports"
 REGISTRY = json.loads((HERE / "services.json").read_text())
-MODES = ("services", "mcp", "rag", "ci")
+MODES = ("services", "mcp", "rag", "ci", "multi-agent", "testing", "cloud")
 IMPLEMENTATION_MODEL = os.getenv("IMPLEMENTATION_MODEL", "claude-sonnet-5")
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", "claude-opus-5")
 NFR_SAMPLES = int(os.getenv("NFR_SAMPLES", "20"))
@@ -66,6 +67,21 @@ MCP_BACKENDS = {
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8011")
 RAG_INSUFFICIENT_BUDGET_MS = 3000
 RAG_ANSWER_BUDGET_MS = 30000
+ROOT = HERE.parents[1]
+MULTI_AGENT_URL = os.getenv("MULTI_AGENT_URL", "http://127.0.0.1:8013")
+MULTI_AGENT_AGENTS = ("planner", "worker", "reviewer")
+# The last audit event of a finished run, by its final status.
+MULTI_AGENT_TERMINAL_EVENT = {
+    "completed": "run_completed",
+    "rejected": "run_rejected",
+    "failed": "run_failed",
+}
+# reports/ is git-ignored scratch. These review/validation logs are Release 2
+# evidence, so they are written to a committed folder as well.
+REVIEW_LOGS = ROOT / "docs" / "reports" / "release-2" / "agentic-loop"
+COMMITTED_LOG_MODES = ("multi-agent", "testing", "cloud")
+RELEASE_REPORTS = ROOT / "docs" / "reports" / "release-2"
+PRE_COMMIT_TOOLS = ("ruff", "detect-secrets", "pip-audit")
 
 
 def load_plan(name):
@@ -611,7 +627,578 @@ def run_ci():
     return plan, [(None, observe_ci())]
 
 
-RUNNERS = {"services": run_services, "mcp": run_mcp, "rag": run_rag, "ci": run_ci}
+def multi_agent_get(path, **params):
+    """(status code, JSON body) from the Multi-Agent Server."""
+    response = requests.get(
+        f"{MULTI_AGENT_URL}{path}", params=params or None, timeout=15
+    )
+    return response.status_code, response.json()
+
+
+def pick_multi_agent_run():
+    """RUN_ID if set, else the newest run a human has decided, else the newest."""
+    if os.getenv("RUN_ID"):
+        return os.environ["RUN_ID"], None
+    status, body = multi_agent_get("/runs", limit=50)
+    runs = body.get("data") or []
+    if status != 200 or not runs:
+        return (
+            None,
+            "no runs on the server; start one with `python -m multi_agent_service run`",
+        )
+    decided = [r for r in runs if r.get("status") in ("completed", "rejected")]
+    return (decided or runs)[0]["run_id"], None
+
+
+def audit_checks(document):
+    """Checks over one run's export document: stages, deterministic checks,
+    Reviewer verdict, human decision and the order of the audit events."""
+    run = document.get("run", {})
+    events = sorted(document.get("history", []), key=lambda e: e.get("sequence", 0))
+    stages = document.get("summary", {}).get("stages", [])
+    human = run.get("human")
+    status = run.get("status")
+    summary = (
+        f"{run.get('run_id')} ({run.get('feature')}), status {status}, "
+        f"{run.get('attempts', 0)} attempt(s)"
+    )
+    results = [("run under review", f"OK: {summary}")]
+
+    completed = {s.get("agent") for s in stages if s.get("status") == "completed"}
+    results += [
+        (
+            f"{agent} stage completed",
+            "OK: completed" if agent in completed else "FAIL: no completed stage",
+        )
+        for agent in MULTI_AGENT_AGENTS
+    ]
+    calls = sum(s.get("tool_calls", 0) for s in stages if s.get("agent") == "worker")
+    results.append(
+        (
+            "worker tool calls",
+            f"OK: {calls} call(s)" if calls else "NOTE: the Worker made no tool calls",
+        )
+    )
+
+    checks = run.get("checks") or []
+    if not checks:
+        results.append(("deterministic checks", "FAIL: none recorded"))
+    results += [
+        (
+            f"check {check.get('name')}",
+            f"{'OK' if check.get('passed') else 'FAIL'}: {check.get('detail')}",
+        )
+        for check in checks
+    ]
+
+    review = run.get("review")
+    if not review:
+        results.append(("reviewer verdict", "FAIL: no review recorded"))
+    elif review.get("verdict") == "approve":
+        results.append(("reviewer verdict", "OK: approve"))
+    else:
+        results.append(
+            (
+                "reviewer verdict",
+                f"NOTE: {review.get('verdict')}; the human decision is the gate",
+            )
+        )
+    if run.get("attempts", 0) > 1:
+        results.append(
+            ("revision", f"NOTE: Worker revised ({run['attempts']} attempts)")
+        )
+
+    if not human:
+        results.append(("human decision", f"FAIL: none recorded (status {status})"))
+    else:
+        results.append(
+            (
+                "human decision",
+                f"OK: {human.get('decision')} by {human.get('reviewer')}",
+            )
+        )
+        expected = "rejected" if human.get("decision") == "reject" else "completed"
+        results.append(
+            (
+                "final status matches decision",
+                "OK: " + status
+                if status == expected
+                else f"FAIL: {status}, expected {expected}",
+            )
+        )
+
+    names = [e.get("event") for e in events]
+    sequence = [e.get("sequence") for e in document.get("history", [])]
+    results.append(
+        (
+            "audit trail starts with run_created",
+            "OK: run_created"
+            if names[:1] == ["run_created"]
+            else f"FAIL: starts {names[:1]}",
+        )
+    )
+    results.append(
+        (
+            "audit sequence increasing",
+            "OK: ordered"
+            if sequence == sorted(set(sequence))
+            else "FAIL: out of order or repeated",
+        )
+    )
+    if "human_decision" in names:
+        in_order = "awaiting_human" in names and names.index(
+            "awaiting_human"
+        ) < names.index("human_decision")
+        actor = next(
+            e.get("actor", "") for e in events if e.get("event") == "human_decision"
+        )
+        results.append(
+            (
+                "human decision follows awaiting_human",
+                "OK: in order"
+                if in_order
+                else "FAIL: decision without awaiting_human first",
+            )
+        )
+        results.append(
+            (
+                "human decision attributed to a person",
+                f"OK: {actor}"
+                if actor.startswith("human:")
+                else f"FAIL: actor {actor!r}",
+            )
+        )
+    terminal = MULTI_AGENT_TERMINAL_EVENT.get(status)
+    if terminal:
+        results.append(
+            (
+                "audit trail ends with the final event",
+                f"OK: {terminal}"
+                if names[-1:] == [terminal]
+                else f"FAIL: ends {names[-1:]}, expected {terminal}",
+            )
+        )
+    return results
+
+
+def observe_multi_agent(plan):
+    results = [
+        (
+            f"file {relative}",
+            "OK: present" if (ROOT / relative).is_file() else "FAIL: missing",
+        )
+        for relative in plan.get("required_files", [])
+    ]
+    try:
+        for label, endpoint in (("GET /health", "/health"), ("GET /ready", "/ready")):
+            status, _ = multi_agent_get(endpoint)
+            results.append(
+                (
+                    label,
+                    f"OK: HTTP {status}" if status == 200 else f"FAIL: HTTP {status}",
+                )
+            )
+        run_id, problem = pick_multi_agent_run()
+        if problem:
+            results.append(("select run", f"FAIL: {problem}"))
+            return results
+        status, body = multi_agent_get(f"/runs/{run_id}/export")
+    except Exception as exc:  # noqa: BLE001 - an unreachable server is evidence, not a crash
+        results.append(("Multi-Agent Server", f"FAIL: {exc}"))
+        return results
+    if status != 200:
+        results.append((f"GET /runs/{run_id}/export", f"FAIL: HTTP {status}"))
+        return results
+    return results + audit_checks(body.get("data", {}))
+
+
+def run_multi_agent():
+    plan = load_plan("checks/multi-agent.json")
+    results = observe_multi_agent(plan)
+    plan["checks"] = [{"label": label} for label, _ in results]
+    return plan, [(None, results)]
+
+
+def ci_branch():
+    return (
+        os.getenv("CI_BRANCH")
+        or subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607 - local Git CLI with literal arguments
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    )
+
+
+def latest_run(workflow, branch):
+    """(run, problem): the newest run of a workflow on a branch, or why not.
+
+    A feature branch that changed nothing a workflow watches has no runs, so
+    the newest run on main stands in; the run records which branch it came from."""
+    for tried in dict.fromkeys([branch, "main"]):
+        listed = gh(
+            "run", "list", "--workflow", workflow, "--branch", tried,
+            "--limit", "1", "--json", "databaseId,status,conclusion,headSha",
+        )  # fmt: skip
+        if listed.returncode != 0:
+            return None, f"gh run list: {listed.stderr.strip()[:200]}"
+        runs = json.loads(listed.stdout or "[]")
+        if runs:
+            return {**runs[0], "branch": tried}, None
+    return None, f"no run of {workflow} on {branch} or main"
+
+
+def pre_commit_report(student):
+    """One student's pre-commit security evidence: the scan's JSON result, else
+    a written report that covers all three tools."""
+    scan = RELEASE_REPORTS / f"{student}-pre-commit-security-scan.json"
+    report = RELEASE_REPORTS / f"{student}-pre-commit-security-report.md"
+    label = f"{student} pre-commit security report"
+    if scan.is_file():
+        try:
+            data = json.loads(scan.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            return label, f"FAIL: {scan.name} is not valid JSON ({exc})"
+        tools = {c.get("tool"): c.get("status") for c in data.get("checks", [])}
+        gaps = [t for t in PRE_COMMIT_TOOLS if tools.get(t) != "passed"]
+        if data.get("status") == "passed" and not gaps:
+            return label, f"OK: {scan.name} passed ({', '.join(PRE_COMMIT_TOOLS)})"
+        return (
+            label,
+            "FAIL: {} status {}, not passed: {}".format(
+                scan.name, data.get("status"), gaps or "n/a"
+            ),
+        )
+    if report.is_file():
+        text = report.read_text(encoding="utf-8").lower()
+        missing = [t for t in PRE_COMMIT_TOOLS if t not in text]
+        if missing:
+            return label, f"FAIL: {report.name} does not cover {missing}"
+        return label, f"OK: {report.name} covers {', '.join(PRE_COMMIT_TOOLS)}"
+    return label, f"FAIL: no {report.name} or {scan.name} in docs/reports/release-2"
+
+
+def pre_commit_setup():
+    config = ROOT / ".pre-commit-config.yaml"
+    text = config.read_text(encoding="utf-8") if config.is_file() else ""
+    hooked = "id: security" in text and "scripts/security/scan.py" in text
+    scan = ROOT / "scripts" / "security" / "scan.py"
+    return [
+        (
+            "pre-commit hook runs the security scan",
+            "OK: security hook -> scripts/security/scan.py"
+            if hooked
+            else "FAIL: .pre-commit-config.yaml has no security hook for scan.py",
+        ),
+        (
+            "scripts/security/scan.py",
+            "OK: present" if scan.is_file() else "FAIL: missing",
+        ),
+    ]
+
+
+def junit_totals(xml_text):
+    """(tests, failures, errors, skipped) from a JUnit XML document."""
+    root = ET.fromstring(xml_text)  # noqa: S314 - our own downloaded CI artifact
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    return tuple(
+        sum(int(s.get(key, 0)) for s in suites)
+        for key in ("tests", "failures", "errors", "skipped")
+    )
+
+
+def post_commit_checks(students):
+    results = []
+    for student in students:
+        post = RELEASE_REPORTS / f"{student}-post-commit-testing-report.md"
+        results.append(
+            (
+                f"{student} post-commit testing report",
+                f"OK: {post.name}"
+                if post.is_file()
+                else f"FAIL: no {post.name} in docs/reports/release-2",
+            )
+        )
+    if not shutil.which("gh"):
+        return [
+            *results,
+            ("gh", "SKIP: gh CLI unavailable; install it and run gh auth login"),
+        ]
+    branch = ci_branch()
+    for entry in (e for e in REGISTRY if e["service"] in students):
+        label = f"{entry['service']} post-commit endpoint tests"
+        run, problem = latest_run(entry["ci"], branch)
+        if problem:
+            results.append((label, f"FAIL: {problem}"))
+            continue
+        where = f"run {run['databaseId']} at {run['headSha'][:7]} on {run['branch']}"
+        if run["status"] != "completed":
+            results.append((label, f"SKIP: {where} is {run['status']}"))
+            continue
+        target = REPORTS / "testing" / entry["service"]
+        shutil.rmtree(target, ignore_errors=True)
+        gh(
+            "run", "download", str(run["databaseId"]),
+            "--name", f"{entry['service']}-endpoint-test-evidence",
+            "--dir", str(target),
+        )  # fmt: skip
+        found = sorted(target.rglob("*endpoint-tests.xml")) if target.exists() else []
+        if not found:
+            results.append(
+                (
+                    label,
+                    "FAIL: {} ({}) has no endpoint-test evidence artifact".format(
+                        where, run["conclusion"]
+                    ),
+                )
+            )
+            continue
+        try:
+            tests, failures, errors, skipped = junit_totals(
+                found[0].read_text(encoding="utf-8")
+            )
+        except (ET.ParseError, ValueError) as exc:
+            results.append((label, f"FAIL: {found[0].name} unreadable ({exc})"))
+            continue
+        detail = (
+            f"{tests} test(s), {failures} failed, {errors} errors, "
+            f"{skipped} skipped; {where}"
+        )
+        passed = run["conclusion"] == "success" and tests > 0 and not failures + errors
+        results.append((label, f"{'OK' if passed else 'FAIL'}: {detail}"))
+    return results
+
+
+def run_testing():
+    plan = load_plan("checks/testing.json")
+    students = [e["service"] for e in REGISTRY if e["service"].startswith("student-")]
+    pre = pre_commit_setup() + [pre_commit_report(s) for s in students]
+    post = post_commit_checks(students)
+    plan["checks"] = [{"label": label} for label, _ in pre + post]
+    return plan, [("Pre-commit security", pre), ("Post-commit CI/CD endpoints", post)]
+
+
+def table_rows(text, start, end):
+    """Cells of each Markdown table row between two markers, header skipped."""
+    section = text.split(start, 1)[-1].split(end, 1)[0] if start in text else ""
+    rows = [
+        [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for line in section.splitlines()
+        if line.strip().startswith("|")
+    ]
+    return [r for r in rows if r and not set(r[0]) <= {"-", " "} and r[0] != "Check"]
+
+
+def cloud_report_checks(text):
+    """Checks over the generated cloud-deployment-results.md."""
+    results = []
+    status = re.search(r"Deployment Status:\s*(\w+)", text)
+    results.append(
+        (
+            "deployment status",
+            f"OK: {status.group(1)}"
+            if status and status.group(1) == "Success"
+            else f"FAIL: {status.group(1) if status else 'not stated'}",
+        )
+    )
+    urls = re.findall(r"^- (https://\S+)", text, re.MULTILINE)
+    results.append(
+        (
+            "frontend URLs reported",
+            f"OK: {len(urls)} URL(s)" if urls else "FAIL: none listed",
+        )
+    )
+    for name, start, end in (
+        ("smoke tests", "Validation Results:", "Security Configuration:"),
+        ("security configuration", "Security Configuration:", "AI-Mode"),
+    ):
+        rows = table_rows(text, start, end)
+        failed = [r[0] for r in rows if len(r) > 1 and r[1].upper() == "FAIL"]
+        if not rows:
+            results.append((name, "FAIL: no result rows in the report"))
+        elif failed:
+            results.append(
+                (
+                    name,
+                    f"FAIL: {len(failed)} of {len(rows)} failed: {', '.join(failed)}",
+                )
+            )
+        else:
+            results.append((name, f"OK: {len(rows)} of {len(rows)} passed"))
+    results.append(
+        (
+            "AI services not deployed",
+            "OK: report states the AI services are not deployed"
+            if "are not deployed" in text
+            else "FAIL: report does not state the AI services are off",
+        )
+    )
+    return results
+
+
+def cloud_profile_check():
+    """The cloud env profile turns every AI switch off by default."""
+    profile = ROOT / "shared" / "configuration" / ".env.cloud"
+    if not profile.is_file():
+        return "cloud profile turns AI features off", "FAIL: .env.cloud missing"
+    on, urls = [], []
+    for line in profile.read_text(encoding="utf-8").splitlines():
+        name, _, value = line.partition("=")
+        if line.startswith("#") or not _:
+            continue
+        if name.endswith("_ENABLED") and value.strip().lower() != "false":
+            on.append(name)
+        if name.endswith(("_AI_MODE_URL", "_RAG_URL")) and value.strip():
+            urls.append(name)
+    if on or urls:
+        return "cloud profile turns AI features off", f"FAIL: still on: {on + urls}"
+    return (
+        "cloud profile turns AI features off",
+        "OK: every *_ENABLED is false, AI URLs blank",
+    )
+
+
+def cloud_static_checks(plan):
+    results = [
+        (
+            f"file {relative}",
+            "OK: present" if (ROOT / relative).is_file() else "FAIL: missing",
+        )
+        for relative in plan.get("required_files", [])
+    ]
+    deploy = ROOT / "scripts" / "deploy" / "azure" / "deploy-azure.sh"
+    text = deploy.read_text(encoding="utf-8") if deploy.is_file() else ""
+    results.append(
+        (
+            "images pulled with a managed identity",
+            "OK: deploy-azure.sh uses --registry-identity"
+            if "--registry-identity" in text
+            else "FAIL: no --registry-identity in deploy-azure.sh",
+        )
+    )
+    workflow = ROOT / ".github" / "workflows" / "cloud-deployment.yml"
+    text = workflow.read_text(encoding="utf-8") if workflow.is_file() else ""
+    results.append(
+        (
+            "human release gate (production environment)",
+            "OK: deploy job runs in `environment: production`"
+            if "environment: production" in text
+            else "FAIL: no production environment gate in cloud-deployment.yml",
+        )
+    )
+    return [*results, cloud_profile_check()]
+
+
+def cloud_run():
+    """(run, problem): the run named by CLOUD_RUN_ID, else the newest one."""
+    run_id = os.getenv("CLOUD_RUN_ID")
+    if not run_id:
+        return latest_run("cloud-deployment.yml", ci_branch())
+    fields = "databaseId,status,conclusion,headSha,headBranch"
+    viewed = gh("run", "view", run_id, "--json", fields)
+    if viewed.returncode != 0:
+        return None, f"gh run view {run_id}: {viewed.stderr.strip()[:200]}"
+    run = json.loads(viewed.stdout)
+    return {**run, "branch": run.get("headBranch", "?")}, None
+
+
+def cloud_report_text():
+    """(text, source): the newest workflow's evidence artifact, else the
+    committed report."""
+    if shutil.which("gh"):
+        run, _ = cloud_run()
+        if run and run["status"] == "completed":
+            target = REPORTS / "ci" / "cloud"
+            shutil.rmtree(target, ignore_errors=True)
+            gh(
+                "run", "download", str(run["databaseId"]),
+                "--name", "cloud-deployment-evidence", "--dir", str(target),
+            )  # fmt: skip
+            found = (
+                sorted(target.rglob("cloud-deployment-results.md"))
+                if target.exists()
+                else []
+            )
+            if found:
+                return found[0].read_text(
+                    encoding="utf-8"
+                ), f"run {run['databaseId']} artifact"
+    committed = RELEASE_REPORTS / "cloud-deployment-results.md"
+    if committed.is_file():
+        return committed.read_text(
+            encoding="utf-8"
+        ), "committed docs/reports/release-2 copy"
+    return None, None
+
+
+def cloud_workflow_check():
+    if not shutil.which("gh"):
+        return "cloud-deployment.yml latest run", "SKIP: gh CLI unavailable"
+    run, problem = cloud_run()
+    if problem:
+        return "cloud-deployment.yml latest run", f"SKIP: {problem}"
+    where = f"run {run['databaseId']} at {run['headSha'][:7]} on {run['branch']}"
+    if run["status"] != "completed":
+        return "cloud-deployment.yml latest run", f"SKIP: {where} is {run['status']}"
+    verdict = "OK" if run["conclusion"] == "success" else "FAIL"
+    return "cloud-deployment.yml latest run", f"{verdict}: {run['conclusion']}, {where}"
+
+
+def cloud_probe(url):
+    try:
+        response = requests.get(url, timeout=30)
+    except requests.RequestException as exc:
+        return f"GET {url}", f"FAIL: {exc}"
+    ok = response.status_code == 200
+    return f"GET {url}", f"{'OK' if ok else 'FAIL'}: HTTP {response.status_code}"
+
+
+def run_cloud():
+    plan = load_plan("checks/cloud.json")
+    text, source = cloud_report_text()
+    report = (
+        cloud_report_checks(text)
+        if text
+        else [
+            (
+                "cloud deployment report",
+                "FAIL: no workflow artifact or committed report",
+            )
+        ]
+    )
+    if source:
+        report.insert(0, ("report source", f"OK: {source}"))
+    configuration = [*cloud_static_checks(plan), cloud_workflow_check()]
+    if os.getenv("CLOUD_URL"):
+        configuration.append(cloud_probe(os.environ["CLOUD_URL"]))
+    plan["checks"] = [{"label": label} for label, _ in report + configuration]
+    return plan, [
+        ("Deployment report", report),
+        ("Configuration and release gate", configuration),
+    ]
+
+
+def release_decision(decision, failures):
+    """The human decision, as a release call: READY only on Accept with every
+    deterministic check passing."""
+    if decision.startswith("Deferred"):
+        return "PENDING (non-interactive run; a human must decide)"
+    if decision == "Accept" and not failures:
+        return "READY"
+    reason = f"{len(failures)} failed check(s)" if failures else decision
+    return f"NOT READY ({reason})"
+
+
+RUNNERS = {
+    "services": run_services,
+    "mcp": run_mcp,
+    "rag": run_rag,
+    "ci": run_ci,
+    "multi-agent": run_multi_agent,
+    "testing": run_testing,
+    "cloud": run_cloud,
+}
 
 
 def call_model(model, system_prompt, user_prompt, max_tokens):
@@ -675,7 +1262,9 @@ def flatten(sections):
     ]
 
 
-def render_report(mode, plan, sections, recommendation, review, failures):
+def render_report(
+    mode, plan, sections, recommendation, review, failures, decision=None
+):
     verdict = f"{len(failures)} check(s) failed" if failures else "all checks passed"
     lines = [f"## Agentic loop ({mode}) -- {verdict}", "", f"_{plan['goal']}_"]
     for title, results in sections:
@@ -695,6 +1284,10 @@ def render_report(mode, plan, sections, recommendation, review, failures):
         "",
         review,
         "",
+    ]
+    if decision:
+        lines += ["### Human decision", "", decision, ""]
+    lines += [
         "Agent findings are advisory -- only the checks above decide the exit code.",
         "",
     ]
@@ -710,6 +1303,31 @@ def write_report(mode, report):
     return path
 
 
+def write_review_log(mode, report, sections, decision):
+    """The committed review/validation log: the report plus a JSON copy of the
+    checks, overwritten on each run (reports/ keeps every timestamped run)."""
+    REVIEW_LOGS.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path = REVIEW_LOGS / f"{mode}-review.md"
+    path.write_text(f"_Generated {stamp}_\n\n{report}", encoding="utf-8")
+    results = flatten(sections)
+    (REVIEW_LOGS / f"{mode}-review.json").write_text(
+        json.dumps(
+            {
+                "mode": mode,
+                "generated_at": stamp,
+                "human_decision": decision,
+                "failed": [name for name, out in results if out.startswith("FAIL")],
+                "checks": [{"check": name, "outcome": out} for name, out in results],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def human_review():
     print("\nHUMAN REVIEW\n1 - Accept\n2 - Partially Accept\n3 - Reject")
     return {"1": "Accept", "2": "Partially Accept"}.get(
@@ -719,9 +1337,20 @@ def human_review():
 
 def choose_mode():
     print("AGENTIC LOOP")
-    print("  1 - Services\n  2 - MCP\n  3 - RAG\n  4 - CI\n  0 - Exit")
+    print(
+        "  1 - Services\n  2 - MCP\n  3 - RAG\n  4 - CI\n  5 - Multi-Agent\n"
+        "  6 - Testing\n  7 - Cloud\n  0 - Exit"
+    )
     choice = input("Choose a validation mode: ").strip()
-    return {"1": "services", "2": "mcp", "3": "rag", "4": "ci"}.get(choice)
+    return {
+        "1": "services",
+        "2": "mcp",
+        "3": "rag",
+        "4": "ci",
+        "5": "multi-agent",
+        "6": "testing",
+        "7": "cloud",
+    }.get(choice)
 
 
 def pick_mode(argv, interactive):
@@ -786,6 +1415,10 @@ def main(argv=None):
 
     decision = human_review() if interactive else "Deferred (non-interactive run)"
     print(f"\nHUMAN DECISION\n  {decision}")
+    if mode == "cloud":
+        release = release_decision(decision, failures)
+        print(f"\nRELEASE DECISION\n  {release}")
+        decision = f"{decision}. Release decision: {release}"
 
     print("\nADAPT")
     if failures:
@@ -795,8 +1428,12 @@ def main(argv=None):
     else:
         print("  All deterministic checks passed; agent advice is advisory only.")
 
-    report = render_report(mode, plan, sections, recommendation, review, failures)
+    report = render_report(
+        mode, plan, sections, recommendation, review, failures, decision
+    )
     print(f"\nREPORT\n  {write_report(mode, report)}")
+    if mode in COMMITTED_LOG_MODES:
+        print(f"  {write_review_log(mode, report, sections, decision)}")
 
     print("\nLOOP COMPLETE")
     return 1 if failures else 0
