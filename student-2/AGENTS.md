@@ -20,6 +20,14 @@ This file supplements the repository-level `AGENTS.md` for `student-2/`.
   and `POST /accommodation/assistant` shows AI-Mode's MCP tool trace; the page
   reaches both through the ask box's RAG and MCP radio modes. Both are
   off when `RAG_URL` / `AI_MODE_URL` is unset, as in CI.
+- Release 2: `POST /accommodation/agent-runs` (with `GET` and `/review`) runs
+  the shared Multi-Agent Server's Planner -> Worker -> Reviewer on an
+  accommodation question (`feature: "student-2"`, MCP accommodation tools,
+  grounding on `suggestions[].accommodation_id`). The server never writes: only
+  after a human decision does this service pin approved listings to the trip,
+  and only ids an accommodation tool returned in the Worker's final attempt.
+  Off unless `MULTI_AGENT_ENABLED=true` (Compose sets it; CI and the cloud
+  profile leave it off). The page is `/agents` in the frontend.
 - Keep `docs/backend-service-api.md`, `docs/database-service-api.md`, and
   `docs/frontend-service.md` synchronized with implementation changes.
 

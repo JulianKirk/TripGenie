@@ -64,6 +64,7 @@ class TestHealth:
             # dragging the whole report down to degraded.
             "ai_mode": "not_configured",
             "rag": "not_configured",
+            "multi_agent": "disabled",
         }
 
 

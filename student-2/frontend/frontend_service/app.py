@@ -15,6 +15,7 @@ service starts computing on the data rather than displaying it.
 
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -24,6 +25,7 @@ from uuid import UUID  # noqa: TC003  (FastAPI reads this at runtime)
 
 import httpx
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import QueryParams
@@ -568,6 +570,195 @@ def _nights(check_in: str | None, check_out: str | None) -> int | None:
     except ValueError:
         return None
     return nights if nights >= 0 else None
+
+
+# ------------------------------------------------- Release 2: multi-agent runs
+#
+# The Planner -> Worker -> Reviewer agents live on the shared Multi-Agent
+# Server and this page only ever talks to this service's backend, which starts
+# a run, serves it back and -- after a person decides -- pins what was approved
+# to a trip. The run has its own page so a refresh only reads it, and a small
+# panel that HTMX re-fetches while the agents are still working.
+
+AGENTS = "/agents"
+UNKNOWN_RUN = "That run could not be found."
+AGENT_BACKEND = f"{PATH}/agent-runs"
+AGENT_RUN_ID = re.compile(r"magent_[0-9a-f]{12}")
+AGENT_ACTIVE = {"planning", "working", "reviewing"}
+AGENT_STATUS_LABELS = {
+    "planning": "The Planner is writing a plan",
+    "working": "The Worker is searching with the accommodation tools",
+    "reviewing": "The Reviewer is checking the answer",
+    "awaiting_human": "Waiting for your decision",
+    "completed": "Decided",
+    "rejected": "Rejected",
+    "failed": "The agents could not finish",
+}
+
+
+def _agent_context(
+    run: dict[str, Any] | None, error: str | None = None
+) -> dict[str, Any]:
+    return {
+        "run": run,
+        "agent_error": error,
+        "agent_poll": bool(run and run["status"] in AGENT_ACTIVE),
+        "status_label": AGENT_STATUS_LABELS.get(run["status"], run["status"])
+        if run
+        else "",
+    }
+
+
+async def _agent_run(request: Request, run_id: str) -> dict[str, Any]:
+    if AGENT_RUN_ID.fullmatch(run_id) is None:
+        raise BackendError(UNKNOWN_RUN)
+    return await call(
+        request,
+        "GET",
+        f"{AGENT_BACKEND}/{run_id}",
+        timeout=request.app.state.settings.agents_timeout,
+    )
+
+
+async def _trips(request: Request) -> list[dict[str, Any]]:
+    """The trips to pick from, or none. A student 1 outage must not take the
+    form down: the run still works, it just has no trip to add listings to."""
+    try:
+        return (await call(request, "GET", f"{PATH}/trips"))["trips"]
+    except (BackendError, KeyError, TypeError):
+        return []
+
+
+@router.get(AGENTS)
+async def agents_form(request: Request):
+    form = {key: request.query_params.get(key, "") for key in ("question", "trip_id")}
+    return render(
+        request,
+        "agents.html",
+        {"run": None, "form": form, "trips": await _trips(request)},
+    )
+
+
+@router.post(AGENTS)
+async def agents_start(request: Request):
+    """Start a run, then show it on its own page so a refresh only reads it."""
+    fields = parse_qs((await request.body()).decode())
+    form = {
+        key: (fields.get(key) or [""])[0].strip()
+        for key in ("question", "trip_id", "country", "city")
+    }
+    if not form["question"]:
+        return render(
+            request,
+            "agents.html",
+            {
+                "run": None,
+                "form": form,
+                "trips": await _trips(request),
+                "agent_error": "Type a question.",
+            },
+        )
+    try:
+        run = await call(
+            request,
+            "POST",
+            AGENT_BACKEND,
+            json={key: value for key, value in form.items() if value},
+            timeout=request.app.state.settings.agents_timeout,
+        )
+    except BackendError as exc:
+        return render(
+            request,
+            "agents.html",
+            {
+                "run": None,
+                "form": form,
+                "trips": await _trips(request),
+                "agent_error": str(exc),
+            },
+        )
+    return RedirectResponse(f"{AGENTS}/runs/{run['run_id']}", status_code=303)
+
+
+@router.get(f"{AGENTS}/runs/{{run_id}}")
+async def agents_run(request: Request, run_id: str):
+    try:
+        run, error = await _agent_run(request, run_id), None
+    except BackendError as exc:
+        run, error = None, str(exc)
+    return render(
+        request,
+        "agents.html",
+        {"form": {}, **_agent_context(run, error)},
+    )
+
+
+@router.get(f"{AGENTS}/runs/{{run_id}}/panel")
+async def agents_run_panel(request: Request, run_id: str):
+    """Just the run panel, for HTMX polling while the agents work."""
+    try:
+        run, error = await _agent_run(request, run_id), None
+    except BackendError as exc:
+        run, error = None, str(exc)
+    context = _agent_context(run, error)
+    # A hiccup in the backend must not stop the page asking again.
+    context["agent_poll"] = context["agent_poll"] or (run is None and error is not None)
+    return render(
+        request, "partials/agent_run_panel.html", {"run_id": run_id, **context}
+    )
+
+
+@router.post(f"{AGENTS}/runs/{{run_id}}/review")
+async def agents_review(request: Request, run_id: str):
+    """The human decision. Approving with only some listings ticked is a
+    partial acceptance; the backend pins what was accepted to the trip."""
+    fields = parse_qs((await request.body()).decode())
+    decision = (fields.get("decision") or [""])[0].strip()
+    accepted = sorted({int(v) for v in fields.get("accepted", []) if v.isdigit()})
+    offered = {int(v) for v in fields.get("offered", []) if v.isdigit()}
+    payload: dict[str, Any] = {"decision": decision}
+    if decision == "approve" and offered:
+        if not accepted:
+            return await _review_error(
+                request, run_id, "Tick the listings to add, or reject the run."
+            )
+        if set(accepted) != offered:
+            payload["decision"] = "partial"
+        payload["accepted"] = accepted
+    elif decision in {"partial", "correct"}:
+        payload["accepted"] = accepted
+    for key in ("notes", "corrected_overview", "check_in", "check_out"):
+        value = (fields.get(key) or [""])[0].strip()
+        if value:
+            payload[key] = value
+    try:
+        run = await call(
+            request,
+            "POST",
+            f"{AGENT_BACKEND}/{run_id}/review",
+            json=payload,
+            timeout=request.app.state.settings.agents_timeout,
+        )
+    except BackendError as exc:
+        return await _review_error(request, run_id, str(exc))
+    return render(
+        request,
+        "partials/agent_run_panel.html",
+        {"run_id": run_id, **_agent_context(run)},
+    )
+
+
+async def _review_error(request: Request, run_id: str, message: str):
+    """The run again, still awaiting its decision, with what went wrong."""
+    try:
+        run, error = await _agent_run(request, run_id), message
+    except BackendError as exc:
+        run, error = None, str(exc)
+    return render(
+        request,
+        "partials/agent_run_panel.html",
+        {"run_id": run_id, **_agent_context(run, error)},
+    )
 
 
 def create_app(settings: Settings | None = None, *, transport: Any = None) -> FastAPI:
