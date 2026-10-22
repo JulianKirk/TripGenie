@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
@@ -23,9 +24,11 @@ class Selection:
     dates: dict[str, str] = field(default_factory=dict)
     times: dict[str, str] = field(default_factory=dict)
     feedback: str = ""
+    previous_run_id: str = ""
 
     @classmethod
     def from_fields(cls, fields: FormData | QueryParams) -> Selection:
+        parent = str(fields.get("previous_run_id", ""))
         ids = list(
             dict.fromkeys(str(value) for value in fields.getlist("selected_ids"))
         )
@@ -44,6 +47,9 @@ class Selection:
                 if key.startswith("start_time_")
             },
             feedback=str(fields.get("feedback", "")),
+            previous_run_id=parent
+            if re.fullmatch(r"magent_[0-9a-f]{12}", parent)
+            else "",
         )
 
     def resolve(self, result: PlannerResponse) -> None:
@@ -55,6 +61,7 @@ class Selection:
             else list(available)
         )
         self.trip_id = self.trip_id or result.run.trip_id or ""
+        self.previous_run_id = result.previous_run_id or self.previous_run_id
 
     def url(self, run_id: str, *, without: str | None = None) -> str:
         fields = (
@@ -67,8 +74,30 @@ class Selection:
         )
         if self.trip_id:
             fields.append(("trip_id", self.trip_id))
+        if self.previous_run_id:
+            fields.append(("previous_run_id", self.previous_run_id))
         query = "?" + urlencode(fields) if fields else ""
         return f"/planner/{run_id}{query}"
+
+
+def unchanged_narrative_after_dismissal(result: PlannerResponse) -> bool:
+    if result.run.status != "completed" or result.run.result is None:
+        return False
+    original = result.run.result.get("parts")
+    if not isinstance(original, list):
+        return False
+    cards = {
+        str(part.get("activity_id"))
+        for part in original
+        if isinstance(part, dict) and part.get("type") == "activity"
+    }
+    texts = [
+        part.get("text")
+        for part in original
+        if isinstance(part, dict) and part.get("type") == "text"
+    ]
+    displayed = [part.text for part in result.answer.parts if part.type == "text"]
+    return set(result.answer.activities) != cards and displayed == texts
 
 
 def scheduling_body(form: FormData, activity_ids: list[str]) -> dict[str, object]:

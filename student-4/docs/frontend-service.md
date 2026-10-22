@@ -201,7 +201,8 @@ approval and correction; rejection remains available.
 requires the reviewer name and a nonempty explanation (at most 1000 characters).
 It posts to `/planner/{run_id}/regenerate`; the backend records rejection and
 starts a new run using the original question/trip and feedback, including the
-explicitly dismissed IDs. The new result links to the previous rejected run.
+IDs of all suggestions in the rejected result. The browser moves to the new
+run URL, retaining the previous-result link through progress polling and refresh.
 A failed response preserves feedback and reads the original run; regeneration
 is never automatically repeated.
 

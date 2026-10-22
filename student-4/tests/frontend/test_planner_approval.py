@@ -287,3 +287,52 @@ def test_polling_before_results_does_not_dismiss_future_cards() -> None:
         page = client.get(f"/planner/{RUN}", headers={"HX-Request": "true"})
     assert f'hx-get="/planner/{RUN}"' in page.text
     assert "selection=1" not in page.text
+
+
+def test_regeneration_moves_browser_to_new_run_and_preserves_parent_on_poll() -> None:
+    child = "magent_aaaaaaaaaaaa"
+    data = response_data("planning")
+    data["run"]["run_id"] = child
+    data["previous_run_id"] = RUN
+    with TestClient(
+        create_app(
+            Settings(),
+            transport=httpx.MockTransport(lambda _: httpx.Response(202, json=data)),
+        )
+    ) as client:
+        response = client.post(
+            f"/planner/{RUN}/regenerate",
+            data={"reviewer": "Alex", "feedback": "Indoor instead"},
+            headers={"HX-Request": "true"},
+        )
+    expected = f"/planner/{child}?previous_run_id={RUN}"
+    assert response.headers.get("HX-Push-Url") == expected
+    assert f'hx-get="{expected}"' in response.text
+
+
+def test_approved_subset_hides_unchanged_original_narrative() -> None:
+    data = card_response()
+    parts = data["answer"]["parts"]
+    data["run"].update(
+        status="completed",
+        result={
+            "type": "final",
+            "parts": [
+                *parts,
+                {
+                    "type": "activity",
+                    "activity_id": "00000000-0000-0000-0000-000000000099",
+                },
+            ],
+        },
+        final_result={"type": "final", "parts": parts},
+    )
+    with TestClient(
+        create_app(
+            Settings(),
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=data)),
+        )
+    ) as client:
+        response = client.get(f"/planner/{RUN}")
+    assert "Take a walk." not in response.text
+    assert DETAIL["name"] in response.text

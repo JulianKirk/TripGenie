@@ -6,6 +6,7 @@
 {% if not can_review %}<p role="status">Decision controls are disabled because this run is not confirmed as awaiting review. Refresh its status to check.</p>{% endif %}
 <form id="planner-review" method="post" action="/planner/{{ run_id }}/review" hx-post="/planner/{{ run_id }}/review" hx-target="#planner-result" hx-swap="outerHTML" hx-disabled-elt="find button">
   <input type="hidden" name="selection" value="1">
+  {% if selection.previous_run_id %}<input type="hidden" name="previous_run_id" value="{{ selection.previous_run_id }}">{% endif %}
   {% for key in selection.ids %}<input type="hidden" name="selected_ids" value="{{ key }}">{% endfor %}
   {% for key in original_activities if key not in selection.ids %}<input type="hidden" name="dismissed_ids" value="{{ key }}"><input type="hidden" name="date_{{ key }}" value="{{ selection.dates.get(key, '') }}"><input type="hidden" name="start_time_{{ key }}" value="{{ selection.times.get(key, '') }}">{% endfor %}
   <p>Approve to add the selected activities to your trip. This does not make a booking. Dismiss suggestions above before approving. You can restore dismissed suggestions before making a decision.</p>

@@ -12,7 +12,11 @@ from starlette.responses import JSONResponse, Response
 from .client import BackendClient
 from .errors import FrontendError
 from .planner_models import RunId  # noqa: TC001 - FastAPI annotation
-from .planner_selection import Selection, scheduling_body
+from .planner_selection import (
+    Selection,
+    scheduling_body,
+    unchanged_narrative_after_dismissal,
+)
 
 if TYPE_CHECKING:
     from fastapi.templating import Jinja2Templates
@@ -77,6 +81,14 @@ async def render(
     dismiss_urls: dict[str, str] = {}
     if result is not None:
         selection.resolve(result)
+        if unchanged_narrative_after_dismissal(result):
+            displayed_answer = result.answer.model_copy(
+                update={
+                    "parts": [
+                        part for part in result.answer.parts if part.type == "activity"
+                    ]
+                }
+            )
         if result.run.status == "awaiting_human" and result.answer.activities:
             try:
                 directory = await _client(request).trips()
@@ -206,7 +218,11 @@ async def review(request: Request, run_id: RunId, client: ClientDep) -> Response
     form = await request.form()
     try:
         body = decision_body(form)
-        return await render(request, await client.review_planner(run_id, body))
+        return await render(
+            request,
+            await client.review_planner(run_id, body),
+            selection=Selection.from_fields(form),
+        )
     except (ValueError, FrontendError) as exc:
         message = exc.detail if isinstance(exc, FrontendError) else str(exc)
         return await recover_review(request, run_id, client, form, error=message)
@@ -286,7 +302,10 @@ async def regenerate(request: Request, run_id: RunId, client: ClientDep) -> Resp
                 "dismissed_activity_ids": list(dict.fromkeys(dismissed)),
             },
         )
-        return await render(request, result)
+        selection = Selection(previous_run_id=run_id)
+        response = await render(request, result, selection=selection)
+        response.headers["HX-Push-Url"] = selection.url(result.run.run_id)
+        return response
     except (ValueError, FrontendError) as exc:
         message = exc.detail if isinstance(exc, FrontendError) else str(exc)
         return await recover_review(request, run_id, client, form, error=message)
