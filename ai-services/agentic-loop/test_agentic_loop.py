@@ -597,3 +597,199 @@ def test_ci_mode_turns_run_conclusions_into_checks(monkeypatch, tmp_path):
     assert "artifacts: report" in outcomes["student-1 (student-1-ci.yml)"]
     assert outcomes["student-2 (student-2-ci.yml)"].startswith("FAIL: failure")
     assert outcomes["student-3 (student-3-ci.yml)"] == "SKIP: no run on feature"
+
+
+def multi_agent_document(**changes):
+    """An export document for a finished, human-approved run."""
+    run = {
+        "run_id": "magent_0123456789ab",
+        "feature": "student-3",
+        "status": "completed",
+        "attempts": 1,
+        "checks": [
+            {"name": "output_schema", "passed": True, "blocking": True, "detail": "ok"},
+            {"name": "grounding", "passed": True, "blocking": True, "detail": "1 id"},
+        ],
+        "review": {"verdict": "approve"},
+        "human": {"decision": "approve", "reviewer": "mark"},
+    }
+    stages = [
+        {"agent": "planner", "status": "completed", "tool_calls": 0},
+        {"agent": "worker", "status": "completed", "tool_calls": 2},
+        {"agent": "reviewer", "status": "completed", "tool_calls": 0},
+    ]
+    names = [
+        ("api", "run_created"),
+        ("system", "awaiting_human"),
+        ("human:mark", "human_decision"),
+        ("system", "run_completed"),
+    ]
+    history = [
+        {"sequence": n, "actor": actor, "event": event}
+        for n, (actor, event) in enumerate(names, start=1)
+    ]
+    document = {"run": run, "history": history, "summary": {"stages": stages}}
+    return {**document, **changes}
+
+
+def outcomes(results):
+    return dict(results)
+
+
+def test_multi_agent_review_passes_a_complete_run():
+    results = outcomes(loop.audit_checks(multi_agent_document()))
+
+    assert not [o for o in results.values() if o.startswith("FAIL")]
+    assert results["human decision"] == "OK: approve by mark"
+    assert results["audit trail ends with the final event"] == "OK: run_completed"
+
+
+def test_multi_agent_review_flags_failed_checks_and_missing_human_decision():
+    document = multi_agent_document()
+    document["run"]["checks"][1]["passed"] = False
+    document["run"]["human"] = None
+    document["run"]["status"] = "awaiting_human"
+    document["summary"]["stages"] = document["summary"]["stages"][:2]
+
+    results = outcomes(loop.audit_checks(document))
+
+    assert results["check grounding"].startswith("FAIL")
+    assert results["reviewer stage completed"] == "FAIL: no completed stage"
+    assert results["human decision"].startswith("FAIL: none recorded")
+
+
+def test_multi_agent_review_checks_decision_matches_final_status_and_audit_order():
+    document = multi_agent_document()
+    document["run"]["human"]["decision"] = "reject"  # but the run says completed
+    document["history"][2], document["history"][1] = (
+        document["history"][1],
+        document["history"][2],
+    )
+
+    results = outcomes(loop.audit_checks(document))
+
+    assert (
+        results["final status matches decision"] == "FAIL: completed, expected rejected"
+    )
+    assert results["audit sequence increasing"].startswith("FAIL")
+
+    document = multi_agent_document()
+    document["history"][1]["sequence"], document["history"][2]["sequence"] = 3, 2
+    results = outcomes(loop.audit_checks(document))
+    assert results["human decision follows awaiting_human"].startswith("FAIL")
+
+
+def test_multi_agent_review_notes_are_advisory():
+    document = multi_agent_document()
+    document["run"]["review"] = {"verdict": "revise"}
+    document["run"]["attempts"] = 2
+    document["summary"]["stages"][1]["tool_calls"] = 0
+
+    results = outcomes(loop.audit_checks(document))
+
+    assert results["reviewer verdict"].startswith("NOTE")
+    assert results["revision"].startswith("NOTE")
+    assert results["worker tool calls"].startswith("NOTE")
+
+
+def test_multi_agent_mode_reads_the_newest_decided_run(monkeypatch):
+    runs = [
+        {"run_id": "magent_aaaaaaaaaaaa", "status": "awaiting_human"},
+        {"run_id": "magent_bbbbbbbbbbbb", "status": "completed"},
+    ]
+    seen = []
+
+    def fake_get(path, **_params):
+        seen.append(path)
+        if path == "/runs":
+            return 200, {"data": runs}
+        if path.endswith("/export"):
+            return 200, {"data": multi_agent_document()}
+        return 200, {"data": {}}
+
+    monkeypatch.setattr(loop, "multi_agent_get", fake_get)
+    monkeypatch.delenv("RUN_ID", raising=False)
+    plan = {
+        "required_files": ["ai-services/agentic-loop/agentic_loop.py", "missing.py"]
+    }
+
+    results = outcomes(loop.observe_multi_agent(plan))
+
+    assert "/runs/magent_bbbbbbbbbbbb/export" in seen
+    assert results["GET /ready"] == "OK: HTTP 200"
+    assert results["file missing.py"] == "FAIL: missing"
+    assert results["file ai-services/agentic-loop/agentic_loop.py"] == "OK: present"
+
+
+def test_multi_agent_mode_uses_run_id_when_given(monkeypatch):
+    seen = []
+    monkeypatch.setenv("RUN_ID", "magent_cccccccccccc")
+    monkeypatch.setattr(
+        loop,
+        "multi_agent_get",
+        lambda path, **_: (seen.append(path), (200, {"data": multi_agent_document()}))[
+            1
+        ],
+    )
+
+    loop.observe_multi_agent({})
+
+    assert "/runs" not in seen
+    assert "/runs/magent_cccccccccccc/export" in seen
+
+
+def test_multi_agent_mode_reports_an_unreachable_server_without_crashing(monkeypatch):
+    def down(*_args, **_kwargs):
+        message = "connection refused"
+        raise OSError(message)
+
+    monkeypatch.setattr(loop, "multi_agent_get", down)
+
+    results = loop.observe_multi_agent({"required_files": []})
+
+    assert results == [("Multi-Agent Server", "FAIL: connection refused")]
+
+
+def test_multi_agent_mode_fails_when_the_server_has_no_runs(monkeypatch):
+    monkeypatch.delenv("RUN_ID", raising=False)
+    monkeypatch.setattr(loop, "multi_agent_get", lambda _path, **_: (200, {"data": []}))
+
+    results = outcomes(loop.observe_multi_agent({}))
+
+    assert results["select run"].startswith("FAIL: no runs")
+
+
+def test_multi_agent_checks_file_lists_real_files():
+    plan = loop.load_plan("checks/multi-agent.json")
+
+    assert plan["required_files"]
+    assert not [f for f in plan["required_files"] if not (loop.ROOT / f).is_file()]
+
+
+def test_multi_agent_is_selectable_from_the_menu(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "5")
+
+    assert loop.choose_mode() == "multi-agent"
+    assert "multi-agent" in loop.RUNNERS
+
+
+def test_multi_agent_review_log_is_committed_with_the_human_decision(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(loop, "REVIEW_LOGS", tmp_path / "agentic-loop")
+    sections = [
+        (None, [("human decision", "OK: approve by mark"), ("check x", "FAIL: bad")])
+    ]
+    plan = {"goal": "goal"}
+
+    report = loop.render_report(
+        "multi-agent", plan, sections, "rec", "rev", ["x"], "Accept"
+    )
+    path = loop.write_review_log("multi-agent", report, sections, "Accept")
+
+    assert path.name == "multi-agent-review.md"
+    assert "### Human decision" in path.read_text()
+    data = json.loads((path.parent / "multi-agent-review.json").read_text())
+    assert data["human_decision"] == "Accept"
+    assert data["failed"] == ["check x"]
+    assert "multi-agent" in loop.COMMITTED_LOG_MODES

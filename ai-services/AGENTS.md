@@ -86,7 +86,10 @@ ADAPT reporting sequence. Keep reports useful even when an optional API key
 is absent or a target service fails to start. The `mcp` and `rag` modes are
 driven by `checks/mcp.json` and the RAG server's
 `config/calibration-queries.json`; update them when a tool or calibration case
-changes. The loop runs locally only; no CI workflow runs it, and student CI
+changes. The `multi-agent` mode reads a Multi-Agent Server run export; keep it
+in step with `docs/architecture/release-2-multi-agent-contract.md` (statuses, check
+names, audit event names), and its review log under
+`docs/reports/release-2/agentic-loop/` is committed evidence. The loop runs locally only; no CI workflow runs it, and student CI
 keeps MCP and RAG disabled.
 
 ## Multi-Agent Server checks

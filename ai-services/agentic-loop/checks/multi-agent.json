@@ -1,0 +1,23 @@
+{
+  "goal": "Review one Multi-Agent Server workflow run: Planner, Worker and Reviewer stages, the deterministic checks, the Reviewer verdict, the human decision and the audit trail",
+  "_note": "Reads ${MULTI_AGENT_URL} (default http://127.0.0.1:8013). RUN_ID picks the run; otherwise the newest run with a human decision is reviewed.",
+  "rules": [
+    "The deterministic checks (output_schema, allowed_tools, tool_evidence, no_writes, grounding) are authoritative; a Reviewer verdict never replaces them.",
+    "Every run ends with a human decision (approve, correct, partial or reject); the agents never approve their own output.",
+    "The server never writes feature data; it only proposes actions for the human to approve.",
+    "A run with no tool calls from the Worker is advisory, not a failure, when the feature allows no tools."
+  ],
+  "required_files": [
+    "ai-services/multi-agent-server/multi_agent_service/app.py",
+    "ai-services/multi-agent-server/multi_agent_service/agents.py",
+    "ai-services/multi-agent-server/multi_agent_service/workflow.py",
+    "ai-services/multi-agent-server/multi_agent_service/checks.py",
+    "ai-services/multi-agent-server/multi_agent_service/store.py",
+    "ai-services/multi-agent-server/multi_agent_service/export.py",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/planner_v1.md",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/worker_v1.md",
+    "ai-services/multi-agent-server/multi_agent_service/prompts/reviewer_v1.md",
+    "docs/architecture/release-2-multi-agent-contract.md",
+    "docs/architecture/decisions/0005-shared-multi-agent-server.md"
+  ]
+}

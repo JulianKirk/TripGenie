@@ -1,0 +1,13 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review the Multi-Agent workflow run using the evidence above. Say whether the Planner, Worker and Reviewer coordinated correctly and a human made the final decision, then give ONE concrete implementation or review recommendation the evidence supports.
+
+Output rules:
+- If the evidence does not support a recommendation, write: No evidence-backed recommendation identified.
+- Otherwise name the stage or check, the recommendation, and the evidence behind it.
+- Maximum 60 words.

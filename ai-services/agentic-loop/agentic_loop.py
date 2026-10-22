@@ -42,7 +42,7 @@ import requests
 HERE = Path(__file__).parent
 REPORTS = HERE / "reports"
 REGISTRY = json.loads((HERE / "services.json").read_text())
-MODES = ("services", "mcp", "rag", "ci")
+MODES = ("services", "mcp", "rag", "ci", "multi-agent")
 IMPLEMENTATION_MODEL = os.getenv("IMPLEMENTATION_MODEL", "claude-sonnet-5")
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", "claude-opus-5")
 NFR_SAMPLES = int(os.getenv("NFR_SAMPLES", "20"))
@@ -66,6 +66,19 @@ MCP_BACKENDS = {
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8011")
 RAG_INSUFFICIENT_BUDGET_MS = 3000
 RAG_ANSWER_BUDGET_MS = 30000
+ROOT = HERE.parents[1]
+MULTI_AGENT_URL = os.getenv("MULTI_AGENT_URL", "http://127.0.0.1:8013")
+MULTI_AGENT_AGENTS = ("planner", "worker", "reviewer")
+# The last audit event of a finished run, by its final status.
+MULTI_AGENT_TERMINAL_EVENT = {
+    "completed": "run_completed",
+    "rejected": "run_rejected",
+    "failed": "run_failed",
+}
+# reports/ is git-ignored scratch. These review/validation logs are Release 2
+# evidence, so they are written to a committed folder as well.
+REVIEW_LOGS = ROOT / "docs" / "reports" / "release-2" / "agentic-loop"
+COMMITTED_LOG_MODES = ("multi-agent",)
 
 
 def load_plan(name):
@@ -611,7 +624,205 @@ def run_ci():
     return plan, [(None, observe_ci())]
 
 
-RUNNERS = {"services": run_services, "mcp": run_mcp, "rag": run_rag, "ci": run_ci}
+def multi_agent_get(path, **params):
+    """(status code, JSON body) from the Multi-Agent Server."""
+    response = requests.get(
+        f"{MULTI_AGENT_URL}{path}", params=params or None, timeout=15
+    )
+    return response.status_code, response.json()
+
+
+def pick_multi_agent_run():
+    """RUN_ID if set, else the newest run a human has decided, else the newest."""
+    if os.getenv("RUN_ID"):
+        return os.environ["RUN_ID"], None
+    status, body = multi_agent_get("/runs", limit=50)
+    runs = body.get("data") or []
+    if status != 200 or not runs:
+        return (
+            None,
+            "no runs on the server; start one with `python -m multi_agent_service run`",
+        )
+    decided = [r for r in runs if r.get("status") in ("completed", "rejected")]
+    return (decided or runs)[0]["run_id"], None
+
+
+def audit_checks(document):
+    """Checks over one run's export document: stages, deterministic checks,
+    Reviewer verdict, human decision and the order of the audit events."""
+    run = document.get("run", {})
+    events = sorted(document.get("history", []), key=lambda e: e.get("sequence", 0))
+    stages = document.get("summary", {}).get("stages", [])
+    human = run.get("human")
+    status = run.get("status")
+    summary = (
+        f"{run.get('run_id')} ({run.get('feature')}), status {status}, "
+        f"{run.get('attempts', 0)} attempt(s)"
+    )
+    results = [("run under review", f"OK: {summary}")]
+
+    completed = {s.get("agent") for s in stages if s.get("status") == "completed"}
+    results += [
+        (
+            f"{agent} stage completed",
+            "OK: completed" if agent in completed else "FAIL: no completed stage",
+        )
+        for agent in MULTI_AGENT_AGENTS
+    ]
+    calls = sum(s.get("tool_calls", 0) for s in stages if s.get("agent") == "worker")
+    results.append(
+        (
+            "worker tool calls",
+            f"OK: {calls} call(s)" if calls else "NOTE: the Worker made no tool calls",
+        )
+    )
+
+    checks = run.get("checks") or []
+    if not checks:
+        results.append(("deterministic checks", "FAIL: none recorded"))
+    results += [
+        (
+            f"check {check.get('name')}",
+            f"{'OK' if check.get('passed') else 'FAIL'}: {check.get('detail')}",
+        )
+        for check in checks
+    ]
+
+    review = run.get("review")
+    if not review:
+        results.append(("reviewer verdict", "FAIL: no review recorded"))
+    elif review.get("verdict") == "approve":
+        results.append(("reviewer verdict", "OK: approve"))
+    else:
+        results.append(
+            (
+                "reviewer verdict",
+                f"NOTE: {review.get('verdict')}; the human decision is the gate",
+            )
+        )
+    if run.get("attempts", 0) > 1:
+        results.append(
+            ("revision", f"NOTE: Worker revised ({run['attempts']} attempts)")
+        )
+
+    if not human:
+        results.append(("human decision", f"FAIL: none recorded (status {status})"))
+    else:
+        results.append(
+            (
+                "human decision",
+                f"OK: {human.get('decision')} by {human.get('reviewer')}",
+            )
+        )
+        expected = "rejected" if human.get("decision") == "reject" else "completed"
+        results.append(
+            (
+                "final status matches decision",
+                "OK: " + status
+                if status == expected
+                else f"FAIL: {status}, expected {expected}",
+            )
+        )
+
+    names = [e.get("event") for e in events]
+    sequence = [e.get("sequence") for e in document.get("history", [])]
+    results.append(
+        (
+            "audit trail starts with run_created",
+            "OK: run_created"
+            if names[:1] == ["run_created"]
+            else f"FAIL: starts {names[:1]}",
+        )
+    )
+    results.append(
+        (
+            "audit sequence increasing",
+            "OK: ordered"
+            if sequence == sorted(set(sequence))
+            else "FAIL: out of order or repeated",
+        )
+    )
+    if "human_decision" in names:
+        in_order = "awaiting_human" in names and names.index(
+            "awaiting_human"
+        ) < names.index("human_decision")
+        actor = next(
+            e.get("actor", "") for e in events if e.get("event") == "human_decision"
+        )
+        results.append(
+            (
+                "human decision follows awaiting_human",
+                "OK: in order"
+                if in_order
+                else "FAIL: decision without awaiting_human first",
+            )
+        )
+        results.append(
+            (
+                "human decision attributed to a person",
+                f"OK: {actor}"
+                if actor.startswith("human:")
+                else f"FAIL: actor {actor!r}",
+            )
+        )
+    terminal = MULTI_AGENT_TERMINAL_EVENT.get(status)
+    if terminal:
+        results.append(
+            (
+                "audit trail ends with the final event",
+                f"OK: {terminal}"
+                if names[-1:] == [terminal]
+                else f"FAIL: ends {names[-1:]}, expected {terminal}",
+            )
+        )
+    return results
+
+
+def observe_multi_agent(plan):
+    results = [
+        (
+            f"file {relative}",
+            "OK: present" if (ROOT / relative).is_file() else "FAIL: missing",
+        )
+        for relative in plan.get("required_files", [])
+    ]
+    try:
+        for label, endpoint in (("GET /health", "/health"), ("GET /ready", "/ready")):
+            status, _ = multi_agent_get(endpoint)
+            results.append(
+                (
+                    label,
+                    f"OK: HTTP {status}" if status == 200 else f"FAIL: HTTP {status}",
+                )
+            )
+        run_id, problem = pick_multi_agent_run()
+        if problem:
+            results.append(("select run", f"FAIL: {problem}"))
+            return results
+        status, body = multi_agent_get(f"/runs/{run_id}/export")
+    except Exception as exc:  # noqa: BLE001 - an unreachable server is evidence, not a crash
+        results.append(("Multi-Agent Server", f"FAIL: {exc}"))
+        return results
+    if status != 200:
+        results.append((f"GET /runs/{run_id}/export", f"FAIL: HTTP {status}"))
+        return results
+    return results + audit_checks(body.get("data", {}))
+
+
+def run_multi_agent():
+    plan = load_plan("checks/multi-agent.json")
+    results = observe_multi_agent(plan)
+    plan["checks"] = [{"label": label} for label, _ in results]
+    return plan, [(None, results)]
+
+
+RUNNERS = {
+    "services": run_services,
+    "mcp": run_mcp,
+    "rag": run_rag,
+    "ci": run_ci,
+    "multi-agent": run_multi_agent,
+}
 
 
 def call_model(model, system_prompt, user_prompt, max_tokens):
@@ -675,7 +886,9 @@ def flatten(sections):
     ]
 
 
-def render_report(mode, plan, sections, recommendation, review, failures):
+def render_report(
+    mode, plan, sections, recommendation, review, failures, decision=None
+):
     verdict = f"{len(failures)} check(s) failed" if failures else "all checks passed"
     lines = [f"## Agentic loop ({mode}) -- {verdict}", "", f"_{plan['goal']}_"]
     for title, results in sections:
@@ -695,6 +908,10 @@ def render_report(mode, plan, sections, recommendation, review, failures):
         "",
         review,
         "",
+    ]
+    if decision:
+        lines += ["### Human decision", "", decision, ""]
+    lines += [
         "Agent findings are advisory -- only the checks above decide the exit code.",
         "",
     ]
@@ -710,6 +927,31 @@ def write_report(mode, report):
     return path
 
 
+def write_review_log(mode, report, sections, decision):
+    """The committed review/validation log: the report plus a JSON copy of the
+    checks, overwritten on each run (reports/ keeps every timestamped run)."""
+    REVIEW_LOGS.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path = REVIEW_LOGS / f"{mode}-review.md"
+    path.write_text(f"_Generated {stamp}_\n\n{report}", encoding="utf-8")
+    results = flatten(sections)
+    (REVIEW_LOGS / f"{mode}-review.json").write_text(
+        json.dumps(
+            {
+                "mode": mode,
+                "generated_at": stamp,
+                "human_decision": decision,
+                "failed": [name for name, out in results if out.startswith("FAIL")],
+                "checks": [{"check": name, "outcome": out} for name, out in results],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def human_review():
     print("\nHUMAN REVIEW\n1 - Accept\n2 - Partially Accept\n3 - Reject")
     return {"1": "Accept", "2": "Partially Accept"}.get(
@@ -719,9 +961,17 @@ def human_review():
 
 def choose_mode():
     print("AGENTIC LOOP")
-    print("  1 - Services\n  2 - MCP\n  3 - RAG\n  4 - CI\n  0 - Exit")
+    print(
+        "  1 - Services\n  2 - MCP\n  3 - RAG\n  4 - CI\n  5 - Multi-Agent\n  0 - Exit"
+    )
     choice = input("Choose a validation mode: ").strip()
-    return {"1": "services", "2": "mcp", "3": "rag", "4": "ci"}.get(choice)
+    return {
+        "1": "services",
+        "2": "mcp",
+        "3": "rag",
+        "4": "ci",
+        "5": "multi-agent",
+    }.get(choice)
 
 
 def pick_mode(argv, interactive):
@@ -795,8 +1045,12 @@ def main(argv=None):
     else:
         print("  All deterministic checks passed; agent advice is advisory only.")
 
-    report = render_report(mode, plan, sections, recommendation, review, failures)
+    report = render_report(
+        mode, plan, sections, recommendation, review, failures, decision
+    )
     print(f"\nREPORT\n  {write_report(mode, report)}")
+    if mode in COMMITTED_LOG_MODES:
+        print(f"  {write_review_log(mode, report, sections, decision)}")
 
     print("\nLOOP COMPLETE")
     return 1 if failures else 0

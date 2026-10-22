@@ -93,7 +93,7 @@ SERVICES="student-1 student-3" python agentic_loop.py --ci --mode services
 
 ## Modes
 
-`--mode {services,mcp,rag,ci}` picks what the collector observes. Run with no
+`--mode {services,mcp,rag,ci,multi-agent}` picks what the collector observes. Run with no
 flag in a terminal and the loop shows a menu instead (`0` exits); `--ci` without
 `--mode` runs `services`, so existing invocations are unchanged. Every mode ends
 the same way: the two agents comment, and only the collector's checks decide
@@ -105,6 +105,7 @@ the exit code.
 | `mcp` | JSON-RPC tool calls to the host MCP server | `checks/mcp.json` |
 | `rag` | Calibration queries to the host RAG server | `checks/rag.json` -> `../rag-server/config/calibration-queries.json` |
 | `ci` | Latest `student-x-ci.yml` run per service via `gh` | `checks/ci.json` |
+| `multi-agent` | One Multi-Agent Server run, read from `GET /runs/{id}/export` | `checks/multi-agent.json` |
 
 **MCP** (`python -m tripgenie_mcp serve` plus the five backends, started with the agentic overlay): all 19 tools
 are listed (the three activity write tools are listed, never called); one valid read per student returns `ok: true`, `data` and the right
@@ -134,6 +135,8 @@ to `reports/ci/<service>/`. Without `gh` the mode reports that and passes.
 | `MCP_URL` | `http://127.0.0.1:8012/mcp` |
 | `RAG_URL` | `http://127.0.0.1:8011` |
 | `CI_BRANCH` | the checked-out branch |
+| `MULTI_AGENT_URL` | `http://127.0.0.1:8013` |
+| `RUN_ID` | unset -- the newest run with a human decision |
 
 Each mode has its own agent prompts in `prompts/<mode>/`, following the labs:
 `services` reviews endpoints and flows; `mcp` has the implementation agent pick
@@ -154,6 +157,25 @@ the more capable of the two. Override either with `IMPLEMENTATION_MODEL` /
 `REVIEW_MODEL`. With no credentials the agent sections print "unavailable" and
 the run still passes or fails on the checks.
 
+**Multi-Agent** (Release 2; `python -m multi_agent_service serve`, plus a run a
+human has decided -- `python -m multi_agent_service run ...` then `review <run_id>`):
+the required server files, prompts and contract exist; `/health` and `/ready`
+answer; the chosen run has completed Planner, Worker and Reviewer stages; every
+deterministic check (`output_schema`, `allowed_tools`, `tool_evidence`,
+`no_writes`, `grounding`) passed; a Reviewer verdict and a human decision are
+recorded; the final status matches the decision; and the audit events run
+`run_created` -> `awaiting_human` -> `human_decision` -> the terminal event,
+with the decision attributed to `human:<name>`. A Reviewer verdict other than
+`approve`, a Worker revision and a Worker with no tool calls are advisory
+`NOTE` rows. The agents recommend an implementation or review improvement and
+cross-check it; the checks alone decide the exit code, and a Reviewer
+`approve` never outranks a failed check.
+
+Unlike the other modes, `multi-agent` also writes its review/validation log to
+`docs/reports/release-2/agentic-loop/multi-agent-review.md` and `.json`
+(committed Release 2 evidence, overwritten on each run, with the loop's human
+decision). The timestamped copy still goes to `reports/`.
+
 ## Local only
 
 The loop is not part of CI -- no workflow runs it or its unit tests. Run it on
@@ -166,6 +188,7 @@ python agentic_loop.py --ci --mode services   # with SERVICES="shared student-1 
 python agentic_loop.py --ci --mode mcp        # MCP server running
 python agentic_loop.py --ci --mode rag        # Ollama, AI-Mode, MCP and RAG running
 python agentic_loop.py --ci --mode ci         # gh auth login first
+python agentic_loop.py --ci --mode multi-agent  # Multi-Agent Server running, one decided run
 pytest -q                                     # the loop's own tests
 ```
 
