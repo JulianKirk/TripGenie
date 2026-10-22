@@ -34,5 +34,18 @@ Write a short, concrete plan:
 - `success_criteria`: one to four checks the Reviewer can apply, such as
   "every suggested id appears in a tool result".
 
+When the user message has a `previous_attempt`, an earlier plan did not
+work. It holds that `plan`, the Worker's `tool_calls` (arguments, `status`
+and `error`), any `worker_error`, the `failed_checks` and the Reviewer's
+`reviewer_feedback`. Write a corrected plan:
+- A call with status `rejected` and error `INVALID_ARGUMENTS` had arguments
+  that broke the tool's schema. Compare them with that tool's argument schema
+  in the catalogue and give the corrected arguments, using the exact names
+  and types it requires (an integer as a number, not a string), or leave out
+  the argument.
+- A call with status `error` failed in the tool itself; plan a different
+  call, for example a broader search, instead of repeating it unchanged.
+- Address every failed check and every Reviewer issue.
+
 Do not answer the task yourself and do not invent data. Return JSON only,
 matching the response schema.

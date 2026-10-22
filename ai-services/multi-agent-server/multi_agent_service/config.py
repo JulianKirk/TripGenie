@@ -99,7 +99,9 @@ class Settings:
     reviewer_timeout_seconds: float = 60.0
     # A whole run, including one revision. Past this it is marked failed with
     # the steps it completed, so a stuck model cannot hold a run open forever.
-    run_timeout_seconds: float = 420.0
+    # Two full Planner → Worker → Reviewer rounds take about 2-4 minutes on
+    # llama3.1:8b; the limit covers a revision with a slow or cold model.
+    run_timeout_seconds: float = 600.0
     max_revisions: int = 1
     max_active_runs: int = 4
     max_task_chars: int = 500
@@ -179,7 +181,7 @@ class Settings:
             run_timeout_seconds=_parse_float(
                 os.getenv("MULTI_AGENT_RUN_TIMEOUT_SECONDS"),
                 env_name="MULTI_AGENT_RUN_TIMEOUT_SECONDS",
-                default=420.0,
+                default=600.0,
             ),
             max_revisions=_parse_int(
                 os.getenv("MULTI_AGENT_MAX_REVISIONS"),

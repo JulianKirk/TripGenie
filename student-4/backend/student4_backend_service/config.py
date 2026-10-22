@@ -33,10 +33,13 @@ class Settings:
     rag_url: str | None = None
     rag_enabled: bool = False
     rag_timeout: float = DEFAULT_RAG_TIMEOUT
+    multi_agent_enabled: bool = True
+    multi_agent_url: str = "http://127.0.0.1:8013"
+    multi_agent_timeout: float = 15.0
     service_name: str = "student-4-backend"
 
     def __post_init__(self) -> None:
-        for name in ("agent_timeout", "rag_timeout"):
+        for name in ("agent_timeout", "rag_timeout", "multi_agent_timeout"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 message = f"{name} must be positive and finite"
                 raise ValueError(message)
@@ -52,11 +55,24 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         return cls(
-            ai_assistant_prompt_asset=os.environ.get(
-                "AI_ASSISTANT_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
+            multi_agent_enabled=_flag(
+                "STUDENT4_BACKEND_MULTI_AGENT_ENABLED", default=True
             ),
-            assistant_enabled=_flag("AI_ASSISTANT_ENABLED"),
-            agent_timeout=float(os.environ.get("AGENT_TIMEOUT", "210")),
+            multi_agent_url=os.environ.get(
+                "STUDENT4_BACKEND_MULTI_AGENT_BASE_URL", "http://127.0.0.1:8013"
+            )
+            .strip()
+            .rstrip("/"),
+            multi_agent_timeout=float(
+                os.environ.get("STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS", "15")
+            ),
+            ai_assistant_prompt_asset=os.environ.get(
+                "STUDENT4_BACKEND_MCP_PROMPT_ASSET", DEFAULT_AI_ASSISTANT_PROMPT_ASSET
+            ),
+            assistant_enabled=_flag("STUDENT4_BACKEND_MCP_ENABLED"),
+            agent_timeout=float(
+                os.environ.get("STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS", "210")
+            ),
             database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             db_timeout=float(os.environ.get("DB_TIMEOUT", DEFAULT_DB_TIMEOUT)),
             location_url=os.environ.get("LOCATION_URL", DEFAULT_LOCATION_URL),
@@ -70,18 +86,24 @@ class Settings:
             itinerary_timeout=float(
                 os.environ.get("ITINERARY_TIMEOUT", DEFAULT_ITINERARY_TIMEOUT)
             ),
-            ai_mode_url=os.environ.get("AI_MODE_URL") or None,
+            ai_mode_url=os.environ.get("STUDENT4_BACKEND_AI_MODE_BASE_URL") or None,
             ai_mode_timeout=float(
-                os.environ.get("AI_MODE_TIMEOUT", DEFAULT_AI_MODE_TIMEOUT)
+                os.environ.get(
+                    "STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS", DEFAULT_AI_MODE_TIMEOUT
+                )
             ),
-            rag_url=os.environ.get("RAG_URL") or None,
-            rag_enabled=_flag("RAG_ENABLED"),
-            rag_timeout=float(os.environ.get("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)),
+            rag_url=os.environ.get("STUDENT4_BACKEND_RAG_BASE_URL") or None,
+            rag_enabled=_flag("STUDENT4_BACKEND_RAG_ENABLED"),
+            rag_timeout=float(
+                os.environ.get(
+                    "STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS", DEFAULT_RAG_TIMEOUT
+                )
+            ),
         )
 
 
-def _flag(name: str) -> bool:
-    value = os.environ.get(name, "false").lower()
+def _flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name, str(default).lower()).lower()
     if value not in {"true", "false", "1", "0"}:
         message = f"{name} must be true or false"
         raise ValueError(message)

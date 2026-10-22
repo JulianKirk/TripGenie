@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -168,7 +169,7 @@ def test_every_deterministic_check_passes_on_a_grounded_answer(
 # -------------------------------------------------------------- revision
 
 
-def test_a_revise_verdict_sends_the_feedback_back_to_the_worker(
+def test_a_revise_verdict_goes_back_to_the_planner_then_the_worker(
     settings, tmp_path
 ) -> None:
     fake = FakeAiMode(
@@ -178,17 +179,25 @@ def test_a_revise_verdict_sends_the_feedback_back_to_the_worker(
         run = start_and_settle(client)
 
     assert run["status"] == "awaiting_human"
-    assert [step["agent"] for step in run["steps"]] == [
-        "planner",
-        "worker",
-        "reviewer",
-        "worker",
-        "reviewer",
+    assert [(step["agent"], step["attempt"]) for step in run["steps"]] == [
+        ("planner", 1),
+        ("worker", 1),
+        ("reviewer", 1),
+        ("planner", 2),
+        ("worker", 2),
+        ("reviewer", 2),
     ]
     assert run["attempts"] == 2
     assert run["review"]["verdict"] == "approve"
     second = json.loads(fake.bodies("worker")[1]["prompt"])
     assert second["reviewer_feedback"]["issues"] == REVISE["issues"]
+    first_plan, replan = (json.loads(b["prompt"]) for b in fake.bodies("planner"))
+    assert "previous_attempt" not in first_plan
+    previous = replan["previous_attempt"]
+    assert previous["plan"]["steps"] == PLAN["steps"]
+    assert previous["reviewer_feedback"]["issues"] == REVISE["issues"]
+    assert previous["tool_calls"][0]["tool"] == "transport_search"
+    assert fake.bodies("planner")[1]["correlation_id"].endswith(".p2")
 
 
 def test_revisions_stop_at_the_limit_and_the_human_still_decides(
@@ -357,3 +366,186 @@ def test_feature_context_cannot_override_the_workflow_fields(
     assert prompt["task"].startswith("Cheapest way")
     assert prompt["plan"]["goal"] == PLAN["goal"]
     assert prompt["origin"] == "Geelong"
+
+
+# ------------------------------------------------------- worker failures
+
+REJECTED_CALL = {
+    "tool": "transport_search",
+    "arguments": {"destination": "Devonport", "limit": "4"},
+    "status": "rejected",
+    "duration_ms": 0,
+    "result": None,
+    "error": "INVALID_ARGUMENTS",
+}
+
+
+def test_a_worker_that_fails_on_tool_arguments_is_reviewed_and_replanned(
+    settings,
+) -> None:
+    """The live failure: AI-Mode gives up after the model's invalid arguments."""
+    fake = FakeAiMode(
+        worker=[
+            lambda _: ai_error(502, "BAD_GATEWAY", [REJECTED_CALL]),
+            lambda _: generation(WORKER_RESULT, [tool_trace()]),
+        ],
+        reviewer=[lambda _: generation(REVISE), lambda _: generation(APPROVE)],
+    )
+    with _client(settings, fake) as client:
+        run = start_and_settle(client)
+        history = client.get(f"/runs/{run['run_id']}/history").json()["data"]
+
+    assert run["status"] == "awaiting_human"
+    assert [(step["agent"], step["status"]) for step in run["steps"]] == [
+        ("planner", "completed"),
+        ("worker", "failed"),
+        ("reviewer", "completed"),
+        ("planner", "completed"),
+        ("worker", "completed"),
+        ("reviewer", "completed"),
+    ]
+    assert run["steps"][1]["error"]["code"] == "BAD_GATEWAY"
+    assert run["steps"][1]["tools"][0]["status"] == "rejected"
+    assert run["result"] == WORKER_RESULT
+    assert run["error"] is None
+
+    # The Reviewer is told the Worker failed, with its partial tool evidence.
+    first_review = json.loads(fake.bodies("reviewer")[0]["prompt"])
+    assert first_review["worker_error"]["code"] == "BAD_GATEWAY"
+    assert first_review["result"] is None
+    assert first_review["tool_evidence"][0]["error"] == "INVALID_ARGUMENTS"
+
+    # The Planner sees the rejected call and the failure, to fix the arguments.
+    previous = json.loads(fake.bodies("planner")[1]["prompt"])["previous_attempt"]
+    assert previous["worker_error"]["code"] == "BAD_GATEWAY"
+    assert previous["tool_calls"] == [
+        {
+            "tool": "transport_search",
+            "arguments": '{"destination":"Devonport","limit":"4"}',
+            "status": "rejected",
+            "error": "INVALID_ARGUMENTS",
+        }
+    ]
+    events = [event["event"] for event in history]
+    assert "stage_failed" in events
+    requested = next(e for e in history if e["event"] == "revision_requested")
+    assert requested["detail"]["reason"] == "worker_failed"
+
+
+def test_a_worker_failing_on_its_last_attempt_fails_the_run(settings) -> None:
+    fake = FakeAiMode(worker=[lambda _: ai_error(502, "BAD_GATEWAY", [REJECTED_CALL])])
+    with _client(settings, fake) as client:
+        run = start_and_settle(client)
+
+    assert run["status"] == "failed"
+    assert run["error"]["code"] == "BAD_GATEWAY"
+    assert run["attempts"] == settings.max_revisions + 1
+    agents = [step["agent"] for step in run["steps"]]
+    assert agents.count("planner") == settings.max_revisions + 1
+    assert agents[-1] == "worker"
+
+
+@pytest.mark.parametrize("code", ["DEPENDENCY_UNAVAILABLE", "DEPENDENCY_TIMEOUT"])
+def test_a_worker_outage_is_not_retried(settings, code: str) -> None:
+    fake = FakeAiMode(worker=[lambda _: ai_error(503, code)])
+    with _client(settings, fake) as client:
+        run = start_and_settle(client)
+
+    assert run["status"] == "failed"
+    assert run["error"]["code"] == code
+    assert [step["agent"] for step in run["steps"]] == ["planner", "worker"]
+
+
+def test_an_attempt_that_ran_a_write_tool_is_never_repeated(settings) -> None:
+    wrote = {**tool_trace("activities_delete"), "arguments": {"activity_id": "a1"}}
+    fake = FakeAiMode(
+        worker=[lambda _: ai_error(502, "BAD_GATEWAY", [wrote])],
+    )
+    with _client(settings, fake) as client:
+        run = start_and_settle(client)
+
+    assert run["status"] == "failed"
+    assert len(fake.bodies("worker")) == 1
+
+
+def test_a_completed_attempt_that_ran_a_write_tool_goes_to_the_human(settings) -> None:
+    wrote = tool_trace("activities_delete")
+    fake = FakeAiMode(
+        worker=[lambda _: generation(WORKER_RESULT, [tool_trace(), wrote])],
+    )
+    with _client(settings, fake) as client:
+        run = start_and_settle(client)
+        history = client.get(f"/runs/{run['run_id']}/history").json()["data"]
+
+    assert run["status"] == "awaiting_human"
+    assert len(fake.bodies("worker")) == 1
+    no_writes = next(c for c in run["checks"] if c["name"] == "no_writes")
+    assert no_writes["passed"] is False
+    skipped = next(e for e in history if e["event"] == "revision_skipped")
+    assert skipped["detail"]["reason"] == "write_tool_executed"
+
+
+def test_common_feature_rules_reach_planner_and_reviewer_only(
+    client: TestClient, fake: FakeAiMode
+) -> None:
+    common = "Feature policy sentinel: one shot, no clarification questions."
+    worker_only = "Worker-only sentinel: return activity parts JSON."
+    run = start_and_settle(
+        client, feature_instructions=common, worker_system=worker_only
+    )
+    assert run["status"] == "awaiting_human"
+    assert len(fake.calls) == 3
+    for call in fake.calls:
+        body = call["body"]
+        assert common not in body["prompt"]
+        if call["agent"] == "worker":
+            assert body["system"].startswith(worker_only)
+            assert common not in body["system"]
+        else:
+            assert common in body["system"]
+            assert worker_only not in body["system"]
+    assert common not in str(run)
+    history = client.get(f"/runs/{run['run_id']}/history").json()
+    assert common not in str(history)
+
+
+def test_common_feature_rules_survive_replanning(settings) -> None:
+    fake = FakeAiMode(
+        reviewer=[lambda _: generation(REVISE), lambda _: generation(APPROVE)]
+    )
+    with _client(settings, fake) as client:
+        run = start_and_settle(
+            client, feature_instructions="Keep feature rules on retry."
+        )
+    assert run["attempts"] == 2
+    assert len(fake.calls) == 6
+    assert all(
+        "Keep feature rules on retry." in call["body"]["system"]
+        for call in fake.calls
+        if call["agent"] != "worker"
+    )
+    assert all(
+        "Keep feature rules on retry." not in body["system"]
+        for body in fake.bodies("worker")
+    )
+
+
+def test_reviewer_budget_counts_common_feature_instructions(settings) -> None:
+    settings = replace(settings, max_stage_prompt_chars=8000)
+    result = {**WORKER_RESULT, "answer": "Evidence-backed answer. " * 220}
+    fake = FakeAiMode(worker=[lambda _: generation(result, [tool_trace()])])
+    with _client(settings, fake) as client:
+        run = start_and_settle(client, feature_instructions="Policy. " * 300)
+    assert run["status"] == "awaiting_human", run
+    (reviewer,) = fake.bodies("reviewer")
+    assert len(reviewer["system"]) + len(reviewer["prompt"]) <= 8000
+    assert len(json.loads(reviewer["prompt"])["result"]) < 4000
+
+
+def test_common_rules_do_not_change_existing_worker_prompt(
+    client: TestClient, fake: FakeAiMode
+) -> None:
+    start_and_settle(client)
+    original = fake.bodies("worker")[0]["system"]
+    start_and_settle(client, feature_instructions="One-shot feature rules.")
+    assert fake.bodies("worker")[1]["system"] == original

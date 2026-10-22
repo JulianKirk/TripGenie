@@ -74,6 +74,9 @@ class Settings:
     rag_base_url: str = "http://host.docker.internal:8011"
     rag_timeout_seconds: float = 130.0
     mcp_enabled: bool = False
+    multi_agent_enabled: bool = False
+    multi_agent_base_url: str = "http://host.docker.internal:8013"
+    multi_agent_timeout_seconds: float = 15.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -147,4 +150,12 @@ class Settings:
             ),
             rag_timeout_seconds=_timeout("STUDENT5_BACKEND_RAG_TIMEOUT_SECONDS", 130.0),
             mcp_enabled=_flag("STUDENT5_BACKEND_MCP_ENABLED"),
+            multi_agent_enabled=_flag("STUDENT5_BACKEND_MULTI_AGENT_ENABLED"),
+            multi_agent_base_url=_url(
+                "STUDENT5_BACKEND_MULTI_AGENT_BASE_URL",
+                "http://host.docker.internal:8013",
+            ),
+            multi_agent_timeout_seconds=_timeout(
+                "STUDENT5_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS", 15.0
+            ),
         )

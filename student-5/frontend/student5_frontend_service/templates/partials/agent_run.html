@@ -1,0 +1,116 @@
+<div id="agent-run" class="panel agent-run" aria-live="polite"
+  {% if agent_run and agent_run.active %}hx-get="/budgets/{{ budget.budget_id }}/agent-runs/{{ agent_run.run_id }}" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"{% endif %}>
+  <div><p class="eyebrow">Shared Multi-Agent Server</p><h2>Budget review agents</h2><p class="muted">A Planner, Worker and Reviewer answer your question with the shared budget MCP tools. Nothing changes until you approve it.</p></div>
+  {% if not agent_run or agent_run.status in ('completed', 'rejected', 'failed') %}
+  <form method="post" action="/budgets/{{ budget.budget_id }}/agent-runs" hx-post="/budgets/{{ budget.budget_id }}/agent-runs" hx-target="#agent-run" hx-swap="outerHTML" hx-indicator="#agent-run-loading">
+    <label class="field"><span>What should the agents review?</span><textarea name="question" rows="2" maxlength="500" required>{{ agent_question or '' }}</textarea></label>
+    <div class="actions"><button class="button button--primary" type="submit">Start agent review</button><span id="agent-run-loading" class="htmx-indicator muted">Starting...</span></div>
+  </form>
+  {% endif %}
+  {% if agent_error %}<div class="banner banner--warning" role="alert">{{ agent_error }} Budget and expense actions remain available.</div>{% endif %}
+  {% if agent_run %}
+  {% set run = agent_run %}
+  <div class="agent-result">
+    <h3>{{ run.task }}</h3>
+    <p role="status"><span class="confidence">{{ run.status | replace('_', ' ') }}</span> {{ agent_status_labels.get(run.status, run.status) }}{% if run.active %}&hellip; this panel refreshes every 2 seconds. <a href="/budgets/{{ budget.budget_id }}/agent-runs/{{ run.run_id }}">Refresh now</a>{% endif %}</p>
+    <p class="cell-note">Run <code>{{ run.run_id }}</code> &middot; attempt {{ run.attempts }} &middot; started {{ run.created_at }}</p>
+    {% if run.error %}<div class="banner banner--error" role="alert"><strong>The run failed: {{ run.error.code }}</strong> {{ run.error.message }} The completed steps are shown below.</div>{% endif %}
+
+    {% if run.plan %}
+    <h4>Plan <span class="cell-note">from the Planner</span></h4>
+    <p>{{ run.plan.goal }}</p>
+    <ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+    {% endif %}
+
+    {% if run.stages %}
+    <h4>Agent steps</h4>
+    <ol class="agent-stages">
+      {% for stage in run.stages %}
+      <li>
+        <strong>{{ stage.agent | capitalize }}</strong> <span class="cell-note">attempt {{ stage.attempt }} &middot; {{ stage.status }} &middot; {{ (stage.duration_ms / 1000) | round(1) }} s</span>
+        {% if stage.error_code %}<span class="cell-note">Error {{ stage.error_code }}: {{ stage.error_message }}</span>{% endif %}
+        {% if stage.agent == 'worker' %}
+        {% if stage.tools %}
+        <ul>
+          {% for call in stage.tools %}
+          <li><code>{{ call.tool }}</code> &middot; {{ call.status }} &middot; {{ call.duration_ms }} ms &middot; arguments <code>{{ call.arguments | tojson }}</code>
+            {% if call.error %}<span class="cell-note">{{ call.error }}</span>{% endif %}
+            {% if call.result %}<details><summary>Returned tool data</summary><pre>{{ call.result | tojson(indent=2) }}</pre></details>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<span class="cell-note">No MCP tool calls in this attempt.</span>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+
+    {% if run.checks %}
+    <h4>Automatic checks</h4>
+    <ul>{% for check in run.checks %}<li><span class="confidence {{ 'confidence--high' if check.passed else 'confidence--insufficient' }}">{{ 'pass' if check.passed else 'fail' }}</span> <code>{{ check.name }}</code> <span class="cell-note">{{ check.detail }}</span></li>{% endfor %}</ul>
+    {% endif %}
+
+    {% if run.review %}
+    <h4>Review <span class="cell-note">from the Reviewer</span></h4>
+    <p><span class="confidence">{{ run.review.verdict }}</span> {{ run.review.summary }}</p>
+    {% for label, items in (('Issues', run.review.issues), ('Risks', run.review.risks), ('Recommendations', run.review.recommendations)) %}{% if items %}<p class="cell-note">{{ label }}</p><ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}{% endfor %}
+    {% endif %}
+
+    {% if run.overview %}
+    <h4>{{ 'Answer you signed off' if run.human else 'Draft answer' }}</h4>
+    {% if not run.grounded %}<div class="banner banner--warning">This answer does not name a budget id returned by this budget's tool results, so its changes cannot be applied.</div>{% endif %}
+    <p>{{ run.overview }}</p>
+    {% if run.findings %}<ul>{% for item in run.findings %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    {% if run.actions and run.status != 'awaiting_human' %}
+    <p class="cell-note">Allocation changes in this answer</p>
+    <ul>{% for action in run.actions %}<li>{{ action.category | title }}: {{ action.current_allocation }} &rarr; {{ action.new_allocation }} &middot; {{ action.reason }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% endif %}
+
+    {% if run.status == 'awaiting_human' %}
+    {% if decision_error %}<div class="banner banner--error" role="alert">{{ decision_error }}</div>{% endif %}
+    {% if run.checks | rejectattr('passed') | list %}<div class="banner banner--warning">Some automatic checks failed. Review the answer carefully before approving it.</div>{% endif %}
+    <form method="post" action="/budgets/{{ budget.budget_id }}/agent-runs/{{ run.run_id }}/review" hx-post="/budgets/{{ budget.budget_id }}/agent-runs/{{ run.run_id }}/review" hx-target="#agent-run" hx-swap="outerHTML" hx-indicator="#agent-review-loading">
+      <fieldset>
+        <legend>Your decision</legend>
+        {% if run.actions %}
+        <p class="cell-note">Ticked allocation changes are applied to this budget when you approve. Change an amount to correct it.</p>
+        {% for action in run.actions %}
+        <div class="agent-action"><label><input type="checkbox" name="accepted" value="{{ action.index }}" checked> <strong>{{ action.category | title }}</strong>: {{ action.current_allocation }} &rarr; proposed {{ action.new_allocation }}</label><span class="cell-note">{{ action.reason }}</span><label class="field">New {{ action.category }} allocation<input name="allocation_{{ action.index }}" value="{{ action.new_allocation }}" inputmode="decimal" pattern="\d{1,10}\.\d{2}" maxlength="13"></label></div>
+        {% endfor %}
+        {% endif %}
+        <label class="field"><span>Corrected answer (only for Correct)</span><textarea name="corrected_overview" rows="2" maxlength="600"></textarea></label>
+        <label class="field"><span>Your name</span><input name="reviewer" value="traveller" maxlength="60" required></label>
+        <label class="field"><span>Notes (optional)</span><textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+        <div class="actions">
+          <button class="button button--primary" type="submit" name="decision" value="approve">Approve</button>
+          <button class="button" type="submit" name="decision" value="correct">Correct</button>
+          <button class="button button--danger" type="submit" name="decision" value="reject">Reject</button>
+          <span id="agent-review-loading" class="htmx-indicator muted">Recording decision...</span>
+        </div>
+      </fieldset>
+    </form>
+    {% endif %}
+
+    {% if run.human %}
+    <div class="banner {{ 'banner--error' if run.human.decision == 'reject' else 'banner--warning' }}" role="status">
+      <p><strong>Human decision: {{ run.human.decision }}</strong> by {{ run.human.reviewer }} at {{ run.human.decided_at }}.</p>
+      {% if run.human.notes %}<p>{{ run.human.notes }}</p>{% endif %}
+      {% for change in run.applied_changes %}<p>Applied: {{ change.category | title }} allocation {{ change.previous }} &rarr; {{ change.new }}.</p>{% endfor %}
+      {% if run.applied_changes %}<p><a href="/budgets/{{ budget.budget_id }}">Reload the budget</a> to see the updated allocations.</p>{% endif %}
+      {% if run.apply_error %}<p>{{ run.apply_error }}</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if run.history %}
+    <details>
+      <summary>Coordination and audit history ({{ run.history | length }} events)</summary>
+      <div class="table-scroll"><table><thead><tr><th>#</th><th>Time</th><th>Actor</th><th>Event</th></tr></thead><tbody>
+        {% for event in run.history %}<tr><td>{{ event.sequence }}</td><td>{{ event.at }}</td><td>{{ event.actor }}</td><td>{{ event.event }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

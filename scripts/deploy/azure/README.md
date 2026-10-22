@@ -45,6 +45,20 @@ holds the checks `deployment-testing.sh` runs.
 - **Database data.** As in Lab 11, databases keep their SQLite file only for the life of their single replica. A restart or redeploy restores the seed data.
 - **HTTPS behind ingress.** Azure ingress ends TLS and forwards plain HTTP, so the frontends trust its `X-Forwarded-*` headers in the cloud profile only (`TRIPGENIE_FORWARDED_ALLOW_IPS=*` in `shared/configuration/.env.cloud`, passed as `FORWARDED_ALLOW_IPS`). Their generated links then use `https://`. Locally the default stays `127.0.0.1`.
 
+## Cloud security
+
+| Control | Where | Checked by |
+| --- | --- | --- |
+| Only `shared-ui` and the frontends are public; backends and databases have internal TCP ingress | `compose_to_azure.py` | `security_check.py`, and `smoke_test.py` expects no 200 from each backend or database name on the public domain |
+| HTTPS only: plain HTTP redirects (`allowInsecure` false) | Container Apps default | `security_check.py`, `smoke_test.py` |
+| Security headers (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) and no server software banner | `x-frontend-security-headers` in `docker-compose.yml` (uvicorn's `UVICORN_HEADERS`), `shared/frontend/default.conf.template` | `smoke_test.py` |
+| No stored Azure credential: GitHub signs in with OIDC, apps pull images with the `tripgenie-acr-pull` identity | `gh-secrets-setup.sh`, `build-images.sh` | `security_check.py` |
+| Registry admin user and anonymous pull disabled | `build-images.sh` | `security_check.py` |
+| No credential in a plain app setting | `docker-compose.yml` | `security_check.py` |
+
+`deployment-testing.sh` runs both checks and adds them to
+`cloud-deployment-results.md`; any failure fails the deployment.
+
 ## One-time setup (subscription owner)
 
 ```bash

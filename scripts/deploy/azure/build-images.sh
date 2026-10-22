@@ -30,6 +30,7 @@ echo "Creating Azure Container Registry..."
 az acr create \
   --resource-group "$RESOURCE_GROUP" \
   --name "$REGISTRY_NAME" \
+  --admin-enabled false \
   --sku Basic -o none
 
 # Step 2a: The identity every container app pulls its image with. It is created

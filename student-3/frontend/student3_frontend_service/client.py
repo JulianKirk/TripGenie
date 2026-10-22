@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from .config import Settings
 from .errors import ApiError, bad_gateway, dependency_timeout, dependency_unavailable
 from .models import (
+    AgentRun,
     BackendHealthPayload,
     DataEnvelope,
     DeleteResponse,
@@ -48,6 +49,7 @@ class BackendApiClient:
         self._ai_timeout_seconds = settings.ai_timeout_seconds
         self._mcp_timeout_seconds = settings.mcp_timeout_seconds
         self._rag_timeout_seconds = settings.rag_timeout_seconds
+        self._agents_timeout_seconds = settings.agents_timeout_seconds
         self._client = httpx.AsyncClient(
             base_url=settings.backend_base_url,
             timeout=settings.backend_timeout_seconds,
@@ -249,6 +251,51 @@ class BackendApiClient:
         )
         return envelope.data
 
+    async def start_agent_run(self, payload: dict[str, object]) -> AgentRun:
+        """Start a multi-agent run; it comes back at once, still planning."""
+        return await self._agent_run(
+            "POST",
+            f"{self._api_prefix}/transport-options/agent-runs",
+            payload,
+            expected_status=202,
+        )
+
+    async def get_agent_run(self, run_id: str) -> AgentRun:
+        return await self._agent_run(
+            "GET",
+            f"{self._api_prefix}/transport-options/agent-runs/{run_id}",
+        )
+
+    async def review_agent_run(
+        self,
+        run_id: str,
+        payload: dict[str, object],
+    ) -> AgentRun:
+        return await self._agent_run(
+            "POST",
+            f"{self._api_prefix}/transport-options/agent-runs/{run_id}/review",
+            payload,
+        )
+
+    async def _agent_run(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, object] | None = None,
+        *,
+        expected_status: int = 200,
+    ) -> AgentRun:
+        envelope = await self._request_model(
+            method,
+            path,
+            json=payload,
+            timeout=self._agents_timeout_seconds,
+            expected_statuses={expected_status},
+            response_type=DataEnvelope[AgentRun],
+            malformed_message="Backend API returned a malformed agent run.",
+        )
+        return envelope.data
+
     async def mcp_search(self, payload: dict[str, object]) -> McpToolResult:
         return await self._mcp(
             f"{self._api_prefix}/transport-options/mcp/search",
@@ -372,9 +419,7 @@ class BackendApiClient:
                 json=json,
                 # httpx.USE_CLIENT_DEFAULT rather than None: passing None
                 # explicitly would disable the timeout altogether.
-                timeout=(
-                    httpx.USE_CLIENT_DEFAULT if timeout is None else timeout
-                ),
+                timeout=(httpx.USE_CLIENT_DEFAULT if timeout is None else timeout),
             )
         except httpx.TimeoutException as exc:
             raise dependency_timeout(

@@ -193,7 +193,7 @@ class HealthDependencies(StrictModel):
 
 
 class HealthIntegrations(StrictModel):
-    """Which optional Release 1 integrations this deployment has switched on.
+    """Which optional AI integrations this deployment has switched on.
 
     Configuration, not a probe: the host-run servers are never contacted from
     a health check, so a stopped MCP server cannot make this service unready.
@@ -201,6 +201,7 @@ class HealthIntegrations(StrictModel):
 
     rag: Literal["enabled", "disabled"]
     mcp: Literal["enabled", "disabled"]
+    multi_agent: Literal["enabled", "disabled"]
 
 
 class HealthResponse(StrictModel):
@@ -627,3 +628,168 @@ class RagAnswer(LenientModel):
         elif not self.citations or self.confidence_category == "insufficient_context":
             raise ValueError("a grounded answer needs citations and a confidence")
         return self
+
+
+# ------------------------------------------------------- Release 2 multi-agent
+
+AgentRunIdentifier = Annotated[
+    str,
+    StringConstraints(pattern=r"^magent_[0-9a-f]{12}$"),
+]
+AgentRunStatus = Literal[
+    "planning",
+    "working",
+    "reviewing",
+    "awaiting_human",
+    "completed",
+    "rejected",
+    "failed",
+]
+HumanDecision = Literal["approve", "correct", "partial", "reject"]
+
+
+class AgentRunRequest(StrictModel):
+    """A transport question for the shared Planner -> Worker -> Reviewer run.
+
+    The same inputs as an AI suggestion: the agents answer it, and a human
+    decides what, if anything, is added to the trip.
+    """
+
+    question: Annotated[str, StringConstraints(min_length=1, max_length=500)]
+    trip_id: TripIdentifier | None = None
+    origin: ShortText | None = None
+    destination: ShortText | None = None
+
+    @field_validator("origin", "destination", "question")
+    @classmethod
+    def normalise_text(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)
+
+
+class AgentPlan(StrictModel):
+    goal: str
+    steps: list[str]
+
+
+class AgentStage(StrictModel):
+    """One agent's turn. A failed Worker stage keeps the tool calls it made."""
+
+    agent: Literal["planner", "worker", "reviewer"]
+    attempt: int = Field(ge=1)
+    status: str
+    duration_ms: int = Field(ge=0)
+    error_code: str | None = None
+    error_message: str | None = None
+    tools: list[ToolCallTrace] = Field(default_factory=list)
+
+
+class AgentCheck(StrictModel):
+    """A deterministic check the Multi-Agent Server ran on the Worker's answer."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class AgentReview(StrictModel):
+    verdict: Literal["approve", "revise", "reject"]
+    summary: str
+    issues: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class AgentSuggestion(StrictModel):
+    """A suggested option, re-read from this service.
+
+    `grounded` is true only when a successful Student 3 transport tool in the
+    Worker's final attempt returned the id; only those can be added to a trip.
+    `option` is None when the record no longer exists.
+    """
+
+    index: int = Field(ge=0)
+    transport_id: str
+    reason: str
+    grounded: bool
+    option: TransportOptionRecord | None = None
+
+
+class AgentHumanDecision(StrictModel):
+    decision: HumanDecision
+    reviewer: str
+    notes: str | None = None
+    decided_at: str
+
+
+class AgentSavedSelection(StrictModel):
+    transport_id: TransportIdentifier
+    trip_id: TripIdentifier
+    traveller_count: int = Field(ge=1, le=1000)
+
+
+class AgentSaveError(StrictModel):
+    transport_id: str
+    code: str
+    message: str
+
+
+class AgentRunError(StrictModel):
+    code: str
+    message: str
+
+
+class AgentRunView(StrictModel):
+    """A multi-agent run as this feature shows it.
+
+    `saved` and `save_errors` are filled only in the reply to a decision:
+    they report what this service added to the trip after the human approved.
+    """
+
+    run_id: AgentRunIdentifier
+    status: AgentRunStatus
+    task: str
+    trip_id: TripIdentifier | None = None
+    attempts: int = Field(ge=0)
+    created_at: str
+    updated_at: str
+    plan: AgentPlan | None = None
+    stages: list[AgentStage] = Field(default_factory=list)
+    checks: list[AgentCheck] = Field(default_factory=list)
+    review: AgentReview | None = None
+    overview: str | None = None
+    considerations: list[str] = Field(default_factory=list)
+    disclaimer: str | None = None
+    suggestions: list[AgentSuggestion] = Field(default_factory=list)
+    human: AgentHumanDecision | None = None
+    error: AgentRunError | None = None
+    saved: list[AgentSavedSelection] = Field(default_factory=list)
+    save_errors: list[AgentSaveError] = Field(default_factory=list)
+
+
+class AgentReviewRequest(StrictModel):
+    """The human decision on a run awaiting review.
+
+    `accepted` indexes the run's suggestions: the ones to keep for `partial`,
+    and for `correct` the corrected answer's suggestions. A corrected answer
+    can also replace the overview. Accepted suggestions are added to the run's
+    trip, for `traveller_count` travellers, by this service's own plan route.
+    """
+
+    decision: HumanDecision
+    reviewer: Annotated[str, StringConstraints(min_length=1, max_length=60)] = (
+        "traveller"
+    )
+    notes: Annotated[str, StringConstraints(max_length=1000)] | None = None
+    accepted: list[Annotated[int, Field(ge=0)]] = Field(
+        default_factory=list,
+        max_length=MAX_AI_RECOMMENDATIONS,
+    )
+    corrected_overview: (
+        Annotated[str, StringConstraints(min_length=1, max_length=400)] | None
+    ) = None
+    traveller_count: int | None = Field(default=None, ge=1, le=1000)
+
+    @field_validator("notes", "corrected_overview")
+    @classmethod
+    def normalise_text(cls, value: str | None) -> str | None:
+        return _normalise_optional_text(value)

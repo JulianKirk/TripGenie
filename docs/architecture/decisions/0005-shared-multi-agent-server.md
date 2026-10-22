@@ -44,10 +44,16 @@ The constraints already in place:
    tools, and at least one successful tool call. A failed check stops the
    Reviewer approving and triggers the one permitted revision, so a model's
    opinion is never the only safeguard.
+   A revision goes back to the Planner, not only the Worker. AI-Mode validates
+   tool arguments against their schemas. A Worker `BAD_GATEWAY` response enters
+   review with its recorded tool calls, and the Planner receives the rejected
+   arguments and review feedback to produce a revised plan against those schemas.
+   Only model failures (`BAD_GATEWAY`) are retried; outages and
+   timeouts are not, and an attempt that ran a write tool is never repeated.
 3. **Runs are asynchronous.** `POST /runs` returns `202` and the workflow runs
    in the background; callers poll `GET /runs/{id}`. The state machine is
    `planning → working → reviewing → awaiting_human → completed | rejected`,
-   with `failed` from any stage.
+   with `reviewing → planning` on a revision and `failed` from any stage.
 4. **Human review is the only way a run finishes successfully.** The server
    never writes feature data. Changes the Worker proposes are returned as
    `proposed_actions`; after a human approves (or partially accepts), the
@@ -56,15 +62,20 @@ The constraints already in place:
    log, exported as JSON or Markdown for the report and the agentic loop.
 6. **Feature prompts lead.** The Worker's system prompt is the feature's own
    prompt followed by the workflow rules, and the feature's context keys are
-   sent at the top level of the Worker's message. Live tests showed the
-   reverse order stops the 8b model calling the feature's tools.
+   sent at the top level of the Worker's message. Optional
+   `feature_instructions` supplement Planner and Reviewer with role-neutral
+   domain policy, including revisions; they never receive Worker-only output/tool
+   instructions. The Worker retains its complete feature prompt unchanged rather
+   than receiving the common rules again. The common policy shares the existing
+   Worker
+   instruction allowance and counts against Planner/Reviewer stage budgets;
+   no additional model calls are introduced.
 
 ## Consequences
 
 - Features integrate with one small HTTP client and keep owning their prompts,
   schemas, grounding rules and writes.
-- The workflow is slower than a single `/generate` call (about 60–160 s
-  locally), so UIs poll and show each stage as it completes.
+- UIs poll the asynchronous workflow and show each stage as it completes.
 - Run history survives restarts; runs interrupted by a restart are marked
   `failed` rather than left `working`.
 - Like AI-Mode, the server has no authentication and binds to loopback. It is

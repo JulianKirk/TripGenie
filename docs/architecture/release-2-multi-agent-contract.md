@@ -26,7 +26,7 @@ sequenceDiagram
     AI-->>MA: result + tools trace
     MA->>MA: deterministic checks
     MA->>AI: Reviewer · /generate-plain (review schema)
-    Note over MA: revise once if a check failed or the Reviewer asks
+    Note over MA: on revise, a failed check or a failed Worker call:<br/>back to the Planner with the previous attempt (once)
     loop until awaiting_human
         UI->>API: poll
         API->>MA: GET /runs/{id}
@@ -64,14 +64,25 @@ All JSON responses use `{"data": ...}`; errors use
 | `feature` | string | One of `student-1` … `student-5` (`MULTI_AGENT_FEATURES`). |
 | `task` | string | The traveller's request, 1–500 characters. |
 | `trip_id` | string? | `trip_…` identifier, when the task is about a trip. |
-| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks` and `reviewer_feedback` are reserved. |
-| `worker_system` | string | The feature's own Worker prompt, at most 6,000 characters. It leads the Worker's system prompt. |
+| `context` | object | Feature data for the Worker, at most 4,000 characters as JSON. Its keys are sent at the top level of the Worker's message; `task`, `plan`, `allowed_tools`, `trip_id`, `first_tool`, `failed_checks`, `reviewer_feedback` and `feature_instructions` are reserved. |
+| `feature_instructions` | string | Optional trusted domain rules, default empty. Appended to Planner and Reviewer system prompts, including revisions; keep role-neutral and omit Worker output formatting. Worker policy remains in `worker_system`. Shares the 6,000-character allowance with `worker_system`. |
+| `worker_system` | string | The feature's own Worker prompt. It leads the Worker's system prompt, followed by workflow rules; common rules are not appended again. Combined with `feature_instructions`, at most 6,000 characters. |
 | `output_schema` | JSON Schema | The Worker's result shape. Must be `type: object`, at most 6,000 characters, local `$ref`s only. |
 | `allowed_tools` | string[] | MCP tool names the Worker may use (at most 24, distinct). Empty means no tool checks. |
 | `grounding` | object? | `{source, id_paths, id_keys}`. Every value at an `id_path` (e.g. `suggestions[].transport_id`) must appear under an `id_key` (default `id`) in a successful tool result whose `source` matches. |
 | `actions_path` | string? | Where the result lists changes for the human to approve, e.g. `actions`. |
 | `correlation_id` | string? | `^[A-Za-z0-9][A-Za-z0-9._:-]{0,47}$`; stage calls append `.p1`, `.w1`, `.r1` … |
 | `metadata` | object | Up to 6 string entries, values at most 160 characters. |
+
+Feature backends supply trusted `feature_instructions` separately from user tasks
+and context data. Planner and Reviewer retain their own role/output schemas;
+they do not receive `worker_system`. The optional field adds no model calls or
+tool execution. Planner/Reviewer prompt budgets include the common rules,
+including Reviewer evidence trimming. The Worker system prompt is unchanged;
+features retain their complete Worker policy in `worker_system`. Instructions are stored privately with the request,
+not echoed in public run/history/export records. Existing callers and persisted
+requests may omit the field. Upgrade the shared server before deploying a feature
+backend that sends it; older servers reject unknown fields.
 
 Unknown fields are rejected (`422 VALIDATION_ERROR`). At most
 `MULTI_AGENT_MAX_ACTIVE_RUNS` (default 4) run at once; beyond that `POST /runs`
@@ -122,10 +133,25 @@ and `approved_actions` the actions the feature backend should now perform.
 | `rejected` | A human rejected; nothing is approved. |
 | `failed` | A stage failed (`error.code`: `DEPENDENCY_UNAVAILABLE`, `DEPENDENCY_TIMEOUT`, `BAD_GATEWAY`, `PLANNER_INVALID_OUTPUT`, `REVIEWER_INVALID_OUTPUT`, `PROMPT_BUDGET_EXCEEDED`, `RUN_TIMEOUT`, `RUN_INTERRUPTED`, `INTERNAL_ERROR`). Completed steps, including partial tool traces, are kept. |
 
-The Worker is retried once (`MULTI_AGENT_MAX_REVISIONS`, 0–2) when the
-Reviewer returns `revise` or any deterministic check fails, with the
-Reviewer's feedback and the failed checks in its message. After that the run
-always goes to the human, whatever the verdict.
+A revision (`MULTI_AGENT_MAX_REVISIONS`, default 1, at most 2) starts when
+the Reviewer returns `revise`, a deterministic check fails, or the Worker's
+AI-Mode call fails with `BAD_GATEWAY` (the model kept sending invalid tool
+arguments, made an invalid or repeated call, hit the turn limit, or returned
+an unusable answer). The run goes back to `planning`: the Planner receives a
+`previous_attempt` with the plan, the Worker's tool calls with their
+arguments, status and error, any Worker error, the failed checks and the
+review, and writes a corrected plan. The Worker then runs again with that plan,
+the Reviewer's feedback and the failed checks.
+
+A failed Worker call is reviewed like an answer: its step is kept with
+`status: failed`, its partial tool trace and its `error`; `result` is `null`,
+so the checks fail; and the Reviewer is told the Worker failed. Outages and
+timeouts (`DEPENDENCY_UNAVAILABLE`, `DEPENDENCY_TIMEOUT`) are not retried and
+fail the run, as does a Worker failure on the last permitted attempt. An
+attempt in which a write tool ran (any call to one that was not `rejected`)
+is never repeated: a failed one fails the run, and a completed one goes
+straight to the human with a `revision_skipped` event. Otherwise, after the
+last attempt the run always goes to the human, whatever the verdict.
 
 ## Deterministic checks
 
@@ -156,8 +182,10 @@ RUN_NOT_AWAITING_REVIEW`. An unknown run is `404 RUN_NOT_FOUND`.
 
 Each event is `{sequence, run_id, at, actor, event, detail}`. Actors are `api`,
 `planner`, `worker`, `reviewer`, `system` and `human:<name>`. Events in order:
-`run_created`, `stage_started`/`stage_completed` per agent,
-`checks_completed`, `review_completed`, `revision_requested`,
+`run_created`, `stage_started`/`stage_completed` per agent (the Worker's
+`stage_failed` when its call failed but the run continues),
+`checks_completed`, `review_completed`, `revision_requested` (with `reason`
+`reviewer_revise`, `checks_failed` or `worker_failed`) or `revision_skipped`,
 `awaiting_human`, `human_decision`, and one of `run_completed`,
 `run_rejected` or `run_failed`. Details carry ids, statuses, counts and
 durations, never prompts or tool data.
@@ -172,7 +200,7 @@ durations, never prompts or tool data.
 | `MULTI_AGENT_DB_PATH` | `ai-services/multi-agent-server/data/runs.sqlite3` |
 | `MULTI_AGENT_FEATURES` | `student-1,…,student-5` |
 | `MULTI_AGENT_PLANNER_TIMEOUT_SECONDS` / `_WORKER_` / `_REVIEWER_` | `90` / `200` / `60` |
-| `MULTI_AGENT_RUN_TIMEOUT_SECONDS` | `420` (must cover one of each stage) |
+| `MULTI_AGENT_RUN_TIMEOUT_SECONDS` | `600` (must cover one of each stage) |
 | `MULTI_AGENT_MAX_REVISIONS` | `1` |
 | `MULTI_AGENT_MAX_ACTIVE_RUNS` | `4` |
 | `MULTI_AGENT_MAX_TASK_CHARS` | `500` |

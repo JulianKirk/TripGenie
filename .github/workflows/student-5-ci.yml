@@ -26,6 +26,7 @@ jobs:
     env:
       STUDENT5_BACKEND_RAG_ENABLED: "false"
       STUDENT5_BACKEND_MCP_ENABLED: "false"
+      STUDENT5_BACKEND_MULTI_AGENT_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -67,10 +68,10 @@ jobs:
             --contains '"status":"ready"' \
             http://127.0.0.1:8085/ready
           curl --fail --silent --show-error http://127.0.0.1:8085/ > /dev/null
-      - name: Verify MCP and RAG are disabled
+      - name: Verify MCP, RAG and multi-agent are disabled
         run: |
           curl --fail --silent --show-error http://127.0.0.1:18005/health \
-            | python -c "import json, sys; i = json.load(sys.stdin)['data']['integrations']; print('backend integrations:', i); assert i == {'rag': 'disabled', 'mcp': 'disabled'}"
+            | python -c "import json, sys; i = json.load(sys.stdin)['data']['integrations']; print('backend integrations:', i); assert i == {'rag': 'disabled', 'mcp': 'disabled', 'multi_agent': 'disabled'}"
           curl --silent --show-error -X POST \
             http://127.0.0.1:18005/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/mcp/budget-summary \
             | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend MCP route:', e['code']); assert e['code'] == 'MCP_DISABLED'"
@@ -82,6 +83,48 @@ jobs:
             --data-urlencode 'question=How is the remaining budget calculated?' \
             http://127.0.0.1:8085/rag | grep -q 'disabled in this environment'
           echo 'Frontend RAG panel shows the disabled state.'
+          curl --silent --show-error -X POST -H 'Content-Type: application/json' \
+            -d '{"question": "Am I on track with this budget?"}' \
+            http://127.0.0.1:18005/api/v1/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/agent-runs \
+            | python -c "import json, sys; e = json.load(sys.stdin)['error']; print('backend agent-run route:', e['code']); assert e['code'] == 'MULTI_AGENT_DISABLED'"
+          curl --fail --silent --show-error -X POST \
+            --data-urlencode 'question=Am I on track with this budget?' \
+            http://127.0.0.1:8085/budgets/5ad9845c-a7d1-5688-b06a-63e92bed4345/agent-runs \
+            | grep -q 'disabled in this environment'
+          echo 'Frontend agent review panel shows the disabled state.'
+      - name: Post-commit endpoint tests
+        working-directory: student-5
+        env:
+          STUDENT5_ENDPOINT_BASE_URL: http://127.0.0.1:18005
+        run: python -m pytest tests/endpoint --junitxml=student-5-endpoint-tests.xml -v
+      - name: Endpoint test summary
+        if: always()
+        working-directory: student-5
+        run: |
+          python - <<'EOF' | tee student-5-endpoint-tests.md >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          print("## Student 5 post-commit endpoint tests\n")
+          if not os.path.exists("student-5-endpoint-tests.xml"):
+              print("The endpoint tests did not run.")
+              raise SystemExit
+          print("| Test | Result |\n| --- | --- |")
+          for case in ET.parse("student-5-endpoint-tests.xml").iter("testcase"):
+              outcome = next(
+                  (child.tag for child in case if child.tag in {"failure", "error", "skipped"}),
+                  "passed",
+              )
+              mark = "PASS" if outcome == "passed" else outcome.upper()
+              print(f"| `{case.get('name')}` | {mark} |")
+          EOF
+      - name: Upload endpoint test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-5-endpoint-test-evidence
+          path: |
+            student-5/student-5-endpoint-tests.xml
+            student-5/student-5-endpoint-tests.md
       - name: Compose logs on failure
         if: failure()
         run: docker compose logs --no-color student-5-database student-5-backend student-5-frontend

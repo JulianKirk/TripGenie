@@ -53,11 +53,30 @@ return active activities only.
 | `ITINERARY_URL` | `http://student-1-backend:8001` | Student 1 public backend base URL. |
 | `ITINERARY_PREFIX` | `/api` | Student 1 public API prefix. |
 | `ITINERARY_TIMEOUT` | `5` | Student 1 timeout in seconds. |
-| `AI_MODE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
-| `AI_MODE_TIMEOUT` | `100` | Timeout in seconds for each AI generation. |
-| `RAG_URL` | unset | Shared host RAG server base URL. Compose sets `http://host.docker.internal:8011`; when unset, knowledge answers report a safe error. |
-| `RAG_ENABLED` | `false` standalone; `true` in Compose | Enable grounded activity-knowledge answers. |
-| `RAG_TIMEOUT` | `130` | Timeout in seconds for one RAG query, including grounded generation. |
+| `STUDENT4_BACKEND_AI_MODE_BASE_URL` | unset | Shared AI Mode base URL. Compose sets `http://host.docker.internal:8006`; when unset, the assistant is unavailable. |
+| `STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS` | `100` | Timeout in seconds for each AI generation. |
+| `STUDENT4_BACKEND_RAG_BASE_URL` | unset | Shared host RAG server base URL. Compose sets `http://host.docker.internal:8011`; when unset, knowledge answers report a safe error. |
+| `STUDENT4_BACKEND_RAG_ENABLED` | `false` standalone; `true` in Compose | Enable grounded activity-knowledge answers. |
+| `STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | Timeout in seconds for one RAG query, including grounded generation. |
+
+The backend reads the same `STUDENT4_BACKEND_*` AI configuration names that
+Compose accepts. URLs use `_BASE_URL`, timeouts use `_TIMEOUT_SECONDS`, and the
+activity-tools assistant uses `_MCP_*`, matching Students 1, 3 and 5. Existing
+custom environment files must rename these settings:
+
+| Previous Compose override | Canonical name |
+| --- | --- |
+| `STUDENT4_AI_ASSISTANT_ENABLED` | `STUDENT4_BACKEND_MCP_ENABLED` |
+| `STUDENT4_AGENT_TIMEOUT` | `STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS` |
+| `STUDENT4_BACKEND_AI_MODE_URL` | `STUDENT4_BACKEND_AI_MODE_BASE_URL` |
+| `STUDENT4_BACKEND_AI_MODE_TIMEOUT` | `STUDENT4_BACKEND_AI_MODE_TIMEOUT_SECONDS` |
+| `STUDENT4_BACKEND_RAG_URL` | `STUDENT4_BACKEND_RAG_BASE_URL` |
+| `STUDENT4_BACKEND_RAG_TIMEOUT` | `STUDENT4_BACKEND_RAG_TIMEOUT_SECONDS` |
+
+For a standalone backend, use the canonical names rather than the old unprefixed
+`AI_MODE_URL`, `AI_MODE_TIMEOUT`, `AI_ASSISTANT_ENABLED`,
+`AI_ASSISTANT_PROMPT_ASSET`, `AGENT_TIMEOUT`, `RAG_URL`, `RAG_ENABLED` and
+`RAG_TIMEOUT` names. Defaults and enablement behaviour are unchanged.
 
 ### Publicly writable data
 
@@ -118,8 +137,11 @@ cards through its ordinary public-detail implementation; these presentation read
 are not MCP calls. Missing records are reported without inventing card data.
 
 The model interprets budgets, party sizes, dates and accessibility, decides which
-search/detail tools to use, asks clarifying questions and writes the answer. The
-backend does not parse these requirements, rewrite filters, reject recommendations
+search/detail tools to use, and writes a one-shot answer without follow-up
+questions. It uses selected-trip context where needed and states missing inputs
+as unavailable context. Without party size, a total-budget answer must not claim
+affordability or return recommendation cards. The backend does not parse these
+requirements, rewrite filters, reject recommendations
 on their behalf, force detail reads or replace model prose. Prices on cards are
 fresh catalogue values; narrative correctness remains model-dependent.
 
@@ -130,10 +152,10 @@ and CRUD workflows remain available independently.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AI_ASSISTANT_PROMPT_ASSET` | `activity_assistant_v1.md` | Trusted packaged system prompt. |
-| `AI_ASSISTANT_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant UI/API workflow. |
-| `AI_MODE_URL` | unset standalone | Shared AI-Mode base URL. |
-| `AGENT_TIMEOUT` | `210` | HTTP deadline for the shared generation run, in seconds. |
+| `STUDENT4_BACKEND_MCP_PROMPT_ASSET` | `activity_assistant_v1.md` | Trusted packaged system prompt. |
+| `STUDENT4_BACKEND_MCP_ENABLED` | `false` standalone; `true` in Compose | Enable the assistant UI/API workflow. |
+| `STUDENT4_BACKEND_AI_MODE_BASE_URL` | unset standalone | Shared AI-Mode base URL. |
+| `STUDENT4_BACKEND_MCP_TIMEOUT_SECONDS` | `210` | HTTP deadline for the shared generation run, in seconds. |
 
 MCP URL and tool limits are configured on shared AI-Mode, not Student 4.
 See [setup and demonstration](mcp-assistant.md). No persistence schema changes.
@@ -183,7 +205,7 @@ The route always returns `200` with a `KnowledgeResponse`:
 ```
 
 An RAG insufficient-context response, or an answer without citations, maps to
-`status: "insufficient_context"` with no citations. When `RAG_ENABLED` is false
+`status: "insufficient_context"` with no citations. When `STUDENT4_BACKEND_RAG_ENABLED` is false
 the server is never called and `status` is `disabled`. RAG `INDEX_NOT_READY`,
 `DEPENDENCY_UNAVAILABLE`, `DEPENDENCY_TIMEOUT` and `VALIDATION_ERROR`, transport
 failures and malformed or unsupported-schema responses map to `status: "error"`
@@ -773,3 +795,75 @@ returns an available total of `0.00`.
 An unknown trip or activity remains `404`. Invalid upstream data returns `502`,
 and an unavailable itinerary or database service returns `503`, so downstream
 budgets never treat an unknown activity cost as zero.
+
+## Smart Planner (Release 2)
+
+Smart Planner is a recommendation workflow, separate from `/activity/assistant`
+and `/activity/knowledge`. The frontend calls this backend; only the backend
+calls the shared host-run Multi-Agent Server. No activity persistence changes
+are needed. The shared server owns run storage, Planner/Worker/Reviewer execution
+and human decision history.
+
+The backend sends `activity_planner_rules_v1.md` as trusted
+`feature_instructions` for Planner and Reviewer. These compact common rules
+cover one-shot interaction, read-only recommendations, group budgets and required
+detail evidence. The Worker keeps the complete `activity_planner_v1.md` prompt,
+which already includes this policy as well as execution/output instructions.
+The rules are not appended again to the Worker. User questions cannot supply either prompt. Upgrade the
+shared Multi-Agent Server to support the optional field before this backend;
+existing callers can omit it. This adds no model calls or UI steps.
+
+| Method | Path | Success | Purpose |
+| --- | --- | --- | --- |
+| POST | `/activity/planner/runs` | 202 | Start with `{question, trip_id?}` (same validation as the assistant). |
+| GET | `/activity/planner/runs/{run_id}` | 200 | Fetch progress and grounded activity cards. |
+| POST | `/activity/planner/runs/{run_id}/review` | 200 | Record approval, correction or rejection. |
+| GET | `/activity/planner/runs/{run_id}/history` | 200 | Download `{run, history}` evidence. |
+
+Run IDs match `magent_` followed by twelve lowercase hexadecimal digits. Reads,
+reviews and history reject runs belonging to other features. This is feature
+scoping, not user authentication; the application has no per-user run ownership.
+
+Start/get/review return `{run, answer}`. `run` contains status, plan, stage outputs,
+checks, reviewer findings and the human decision. `answer` uses the existing
+assistant presentation contract (`parts`, resolved `activities`, tool traces,
+unavailable IDs and an optional error). Cards must be grounded in successful
+Student 4 tool results from this run and are resolved through ordinary activity
+lookup. Invalid model results retain their traces but do not produce cards.
+
+A decision body is `{decision: "approve"|"correct"|"reject", reviewer, notes?}`.
+`reviewer` is 1–60 characters and notes at most 1000. `correct` also requires
+`corrected_result` using the Worker shape:
+`{"type":"final","parts":[{"type":"text","text":"Edited recommendation"}]}`.
+Activity parts may be retained only with IDs grounded in the run's tool results.
+Approval validates and accepts the original draft; `corrected_result` is used only
+for a `correct` decision. Correction records a human edit; it does not restart the
+agents. Failed blocking
+checks prevent approval/correction through this backend; rejection remains possible.
+Partial acceptance is not exposed because this workflow proposes no executable actions.
+
+Approval does not write activities, book anything, or add itinerary items. The
+ordinary Add to itinerary control remains available on accepted cards. Prompts
+instruct the Worker to use read-only tools, but the shared server's `allowed_tools`
+and `no_writes` checks are retrospective, not a pre-execution authorization gate.
+Tool traces remain visible: rejection cannot undo any tool calls already executed.
+
+Configuration (read by backend `Settings.from_env`):
+
+| Variable | Standalone default | Compose default |
+| --- | --- | --- |
+| `STUDENT4_BACKEND_MULTI_AGENT_ENABLED` | `true` | `true` |
+| `STUDENT4_BACKEND_MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013` | `http://host.docker.internal:8013` |
+| `STUDENT4_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` | `15` |
+
+Smart Planner is enabled by default locally. Start the host services using the
+shared Multi-Agent Server README. Set `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=false`
+to disable it explicitly; CI and the cloud profile already set this override. Polling uses short requests rather than holding a request open
+for the whole model workflow. Readiness continues to depend on the database,
+not optional AI services.
+
+Disabled/unavailable returns `503`, a dependency timeout `504`, invalid upstream
+data `502`, unknown/other-feature runs `404`, and a run no longer awaiting review
+`409`. Invalid local input is `400`. Requests are never automatically retried:
+a timeout after start/review may have an ambiguous outcome; refresh a known run
+before submitting again. A failed run still returns its recorded partial evidence.

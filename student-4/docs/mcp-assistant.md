@@ -6,11 +6,29 @@ AI-Mode discovers the complete shared MCP catalogue and runs the model/tool loop
 The model interprets requirements, selects tools and writes its answer. Student 4
 only validates the response, resolves grounded activity cards and displays the trace.
 The superseded plan/evaluate endpoints, their two prompt assets and their parser
-have been removed. `activity_assistant_v1.md` is the sole Student 4 AI prompt.
+have been removed. `activity_assistant_v1.md` is the primary assistant prompt;
+the separate Smart Planner mode uses `activity_planner_v1.md` for its Worker
+and `activity_planner_rules_v1.md` as role-neutral `feature_instructions` for
+Planner and Reviewer. The Worker retains its complete tested prompt, which
+already contains these policies plus execution and final-JSON rules. All roles
+therefore receive the relevant domain policy without duplicating Worker context.
+That compact prompt prioritises the original task over invalid plan steps, avoids
+unrequested search preferences, and directs schema-based recovery from rejected
+read calls. Both modes treat generation as a one-shot request with no
+follow-up questions or input supplied during human review. They use stated requirements and
+selected-trip context, retrieve evidence using known constraints, and identify
+any additional information needed to establish a result. Without party size,
+total-budget answers show grounded
+unit prices as text, omit activity cards, and do not claim affordability. They
+distinguish group totals from per-person prices, check participant minimums,
+and require requested detail facts in the final text. The Smart Planner Worker also
+uses revision feedback rather than repeating a failed attempt. They keep
+group-cost and accessibility checks without copying tool
+definitions or adding model calls.
 
 All advertised tools are available, including other students' tools and activity
-create/update/delete. Prompts direct writes only when requested; there is no hard
-read-only guarantee. Inspect tool results for actions completed, even after a failure.
+create/update/delete. Prompts direct writes only when requested. Tool traces
+record executed actions and their outcomes; inspect these when reviewing a result.
 No conversation history is retained. Ordinary browsing and CRUD work without AI.
 
 ## Local setup
@@ -61,10 +79,11 @@ Open `http://localhost:8084`. Use the [showcase prompts](../../docs/reports/rele
 
 Expand **Tools used** and **Returned tool data**. Verify actual search/detail calls
 and whether the answer accurately reflects those records. Card lookups use the
-ordinary backend and do not appear as MCP calls. A missing model-selected detail
-call is a model-quality failure, not a trigger for backend answer rewriting.
-Also exercise natural-language budgets/dates, clarification, cross-domain tools,
-ordinary catalogue actions and MCP outage/recovery. Use isolated test data for writes.
+ordinary backend and do not appear as MCP calls. Check that the model-selected
+calls supply the requested detail evidence. Also exercise natural-language
+budgets/dates, handling of unspecified inputs without follow-up questions,
+cross-domain tools, ordinary catalogue actions and MCP outage/recovery. Use
+isolated test data for writes.
 
 ## Checks
 
@@ -78,6 +97,6 @@ ordinary catalogue actions and MCP outage/recovery. Use isolated test data for w
 docker compose config --quiet
 ```
 
-Keep development evidence outside the repository. Protocol fakes establish wiring,
-not live-model answer quality. Do not reintroduce natural-language parsers, forced
-retrieval or authored answer replacement to improve showcase results.
+Keep development evidence outside the repository. Protocol fakes verify service
+contracts; functional checks verify model-selected retrieval and grounded answers.
+Natural-language interpretation and retrieval decisions remain model-owned.

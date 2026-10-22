@@ -106,6 +106,7 @@ class RunRequest(StrictModel):
         | None
     ) = None
     context: dict[str, Any] = Field(default_factory=dict)
+    feature_instructions: str = ""
     worker_system: Annotated[str, StringConstraints(min_length=1)]
     output_schema: dict[str, Any]
     allowed_tools: list[Annotated[str, StringConstraints(pattern=TOOL_NAME)]] = Field(

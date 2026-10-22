@@ -1,0 +1,253 @@
+{% import "macros/forms.html" as forms %}
+{% set panel_run_id = run.run_id if run else (run_id | default("")) %}
+<div
+  id="agent-run"
+  class="agent-run"
+  {% if agent_poll %}
+    hx-get="{{ request.url_for('agents_run_panel', run_id=panel_run_id) }}"
+    hx-trigger="every 2s"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-indicator="#agent-run-polling"
+  {% endif %}
+>
+  {% if agent_error %}
+    <div class="banner banner--error" role="alert">
+      <p><strong>{{ agent_error.code }}</strong></p>
+      <p>{{ agent_error.message }}</p>
+      {% if agent_error_hint %}<p>{{ agent_error_hint }}</p>{% endif %}
+    </div>
+  {% endif %}
+
+  {% if run %}
+    <div class="panel__header panel__header--compact">
+      <h3 id="agent-run-heading">{{ run.task }}</h3>
+      <span class="tag">{{ run.status | replace("_", " ") }}</span>
+    </div>
+    <p class="agent-run__status" role="status">
+      {{ agent_status_labels.get(run.status, run.status) }}{% if run.active %}&hellip;{% endif %}
+    </p>
+    {% if run.active %}
+      <p id="agent-run-polling" class="footnote">
+        This page updates every 2 seconds while the agents work; a run takes
+        about one to three minutes.
+        <a href="{{ request.url_for('agents_run', run_id=run.run_id) }}">Refresh now</a>
+      </p>
+    {% endif %}
+    <p class="footnote">
+      Run <code>{{ run.run_id }}</code>{% if run.trip_id %} · trip <code>{{ run.trip_id }}</code>{% endif %}
+      · attempt {{ run.attempts }}
+    </p>
+
+    {% if run.error %}
+      <div class="banner banner--error" role="alert">
+        <p><strong>The run failed: {{ run.error.code }}</strong></p>
+        <p>{{ run.error.message }}</p>
+        <p>The steps it completed are shown below. Ask again to start a new run.</p>
+      </div>
+    {% endif %}
+
+    {% if run.plan %}
+      <h4>Plan <span class="ai-draft__meta">from the Planner</span></h4>
+      <p>{{ run.plan.goal }}</p>
+      <ol class="agent-run__plan">
+        {% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}
+      </ol>
+    {% endif %}
+
+    {% if run.stages %}
+      <h4>Agent steps</h4>
+      <ol class="agent-stages">
+        {% for stage in run.stages %}
+          <li class="agent-stages__item">
+            <p>
+              <strong>{{ stage.agent | capitalize }}</strong>
+              <span class="ai-draft__meta">attempt {{ stage.attempt }} · {{ (stage.duration_ms / 1000) | round(1) }} s</span>
+              <span class="status {{ 'status--available' if stage.status == 'completed' else 'status--cancelled' }}">{{ stage.status }}</span>
+            </p>
+            {% if stage.error_code %}
+              <p class="ai-draft__meta">Error {{ stage.error_code }}: {{ stage.error_message }}</p>
+            {% endif %}
+            {% if stage.agent == "worker" %}
+              <details class="ai-tools">
+                <summary>Tools used &middot; {{ stage.tools | length }} MCP call{{ "" if stage.tools | length == 1 else "s" }}</summary>
+                {% if stage.tools %}
+                  <ol class="ai-tools__list">
+                    {% for call in stage.tools %}
+                      <li>
+                        <p>
+                          <code>{{ call.tool }}</code>
+                          <span class="status {{ 'status--available' if call.status == 'success' else 'status--cancelled' }}">{{ call.status }}</span>
+                          <span class="ai-draft__meta">{{ call.duration_ms }} ms</span>
+                        </p>
+                        <p class="ai-draft__meta">
+                          Arguments:
+                          {% for key, value in call.arguments.items() %}<code>{{ key }}={{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}
+                        </p>
+                        {% if call.transport_ids %}
+                          <p class="ai-draft__meta">Returned {{ call.transport_ids | length }} transport option{{ "" if call.transport_ids | length == 1 else "s" }}.</p>
+                        {% endif %}
+                        {% if call.error %}<p class="ai-draft__meta">Error: {{ call.error }}</p>{% endif %}
+                        {% if call.result %}
+                          <details>
+                            <summary>Returned tool data</summary>
+                            <pre>{{ call.result | tojson(indent=2) }}</pre>
+                          </details>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ol>
+                {% else %}
+                  <p class="helper-copy">This attempt made no tool calls.</p>
+                {% endif %}
+              </details>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% endif %}
+
+    {% if run.checks %}
+      <h4>Automatic checks</h4>
+      <ul class="agent-checks">
+        {% for check in run.checks %}
+          <li>
+            <span class="status {{ 'status--available' if check.passed else 'status--cancelled' }}">{{ "pass" if check.passed else "fail" }}</span>
+            <code>{{ check.name }}</code> <span class="ai-draft__meta">{{ check.detail }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if run.review %}
+      <h4>Review <span class="ai-draft__meta">from the Reviewer</span></h4>
+      <p><span class="tag">{{ run.review.verdict }}</span> {{ run.review.summary }}</p>
+      {% for label, items in (("Issues", run.review.issues), ("Risks", run.review.risks), ("Recommendations", run.review.recommendations)) %}
+        {% if items %}
+          <p class="ai-draft__meta">{{ label }}</p>
+          <ul class="ai-draft__considerations">
+            {% for item in items %}<li>{{ item }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if run.overview %}
+      <div class="ai-draft" role="region" aria-labelledby="agent-answer-heading">
+        <div class="panel__header panel__header--compact">
+          <h4 id="agent-answer-heading">{{ "Answer you signed off" if run.human else "Draft answer" }}</h4>
+          <span class="tag">advisory only</span>
+        </div>
+        <p class="ai-draft__overview">{{ run.overview }}</p>
+        {% if run.suggestions %}
+          <ol class="ai-draft__list">
+            {% for item in run.suggestions %}
+              <li>
+                {% if item.option %}
+                  <p class="ai-draft__route">
+                    <a href="{{ request.url_for('view_option', transport_id=item.option.id) }}">
+                      {{ item.option.origin }} &rarr; {{ item.option.destination }}
+                    </a>
+                    <span class="ai-draft__meta">
+                      {{ item.option.type_label }} · {{ item.option.provider }} ·
+                      {{ item.option.duration_label }} · ${{ "%.2f" | format(item.option.price) }}
+                    </span>
+                  </p>
+                {% else %}
+                  <p class="ai-draft__route">
+                    <code>{{ item.transport_id }}</code>
+                    <span class="status status--cancelled">{{ "no longer on record" if item.grounded else "not from a tool" }}</span>
+                  </p>
+                {% endif %}
+                <p class="ai-draft__reason">{{ item.reason }}</p>
+              </li>
+            {% endfor %}
+          </ol>
+        {% endif %}
+        {% if run.considerations %}
+          <ul class="ai-draft__considerations">
+            {% for consideration in run.considerations %}<li>{{ consideration }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if run.disclaimer %}<p class="footnote">{{ run.disclaimer }}</p>{% endif %}
+      </div>
+    {% endif %}
+
+    {% if run.status == "awaiting_human" %}
+      {% if decision_error %}
+        <div class="banner banner--error" role="alert">
+          <p><strong>{{ decision_error.code }}</strong></p>
+          <p>{{ decision_error.message }}</p>
+          {% if decision_error.details %}
+            <ul class="field-errors">
+              {% for detail in decision_error.details %}<li>{{ detail.field }}: {{ detail.issue }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if run.checks | rejectattr("passed") | list %}
+        <div class="banner banner--warning" role="status">
+          <p>Some automatic checks failed. Review the answer carefully before approving it.</p>
+        </div>
+      {% endif %}
+      <form method="post" action="{{ request.url_for('agents_review', run_id=run.run_id) }}" class="agent-decision">
+        <fieldset>
+          <legend>Your decision</legend>
+          {% if run.addable %}
+            <p class="field__hint">
+              {% if run.trip_id %}Ticked options are added to trip <code>{{ run.trip_id }}</code> when you approve.{% else %}Ticked options are the ones you accept. Pick a trip next time to add them to it.{% endif %}
+            </p>
+            {% for item in run.addable %}
+              <input type="hidden" name="offered" value="{{ item.index }}">
+              <p class="field field--checkbox">
+                <label>
+                  <input type="checkbox" name="accepted" value="{{ item.index }}" checked>
+                  {% if item.option %}{{ item.option.origin }} &rarr; {{ item.option.destination }} · {{ item.option.provider }}{% else %}<code>{{ item.transport_id }}</code>{% endif %}
+                </label>
+              </p>
+            {% endfor %}
+            {{ forms.field_errors("accepted", decision_errors_by_field) }}
+            {% if run.trip_id %}
+              {{ forms.number_field("traveller_count", "Travellers to add", "1", decision_errors_by_field, min="1", max="1000") }}
+            {% endif %}
+          {% endif %}
+          <p class="field">
+            <label for="corrected_overview">Corrected answer (only for Correct)</label>
+            <textarea id="corrected_overview" name="corrected_overview" rows="2" maxlength="400"></textarea>
+            {{ forms.field_errors("corrected_overview", decision_errors_by_field) }}
+          </p>
+          {{ forms.text_field("reviewer", "Your name", "traveller", decision_errors_by_field) }}
+          <p class="field">
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" rows="2" maxlength="1000"></textarea>
+          </p>
+          <p class="actions">
+            <button class="button button--primary" type="submit" name="decision" value="approve">{{ "Approve and add ticked" if run.trip_id and run.addable else "Approve" }}</button>
+            <button class="button" type="submit" name="decision" value="correct">Correct</button>
+            <button class="button" type="submit" name="decision" value="reject">Reject</button>
+          </p>
+        </fieldset>
+      </form>
+    {% endif %}
+
+    {% if run.human %}
+      <div class="banner {{ 'banner--error' if run.human.decision == 'reject' else 'banner--success' }}" role="status">
+        <p>
+          <strong>Human decision: {{ run.human.decision }}</strong>
+          by {{ run.human.reviewer }} at {{ run.human.decided_at }}.
+        </p>
+        {% if run.human.notes %}<p>{{ run.human.notes }}</p>{% endif %}
+        {% for item in run.saved %}
+          <p>
+            Added <a href="{{ request.url_for('view_option', transport_id=item.transport_id) }}"><code>{{ item.transport_id }}</code></a>
+            to <a href="{{ request.url_for('trip_transport', trip_id=item.trip_id) }}">trip <code>{{ item.trip_id }}</code></a>
+            for {{ item.traveller_count }} traveller{{ "" if item.traveller_count == 1 else "s" }}.
+          </p>
+        {% endfor %}
+        {% for item in run.save_errors %}
+          <p>Not added: <code>{{ item.transport_id }}</code> &mdash; {{ item.message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+</div>

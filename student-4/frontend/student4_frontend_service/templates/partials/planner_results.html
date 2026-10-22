@@ -1,0 +1,29 @@
+<section id="planner-result" aria-label="Smart Planner workflow" aria-live="polite"
+{% if planner and not recovering and planner.run.status in ['planning', 'working', 'reviewing'] %}hx-get="/planner/{{ planner.run.run_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+{% if error %}
+  <div class="banner banner--error" role="alert"><strong>Smart Planner request failed</strong><p>{{ error }}</p></div>
+  {% if run_id and not recovering %}<p><a class="button" href="/planner/{{ run_id }}" hx-get="/planner/{{ run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh this run</a></p>{% endif %}
+{% endif %}
+{% if planner %}
+  {% set run = planner.run %}
+  <h3>Smart Planner · {{ {'planning':'Planning', 'working':'Finding activities', 'reviewing':'Reviewing', 'awaiting_human':'Your decision', 'completed':'Accepted', 'rejected':'Rejected', 'failed':'Failed'}[run.status] }}</h3>
+  <p>{{ run.task }}</p>
+  <p class="field-hint">Planning → Finding activities → Reviewing → Your decision</p>
+  <p>{% if not recovering and run.status != 'awaiting_human' %}<a href="/planner/{{ run.run_id }}" hx-get="/planner/{{ run.run_id }}" hx-target="#planner-result" hx-swap="outerHTML">Refresh progress</a> · {% endif %}<a href="/planner/{{ run.run_id }}/history">Download workflow evidence</a></p>
+  {% if run.plan %}<details open><summary>Planner’s approach</summary><p>{{ run.plan.goal }}</p><ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+    {% if run.plan.required_evidence %}<p>Required evidence:</p><ul>{% for item in run.plan.required_evidence %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+  </details>{% endif %}
+  {% if run.steps %}<details><summary>Agent execution</summary><ol>{% for step in run.steps %}<li>{{ step.agent }} · attempt {{ step.attempt }} · {{ step.status }}</li>{% endfor %}</ol></details>{% endif %}
+  {% if run.status not in ['completed', 'rejected'] and planner.answer.parts %}<p><strong>Draft — awaiting your decision.</strong></p>{% endif %}
+  {% with result=planner.answer, error=none, planner_draft=(run.status != 'completed') %}{% include "partials/assistant_results.html" %}{% endwith %}
+  {% if run.checks %}<details open><summary>Validation checks</summary><ul>{% for check in run.checks %}<li><strong>{{ 'Passed' if check.passed else 'Failed' }}: {{ check.name }}</strong> — {{ check.detail }}</li>{% endfor %}</ul></details>{% endif %}
+  {% if run.review %}<section aria-label="Reviewer findings"><h4>Reviewer: {{ run.review.verdict }}</h4><p>{{ run.review.summary }}</p>
+    {% for label, entries in [('Issues', run.review.issues), ('Risks', run.review.risks), ('Recommendations', run.review.recommendations)] %}{% if entries %}<h5>{{ label }}</h5><ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>{% endif %}{% endfor %}
+  </section>{% endif %}
+  {% if run.human %}<p><strong>Human decision: {{ run.human.decision }}</strong> · {{ run.human.reviewer }}</p>{% if run.human.notes %}<p>{{ run.human.notes }}</p>{% endif %}{% endif %}
+  <p class="field-hint">Run: <code>{{ run.run_id }}</code>. Check recorded tool results for any actions performed; rejecting a proposal does not undo tool calls.</p>
+{% endif %}
+{% if review_form and (recovering or (planner and planner.run.status == 'awaiting_human')) %}
+  {% include "partials/planner_review_form.html" %}
+{% endif %}
+</section>
