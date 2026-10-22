@@ -93,7 +93,7 @@ SERVICES="student-1 student-3" python agentic_loop.py --ci --mode services
 
 ## Modes
 
-`--mode {services,mcp,rag,ci,multi-agent}` picks what the collector observes. Run with no
+`--mode {services,mcp,rag,ci,multi-agent,testing,cloud}` picks what the collector observes. Run with no
 flag in a terminal and the loop shows a menu instead (`0` exits); `--ci` without
 `--mode` runs `services`, so existing invocations are unchanged. Every mode ends
 the same way: the two agents comment, and only the collector's checks decide
@@ -106,6 +106,8 @@ the exit code.
 | `rag` | Calibration queries to the host RAG server | `checks/rag.json` -> `../rag-server/config/calibration-queries.json` |
 | `ci` | Latest `student-x-ci.yml` run per service via `gh` | `checks/ci.json` |
 | `multi-agent` | One Multi-Agent Server run, read from `GET /runs/{id}/export` | `checks/multi-agent.json` |
+| `testing` | Each student's pre-commit security report and post-commit endpoint-test artifact | `checks/testing.json` |
+| `cloud` | The cloud deployment report, workflow run and release gate | `checks/cloud.json` |
 
 **MCP** (`python -m tripgenie_mcp serve` plus the five backends, started with the agentic overlay): all 19 tools
 are listed (the three activity write tools are listed, never called); one valid read per student returns `ok: true`, `data` and the right
@@ -137,6 +139,8 @@ to `reports/ci/<service>/`. Without `gh` the mode reports that and passes.
 | `CI_BRANCH` | the checked-out branch |
 | `MULTI_AGENT_URL` | `http://127.0.0.1:8013` |
 | `RUN_ID` | unset -- the newest run with a human decision |
+| `CLOUD_URL` | unset -- set it to also probe a deployed frontend |
+| `CLOUD_RUN_ID` | unset -- the newest `cloud-deployment.yml` run; set it to review a specific past run |
 
 Each mode has its own agent prompts in `prompts/<mode>/`, following the labs:
 `services` reviews endpoints and flows; `mcp` has the implementation agent pick
@@ -171,8 +175,31 @@ with the decision attributed to `human:<name>`. A Reviewer verdict other than
 cross-check it; the checks alone decide the exit code, and a Reviewer
 `approve` never outranks a failed check.
 
-Unlike the other modes, `multi-agent` also writes its review/validation log to
-`docs/reports/release-2/agentic-loop/multi-agent-review.md` and `.json`
+**Testing** (Release 2; `gh auth login` first): for every student, the
+`security` pre-commit hook and `scripts/security/scan.py` are wired, and
+`docs/reports/release-2/student-N-pre-commit-security-scan.json` (every tool
+`passed`) or `student-N-pre-commit-security-report.md` (covers Ruff,
+detect-secrets and pip-audit) exists. For post-commit, `student-N-post-commit-testing-report.md`
+exists, and the latest `student-N-ci.yml` run on the branch succeeded and its
+`student-N-endpoint-test-evidence` artifact holds a JUnit file with tests and no
+failures or errors (downloaded to `reports/testing/<service>/`). A missing
+report, run or artifact is a `FAIL` naming the student; a run still in progress
+is a `SKIP`.
+
+**Cloud** (Release 2; `gh auth login` first): the report is the
+`cloud-deployment-evidence` artifact of the latest `cloud-deployment.yml` run,
+else the committed `docs/reports/release-2/cloud-deployment-results.md`. The
+status is `Success`; frontend URLs are listed; every smoke-test and security
+row passes; the report says the AI services are not deployed. The loop also
+checks `deploy-azure.sh` pulls images with a managed identity, the deploy job
+runs in the `production` environment (the human release gate), and
+`.env.cloud` has every `*_ENABLED` false and the AI URLs blank. Set `CLOUD_URL`
+to probe a deployed frontend for HTTP 200. The loop's human decision becomes
+the release decision: `READY` only on Accept with every check passing,
+otherwise `NOT READY`; a non-interactive run is `PENDING`.
+
+Unlike the other modes, `multi-agent`, `testing` and `cloud` also write their review/validation logs to
+`docs/reports/release-2/agentic-loop/<mode>-review.md` and `.json`
 (committed Release 2 evidence, overwritten on each run, with the loop's human
 decision). The timestamped copy still goes to `reports/`.
 
@@ -189,6 +216,8 @@ python agentic_loop.py --ci --mode mcp        # MCP server running
 python agentic_loop.py --ci --mode rag        # Ollama, AI-Mode, MCP and RAG running
 python agentic_loop.py --ci --mode ci         # gh auth login first
 python agentic_loop.py --ci --mode multi-agent  # Multi-Agent Server running, one decided run
+python agentic_loop.py --ci --mode testing     # gh auth login first
+python agentic_loop.py --mode cloud            # gh auth login first; interactive for the release decision
 pytest -q                                     # the loop's own tests
 ```
 

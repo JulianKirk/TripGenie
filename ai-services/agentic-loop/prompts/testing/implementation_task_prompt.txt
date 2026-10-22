@@ -1,0 +1,13 @@
+Service scope:
+{{SERVICE_SCOPE}}
+
+Validation Evidence:
+{{VALIDATION_EVIDENCE}}
+
+Task:
+Review the pre-commit security scan evidence and the post-commit endpoint test evidence for every student. Say which students have complete evidence and which have gaps, then give ONE concrete testing improvement the evidence supports.
+
+Output rules:
+- If the evidence does not support an improvement, write: No evidence-backed improvement identified.
+- Otherwise name the student or tool, the improvement, and the evidence behind it.
+- Maximum 60 words.

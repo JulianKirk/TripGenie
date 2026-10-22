@@ -793,3 +793,410 @@ def test_multi_agent_review_log_is_committed_with_the_human_decision(
     assert data["human_decision"] == "Accept"
     assert data["failed"] == ["check x"]
     assert "multi-agent" in loop.COMMITTED_LOG_MODES
+
+
+# ---------------------------------------------------------------- testing mode
+
+
+def scan_json(**overrides):
+    data = {
+        "status": "passed",
+        "checks": [{"tool": t, "status": "passed"} for t in loop.PRE_COMMIT_TOOLS],
+    }
+    return json.dumps({**data, **overrides})
+
+
+def release_reports(monkeypatch, tmp_path):
+    folder = tmp_path / "release-2"
+    folder.mkdir()
+    monkeypatch.setattr(loop, "RELEASE_REPORTS", folder)
+    return folder
+
+
+def test_pre_commit_report_reads_the_scan_json(monkeypatch, tmp_path):
+    folder = release_reports(monkeypatch, tmp_path)
+    (folder / "student-5-pre-commit-security-scan.json").write_text(scan_json())
+    failing = {"status": "failed", "checks": [{"tool": "ruff", "status": "failed"}]}
+    (folder / "student-3-pre-commit-security-scan.json").write_text(json.dumps(failing))
+
+    assert loop.pre_commit_report("student-5")[1].startswith("OK: student-5-pre")
+    outcome = loop.pre_commit_report("student-3")[1]
+    assert outcome.startswith("FAIL") and "detect-secrets" in outcome
+
+
+def test_pre_commit_report_accepts_a_written_report_that_covers_all_tools(
+    monkeypatch, tmp_path
+):
+    folder = release_reports(monkeypatch, tmp_path)
+    (folder / "student-1-pre-commit-security-report.md").write_text(
+        "Ruff, detect-secrets and pip-audit ran."
+    )
+    (folder / "student-4-pre-commit-security-report.md").write_text("Ruff only.")
+
+    assert loop.pre_commit_report("student-1")[1].startswith("OK")
+    assert "pip-audit" in loop.pre_commit_report("student-4")[1]
+    missing = loop.pre_commit_report("student-2")[1]
+    assert missing.startswith("FAIL: no student-2-pre-commit-security-report.md")
+
+
+def test_pre_commit_setup_needs_the_hook_and_the_scan_script(monkeypatch, tmp_path):
+    monkeypatch.setattr(loop, "ROOT", tmp_path)
+    assert all(o.startswith("FAIL") for _, o in loop.pre_commit_setup())
+
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "- id: security\n  entry: python scripts/security/scan.py\n"
+    )
+    (tmp_path / "scripts" / "security").mkdir(parents=True)
+    (tmp_path / "scripts" / "security" / "scan.py").write_text("")
+    assert all(o.startswith("OK") for _, o in loop.pre_commit_setup())
+
+
+def test_junit_totals_reads_a_testsuite_or_testsuites():
+    suite = '<testsuite tests="7" failures="1" errors="0" skipped="2"></testsuite>'
+    wrapped = f"<testsuites>{suite}{suite}</testsuites>"
+
+    assert loop.junit_totals(suite) == (7, 1, 0, 2)
+    assert loop.junit_totals(wrapped) == (14, 2, 0, 4)
+
+
+def test_post_commit_checks_turn_artifacts_into_per_student_results(
+    monkeypatch, tmp_path
+):
+    folder = release_reports(monkeypatch, tmp_path)
+    (folder / "student-1-post-commit-testing-report.md").write_text("report")
+    monkeypatch.setattr(loop, "REPORTS", tmp_path / "reports")
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setenv("CI_BRANCH", "feature")
+    monkeypatch.setattr(
+        loop,
+        "REGISTRY",
+        [
+            {"service": f"student-{n}", "ci": f"student-{n}-ci.yml"}
+            for n in (1, 2, 3, 4)
+        ],
+    )
+    sha = "abcdef123"  # pragma: allowlist secret - synthetic commit ID
+    runs = {
+        "student-1-ci.yml": [
+            {"databaseId": 1, "status": "completed", "conclusion": "success",
+             "headSha": sha}
+        ],
+        "student-2-ci.yml": [
+            {"databaseId": 2, "status": "completed", "conclusion": "success",
+             "headSha": sha}
+        ],
+        "student-3-ci.yml": [
+            {"databaseId": 3, "status": "in_progress", "conclusion": "", "headSha": sha}
+        ],
+        "student-4-ci.yml": [],
+    }  # fmt: skip
+
+    def fake_gh(*args):
+        if args[:2] == ("run", "list"):
+            return FakeRun(json.dumps(runs[args[3]]))
+        if "student-1-endpoint-test-evidence" in args:
+            target = Path(args[args.index("--dir") + 1])
+            target.mkdir(parents=True)
+            (target / "student-1-endpoint-tests.xml").write_text(
+                '<testsuite tests="7" failures="0" errors="0" skipped="0"/>'
+            )
+        return FakeRun()
+
+    monkeypatch.setattr(loop, "gh", fake_gh)
+    students = ["student-1", "student-2", "student-3", "student-4"]
+    results = dict(loop.post_commit_checks(students))
+
+    assert results["student-1 post-commit testing report"].startswith("OK")
+    assert results["student-2 post-commit testing report"].startswith("FAIL")
+    assert results["student-1 post-commit endpoint tests"].startswith("OK: 7 test(s)")
+    assert (
+        "no endpoint-test evidence" in results["student-2 post-commit endpoint tests"]
+    )
+    assert results["student-3 post-commit endpoint tests"].startswith("SKIP")
+    assert results["student-4 post-commit endpoint tests"].startswith("FAIL: no run")
+
+
+def test_post_commit_checks_fail_a_failing_endpoint_test(monkeypatch, tmp_path):
+    release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop, "REPORTS", tmp_path / "reports")
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(loop, "REGISTRY", [{"service": "student-1", "ci": "s1.yml"}])
+    run = {
+        "databaseId": 9, "status": "completed", "conclusion": "failure",
+        "headSha": "abcdef123",  # pragma: allowlist secret - synthetic commit ID
+    }  # fmt: skip
+
+    def fake_gh(*args):
+        if args[:2] == ("run", "list"):
+            return FakeRun(json.dumps([run]))
+        target = Path(args[args.index("--dir") + 1])
+        target.mkdir(parents=True)
+        (target / "student-1-endpoint-tests.xml").write_text(
+            '<testsuite tests="7" failures="2" errors="0" skipped="0"/>'
+        )
+        return FakeRun()
+
+    monkeypatch.setattr(loop, "gh", fake_gh)
+    results = dict(loop.post_commit_checks(["student-1"]))
+
+    assert results["student-1 post-commit endpoint tests"].startswith(
+        "FAIL: 7 test(s), 2"
+    )
+
+
+def test_latest_run_falls_back_to_main_when_the_branch_has_no_runs(monkeypatch):
+    sha = "abcdef123"  # pragma: allowlist secret - synthetic commit ID
+    run = {
+        "databaseId": 7,
+        "status": "completed",
+        "conclusion": "success",
+        "headSha": sha,
+    }
+    asked = []
+
+    def fake_gh(*args):
+        branch = args[args.index("--branch") + 1]
+        asked.append(branch)
+        return FakeRun(json.dumps([run] if branch == "main" else []))
+
+    monkeypatch.setattr(loop, "gh", fake_gh)
+
+    found, problem = loop.latest_run("student-1-ci.yml", "feature")
+    assert (
+        problem is None and found["branch"] == "main" and asked == ["feature", "main"]
+    )
+
+    monkeypatch.setattr(loop, "gh", lambda *_a: FakeRun("[]"))
+    assert loop.latest_run("x.yml", "feature") == (
+        None,
+        "no run of x.yml on feature or main",
+    )
+
+
+def test_testing_mode_builds_two_titled_sections(monkeypatch, tmp_path):
+    release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop, "ROOT", tmp_path)
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(loop, "REGISTRY", [{"service": "student-2", "ci": "s2.yml"}])
+
+    plan, sections = loop.run_testing()
+
+    assert [title for title, _ in sections] == [
+        "Pre-commit security",
+        "Post-commit CI/CD endpoints",
+    ]
+    assert plan["checks"] and "student-2 pre-commit security report" in {
+        c["label"] for c in plan["checks"]
+    }
+
+
+# ----------------------------------------------------------------- cloud mode
+
+CLOUD_REPORT = """# TripGenie Cloud Deployment Report
+
+Deployment Status: Success
+
+Frontend URLs:
+
+- https://shared-ui.example.io
+- https://student-1-frontend.example.io
+
+Validation Results:
+
+| Check | Result | HTTP |
+| --- | --- | --- |
+| shared-ui loads | pass | 200 |
+| Student 1 trip round trip | pass | 200 |
+
+Security Configuration:
+
+| Check | Result | Detail |
+| --- | --- | --- |
+| Only shared-ui and the frontends are public | pass | 5 public |
+| Images pulled with a managed identity | pass |  |
+
+AI-Mode, MCP, RAG and the Multi-Agent Server are not deployed; the cloud
+profile turns every AI feature off.
+"""
+
+
+def test_cloud_report_checks_pass_a_clean_report():
+    results = dict(loop.cloud_report_checks(CLOUD_REPORT))
+
+    assert not [o for o in results.values() if o.startswith("FAIL")]
+    assert results["frontend URLs reported"] == "OK: 2 URL(s)"
+    assert results["smoke tests"] == "OK: 2 of 2 passed"
+
+
+def test_cloud_report_checks_name_the_failed_rows():
+    bad = (
+        CLOUD_REPORT.replace("Success", "Failed")
+        .replace("round trip | pass |", "round trip | FAIL |")
+        .replace("managed identity | pass |", "managed identity | FAIL |")
+        .replace("are not deployed", "run in the cloud")
+    )  # fmt: skip
+    results = dict(loop.cloud_report_checks(bad))
+
+    assert results["deployment status"] == "FAIL: Failed"
+    assert "Student 1 trip round trip" in results["smoke tests"]
+    assert "managed identity" in results["security configuration"]
+    assert results["AI services not deployed"].startswith("FAIL")
+
+
+def test_cloud_report_checks_flag_an_empty_report():
+    results = dict(loop.cloud_report_checks("# nothing here"))
+
+    assert results["deployment status"] == "FAIL: not stated"
+    assert results["smoke tests"].startswith("FAIL")
+    assert results["frontend URLs reported"].startswith("FAIL")
+
+
+def test_cloud_profile_must_turn_every_ai_switch_off(monkeypatch, tmp_path):
+    monkeypatch.setattr(loop, "ROOT", tmp_path)
+    assert loop.cloud_profile_check()[1].startswith("FAIL: .env.cloud missing")
+
+    profile = tmp_path / "shared" / "configuration"
+    profile.mkdir(parents=True)
+    env = profile / ".env.cloud"
+    env.write_text(
+        "# note\nSTUDENT1_BACKEND_RAG_ENABLED=false\nSTUDENT2_BACKEND_RAG_URL=\n"
+    )
+    assert loop.cloud_profile_check()[1].startswith("OK")
+
+    env.write_text(
+        "STUDENT3_BACKEND_MCP_ENABLED=true\nSTUDENT2_BACKEND_AI_MODE_URL=http://x\n"
+    )
+    outcome = loop.cloud_profile_check()[1]
+    assert "STUDENT3_BACKEND_MCP_ENABLED" in outcome
+    assert "STUDENT2_BACKEND_AI_MODE_URL" in outcome
+
+
+def test_cloud_static_checks_need_identity_and_the_production_gate(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(loop, "ROOT", tmp_path)
+    (tmp_path / "scripts" / "deploy" / "azure").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    plan = {"required_files": ["scripts/deploy/azure/deploy-azure.sh"]}
+
+    missing = dict(loop.cloud_static_checks(plan))
+    assert missing["file scripts/deploy/azure/deploy-azure.sh"] == "FAIL: missing"
+    assert missing["images pulled with a managed identity"].startswith("FAIL")
+    assert missing["human release gate (production environment)"].startswith("FAIL")
+
+    (tmp_path / "scripts/deploy/azure/deploy-azure.sh").write_text(
+        "az containerapp create --registry-identity $ID"
+    )
+    (tmp_path / ".github/workflows/cloud-deployment.yml").write_text(
+        "    environment: production\n"
+    )
+    ok = dict(loop.cloud_static_checks(plan))
+    assert ok["images pulled with a managed identity"].startswith("OK")
+    assert ok["human release gate (production environment)"].startswith("OK")
+
+
+def test_cloud_report_falls_back_to_the_committed_copy(monkeypatch, tmp_path):
+    folder = release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: None)
+    assert loop.cloud_report_text() == (None, None)
+
+    (folder / "cloud-deployment-results.md").write_text(CLOUD_REPORT)
+    text, source = loop.cloud_report_text()
+    assert text == CLOUD_REPORT and "committed" in source
+
+
+def test_cloud_report_prefers_the_latest_workflow_artifact(monkeypatch, tmp_path):
+    release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop, "REPORTS", tmp_path / "reports")
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: "/usr/bin/gh")
+    run = {
+        "databaseId": 5, "status": "completed", "conclusion": "success",
+        "headSha": "abcdef123",  # pragma: allowlist secret - synthetic commit ID
+    }  # fmt: skip
+
+    def fake_gh(*args):
+        if args[:2] == ("run", "list"):
+            return FakeRun(json.dumps([run]))
+        target = Path(args[args.index("--dir") + 1])
+        target.mkdir(parents=True)
+        (target / "cloud-deployment-results.md").write_text("from the artifact")
+        return FakeRun()
+
+    monkeypatch.setattr(loop, "gh", fake_gh)
+
+    assert loop.cloud_report_text() == ("from the artifact", "run 5 artifact")
+    assert loop.cloud_workflow_check()[1].startswith("OK: success, run 5")
+
+
+def test_cloud_run_id_pins_the_run_to_review(monkeypatch, tmp_path):
+    release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop, "REPORTS", tmp_path / "reports")
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setenv("CLOUD_RUN_ID", "111")
+    sha = "abcdef123"  # pragma: allowlist secret - synthetic commit ID
+    run = {"databaseId": 111, "status": "completed", "conclusion": "success",
+           "headSha": sha, "headBranch": "main"}  # fmt: skip
+    calls = []
+
+    def fake_gh(*args):
+        calls.append(args)
+        if args[:2] == ("run", "view"):
+            return FakeRun(json.dumps(run))
+        target = Path(args[args.index("--dir") + 1])
+        target.mkdir(parents=True)
+        (target / "cloud-deployment-results.md").write_text("old good report")
+        return FakeRun()
+
+    monkeypatch.setattr(loop, "gh", fake_gh)
+
+    assert loop.cloud_report_text() == ("old good report", "run 111 artifact")
+    assert loop.cloud_workflow_check()[1] == "OK: success, run 111 at abcdef1 on main"
+    assert not [c for c in calls if c[:2] == ("run", "list")]
+
+    monkeypatch.setattr(loop, "gh", lambda *_a: FakeRun("", returncode=1))
+    assert loop.cloud_run()[1].startswith("gh run view 111")
+
+
+def test_cloud_mode_reports_a_missing_report_without_crashing(monkeypatch, tmp_path):
+    release_reports(monkeypatch, tmp_path)
+    monkeypatch.setattr(loop, "ROOT", tmp_path)
+    monkeypatch.setattr(loop.shutil, "which", lambda _name: None)
+    monkeypatch.delenv("CLOUD_URL", raising=False)
+
+    plan, sections = loop.run_cloud()
+    results = dict(loop.flatten(sections))
+
+    assert results["Deployment report / cloud deployment report"].startswith("FAIL")
+    assert results[
+        "Configuration and release gate / cloud-deployment.yml latest run"
+    ] == ("SKIP: gh CLI unavailable")
+    assert plan["checks"]
+
+
+def test_cloud_probe_checks_the_deployed_frontend(monkeypatch):
+    monkeypatch.setattr(loop.requests, "get", lambda *_a, **_k: FakeResponse(200))
+    assert loop.cloud_probe("https://app.example.io")[1] == "OK: HTTP 200"
+
+    monkeypatch.setattr(loop.requests, "get", lambda *_a, **_k: FakeResponse(503))
+    assert loop.cloud_probe("https://app.example.io")[1] == "FAIL: HTTP 503"
+
+
+def test_release_decision_is_ready_only_when_accepted_with_clean_checks():
+    assert loop.release_decision("Accept", []) == "READY"
+    assert (
+        loop.release_decision("Accept", ["x: FAIL"]) == "NOT READY (1 failed check(s))"
+    )
+    assert loop.release_decision("Reject", []) == "NOT READY (Reject)"
+    assert loop.release_decision("Partially Accept", []).startswith("NOT READY")
+    assert loop.release_decision("Deferred (non-interactive run)", []).startswith(
+        "PENDING"
+    )
+
+
+def test_testing_and_cloud_are_selectable_and_write_committed_logs(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "6")
+    assert loop.choose_mode() == "testing"
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "7")
+    assert loop.choose_mode() == "cloud"
+    for mode in ("testing", "cloud"):
+        assert mode in loop.RUNNERS and mode in loop.COMMITTED_LOG_MODES
