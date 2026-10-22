@@ -1,0 +1,5 @@
+Downloading pip (2.0MiB)
+ Downloaded pip
+Installed 43 packages in 898ms
+.....................................................................    [100%]
+69 passed in 34.23s

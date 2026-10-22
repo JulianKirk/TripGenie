@@ -5,6 +5,16 @@
 # them is a depends_on or healthcheck target: a stopped host service turns off
 # the AI feature, not the container. Startup order and binding notes:
 # docs/reports/release-1/local-host-services-runbook.md.
+
+x-frontend-security-headers: &frontend-security-headers
+  UVICORN_HEADERS: >-
+    Strict-Transport-Security:max-age=31536000
+    X-Content-Type-Options:nosniff
+    X-Frame-Options:DENY
+    Referrer-Policy:same-origin
+    Permissions-Policy:camera=(),microphone=(),geolocation=()
+  UVICORN_SERVER_HEADER: "false"
+
 services:
   # Shared Frontend Portal
   shared-ui:
@@ -134,6 +144,7 @@ services:
       # Uvicorn's own default locally; the cloud profile trusts the HTTPS
       # ingress (see shared/configuration/.env.cloud).
       FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+      <<: *frontend-security-headers
     ports:
       - "8081:8081"
     depends_on:
@@ -245,6 +256,7 @@ services:
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.
       FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+      <<: *frontend-security-headers
     depends_on:
       - student-2-backend
 
@@ -293,6 +305,7 @@ services:
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.
       FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+      <<: *frontend-security-headers
     ports:
       - "${STUDENT3_FRONTEND_HOST_PORT:-8093}:8093"
     depends_on:
@@ -462,6 +475,7 @@ services:
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.
       FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+      <<: *frontend-security-headers
     ports:
       - "${STUDENT4_FRONTEND_HOST_PORT:-8084}:8084"
     depends_on:
@@ -530,6 +544,7 @@ services:
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Proxy-header trust for page URLs; see student-1-frontend.
       FORWARDED_ALLOW_IPS: "${TRIPGENIE_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+      <<: *frontend-security-headers
     ports:
       - "8085:8085"
     depends_on:
