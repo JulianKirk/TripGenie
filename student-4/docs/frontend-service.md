@@ -118,14 +118,16 @@ picker is ignored in this mode. See [RAG knowledge](rag-knowledge.md).
 ## Smart Planner
 
 The AI activity assistant offers **Activity tools (MCP)**, **Activity guides
-(RAG)** and **Smart Planner**. Smart Planner stays in the assistant panel on the
+(RAG)** and **Smart Planner (Multi-Agent)**. Smart Planner stays in the assistant panel on the
 catalogue page. `/?planner_run={run_id}#ai-suggestions` restores a known workflow;
 `/planner/{run_id}` renders that same page or an HTMX workflow partial.
 
 Active runs poll through the feature backend every two seconds. The panel shows
 **Planner**, **Worker**, **Validation checks** and **Reviewer** dropdowns from the
 start, each with a coloured status badge. Agent badges distinguish not yet run,
-running, completed and failed states, including retry attempts. The Worker
+running, completed and failed states, including retry attempts. A stage expands
+when it starts running; otherwise each dropdown keeps the open or closed state
+the user chose across polls. The Worker
 contains nested **Activities found** and **Tools used** dropdowns. Activity names
 come from successful structured Student 4 tool results; tool arguments, results
 and attempts remain available. Validation checks and Reviewer findings precede

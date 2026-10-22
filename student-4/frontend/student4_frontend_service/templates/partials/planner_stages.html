@@ -1,6 +1,6 @@
 <div class="planner-stages" aria-label="Agent progress">
 {% for stage in agent_stages %}
-  <details id="planner-stage-{{ stage.agent }}" class="planner-stage"{% if stage.status == 'running' %} open{% endif %}>
+  <details id="planner-stage-{{ stage.agent }}" class="planner-stage" data-stage-status="{{ stage.status }}"{% if stage.status == 'running' %} open{% endif %}>
     <summary>{{ stage.agent|capitalize }} <span class="planner-status planner-status--{{ stage.status }}">{{ stage.label }}</span></summary>
     <div class="planner-stage__content">
       {% if stage.agent == 'planner' %}

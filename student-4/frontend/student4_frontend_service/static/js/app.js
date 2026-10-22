@@ -8,9 +8,47 @@ function syncDependentControls(root = document) {
   }
 }
 
+// Smart Planner polling re-renders its stages; keep what the user expanded or
+// collapsed, and only open a stage automatically when it starts running.
+let plannerDetailsState = null;
+
+function plannerDetailsKey(details) {
+  if (details.id) return details.id;
+  const owner = details.parentElement?.closest("[id]");
+  if (!owner) return null;
+  const index = [...owner.querySelectorAll("details:not([id])")].indexOf(details);
+  return `${owner.id}/${index}`;
+}
+
+function capturePlannerDetails(planner) {
+  const state = new Map();
+  planner.querySelectorAll("details").forEach((details) => {
+    const key = plannerDetailsKey(details);
+    if (key) state.set(key, { open: details.open, status: details.dataset.stageStatus });
+  });
+  return state;
+}
+
+function restorePlannerDetails(planner, state) {
+  planner.querySelectorAll("details").forEach((details) => {
+    const previous = state.get(plannerDetailsKey(details));
+    if (!previous) return;
+    const started = details.dataset.stageStatus === "running" && previous.status !== "running";
+    details.open = started || previous.open;
+  });
+}
+
+document.addEventListener("htmx:beforeSwap", (event) => {
+  const target = event.detail.target;
+  plannerDetailsState = target?.id === "planner-result" ? capturePlannerDetails(target) : null;
+});
+
 document.addEventListener("DOMContentLoaded", () => syncDependentControls());
 document.addEventListener("change", (event) => syncDependentControls(event.currentTarget));
 document.addEventListener("htmx:afterSwap", (event) => {
+  const planner = document.getElementById("planner-result");
+  if (plannerDetailsState && planner) restorePlannerDetails(planner, plannerDetailsState);
+  plannerDetailsState = null;
   syncDependentControls(event.target);
   const dialog = event.target.matches?.("dialog")
     ? event.target
