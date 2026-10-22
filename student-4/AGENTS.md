@@ -43,8 +43,13 @@ This file supplements the repository-level `AGENTS.md` for `student-4/`.
   Keep its HTTP boundary and routes in `planner_client.py` and `planner_routes.py`;
   frontend orchestration lives in `planner.py`. Feature backends own prompt/schema
   and grounded card presentation; shared agents own planning/execution/review.
-  Approval records acceptance of recommendations; it must not automatically
-  modify activities or itinerary items. Preserve partial traces, validate the
+  Human approval adds only explicitly selected, grounded recommendations to a
+  chosen trip through the existing itinerary client. Stage independent card
+  approvals or rejections in the inline assistant, keeping rejected cards visible.
+  Apply all choices through one shared human decision before itinerary writes;
+  retain the original agent evidence and per-card reasons in the review audit.
+  Preserve partial itinerary-save outcomes and never replay ambiguous writes.
+  Preserve partial traces, validate the
   run's feature before reads/reviews, and never retry ambiguous start/review calls.
   Keep `STUDENT4_BACKEND_MULTI_AGENT_ENABLED=false` in CI and the cloud baseline.
 - The RAG activity-guides mode is a thin client of the shared host RAG `/query`

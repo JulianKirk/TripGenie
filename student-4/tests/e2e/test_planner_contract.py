@@ -13,6 +13,7 @@ from student4_frontend_service.app import create_app as create_frontend
 from student4_frontend_service.config import Settings as FrontendSettings
 
 from tests.backend.test_activity_api import location_handler, public_payload
+from tests.backend.test_itinerary_api import SYDNEY, FakeItinerary
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -46,6 +47,26 @@ def test_planner_ui_resolves_real_catalogue_cards_and_records_human_review(
         code = 202 if request.url.path == "/runs" else 200
         return httpx.Response(code, json={"data": run})
 
+    entries: dict[str, dict[str, Any]] = {}
+    trip = FakeItinerary().trips[0]
+
+    def itinerary(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/trips":
+            return httpx.Response(200, json={"data": [trip]})
+        collection = f"/api/trips/{SYDNEY}/activities"
+        if request.url.path == collection:
+            return httpx.Response(200, json={"data": list(entries.values())})
+        if request.method == "PUT" and request.url.path.startswith(collection + "/"):
+            key = request.url.path.rsplit("/", 1)[-1]
+            entries[key] = {
+                "activity_id": key,
+                "trip_id": SYDNEY,
+                "date": trip["start_date"],
+                **json.loads(request.content),
+            }
+            return httpx.Response(200, json={"data": entries[key]})
+        return httpx.Response(404)
+
     database = create_database(
         DatabaseSettings(database_url=f"sqlite:///{tmp_path / 'activities.db'}")
     )
@@ -54,6 +75,7 @@ def test_planner_ui_resolves_real_catalogue_cards_and_records_human_review(
         database_transport=httpx.ASGITransport(app=database),
         location_transport=httpx.MockTransport(location_handler),
         multi_agent_transport=httpx.MockTransport(multi_agent),
+        itinerary_transport=httpx.MockTransport(itinerary),
     )
     frontend = create_frontend(
         FrontendSettings(), transport=httpx.ASGITransport(app=backend)
@@ -110,16 +132,25 @@ def test_planner_ui_resolves_real_catalogue_cards_and_records_human_review(
         assert "every 2s" not in fetched.text
         accepted = browser.post(
             f"/planner/{run_id}/review",
-            data={"decision": "approve", "reviewer": "Test traveller"},
+            data={
+                "decision": "approve",
+                "reviewer": "Test traveller",
+                f"choice_{activity_id}": "approve",
+                f"trip_{activity_id}": SYDNEY,
+                f"date_{activity_id}": "2027-04-02",
+                f"start_time_{activity_id}": "09:30",
+            },
         )
-        assert "Human decision: approve" in accepted.text
+        assert "Human decisions recorded" in accepted.text
         assert "Test traveller" in accepted.text
-        assert "Add to itinerary" in accepted.text
+        assert "Itinerary updated" in accepted.text
+        assert activity_id in entries
         evidence = browser.get(f"/planner/{run_id}/history")
         assert evidence.json()["run"]["human"]["decision"] == "approve"
         assert evidence.json()["run"]["steps"][0]["tools"][0]["status"] == "success"
     assert called == [
         ("POST", "/runs"),
+        ("GET", f"/runs/{run_id}"),
         ("GET", f"/runs/{run_id}"),
         ("GET", f"/runs/{run_id}"),
         ("POST", f"/runs/{run_id}/review"),

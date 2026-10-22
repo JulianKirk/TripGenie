@@ -1,0 +1,16 @@
+      <article class="activity-card{% if planner_item and item_choice == 'reject' %} activity-card--rejected{% elif planner_item and item_choice == 'approve' %} activity-card--approved{% endif %}">
+        <div class="activity-card__heading"><div><h3>{{ activity.name }}</h3><p>{{ activity.location_details|location }}</p></div><span class="pill">Catalogue activity</span></div>
+        <p>{{ activity.description }}</p>
+        <dl class="facts">
+          <div><dt>Price (AUD)</dt><dd>{{ activity.price|money }} · {{ 'per person' if activity.pricing_basis == 'PER_PERSON' else 'flat admission' }}</dd></div>
+          <div><dt>Duration</dt><dd>{{ activity.duration_minutes|duration }}</dd></div>
+          <div><dt>Wheelchair access</dt><dd>{{ activity.wheelchair_accessible|accessibility }}</dd></div>
+        </dl>
+        <div class="actions">
+
+          <button class="button" type="button" hx-get="/activity/{{ activity.id }}" hx-target="#activity-dialog" hx-swap="innerHTML">View details</button>
+          {% if activity.is_active and not planner_item %}<button class="button button--primary" type="button" hx-get="/activity/{{ activity.id }}/itineraries/dialog" hx-target="#activity-dialog" hx-swap="innerHTML">Add to itinerary</button>
+          {% elif not activity.is_active %}<span class="field-hint">This activity is no longer active.</span>{% endif %}
+        </div>
+        {% if planner_item %}{% include "partials/planner_choice_controls.html" %}{% endif %}
+      </article>

@@ -86,9 +86,34 @@ class Run(BaseModel):
     error: dict[str, str] | None = None
 
 
+class SavedSelection(StrictModel):
+    activity_id: str
+    trip_id: str
+    status: Literal["added", "already_present", "updated"]
+
+
+class SaveError(StrictModel):
+    activity_id: str
+    trip_id: str
+    message: str
+
+
+class ItemDecision(StrictModel):
+    trip_id: str | None = None
+    date: str | None = None
+    start_time: str | None = None
+    activity_id: str
+    decision: Literal["approve", "reject"]
+    notes: str | None = None
+
+
 class PlannerResponse(StrictModel):
     run: Run
     answer: AssistantResponse
+    saved: list[SavedSelection] = Field(default_factory=list)
+    save_errors: list[SaveError] = Field(default_factory=list)
+    previous_run_id: RunId | None = None
+    item_decisions: list[ItemDecision] = Field(default_factory=list)
 
 
 class HistoryEvent(BaseModel):
@@ -103,3 +128,4 @@ class HistoryEvent(BaseModel):
 class Evidence(StrictModel):
     run: Run
     history: list[HistoryEvent]
+    item_decisions: list[ItemDecision] = Field(default_factory=list)

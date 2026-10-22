@@ -13,10 +13,10 @@
     </aside>
     <section class="panel results-panel">
       <div id="activity-results" aria-live="polite">
-        {% include "partials/results.html" %}
+        {% with error=catalogue_error if planner_mode else error %}{% include "partials/results.html" %}{% endwith %}
       </div>
     </section>
   </div>
-  <div id="activity-dialog"></div>
+  <div id="activity-dialog">{% if dialog %}{% with planner=dialog.planner, run=dialog.run, choices=dialog.choices, dialog_key=dialog.dialog_key, dialog_kind=dialog.dialog_kind, dialog_error=dialog.dialog_error, dialog_trips=dialog.dialog_trips %}{% include "partials/planner_dialog.html" %}{% endwith %}{% endif %}</div>
 </main>
 {% endblock %}

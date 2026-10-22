@@ -1,4 +1,4 @@
-"""Feature-owned recommendation workflow; no automatic itinerary changes."""
+"""Feature-owned recommendations and explicit human-approved itinerary changes."""
 
 from __future__ import annotations
 
@@ -10,23 +10,40 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 
 from .activity_routes import get as get_activity
-from .assistant import _activity_ids, _prompt_asset
+from .assistant import _prompt_asset
 from .assistant_models import (
     ActivityPart,
     AssistantRequest,
     AssistantResponse,
     FinalAction,
-    ToolTrace,
 )
-from .dependencies import DbDep, LocationDep  # noqa: TC001 - FastAPI annotations
+from .dependencies import (  # noqa: TC001 - FastAPI annotations
+    DbDep,
+    ItineraryDep,
+    LocationDep,
+)
 from .planner_client import PlannerClient
 from .planner_models import (
     Decision,
     Evidence,
     HistoryEvent,
     PlannerResponse,
+    PlannerSelection,
+    Regenerate,
     Run,
     RunId,
+)
+from .planner_review import (
+    _accepted,
+    _confirm_approval,
+    _confirm_item_audit,
+    _item_audit,
+    _preflight_groups,
+    _recorded_choices,
+    _rejected_ids,
+    _save,
+    _tools,
+    _validate_result,
 )
 
 if TYPE_CHECKING:
@@ -62,23 +79,10 @@ def _run(data: object, run_id: str | None = None) -> Run:
     return run
 
 
-def _tools(run: Run) -> list[ToolTrace]:
-    return [tool for step in run.steps for tool in step.tools]
-
-
-def _validate_result(data: object, run: Run) -> FinalAction:
-    action = FinalAction.model_validate(data)
-    known = set().union(*(_activity_ids(tool) for tool in _tools(run)))
-    refs = [str(p.activity_id) for p in action.parts if isinstance(p, ActivityPart)]
-    if len(refs) > 6 or any(ref not in known for ref in refs):
-        msg = "Ungrounded activity references"
-        raise ValueError(msg)
-    return action
-
-
 async def _present(run: Run, resolve: ActivityLookup) -> PlannerResponse:
     answer = AssistantResponse(request_id=run.run_id, tools=_tools(run))
-    data = run.final_result if run.status == "completed" else run.result
+    choices = _recorded_choices(run)
+    data = run.final_result if run.status == "completed" and not choices else run.result
     if data is not None:
         try:
             action = _validate_result(data, run)
@@ -105,13 +109,19 @@ async def _present(run: Run, resolve: ActivityLookup) -> PlannerResponse:
             "The planning workflow failed. Review the recorded steps and "
             "tool results for partial execution."
         )
-    return PlannerResponse(run=run, answer=answer)
+    return PlannerResponse(run=run, answer=answer, item_decisions=choices)
 
 
 @router.post("", status_code=202, response_model=PlannerResponse)
 async def start(
     payload: AssistantRequest, client: PlannerDep, db: DbDep, location: LocationDep
 ) -> PlannerResponse:
+    body = _start_body(payload)
+    run = _run(await client.request("POST", "/runs", body))
+    return await _present(run, partial(get_activity, db=db, location=location))
+
+
+def _start_body(payload: AssistantRequest) -> dict[str, object]:
     body: dict[str, object] = {
         "feature": "student-4",
         "task": payload.question,
@@ -125,8 +135,7 @@ async def start(
     }
     if payload.trip_id:
         body["trip_id"] = payload.trip_id
-    run = _run(await client.request("POST", "/runs", body))
-    return await _present(run, partial(get_activity, db=db, location=location))
+    return body
 
 
 @router.get("/{run_id}", response_model=PlannerResponse)
@@ -144,44 +153,111 @@ async def review(
     client: PlannerDep,
     db: DbDep,
     location: LocationDep,
+    itinerary: ItineraryDep,
 ) -> PlannerResponse:
     run = _run(await client.request("GET", f"/runs/{run_id}"), run_id)
     if run.status != "awaiting_human":
         raise HTTPException(
             409, "This run is no longer awaiting review. Refresh its status."
         )
+    body: dict[str, object] = {
+        "decision": payload.decision,
+        "reviewer": payload.reviewer,
+    }
+    notes = _item_audit(run, payload)
+    if notes is not None:
+        body["notes"] = notes
+    action: FinalAction | None = None
+    additions: list[tuple[list[PlannerSelection], str, set[str]]] = []
     if payload.decision != "reject":
         if any(check.blocking and not check.passed for check in run.checks):
             raise HTTPException(
                 400,
                 "This run has failed checks. Reject it and start a revised request.",
             )
-        data = (
-            payload.corrected_result.model_dump(mode="json")
-            if payload.decision == "correct" and payload.corrected_result is not None
-            else run.result
+        action = _accepted(run, payload)
+        additions = await _preflight_groups(run, payload, itinerary, db, location)
+        if (
+            payload.decision == "correct"
+            or action.model_dump(mode="json") != run.result
+        ):
+            body["decision"] = "correct"
+            body["corrected_result"] = action.model_dump(mode="json")
+    updated = _run(await client.request("POST", f"/runs/{run_id}/review", body), run_id)
+    _confirm_item_audit(updated, payload, notes)
+    if action is not None:
+        _confirm_approval(updated, action, str(body["decision"]))
+    response = await _present(updated, partial(get_activity, db=db, location=location))
+    if action is not None:
+        for selections, trip_id, existing in additions:
+            await _save(
+                response,
+                selections,
+                trip_id,
+                existing,
+                itinerary,
+                update_existing=payload.item_decisions is not None,
+            )
+    return response
+
+
+@router.post("/{run_id}/regenerate", status_code=202, response_model=PlannerResponse)
+async def regenerate(
+    run_id: RunId,
+    payload: Regenerate,
+    client: PlannerDep,
+    db: DbDep,
+    location: LocationDep,
+) -> PlannerResponse:
+    run = _run(await client.request("GET", f"/runs/{run_id}"), run_id)
+    if run.status != "awaiting_human":
+        raise HTTPException(
+            409, "This run is no longer awaiting review. Refresh its status."
         )
-        if payload.decision == "correct" and payload.corrected_result is None:
-            raise HTTPException(400, "A corrected result is required.")
-        try:
-            _validate_result(data, run)
-        except (ValueError, ValidationError) as exc:
-            raise HTTPException(
-                400,
-                (
-                    "Only valid recommendations backed by this run activity tool "
-                    "results can be accepted."
-                ),
-            ) from exc
-    updated = _run(
+    try:
+        request = AssistantRequest(question=run.task, trip_id=run.trip_id)
+    except ValidationError as exc:
+        raise HTTPException(
+            400, "This run cannot be regenerated. Start a new search."
+        ) from exc
+    rejected_ids = _rejected_ids(run, payload)
+    rejected = _run(
         await client.request(
             "POST",
             f"/runs/{run_id}/review",
-            payload.model_dump(mode="json", exclude_none=True),
+            {
+                "decision": "reject",
+                "reviewer": payload.reviewer,
+                "notes": payload.feedback,
+            },
         ),
         run_id,
     )
-    return await _present(updated, partial(get_activity, db=db, location=location))
+    if rejected.status != "rejected":
+        raise HTTPException(
+            502, "Smart Planner did not confirm rejection. No new search was started."
+        )
+    body = _start_body(request)
+    body["context"] = {
+        "human_feedback": payload.feedback,
+        "previous_run_id": run_id,
+        "rejected_activity_ids": rejected_ids,
+    }
+    body["metadata"] = {"service": "student-4-backend", "parent_run_id": run_id}
+    try:
+        started = _run(await client.request("POST", "/runs", body))
+    except HTTPException as exc:
+        raise HTTPException(
+            exc.status_code,
+            (
+                "The previous result was rejected, but a replacement run "
+                "could not be confirmed. Do not resubmit automatically; "
+                "a new run may have started."
+            ),
+        ) from exc
+    response = await _present(started, partial(get_activity, db=db, location=location))
+    response.previous_run_id = run_id
+    return response
 
 
 @router.get("/{run_id}/history", response_model=Evidence)
@@ -198,4 +274,4 @@ async def history(run_id: RunId, client: PlannerDep) -> Evidence:
             raise ValueError(msg)
     except (ValueError, ValidationError) as exc:
         raise HTTPException(502, "Smart Planner returned invalid history.") from exc
-    return Evidence(run=run, history=events)
+    return Evidence(run=run, history=events, item_decisions=_recorded_choices(run))

@@ -1,0 +1,32 @@
+<dialog id="planner-choice-dialog" class="activity-dialog" aria-labelledby="planner-dialog-title"{% if request.headers.get('HX-Request', '')|lower != 'true' %} open{% endif %}>
+  <div class="dialog-content">
+    {% set activity = planner.answer.activities.get(dialog_key) %}
+    <p class="eyebrow">Human review · pending choice</p>
+    <h2 id="planner-dialog-title">{{ 'Approve' if dialog_kind == 'approve' else 'Reject' }} {{ activity.name if activity else 'activity' }}</h2>
+    {% if dialog_error %}<div class="banner banner--error" role="alert">{{ dialog_error }}</div>{% endif %}
+    {% if dialog_kind == 'approve' %}
+      <p>Choose an itinerary and schedule. Confirmation stages your approval; Apply approvals saves it.</p>
+      <div class="itinerary-list">{% for trip in dialog_trips %}
+        <article class="itinerary-row"><div><h4>{{ trip.name }}</h4><p>{{ trip.start_date }} to {{ trip.end_date }}</p></div>
+          <form method="post" action="/planner/{{ run.run_id }}/choices" hx-post="/planner/{{ run.run_id }}/choices" hx-target="#planner-result" hx-swap="outerHTML" hx-sync="#planner-choice-dialog:drop" hx-disabled-elt="#planner-choice-dialog button, #planner-choice-dialog input, #planner-choice-dialog textarea">
+            {% include "partials/planner_dialog_state.html" %}
+            <input type="hidden" name="trip_{{ dialog_key }}" value="{{ trip.id }}">
+            <label class="field">Activity date<input name="date_{{ dialog_key }}" type="date" min="{{ trip.start_date }}" max="{{ trip.end_date }}" value="{{ choices.dates.get(dialog_key, '') if choices.trip_ids.get(dialog_key) == trip.id else '' }}" required></label>
+            <label class="field">Local start time<input name="start_time_{{ dialog_key }}" type="time" value="{{ choices.times.get(dialog_key, '') if choices.trip_ids.get(dialog_key) == trip.id else '' }}" required></label>
+            <button class="button button--approve" type="submit" name="approve_id" value="{{ dialog_key }}">Confirm approval</button>
+          </form>
+        </article>
+      {% else %}<p>No itineraries are available.</p>{% endfor %}</div>
+    {% else %}
+      <form method="post" action="/planner/{{ run.run_id }}/choices" hx-post="/planner/{{ run.run_id }}/choices" hx-target="#planner-result" hx-swap="outerHTML" hx-sync="#planner-choice-dialog:drop" hx-disabled-elt="#planner-choice-dialog button, #planner-choice-dialog input, #planner-choice-dialog textarea">
+        {% include "partials/planner_dialog_state.html" %}
+        <label class="field">Reason (optional)<textarea name="reason_{{ dialog_key }}" maxlength="1000">{{ choices.reasons.get(dialog_key, '') }}</textarea></label>
+        <button class="button button--reject" type="submit" name="reject_id" value="{{ dialog_key }}">Confirm rejection</button>
+      </form>
+    {% endif %}
+    <form class="actions dialog-actions" method="post" action="/planner/{{ run.run_id }}/dialog" hx-post="/planner/{{ run.run_id }}/dialog" hx-target="#planner-result" hx-swap="outerHTML" hx-sync="#planner-choice-dialog:drop" hx-disabled-elt="#planner-choice-dialog button">
+      {% with dialog_cancel=true %}{% include "partials/planner_dialog_state.html" %}{% endwith %}
+      <button class="button" type="submit" name="cancel" value="1" formnovalidate>Cancel</button>
+    </form>
+  </div>
+</dialog>

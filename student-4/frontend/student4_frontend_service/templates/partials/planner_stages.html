@@ -1,0 +1,30 @@
+<div class="planner-stages" aria-label="Agent progress">
+{% for stage in agent_stages %}
+  <details id="planner-stage-{{ stage.agent }}" class="planner-stage"{% if stage.status == 'running' %} open{% endif %}>
+    <summary>{{ stage.agent|capitalize }} <span class="planner-status planner-status--{{ stage.status }}">{{ stage.label }}</span></summary>
+    <div class="planner-stage__content">
+      {% if stage.agent == 'planner' %}
+        {% if run.plan %}<p>{{ run.plan.goal }}</p><ol>{% for step in run.plan.steps %}<li>{{ step }}</li>{% endfor %}</ol>{% else %}<p>No plan recorded yet.</p>{% endif %}
+      {% elif stage.agent == 'worker' %}
+        <details class="planner-evidence"><summary>Activities found · {{ found_activities|length }}</summary>
+          {% if found_activities %}<ul>{% for name in found_activities.values() %}<li>{{ name }}</li>{% endfor %}</ul>{% else %}<p>No activity results recorded yet.</p>{% endif %}
+        </details>
+        {% with result=planner.answer %}{% include "partials/assistant_tools.html" %}{% endwith %}
+      {% else %}
+        {% if run.review %}<p><strong>{{ run.review.verdict|capitalize }}</strong> — {{ run.review.summary }}</p>
+          {% for label, entries in [('Issues', run.review.issues), ('Risks', run.review.risks), ('Recommendations', run.review.recommendations)] %}{% if entries %}<h5>{{ label }}</h5><ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>{% endif %}{% endfor %}
+        {% else %}<p>No reviewer findings recorded yet.</p>{% endif %}
+      {% endif %}
+      {% if stage.steps %}<ol class="field-hint">{% for step in stage.steps %}<li>attempt {{ step.attempt }} · {{ step.status }} · {{ step.duration_ms }} ms{% if step.error %}<p>{{ step.error.get('message', step.error.get('code', 'Stage failed')) }}</p>{% endif %}</li>{% endfor %}</ol>{% endif %}
+    </div>
+  </details>
+  {% if stage.agent == 'worker' %}
+    {% set failed = run.checks|rejectattr('passed')|list %}
+    {% set check_status = 'pending' if run.status in ['planning', 'working'] else ('failed' if failed else ('completed' if run.checks else 'pending')) %}
+    <details id="planner-validation" class="planner-stage">
+      <summary>Validation checks <span class="planner-status planner-status--{{ check_status }}">{{ {'pending':'Not yet run', 'failed':'Failed', 'completed':'Completed'}[check_status] }}</span></summary>
+      <div class="planner-stage__content">{% if run.checks and check_status == 'pending' %}<p class="field-hint">Checks from the previous attempt; this attempt has not been validated yet.</p>{% endif %}{% if run.checks %}<ul>{% for check in run.checks %}<li><strong>{{ 'Passed' if check.passed else 'Failed' }}: {{ check.name }}</strong> — {{ check.detail }}</li>{% endfor %}</ul>{% else %}<p>No validation checks recorded yet.</p>{% endif %}</div>
+    </details>
+  {% endif %}
+{% endfor %}
+</div>
