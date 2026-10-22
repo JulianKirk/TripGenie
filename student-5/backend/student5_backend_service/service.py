@@ -7,6 +7,9 @@ from importlib import resources
 from time import perf_counter
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
+
+from . import agent_runs
 from .accommodation_client import AccommodationApiClient
 from .activity_client import ActivityApiClient
 from .ai_analysis import build_budget_analysis_prompt
@@ -16,9 +19,14 @@ from .client import DatabaseApiClient
 from .config import Settings
 from .errors import ApiError, bad_gateway, date_outside_trip
 from .models import (
+    AgentAppliedChange,
+    AgentReviewRequest,
+    AgentRunRequest,
+    AgentRunView,
     BudgetAnalysisRequest,
     BudgetAnalysisResponse,
     BudgetCreate,
+    BudgetFields,
     BudgetRecord,
     BudgetSummary,
     BudgetUpdate,
@@ -31,6 +39,7 @@ from .models import (
     RagQueryRequest,
     TripRecord,
 )
+from .multi_agent_client import MultiAgentClient
 from .rag_client import RagClient
 from .transport_client import TransportApiClient
 from .trips_client import TripsApiClient
@@ -64,6 +73,7 @@ class BackendService:
         ai_mode: AiModeClient,
         settings: Settings,
         rag: RagClient,
+        multi_agent: MultiAgentClient,
     ) -> None:
         self.database = database
         self.trips = trips
@@ -73,6 +83,7 @@ class BackendService:
         self.ai_mode = ai_mode
         self.settings = settings
         self.rag = rag
+        self.multi_agent = multi_agent
 
     def ready(self) -> bool:
         return self.database.ready()
@@ -81,7 +92,112 @@ class BackendService:
         return {
             "rag": "enabled" if self.settings.rag_enabled else "disabled",
             "mcp": "enabled" if self.settings.mcp_enabled else "disabled",
+            "multi_agent": (
+                "enabled" if self.settings.multi_agent_enabled else "disabled"
+            ),
         }
+
+    def _multi_agent(self) -> MultiAgentClient:
+        if not self.settings.multi_agent_enabled:
+            raise _disabled(
+                "MULTI_AGENT_DISABLED", "multi_agent", "Budget review agents"
+            )
+        return self.multi_agent
+
+    def start_agent_run(
+        self, budget_id: UUID, payload: AgentRunRequest
+    ) -> AgentRunView:
+        client = self._multi_agent()
+        budget = self.database.get_budget(budget_id)
+        worker_system = (
+            resources.files("student5_backend_service")
+            .joinpath("prompts", agent_runs.WORKER_PROMPT_ASSET)
+            .read_text(encoding="utf-8")
+        )
+        body = agent_runs.build_run_request(
+            self.settings, budget, payload.question, worker_system
+        )
+        run = client.start_run(body)
+        logger.info(
+            "agent_run_started correlation_id=%s run_id=%s budget_id=%s",
+            body["correlation_id"],
+            run.get("run_id"),
+            budget_id,
+        )
+        return agent_runs.to_view(run, budget)
+
+    def _agent_view(
+        self, client: MultiAgentClient, run: dict, budget: BudgetRecord
+    ) -> AgentRunView:
+        history = (
+            client.history(run["run_id"])
+            if run.get("status") in agent_runs.TERMINAL_STATUSES
+            else None
+        )
+        return agent_runs.to_view(run, budget, history)
+
+    def get_agent_run(self, budget_id: UUID, run_id: str) -> AgentRunView:
+        client = self._multi_agent()
+        budget = self.database.get_budget(budget_id)
+        run = client.get_run(run_id)
+        agent_runs.ensure_feature(run, run_id)
+        return self._agent_view(client, run, budget)
+
+    def review_agent_run(
+        self, budget_id: UUID, run_id: str, decision: AgentReviewRequest
+    ) -> AgentRunView:
+        client = self._multi_agent()
+        budget = self.database.get_budget(budget_id)
+        run = client.get_run(run_id)
+        agent_runs.ensure_feature(run, run_id)
+        decided = client.review(run_id, agent_runs.review_body(run, decision))
+
+        applied: list[AgentAppliedChange] = []
+        apply_error = None
+        if decided.get("approved_actions"):
+            applied, apply_error = self._apply_allocations(decided, budget)
+        logger.info(
+            "agent_run_decided run_id=%s decision=%s applied=%d apply_error=%s",
+            run_id,
+            decision.decision,
+            len(applied),
+            apply_error is not None,
+        )
+        view = self._agent_view(client, decided, budget)
+        return view.model_copy(
+            update={"applied_changes": applied, "apply_error": apply_error}
+        )
+
+    def _apply_allocations(
+        self, run: dict, budget: BudgetRecord
+    ) -> tuple[list[AgentAppliedChange], str | None]:
+        if not agent_runs.is_grounded(run, budget.budget_id):
+            return [], (
+                "The answer was not grounded in this budget's tool results, "
+                "so no allocation was changed."
+            )
+        try:
+            changes = agent_runs.allocation_changes(run)
+            BudgetFields.model_validate(
+                budget.model_dump(include=set(BudgetFields.model_fields)) | changes
+            )
+        except ValidationError:
+            return [], (
+                "The approved allocations are invalid or would exceed the total "
+                "budget, so no allocation was changed."
+            )
+        try:
+            self.database.update_budget(budget.budget_id, BudgetUpdate(**changes))
+        except ApiError as error:
+            return [], f"The budget could not be updated: {error.message}"
+        return [
+            AgentAppliedChange(
+                category=field.removesuffix("_budget"),
+                previous=f"{getattr(budget, field):.2f}",
+                new=f"{value:.2f}",
+            )
+            for field, value in changes.items()
+        ], None
 
     def rag_query(self, request: RagQueryRequest) -> RagAnswer:
         if not self.settings.rag_enabled:
