@@ -1,9 +1,14 @@
-# Release 1 local host services runbook
+# Local host services and cloud demonstration runbook
 
 Release 1 runs AI-Mode, RAG, MCP, Ollama, and the agentic loop as host
 processes; Release 2 adds the Multi-Agent Server. Docker Compose runs only the shared reference service and the
 feature frontends, backends, and databases. Backends reach the host through
 `host.docker.internal`.
+
+For recording, use the [local planner walkthrough](#student-1-planner-prompts-and-recording-walkthrough)
+and the separate [Azure cloud walkthrough](#student-1-cloud-demonstration-walkthrough).
+The latter demonstrates the deployed application, security controls and
+deployment evidence; it does not run the host-only AI workflow in Azure.
 
 | Host process | Port | Container URL | Host URL |
 | --- | --- | --- | --- |
@@ -330,6 +335,125 @@ python -m multi_agent_service --url http://127.0.0.1:18313 export <run_id> --for
 
 For the standard stack, use `http://127.0.0.1:8013`. Say that a prepared run
 was generated before recording; do not present it as instantaneous generation.
+
+## Student 1 cloud demonstration walkthrough
+
+### Open the deployed application, not localhost
+
+| Page | Address |
+| --- | --- |
+| Cloud portal | `https://shared-ui.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` |
+| Student 1 cloud frontend | `https://student-1-frontend.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` |
+
+Open both pages a few minutes before recording: the frontends scale to zero
+and a cold start can be slow. From the cloud portal, follow the Student 1 link
+and keep the browser's HTTPS address visible. Do not use the isolated local
+portal on `:18380` for this part.
+
+**Version gate:** checked on 23 October, the latest successful Cloud Deployment
+was [run 39870145500](https://github.com/YourNightmareIsOver/TripGenie/actions/runs/39870145500),
+SHA `9f51e72331f6f6bb4596851fe5b9bd0257ef0199`. It predates #190 and #189.
+It is a dated deployment reference, not the agreed final Release 2 version.
+Before the final take, select the team's actual deployment run and record its
+SHA; refresh the addresses from that run if they changed. Do not describe
+unmerged local PR code as already deployed.
+
+To find the current deployment from any PowerShell directory:
+
+```powershell
+gh run list --repo YourNightmareIsOver/TripGenie --workflow cloud-deployment.yml --limit 5 --json databaseId,status,conclusion,headSha,url
+```
+
+### Rehearse cloud trip and itinerary CRUD
+
+Use only a disposable trip you create for this take, not a teammate's records.
+These browser operations use the deployed frontend, backend and database;
+they do not require the local model or local containers.
+
+| Trip field | Value |
+| --- | --- |
+| Name | `Cloud demo trip - Student 1` |
+| Destination | `Melbourne` |
+| Start / end date | `2026-11-12` / `2026-11-14` |
+| Travellers / status | `2` / `Planned` |
+| Notes | `Disposable cloud recording data.` |
+
+| Step | Action on the cloud page | What proves it worked |
+| --- | --- | --- |
+| **Create a trip** | Click **Create trip**, enter the values above and submit. | The trip detail shows the name, dates and its new trip identifier. |
+| **Read and update it** | Click **Edit trip**, change Notes to `Cloud edit confirmed.`, save, then reload the page. | The changed notes survive the reload; this is not just an unsaved form. |
+| **Create an itinerary item** | Click **Add itinerary item**. Use title `Cloud coffee stop`, date `2026-11-13`, start `08:00`, end `08:30`, category `Meal`, location `Degraves Street`; submit. | The item appears under **View by day** on 13 November. |
+| **Browse and filter** | Select 13 November, or choose that Date and Category **Meal**, then **Apply filters**. | The new item is visible for the requested day/category. Use **Reset filters** afterwards. |
+| **Update the item** | Click its **Edit item**, change the title to `Cloud coffee stop - updated`, save and reload. | The updated title is shown on the saved itinerary. |
+| **Delete the item** | Click its **Delete item**, then confirm **Delete itinerary item**. | The item disappears, including after reload. |
+| **Delete the trip** | Click **Delete trip** and confirm. | Your disposable trip disappears from the trip list. |
+
+This is the full rehearsal/backup sequence, not seven extra beats to squeeze
+into the group video. For a short cloud take, show create-trip/delete-trip,
+the HTTPS address and deployment evidence. If demonstrating item CRUD instead,
+say that its trip was prepared beforehand and delete that trip after recording.
+
+> **Say:** "This is the deployed Student 1 application on Azure Container
+> Apps, not my local demo. I can create and update trip and itinerary data,
+> reload to read it back, and delete the test records through the cloud UI."
+
+Reload demonstrates persistence in the current running revision, **not durable
+storage across deployment**. The cloud uses ephemeral SQLite; a new revision
+or restart can reset data. Do not restart or redeploy to demonstrate deletion.
+
+### Explain which features are local-only
+
+AI-Mode, RAG, MCP, Ollama and the Multi-Agent Server run on the host, not in
+Azure. The cloud demo is ordinary application functionality; there is no
+cloud planner prompt to enter. Cloud and local databases are separate, so
+local planner runs and approved items do not automatically appear in Azure.
+
+> **Say:** "The AI workflow runs on our host machines. In Azure we deploy the
+> ordinary feature services, with AI disabled. This demonstrates that the
+> core application remains usable independently of the local AI stack."
+
+On a final deployment containing #190/#189, disabled AI panels should be
+hidden. Older deployments may still display unavailable controls. Check the
+actual deployed version before saying the panels are hidden; their visibility
+is not proof that cloud AI is available.
+
+### Demonstrate cloud security, not just a padlock
+
+Use 30-45 seconds of optional shared footage, coordinated with Student 5.
+Their #195 endpoint-hardening work builds on the deployment identity work;
+credit both rather than claiming all shared controls as Student 1's.
+
+| Show on screen | Explain |
+| --- | --- |
+| Enter the frontend's `http://` address and show the resulting `https://` URL. In DevTools **Network**, preserve the log if you want to show the redirect itself. | Cloud ingress redirects plain HTTP to HTTPS. |
+| Reload over HTTPS, select the document request in **Network**, then its response headers. Highlight `Strict-Transport-Security`, `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`. | The public frontend sends browser security headers. |
+| In the chosen deployment's `cloud-deployment-evidence` artifact, open `cloud-deployment-results.md`: show frontend HTTPS/header checks and the **Security Configuration** table. | Six frontends are public; the twelve backend/database services have internal ingress. Show the configuration check alongside the public-access probes; a 404 alone does not prove isolation. |
+| Show the workflow's OIDC login and the registry managed-identity checks, without opening secret values. | GitHub authenticates to Azure through OIDC; apps pull images through managed identity rather than registry passwords. Registry admin and anonymous access are disabled. |
+
+Do not claim user login/authentication, an IP allow-list, CSP, Azure Files
+protection or per-service authorization from this evidence. The plain-setting
+credential checker is a targeted check, not proof that no possible secret
+exists. See [endpoint security](../release-2/cloud-endpoint-security.md) and
+[data security](../release-2/cloud-data-security.md) for the implementation.
+
+### Show deployment and release evidence
+
+Open the **Cloud Deployment** Actions run for the version on screen. Show its
+commit SHA, successful deployment result, the `production` environment
+approval, and the `cloud-deployment-evidence` artifact. Its automated
+`cloud-deployment-results.md` is generated for each deployment; the human-written
+cloud report in PR #186 is a separate assessment/release narrative.
+
+> **Say:** "This Actions run deployed the version I am showing, after the
+> production approval. Its artifact records deployment readiness and security
+> checks. That approval authorizes deployment; our final release decision is
+> a separate human decision after reviewing the evidence."
+
+Record the deployment URL/SHA and the results you actually observed in the
+demonstration guide's evidence record. If the team has not chosen or approved
+the final release, leave that decision pending. Do not click **Run workflow**
+or approve a deployment just for footage. Keep credentials, subscription IDs
+and unrelated browser tabs off screen.
 
 ## Troubleshooting
 
