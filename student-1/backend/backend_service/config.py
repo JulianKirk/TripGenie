@@ -186,6 +186,12 @@ class Settings:
     rag_timeout_seconds: float = 130.0
     mcp_enabled: bool = False
     mcp_timeout_seconds: float = 200.0
+    # Release 2 shared host Multi-Agent server. Runs are asynchronous on the
+    # server, so each call (start, poll, review) is short; the timeout bounds
+    # one such call, never the whole Planner -> Worker -> Reviewer workflow.
+    multi_agent_enabled: bool = False
+    multi_agent_base_url: str = "http://127.0.0.1:8013"
+    multi_agent_timeout_seconds: float = 15.0
 
     def __post_init__(self) -> None:
         self.ai_max_attempts = _validate_ai_max_attempts(self.ai_max_attempts)
@@ -342,5 +348,19 @@ class Settings:
                 os.getenv("STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS"),
                 env_name="STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS",
                 default=200.0,
+            ),
+            multi_agent_enabled=_parse_bool(
+                os.getenv("STUDENT1_BACKEND_MULTI_AGENT_ENABLED"),
+                env_name="STUDENT1_BACKEND_MULTI_AGENT_ENABLED",
+            ),
+            multi_agent_base_url=_normalise_base_url(
+                os.getenv("STUDENT1_BACKEND_MULTI_AGENT_BASE_URL"),
+                env_name="STUDENT1_BACKEND_MULTI_AGENT_BASE_URL",
+                default="http://127.0.0.1:8013",
+            ),
+            multi_agent_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS",
+                default=15.0,
             ),
         )

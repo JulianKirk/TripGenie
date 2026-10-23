@@ -301,15 +301,17 @@ def test_ai_mode_not_configured_is_an_explicit_error(client_factory, database_ap
     [
         (
             Settings(database_api_base_url="http://database.test"),
-            {"ai_suggestions": False, "rag": False, "mcp": False},
+            {"ai_suggestions": False, "rag": False, "mcp": False, "multi_agent": False},
         ),
         (
             Settings(
                 database_api_base_url="http://database.test",
                 rag_enabled=True,
                 mcp_enabled=True,
+                multi_agent_enabled=True,
             ),
-            {"ai_suggestions": False, "rag": True, "mcp": False},
+            # The Multi-Agent Server calls AI-Mode itself, so needs no URL here.
+            {"ai_suggestions": False, "rag": True, "mcp": False, "multi_agent": True},
         ),
         (
             Settings(
@@ -318,7 +320,7 @@ def test_ai_mode_not_configured_is_an_explicit_error(client_factory, database_ap
                 rag_enabled=True,
                 mcp_enabled=True,
             ),
-            {"ai_suggestions": True, "rag": True, "mcp": True},
+            {"ai_suggestions": True, "rag": True, "mcp": True, "multi_agent": False},
         ),
     ],
 )

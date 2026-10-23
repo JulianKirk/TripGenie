@@ -1,5 +1,6 @@
 # Release 1: AI-Mode (8006), RAG (8011), MCP (8012), Ollama and the agentic
-# loop run on the host, never in here. Backends that use them reach the host as
+# loop run on the host, never in here; so does the Release 2 Multi-Agent Server
+# (8013). Backends that use them reach the host as
 # host.docker.internal; each declares the host-gateway mapping so that name also
 # resolves on native Linux Docker Engine, which lacks Docker Desktop's alias. None of
 # them is a depends_on or healthcheck target: a stopped host service turns off
@@ -104,6 +105,12 @@ services:
       # agent timeout.
       STUDENT1_BACKEND_MCP_ENABLED: "${STUDENT1_BACKEND_MCP_ENABLED:-true}"
       STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS: "200"
+      # Release 2 "Plan my itinerary": the shared Multi-Agent Server is a host
+      # service (:8013), never a Compose one. Runs are asynchronous there, so
+      # each start, poll or decision call is short.
+      STUDENT1_BACKEND_MULTI_AGENT_ENABLED: "${STUDENT1_BACKEND_MULTI_AGENT_ENABLED:-true}"
+      STUDENT1_BACKEND_MULTI_AGENT_BASE_URL: http://host.docker.internal:8013
+      STUDENT1_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS: "15"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -140,6 +147,9 @@ services:
       STUDENT1_FRONTEND_AI_TIMEOUT_SECONDS: "250"
       STUDENT1_FRONTEND_RAG_TIMEOUT_SECONDS: "150"
       STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS: "210"
+      # Multi-agent start/poll/decision: one short backend call each, plus
+      # saving approved items on a decision.
+      STUDENT1_FRONTEND_MULTI_AGENT_TIMEOUT_SECONDS: "60"
       # Where a browser reaches the shared portal: theme.css and the Home link.
       TRIPGENIE_PORTAL_URL: http://localhost:8080
       # Whose X-Forwarded-Proto uvicorn believes when building page URLs.

@@ -46,6 +46,25 @@ def test_ai_form_submission_via_htmx_returns_draft_results_without_persisting(
     assert set(backend_api.items) == starting_item_ids
 
 
+def test_ai_htmx_response_replaces_the_element_the_form_targets(
+    client,
+    backend_api,
+) -> None:
+    page = client.get("/trips/trip_2027_sydney_getaway").text
+    target = re.search(r'hx-post="[^"]*/ai-suggestions"\s+hx-target="#([\w-]+)"', page)
+
+    response = client.post(
+        "/trips/trip_2027_sydney_getaway/ai-suggestions",
+        data={"requested_date": "2027-04-02", "goal": "A slow morning"},
+        headers=HTMX_HEADERS,
+    )
+
+    # An outerHTML swap must get back the element it targets, or the whole
+    # shell is nested inside the trip panel.
+    assert target is not None
+    assert re.match(rf'\s*<\w+\s+id="{target[1]}"', response.text)
+
+
 def test_ai_empty_state_renders_without_breaking_trip_page(client, backend_api) -> None:
     backend_api.ai_responses.append(
         data_response(

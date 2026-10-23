@@ -27,6 +27,9 @@ This FastAPI service exposes the public TripGenie Student 1 `/api` CRUD surface 
 | `STUDENT1_BACKEND_RAG_TIMEOUT_SECONDS` | `130` | RAG query timeout (retrieval plus generation). |
 | `STUDENT1_BACKEND_MCP_ENABLED` | `false` | Enables `POST /api/trips/{tripId}/mcp-options` (also needs `STUDENT1_BACKEND_AI_MODE_BASE_URL`). |
 | `STUDENT1_BACKEND_MCP_TIMEOUT_SECONDS` | `200` | Budget for the AI-Mode tool run behind that route, retry included; must outlast AI-Mode's own agent timeout (180 s). |
+| `STUDENT1_BACKEND_MULTI_AGENT_ENABLED` | `false` | Enables the Release 2 `/api/trips/{tripId}/multi-agent-plan` routes. Compose turns it on; CI and `.env.cloud` set `false`. |
+| `STUDENT1_BACKEND_MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8013` | Shared host-run Multi-Agent Server. Compose uses `http://host.docker.internal:8013`. |
+| `STUDENT1_BACKEND_MULTI_AGENT_TIMEOUT_SECONDS` | `15` | Per call to that server (start, poll, review). Runs are asynchronous there, so no call waits for the agents. |
 
 ## Activities on a trip
 
@@ -188,10 +191,12 @@ one correlation id (`student1-rag-…` / `student1-mcp-…`), sent as
 
 ### `GET /api/ai-features`
 
-Returns `{"data": {"ai_suggestions": bool, "rag": bool, "mcp": bool}}`, read
+Returns `{"data": {"ai_suggestions": bool, "rag": bool, "mcp": bool, "multi_agent": bool}}`, read
 from the same settings the routes check: `ai_suggestions` needs
 `STUDENT1_BACKEND_AI_MODE_BASE_URL`, `rag` needs `STUDENT1_BACKEND_RAG_ENABLED`,
-and `mcp` needs both `STUDENT1_BACKEND_MCP_ENABLED` and the AI-Mode URL. It
+`mcp` needs both `STUDENT1_BACKEND_MCP_ENABLED` and the AI-Mode URL, and
+`multi_agent` needs only `STUDENT1_BACKEND_MULTI_AGENT_ENABLED` (the
+Multi-Agent Server calls AI-Mode itself, not this service). It
 never probes a live service. The frontend uses it to hide panels the
 configuration switches off; the routes still refuse when called anyway.
 
@@ -266,3 +271,104 @@ configured or unreachable; `504 DEPENDENCY_TIMEOUT`; `502 BAD_GATEWAY` for a
 malformed AI-Mode response or trace; `502 AI_OUTPUT_INVALID` when the final
 answer breaks the schema; `502 MCP_TOOLS_NOT_USED` when the model made no
 successful tool call even after one retry (never an answer from memory).
+
+## Release 2 multi-agent "Plan my itinerary"
+
+The shared [Multi-Agent Server](../../ai-services/multi-agent-server/README.md)
+(host, `:8013`; contract in
+[release-2-multi-agent-contract.md](../../docs/architecture/release-2-multi-agent-contract.md))
+runs a Planner, a Worker and a Reviewer through AI-Mode; the Worker reads the
+trip with the read-only `trip_get_context` and `trips_list_itinerary_items`
+MCP tools. The server **never writes itinerary data**: its approved actions are
+instructions this service carries out, and only after a human decision. Every
+item saved goes through `create_itinerary_item` — the same validation and
+database API path as a hand-entered item.
+
+All three routes answer `503 MULTI_AGENT_DISABLED` when
+`STUDENT1_BACKEND_MULTI_AGENT_ENABLED` is false, before touching the trip or
+the server. `/health` and `/ready` never probe the Multi-Agent Server. An
+unknown trip is `404 NOT_FOUND`. Each response is
+`{"data": {trip_id, run_id, correlation_id, status, active, request, created_at, updated_at, attempts, plan, steps, checks, review, summary, items, approved_items, human, error, persistence}}`.
+
+### `POST /api/trips/{tripId}/multi-agent-plan` → `202`
+
+Optional body `{"request": "Fit the opera into an evening"}` (1–500 characters;
+default: draft up to 8 items from the saved accommodation, transport and
+activities). Starts one run with `feature="student-1"`, the trip id, a
+correlation id `student1-plan-…`, bounded trip context (trip, items, saved
+accommodation/activities/transport, trimmed deterministically to fit the
+server's 4,000-character limit with `truncated: true`), the worker prompt
+`prompts/itinerary_planner_agents_v1.md`, role-neutral rules for the Planner
+and Reviewer as `feature_instructions` (`prompts/itinerary_planner_rules_v1.md`;
+the two share the server's 6,000-character allowance), `allowed_tools`
+`trip_get_context` and `trips_list_itinerary_items`, an output schema of at most 8 items
+(`date, start_time, end_time, title, location, description, category,
+source_id`), `actions_path: "items"`, and grounding on `items[].source_id`. It
+returns at once with `status: "planning"`; the agents keep working on the
+server. A returned run with another feature, trip or correlation id is
+`502 BAD_GATEWAY`.
+
+`feature_instructions` needs the server from main after #191; an older server
+rejects the unknown field with `422`. A shared-server change that removes
+`allowed_tools` from the request (proposed in PR #197) needs this request
+updated at the same time.
+
+### `GET /api/trips/{tripId}/multi-agent-plan/{runId}`
+
+Poll until `active` is false. Statuses: `planning`, `working`, `reviewing`,
+then `awaiting_human`, then `completed` / `rejected`, or `failed` (with
+`error`). `runId` must match `magent_` + 12 hex digits (else `422`). A run
+that belongs to another feature or trip is `404 NOT_FOUND`, never shown.
+Once the plan is ready each drafted item in `items` carries:
+
+- `problems` — blocking: the item cannot be saved as drafted (the same rules as
+  `POST …/itinerary-items`, e.g. a date outside the trip, a bad time or category);
+- `warnings` — for the human: a `source_id` not found among the trip's items or
+  saved accommodation/activities/transport, a time clash with an existing item
+  or another drafted item, or a repeated title on the same day.
+
+`steps` lists every agent step with its MCP tool trace; `checks` and `review`
+are the server's deterministic checks and the Reviewer's verdict, issues and
+risks. When the Reviewer asks for a revision, a blocking check fails or the
+Worker's model call returns unusable output, the server plans again (by
+default once), so `attempts` can be 2 and `steps` then holds both attempts; a
+failed Worker step keeps `status: "failed"` and its `error` message. Only the
+final draft is offered for a decision. A decided run also shows `persistence` (below) read back from the
+database, so a reload never re-saves anything.
+
+### `POST /api/trips/{tripId}/multi-agent-plan/{runId}/review`
+
+```json
+{"decision": "approve" | "correct" | "partial" | "reject",
+ "reviewer": "traveller", "notes": "optional",
+ "accepted_items": [0, 2],
+ "corrected_items": [{"date": "2027-04-02", "start_time": "18:00", "end_time": null,
+   "title": "Opera night", "location": null, "description": null,
+   "category": "activity", "source_id": "act_opera"}]}
+```
+
+- `approve` saves every drafted item; `partial` saves `accepted_items`
+  (indexes into `items`); `correct` saves `corrected_items` (1–8 items, the
+  full corrected list); `reject` saves nothing.
+- Before anything is recorded, the items to be saved are checked against the
+  itinerary rules. Any problem is `422 VALIDATION_ERROR` with details such as
+  `items.1` / `accepted_items.1` / `corrected_items.0.date`; the run stays
+  `awaiting_human` and nothing is written.
+- Items are created one at a time with the deterministic id
+  `item_{runId}_{index}` and notes `Added from multi-agent plan {runId}
+  (source …).` `persistence.outcome` is `saved`, `partially_saved`,
+  `nothing_saved` or `rejected`, with `saved`, `already_saved` and `failed`
+  (code and message per item). It never claims more than was written.
+- **Retry:** sending the same decision again for a decided run saves only what
+  is still missing; items already on the trip are reported as
+  `already_saved`, never written twice. A different decision on a decided run
+  is `409 MULTI_AGENT_ALREADY_DECIDED`; a run still working is
+  `409 MULTI_AGENT_NOT_REVIEWABLE`. If two submissions race, the second acts
+  on the decision the server recorded first.
+
+Errors from the server: unreachable `503 DEPENDENCY_UNAVAILABLE`, timeout
+`504 DEPENDENCY_TIMEOUT`, `503 RUN_LIMIT_REACHED` preserved, an unknown run
+`404 NOT_FOUND`, and any malformed or unexpected response `502 BAD_GATEWAY`.
+
+Running it locally (host server, live model) is in the
+[local host services runbook](../../docs/reports/release-1/local-host-services-runbook.md).

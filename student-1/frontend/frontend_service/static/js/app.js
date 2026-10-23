@@ -10,9 +10,14 @@ document.addEventListener("htmx:beforeSwap", (event) => {
   }
 });
 
-document.addEventListener("htmx:beforeRequest", () => {
+const isStatusPoll = (event) =>
+  event.detail.requestConfig?.elt?.hasAttribute?.("data-preserve-focus") ??
+  event.detail.elt?.hasAttribute?.("data-preserve-focus") ??
+  false;
+
+document.addEventListener("htmx:beforeRequest", (event) => {
   const shell = document.getElementById("app-shell");
-  if (shell) {
+  if (shell && !isStatusPoll(event)) {
     shell.setAttribute("aria-busy", "true");
   }
 });
@@ -25,6 +30,12 @@ document.addEventListener("htmx:afterRequest", () => {
 });
 
 document.addEventListener("htmx:afterSwap", (event) => {
+  // A panel that polls its own status (data-preserve-focus) must not pull
+  // focus on every refresh; its role="status" text announces progress.
+  if (isStatusPoll(event)) {
+    return;
+  }
+
   // An outerHTML swap replaces the target itself, so event.detail.target is
   // the detached old element; focus its replacement by id instead.
   let target = event.detail.target;

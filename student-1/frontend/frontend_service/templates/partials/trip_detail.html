@@ -345,5 +345,8 @@
     {% if ai_features is none or ai_features.mcp or mcp_error %}
       {% include "partials/mcp_panel.html" %}
     {% endif %}
+    {% if ai_features is none or ai_features.multi_agent or ma_error %}
+      {% include "partials/multi_agent_panel.html" %}
+    {% endif %}
   {% endwith %}
 </article>

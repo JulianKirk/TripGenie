@@ -66,6 +66,10 @@ class Settings:
     ai_timeout_seconds: float = 250.0
     rag_timeout_seconds: float = 150.0
     mcp_timeout_seconds: float = 210.0
+    # The multi-agent calls are short (runs are asynchronous on the server and
+    # polled), but a start or a review also reads the trip and saves approved
+    # items, so they get more than the CRUD default.
+    multi_agent_timeout_seconds: float = 60.0
     service_name: str = "student-1-frontend"
     # Where a browser -- not this container -- reaches student 2's webpage. A
     # row on the trip page links there, so it has to be the address on the
@@ -122,6 +126,11 @@ class Settings:
                 os.getenv("STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS"),
                 env_name="STUDENT1_FRONTEND_MCP_TIMEOUT_SECONDS",
                 default=210.0,
+            ),
+            multi_agent_timeout_seconds=_parse_timeout(
+                os.getenv("STUDENT1_FRONTEND_MULTI_AGENT_TIMEOUT_SECONDS"),
+                env_name="STUDENT1_FRONTEND_MULTI_AGENT_TIMEOUT_SECONDS",
+                default=60.0,
             ),
             service_name=os.getenv(
                 "STUDENT1_FRONTEND_SERVICE_NAME",

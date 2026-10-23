@@ -1,0 +1,402 @@
+{% import "macros/forms.html" as forms %}
+
+{# Release 2 "Plan my itinerary": a Planner, Worker and Reviewer on the shared
+   Multi-Agent Server draft items; only the traveller's decision here makes
+   the backend save anything. While the agents work, the section polls its
+   own status URL with HTMX and is swapped in place. #}
+{% set run = ma_run %}
+{% set run_id = ma_run_id %}
+{% set view_url = request.url_for('view_multi_agent_plan', trip_id=trip_id, run_id=run_id) if run_id else none %}
+{% set review_url = request.url_for('review_multi_agent_plan', trip_id=trip_id, run_id=run_id) if run_id else none %}
+{% set start_url = request.url_for('start_multi_agent_plan', trip_id=trip_id) %}
+{% set stage_labels = [
+  ("planning", "Planner: making a plan from the trip and its saved evidence"),
+  ("working", "Worker: drafting itinerary items with the trip tools"),
+  ("reviewing", "Reviewer: checking the draft for clashes, dates and unsupported items"),
+] %}
+{% set status_badges = {
+  "success": ("Success", ""),
+  "error": ("Error", "badge--danger"),
+  "rejected": ("Rejected", "badge--warning"),
+  "completed": ("Completed", ""),
+  "failed": ("Failed", "badge--danger"),
+} %}
+{% set decision_labels = {
+  "approve": "approved the whole plan",
+  "correct": "saved a corrected plan",
+  "partial": "accepted some items",
+  "reject": "rejected the plan",
+} %}
+
+{% macro item_line(item) -%}
+  <strong>{{ item.title or "Untitled item" }}</strong>
+  · {{ item.date or "no date" }}{% if item.start_time %} {{ item.start_time }}{% if item.end_time %}–{{ item.end_time }}{% endif %}{% endif %}
+  {% if item.category %}· {{ item.category }}{% endif %}
+  {% if item.location %}· {{ item.location }}{% endif %}
+{%- endmacro %}
+
+{% macro item_findings(item) -%}
+  {% if item.problems %}
+    <p><span class="badge badge--danger">Cannot be saved as drafted</span></p>
+    <ul class="field-errors">
+      {% for problem in item.problems %}<li>{{ problem }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% if item.warnings %}
+    <p><span class="badge badge--warning">Check before saving</span></p>
+    <ul>
+      {% for warning in item.warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+{%- endmacro %}
+
+<section
+  id="multi-agent-panel"
+  class="mode-panel mode-panel--ai"
+  aria-labelledby="multi-agent-heading"
+  {% if run and run.active %}
+    hx-get="{{ view_url }}"
+    hx-trigger="every 3s"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-indicator="this"
+    data-preserve-focus
+  {% endif %}
+>
+  <p class="section-eyebrow">AI mode · Multi-agent planner</p>
+  <h3 id="multi-agent-heading">Plan my itinerary</h3>
+  {% set offered = ai_features is none or ai_features.multi_agent %}
+  {% if offered %}
+  <p>
+    Three AI agents draft itinerary items from this trip's saved accommodation, transport and activities: a Planner decides what to look up, a Worker drafts the items using TripGenie's trip tools, and a Reviewer flags clashes, dates outside the trip and unsupported items.
+    <strong>Nothing is saved until you approve, correct or partially accept the plan.</strong>
+    Rejecting it saves nothing.
+  </p>
+  {% endif %}
+
+  {% if ma_error %}
+    {{ forms.panel_error(ma_error, 'multi-agent-result-heading', {"NOT_FOUND": "This trip or plan could not be found."}) }}
+    {% if offered and view_url and not run %}
+      <p>
+        <a href="{{ view_url }}" hx-get="{{ view_url }}" hx-target="#multi-agent-panel" hx-swap="outerHTML">Check this plan again</a>
+      </p>
+    {% endif %}
+  {% endif %}
+
+  {% if run and run.active %}
+    {% set current = (stage_labels | map('first') | list).index(run.status) %}
+    <section class="panel panel--nested" aria-labelledby="multi-agent-progress-heading">
+      <h4 id="multi-agent-progress-heading" data-autofocus>The agents are working on your plan</h4>
+      <ol>
+        {% for stage, label in stage_labels %}
+          <li{% if loop.index0 == current %} aria-current="step"{% endif %}>
+            {{ label }}
+            <span class="muted-copy">
+              {%- if loop.index0 < current %} — done{% elif loop.index0 == current %} — in progress{% else %} — waiting{% endif -%}
+            </span>
+          </li>
+        {% endfor %}
+      </ol>
+      <p class="muted-copy" role="status" aria-live="polite">
+        Status: {{ run.status }} · attempt {{ run.attempts }}. This panel checks again every few seconds; you can keep using the rest of the page.
+      </p>
+      <p>
+        <a href="{{ view_url }}">Refresh status</a>
+        <span class="muted-copy">· Run ID: {{ run.run_id }}</span>
+      </p>
+    </section>
+  {% elif run %}
+    <section class="panel panel--nested" aria-labelledby="multi-agent-result-heading-run">
+      <h4 id="multi-agent-result-heading-run"{% if not ma_error %} data-autofocus{% endif %}>
+        {% if run.status == "awaiting_human" %}Your plan is ready for a decision
+        {% elif run.status == "failed" %}The agents could not finish this plan
+        {% elif run.status == "rejected" %}You rejected this plan
+        {% else %}You decided this plan{% endif %}
+      </h4>
+      <p class="muted-copy" role="status" aria-live="polite">
+        Status: {{ run.status }} · {{ run.attempts }} attempt(s) · Run ID: {{ run.run_id }} · Correlation ID: {{ run.correlation_id }}
+      </p>
+      <p class="muted-copy">You asked: {{ run.request }}</p>
+
+      {% if run.status == "failed" %}
+        <div class="banner banner--error">
+          <p><strong>{{ (run.error or {}).get("message") or "The multi-agent run failed." }}</strong></p>
+          {% if run.error and run.error.get("code") %}<p class="muted-copy">Error code: <code>{{ run.error.code }}</code>. Nothing was saved.</p>{% endif %}
+        </div>
+      {% endif %}
+
+      {% if run.summary %}<p>{{ run.summary }}</p>{% endif %}
+
+      {% if run.plan %}
+        <details>
+          <summary>Planner's plan</summary>
+          <p><strong>Goal:</strong> {{ run.plan.goal }}</p>
+          {% for title, entries in [
+            ("Steps", run.plan.steps),
+            ("Evidence it needs", run.plan.required_evidence),
+            ("Tools it chose", run.plan.tools_to_use),
+            ("Success criteria", run.plan.success_criteria),
+          ] %}
+            {% if entries %}
+              <h5>{{ title }}</h5>
+              <ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>
+            {% endif %}
+          {% endfor %}
+        </details>
+      {% endif %}
+
+      {% if run.steps %}
+        <details>
+          <summary>Agent steps and tool evidence ({{ run.steps | length }})</summary>
+          <ol class="item-list">
+            {% for step in run.steps %}
+              {% set badge_label, badge_class = status_badges.get(step.status, (step.status, "badge--muted")) %}
+              <li class="item-card">
+                <div class="item-card__content">
+                  <div class="badge-row">
+                    <span class="badge badge--muted">{{ step.agent | capitalize }}</span>
+                    <span class="badge {{ badge_class }}">{{ badge_label }}</span>
+                    <span class="muted-copy">attempt {{ step.attempt }} · {{ step.duration_ms }} ms{% if step.model %} · {{ step.model }}{% endif %}</span>
+                  </div>
+                  {% if step.error %}<p><strong>{{ step.error }}</strong></p>{% endif %}
+                  {% if step.tools %}
+                    <ul>
+                      {% for call in step.tools %}
+                        {% set call_label, call_class = status_badges[call.status] %}
+                        <li>
+                          <span class="badge {{ call_class }}">{{ call_label }}</span>
+                          <code>{{ call.tool }}</code>
+                          {% for key, value in call.arguments.items() %} · {{ key }}={{ 'not set' if value is none else (value|tojson if (value is mapping or (value is iterable and value is not string)) else value) }}{% endfor %}
+                          {% if call.status == 'success' %}
+                            {% set lines = summarise_mcp_data(call.data) %}
+                            {% if lines %}<ul>{% for line in lines %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+                          {% else %}
+                            — {{ call.error or 'The tool call did not succeed.' }}
+                          {% endif %}
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                </div>
+              </li>
+            {% endfor %}
+          </ol>
+        </details>
+      {% endif %}
+
+      {% if run.checks %}
+        <h5>Deterministic checks</h5>
+        <ul>
+          {% for check in run.checks %}
+            <li>
+              {% if check.passed %}<span class="badge">Passed</span>{% elif check.blocking %}<span class="badge badge--danger">Failed</span>{% else %}<span class="badge badge--warning">Warning</span>{% endif %}
+              <code>{{ check.name }}</code> — {{ check.detail }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if run.review %}
+        <h5>Reviewer</h5>
+        <p>
+          <span class="badge {% if run.review.verdict == 'approve' %}{% elif run.review.verdict == 'reject' %}badge--danger{% else %}badge--warning{% endif %}">Verdict: {{ run.review.verdict }}</span>
+          {{ run.review.summary }}
+        </p>
+        {% for title, entries in [
+          ("Issues", run.review.issues),
+          ("Risks", run.review.risks),
+          ("Recommendations", run.review.recommendations),
+        ] %}
+          {% if entries %}
+            <p><strong>{{ title }}</strong></p>
+            <ul>{% for entry in entries %}<li>{{ entry }}</li>{% endfor %}</ul>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
+      {% if run.status == "awaiting_human" %}
+        <h5 id="multi-agent-items-heading">Drafted items</h5>
+        {% if not run.items %}
+          <p class="muted-copy">The Worker drafted no items. Reject this plan and try again with a different request.</p>
+        {% endif %}
+        <form
+          action="{{ review_url }}"
+          method="post"
+          hx-post="{{ review_url }}"
+          hx-target="#multi-agent-panel"
+          hx-swap="outerHTML"
+          hx-sync="this:drop"
+          hx-indicator="#multi-agent-saving"
+          novalidate
+        >
+          {% if run.items %}
+            <ol class="item-list" aria-labelledby="multi-agent-items-heading">
+              {% for item in run.items %}
+                {% set n = item.index %}
+                {% set edited = ma_form["items"].get(n, {}) if ma_form else {} %}
+                {% set checked = (n in ma_form["selected"]) if ma_form else not item.problems %}
+                <li class="item-card item-card--draft">
+                  <div class="item-card__content">
+                    <p>
+                      <input type="checkbox" id="ma-item-{{ n }}-selected" name="selected" value="{{ n }}"{% if checked %} checked{% endif %}>
+                      <label for="ma-item-{{ n }}-selected">Item {{ n + 1 }}: {{ item_line(item) }}</label>
+                    </p>
+                    {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+                    <p class="item-card__meta">Evidence: {% if item.source_id %}<code>{{ item.source_id }}</code>{% else %}none cited{% endif %}</p>
+                    {{ item_findings(item) }}
+                    <details{% if item.problems or edited %} open{% endif %}>
+                      <summary>Correct item {{ n + 1 }}</summary>
+                      <div class="form-grid">
+                        {% for field, label, kind, limit in [
+                          ("date", "Date", "date", none),
+                          ("start_time", "Start time", "time", none),
+                          ("end_time", "End time", "time", none),
+                          ("title", "Title", "text", 120),
+                          ("location", "Location", "text", 200),
+                        ] %}
+                          <div class="form-field">
+                            <label for="ma-item-{{ n }}-{{ field }}">{{ label }}</label>
+                            <input id="ma-item-{{ n }}-{{ field }}" name="item-{{ n }}-{{ field }}" type="{{ kind }}"{% if limit %} maxlength="{{ limit }}"{% endif %} value="{{ edited.get(field, item[field] or '') }}">
+                          </div>
+                        {% endfor %}
+                        <div class="form-field">
+                          <label for="ma-item-{{ n }}-category">Category</label>
+                          {% set chosen = edited.get('category', item.category or '') %}
+                          <select id="ma-item-{{ n }}-category" name="item-{{ n }}-category">
+                            {% if chosen not in itinerary_category_options | map('first') | list %}<option value="{{ chosen }}" selected>{{ chosen or 'Choose a category' }}</option>{% endif %}
+                            {% for value, label in itinerary_category_options %}
+                              <option value="{{ value }}"{% if value == chosen %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="form-field form-field--full">
+                          <label for="ma-item-{{ n }}-description">Description</label>
+                          <textarea id="ma-item-{{ n }}-description" name="item-{{ n }}-description" rows="2" maxlength="400">{{ edited.get('description', item.description or '') }}</textarea>
+                        </div>
+                        <input type="hidden" name="item-{{ n }}-source_id" value="{{ edited.get('source_id', item.source_id or '') }}">
+                      </div>
+                    </details>
+                  </div>
+                </li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+
+          <div class="form-field form-field--full">
+            <label for="ma-notes">Notes for the record (optional)</label>
+            <textarea id="ma-notes" name="notes" rows="2" maxlength="1000">{{ ma_form.notes if ma_form else '' }}</textarea>
+          </div>
+
+          <p id="ma-decision-hint" class="hint-copy">
+            <strong>Approve</strong> saves every drafted item. <strong>Save selected</strong> saves only the ticked items, as drafted. <strong>Save corrections</strong> saves the ticked items with your edits. <strong>Reject</strong> saves nothing. Items that cannot be saved are unticked; fix them and tick them, or leave them out.
+          </p>
+          <div class="button-row">
+            {% if run.items %}
+              <button class="button button--primary" type="submit" name="decision" value="approve" aria-describedby="ma-decision-hint">Approve all items</button>
+              <button class="button button--secondary" type="submit" name="decision" value="partial" aria-describedby="ma-decision-hint">Save selected items</button>
+              <button class="button button--secondary" type="submit" name="decision" value="correct" aria-describedby="ma-decision-hint">Save corrections</button>
+            {% endif %}
+            <button class="button button--danger" type="submit" name="decision" value="reject" aria-describedby="ma-decision-hint">Reject plan</button>
+          </div>
+        </form>
+        <div id="multi-agent-saving" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
+          Recording your decision and saving approved items…
+        </div>
+      {% elif run.human %}
+        <h5>Your decision</h5>
+        <p>
+          {{ run.human.reviewer }} {{ decision_labels.get(run.human.decision, run.human.decision) }} on {{ run.human.decided_at }}.
+          {% if run.human.notes %}Notes: {{ run.human.notes }}{% endif %}
+        </p>
+
+        {% set result = run.persistence %}
+        {% if result %}
+          {% set kept = result.saved | length + result.already_saved | length %}
+          {% set total = kept + result.failed | length %}
+          <div class="banner {% if result.outcome in ['saved', 'rejected'] %}banner--info{% else %}banner--error{% endif %}" role="status">
+            <p><strong>
+              {% if result.outcome == "rejected" %}Nothing was saved: you rejected this plan.
+              {% elif result.outcome == "saved" %}All {{ total }} approved item(s) are on your itinerary.
+              {% elif result.outcome == "partially_saved" %}Only {{ kept }} of {{ total }} approved items are on your itinerary. {{ result.failed | length }} could not be saved.
+              {% else %}None of the {{ total }} approved item(s) could be saved.{% endif %}
+            </strong></p>
+            {% if result.saved %}
+              <p>Saved now:</p>
+              <ul class="banner__list">{% for row in result.saved %}<li>Item {{ row.index + 1 }}: {{ row.title or row.id }}</li>{% endfor %}</ul>
+            {% endif %}
+            {% if result.already_saved %}
+              <p>Already on the itinerary:</p>
+              <ul class="banner__list">{% for row in result.already_saved %}<li>Item {{ row.index + 1 }}: {{ row.title or row.id }}</li>{% endfor %}</ul>
+            {% endif %}
+            {% if result.failed %}
+              <p>Not saved:</p>
+              <ul class="banner__list">{% for row in result.failed %}<li>Item {{ row.index + 1 }} ({{ row.code }}): {{ row.message }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          {% if result.failed %}
+            <form
+              action="{{ review_url }}"
+              method="post"
+              hx-post="{{ review_url }}"
+              hx-target="#multi-agent-panel"
+              hx-swap="outerHTML"
+              hx-sync="this:drop"
+              novalidate
+            >
+              <input type="hidden" name="decision" value="{{ run.human.decision }}">
+              <p class="hint-copy">Retrying saves only the items still missing; saved items are never written twice. If an item keeps failing, add it through the itinerary form instead.</p>
+              <button class="button button--secondary" type="submit">Retry saving the missing items</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if run.approved_items %}
+          <h5>Approved items</h5>
+          <ul class="item-list">
+            {% for item in run.approved_items %}
+              <li class="item-card"><div class="item-card__content"><p>{{ item_line(item) }}</p>{{ item_findings(item) }}</div></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if offered and (not run or run.status in ["completed", "rejected", "failed"]) %}
+    {% set request_errors = ma_errors_by_field.get('request') %}
+    <form
+      class="form-grid"
+      action="{{ start_url }}"
+      method="post"
+      hx-post="{{ start_url }}"
+      hx-target="#multi-agent-panel"
+      hx-swap="outerHTML"
+      hx-indicator="#multi-agent-loading"
+      hx-disabled-elt="find button"
+      novalidate
+    >
+      <div class="form-field form-field--full">
+        <label for="multi-agent-request">What should the plan focus on? (optional)</label>
+        <textarea
+          id="multi-agent-request"
+          name="request"
+          rows="2"
+          maxlength="500"
+          placeholder="Fit the opera into the evening and keep mornings free"
+          aria-describedby="multi-agent-request-hint{% if request_errors %} request-errors{% endif %}"
+          {% if request_errors %}aria-invalid="true"{% endif %}
+        >{{ ma_request }}</textarea>
+        <p id="multi-agent-request-hint" class="hint-copy">
+          Up to 500 characters. Leave blank to plan from everything saved on the trip. The agents take a minute or more with a local model; this panel updates by itself.
+        </p>
+        {{ forms.field_errors('request', ma_errors_by_field) }}
+      </div>
+      <div class="form-field form-field--actions">
+        <button class="button button--secondary" type="submit">{% if run %}Plan again{% else %}Plan my itinerary{% endif %}</button>
+      </div>
+    </form>
+    <div id="multi-agent-loading" class="htmx-indicator ai-loading-indicator" role="status" aria-live="polite">
+      Starting the planner…
+    </div>
+  {% endif %}
+</section>

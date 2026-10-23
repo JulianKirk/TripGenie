@@ -149,6 +149,7 @@ def test_cloud_student_1_backend_gets_no_ai_mode_url_and_locals_keep_it():
     assert "STUDENT1_BACKEND_AI_MODE_BASE_URL" not in backend_env
     assert backend_env["STUDENT1_BACKEND_RAG_ENABLED"] == "false"
     assert backend_env["STUDENT1_BACKEND_MCP_ENABLED"] == "false"
+    assert backend_env["STUDENT1_BACKEND_MULTI_AGENT_ENABLED"] == "false"
     for local in ((), (".env.example",)):
         environment = compose_config(*local)["services"]["student-1-backend"][
             "environment"
