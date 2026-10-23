@@ -185,6 +185,50 @@ you must check or fill in before you say it.
   Clicking **Reject plan** on a run you already approved returns
   `MULTI_AGENT_ALREADY_DECIDED` and does not demonstrate rejection.
 
+### Optional shared bonus-security segment (30–45 seconds)
+
+Coordinate this segment with Student 5 rather than demonstrating it twice.
+[PR #195](https://github.com/YourNightmareIsOver/TripGenie/pull/195) added the
+shared endpoint headers and deployment security checks, building on the OIDC
+and managed-identity deployment work. Attribute those contributions accurately.
+Replace or shorten other shared footage to keep the group video under ten
+minutes; this segment is not included in the timings above.
+
+*Do:* Open the Student 1 cloud page, then DevTools **Network**, select the
+document request, and show its response headers. Highlight
+`Strict-Transport-Security`, `X-Content-Type-Options: nosniff` and
+`X-Frame-Options: DENY`. Show the deployment's `cloud-deployment-evidence`
+artifact: the HTTPS redirect and non-public backend/database checks, followed
+by its **Security Configuration** table. Finally point to the workflow's OIDC
+login and managed-identity configuration, without displaying credentials.
+
+> **Say:** "Our cloud endpoints enforce HTTPS and return browser security
+> headers. Only the frontends are public; backend and database ingress is
+> internal. The deployment validates these controls automatically. GitHub
+> uses OIDC, and apps pull images through a managed identity rather than
+> registry passwords. These are shared security contributions, including
+> Student 5's endpoint hardening and our deployment identity configuration."
+
+The successful
+[run 39870145500](https://github.com/YourNightmareIsOver/TripGenie/actions/runs/39870145500)
+contains passing header/HTTPS checks for all six frontends, public-domain
+404 checks for all twelve internal services, and Azure configuration checks
+for ingress, managed registry access, plain credential settings and disabled
+registry admin/anonymous access. On 23 Oct, a separate live check also
+confirmed the Student 1 headers and the portal's HTTP-to-HTTPS 301 redirect.
+Recheck these controls on the final demonstrated deployment. A 404 alone is
+not proof of isolation: show it alongside the internal-ingress configuration.
+
+The bonus issues,
+[#172 (B5)](https://github.com/YourNightmareIsOver/TripGenie/issues/172) and
+[#173 (B6)](https://github.com/YourNightmareIsOver/TripGenie/issues/173), still
+have older Bicep/Azure Files checklists. Do not claim an IP allow-list,
+Content-Security-Policy, Azure Files protection, or application-user
+authentication from this evidence. The implemented controls and their
+limitations are documented in [cloud endpoint security](cloud-endpoint-security.md)
+and [cloud data security](cloud-data-security.md). Neither merged code nor
+this script guarantees bonus marks.
+
 ## Rules for honest footage
 
 - **Pre-runs.** A pre-run is a genuine run started before recording and left
