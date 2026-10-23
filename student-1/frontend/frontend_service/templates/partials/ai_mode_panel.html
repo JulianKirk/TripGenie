@@ -31,7 +31,7 @@
     action="{{ request.url_for('generate_ai_suggestions', trip_id=trip.id) }}"
     method="post"
     hx-post="{{ request.url_for('generate_ai_suggestions', trip_id=trip.id) }}"
-    hx-target="#trip-detail-panel"
+    hx-target="#app-shell"
     hx-swap="outerHTML"
     hx-push-url="true"
     hx-indicator="#ai-suggestion-loading"
