@@ -61,7 +61,51 @@ python -m uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
 ```
 
 Use `--host 0.0.0.0` where the binding notes above require it. The 90-second
-timeout covers a cold 8b model; backend timeouts in Compose sit above it.
+timeout allows a cold model load but does not guarantee that an 8b model fits
+the host GPU. Check `ollama ps` and measure a complete workflow before recording.
+
+### Student 1 profile for a 4 GB GPU (Windows PowerShell)
+
+An 8b model can spill heavily into CPU memory on this hardware. Student 1's
+failed runs completed their MCP reads quickly but timed out in generation;
+raising the timeout did not make that configuration suitable for a demo.
+Use a smaller tool-capable model rather than weakening the workflow checks.
+This is a local profile, not a change to shared defaults or cloud settings.
+
+Pull the model once (approximately 1.9 GB); keep the embedding model from step 1
+for RAG. In the AI-Mode terminal, from the repository root and using its Python
+environment:
+
+```powershell
+ollama pull qwen2.5:3b
+Set-Location ai-services\ai-mode
+$env:AI_MODE_DEFAULT_MODEL = 'qwen2.5:3b'
+$env:AI_MODE_ALLOWED_MODELS = 'qwen2.5:0.5b,qwen2.5:3b,llama3.1:8b'
+$env:AI_MODE_CONTEXT_TOKENS = '12288'
+$env:AI_MODE_TIMEOUT_SECONDS = '90'
+$env:AI_MODE_AGENT_TIMEOUT_SECONDS = '180'
+$env:AI_MODE_MCP_URL = 'http://127.0.0.1:8012/mcp'
+python -m uvicorn ai_mode_service.app:app --host 127.0.0.1 --port 8006
+```
+
+In the separate Multi-Agent terminal, from the repository root and using the
+Multi-Agent Server's Python environment:
+
+```powershell
+Set-Location ai-services\multi-agent-server
+$env:MULTI_AGENT_MODEL = 'qwen2.5:3b'
+python -m multi_agent_service serve
+```
+
+Keep the normal Planner, Worker, Reviewer and total-run deadlines. The model
+allow-list must include the selected model; changing only `MULTI_AGENT_MODEL`
+is insufficient. Host services do not load the Compose environment file.
+Model output remains advisory: test your actual trip and request before the
+take, inspect grounding and dates, and never treat a timeout as a successful run.
+The [Student 1 runtime evidence](../release-2/student-1-multi-agent-runtime-evidence.md)
+records four real Compose/browser decisions in 25-46 seconds, the exact
+general-note request, and observed failures on other requests. This profile
+improves practical runtime; it does not guarantee model accuracy.
 
 ## 3. RAG ingest and serve (terminal 2)
 

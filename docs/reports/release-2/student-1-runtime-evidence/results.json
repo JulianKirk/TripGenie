@@ -1,0 +1,46 @@
+[
+  {
+    "decision": "approve",
+    "run_id": "magent_8584e4aef5f5",
+    "generation_seconds": 46.3,
+    "saved_items": 2,
+    "duplicate_replay": "no additional writes",
+    "conflicting_decision_http": 409,
+    "saved_source_item": "item_48baa836aad2414a",
+    "scenario": "general preparation notes, nullable citations",
+    "trip_context_tool_verified": true
+  },
+  {
+    "decision": "correct",
+    "run_id": "magent_7d060706226f",
+    "generation_seconds": 25.0,
+    "saved_items": 2,
+    "duplicate_replay": "no additional writes",
+    "conflicting_decision_http": 409,
+    "saved_source_item": "item_92b08e73f11c4c65",
+    "scenario": "general preparation notes, nullable citations",
+    "trip_context_tool_verified": true
+  },
+  {
+    "decision": "partial",
+    "run_id": "magent_6e4a5b75d58e",
+    "generation_seconds": 25.1,
+    "saved_items": 1,
+    "duplicate_replay": "no additional writes",
+    "conflicting_decision_http": 409,
+    "saved_source_item": "item_52dbd15963dd4770",
+    "scenario": "general preparation notes, nullable citations",
+    "trip_context_tool_verified": true
+  },
+  {
+    "decision": "reject",
+    "run_id": "magent_ff28106d8d8b",
+    "generation_seconds": 28.2,
+    "saved_items": 0,
+    "duplicate_replay": "no additional writes",
+    "conflicting_decision_http": 409,
+    "saved_source_item": "item_4c729dadfd3942ee",
+    "scenario": "general preparation notes, nullable citations",
+    "trip_context_tool_verified": true
+  }
+]

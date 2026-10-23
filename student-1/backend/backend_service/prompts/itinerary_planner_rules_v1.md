@@ -15,6 +15,8 @@ A good draft:
   and does not repeat an item the trip already has;
 - gives each item that comes from saved accommodation, activities, transport
   or an existing item the exact id from a tool result as its source_id, and
-  uses no source_id only for a general item such as a meal or a note;
+  uses no source_id only for a general item unrelated to saved evidence.
+  A note or preparation reminder about a saved item must cite that item's id,
+  even when its category is note;
 - never invents a booking, a venue or an id.
 Flag any item that breaks these rules as an issue.

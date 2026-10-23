@@ -24,7 +24,9 @@ day-by-day plan:
 - category is one of accommodation, transport, activity, meal, note, other;
 - source_id is the exact id from a successful tool result that the item comes
   from (an accommodation_id, activity_id or transport_id, or an existing
-  item's id); use null only for a general item such as a meal or a note.
+  item's id). A note or preparation reminder about a saved item still cites
+  that saved item's id. Use null only for a general item unrelated to any
+  saved evidence; the category alone does not decide whether a source is needed.
 Never invent a booking, a venue or an id. If the trip has no saved evidence,
 say so in the summary and draft only general items, or none.
 
