@@ -175,6 +175,12 @@ you must check or fill in before you say it.
 
 ### Part B: shared evidence and cloud (about 1:00)
 
+For the cloud addresses, disposable data, full trip/item CRUD rehearsal,
+security-header demonstration and deployment evidence, follow the runbook's
+[Student 1 cloud demonstration walkthrough](https://github.com/YourNightmareIsOver/TripGenie/blob/aadirai31/student-1-multi-agent/docs/reports/release-1/local-host-services-runbook.md#student-1-cloud-demonstration-walkthrough).
+The full walkthrough is preparation/backup footage; beat 10 below is the short
+video cut, not an instruction to fit every cloud check into 24 seconds.
+
 **Beat 7, 1:32–1:44. Pre-commit security scan.**
 *Do:* Show the terminal output of a fresh `security` hook run on the release commit: three `passed` lines and `Security gate: passed`.
 
@@ -202,7 +208,7 @@ you must check or fill in before you say it.
 > **Say:** "Finally, the same frontend on Azure Container Apps, over HTTPS. I
 > create a trip and delete it. GitHub Actions deployed this release with
 > OIDC, no stored passwords, after a required production approval. The AI
-> services stay on our machines, so the AI panels are off here. Back to
+> services stay on our machines; core CRUD works here with AI disabled. Back to
 > [next presenter]."
 
 ### Cuts and extra footage
