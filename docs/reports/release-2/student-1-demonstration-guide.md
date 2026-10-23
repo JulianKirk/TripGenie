@@ -111,6 +111,14 @@ Only the Student 1
 slice and portal run in this isolated Compose project; it is not the complete
 five-student stack, and its standalone AI/RAG/MCP panels are disabled.
 
+Follow the runbook's
+[planner prompts and recording walkthrough](https://github.com/YourNightmareIsOver/TripGenie/blob/aadirai31/student-1-multi-agent/docs/reports/release-1/local-host-services-runbook.md#student-1-planner-prompts-and-recording-walkthrough)
+for the copy-and-paste request, trip setup, each decision's button sequence,
+expected saved-item counts, and terminal commands. Use a **fresh trip for each
+decision walkthrough**: reusing the same prompt after approval changes the
+saved evidence and can produce duplicate warnings. The optional saved-dinner
+prompt there is explicitly an unverified quality rehearsal, not a passing demo.
+
 ## Timed script
 
 Times are cumulative. The narration is about 350 words. At 130–150 words a
