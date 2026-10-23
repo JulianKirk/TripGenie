@@ -228,6 +228,109 @@ under `docs/reports/release-2/`.
 Then open the portal at `http://localhost:8080` and exercise each feature's
 AI, MCP, and RAG flows.
 
+## Student 1 planner prompts and recording walkthrough
+
+Use the **What should the plan focus on? (optional)** field under **Plan my
+itinerary**. You enter one request; the server runs Planner, Worker and
+Reviewer automatically. Approve, correct, partial and reject are human
+decisions made with the buttons afterwards, not four different agent prompts.
+
+Use the small-GPU profile above. These instructions match the
+[four completed real-model runs](../release-2/student-1-multi-agent-runtime-evidence.md);
+they do not promise that a new model response will be identical.
+
+### Prepare the trip
+
+For the isolated recording stack, open `http://127.0.0.1:18353`; its portal is
+`http://127.0.0.1:18380`. The standard runbook stack uses `:8081` and `:8080`.
+Keep Docker Desktop, Ollama and the host AI services running.
+
+Create a fresh trip for each walkthrough, named `Planner demo - approve`,
+`Planner demo - correct`, `Planner demo - partial` or `Planner demo - reject`:
+
+| Field | Value |
+| --- | --- |
+| Destination | `Singapore` |
+| Start / end date | `2026-11-12` / `2026-11-14` |
+| Travellers / status | `1` / `Planned` |
+| Existing itinerary item | `Saved dinner`, `2026-11-14`, `18:00`-`19:00`, category `Meal` |
+| Dinner description | `An existing dinner on the last trip day.` |
+
+Leave the first two days empty. Separate trips prevent previously approved
+notes from changing the next run's evidence or triggering duplicate warnings.
+Do not create all four runs on one trip and then approve them in sequence.
+
+**Already-prepared take:** the isolated stack has `Release 2 demo - Singapore`,
+with run `magent_ec8c2096913b` left at human review when it was prepared on
+23 October. Open
+`http://127.0.0.1:18353/trips/trip_31f1f9e5228e48d2/multi-agent-plan/magent_ec8c2096913b`.
+If it still says **Your plan is ready for a decision**, you can use it for the
+approve footage without generating another plan. If you have already decided
+it, create a fresh trip/run instead; it cannot be reset to undecided.
+
+### Prompt to paste for each walkthrough
+
+```text
+Draft exactly two general travel-preparation notes: check travel documents on 2026-11-12, and pack a day bag on 2026-11-13. These are new general notes, not bookings or saved activities. Use category note, null times, and no invented venue.
+```
+
+Click **Plan my itinerary** once and wait for **Your plan is ready for a
+decision**. The measured runs took 25-46 seconds; allow for a cold model and
+do not submit duplicates while it is working.
+
+Before choosing a decision, show **Planner's plan**, **Agent steps and tool
+evidence**, **Deterministic checks**, and the **Reviewer** verdict. Confirm a
+successful `trip_get_context` call, two drafted notes on the requested dates,
+no invented venue or booking, and no blocking item problems. The original
+dinner should still be the only saved item.
+
+### Four human-decision walkthroughs
+
+Use the **same prompt above on each fresh trip**. The model's wording can
+vary; identify the notes by their meaning and date rather than exact title.
+
+| Walkthrough | What to do after reviewing the draft | What to show afterwards |
+| --- | --- | --- |
+| **1. Approve** | Leave both notes selected and click **Approve all items**. | Two new notes appear on 12 and 13 November; the dinner remains. Three saved items in total. |
+| **2. Correct** | On the fresh correction trip, expand **Correct item 1**, change its title to `Human-corrected preparation`, leave both selected, then click **Save corrections**. | Two new notes are saved, including the edited title. Three saved items in total. |
+| **3. Partial** | On the fresh partial trip, untick the day-bag note and click **Save selected items**. | Only the travel-documents note is added; the day-bag note is absent. Two saved items in total. |
+| **4. Reject** | On the fresh rejection trip, click **Reject plan**. | **Nothing was saved: you rejected this plan.** Only the original dinner remains. |
+
+For the main video, approve is enough to show the complete save path; use
+the other three as separately recorded backup footage if the group has time.
+Each run takes one decision. Do not try to demonstrate rejection by rejecting
+an already-approved run: that correctly returns `MULTI_AGENT_ALREADY_DECIDED`.
+If any draft fails the precheck, reject it or correct the actual problem;
+do not approve it just to match the expected item counts.
+
+### Optional saved-evidence rehearsal, not a verified recording prompt
+
+Only try this on another fresh trip with the dinner above:
+
+```text
+Draft exactly two short preparation reminders for the saved dinner: one on 12 November and one on 13 November. Use the saved dinner's id as source evidence. Do not repeat the dinner or invent venues. Use null times and optional details; keep titles brief.
+```
+
+This request exposed missing source IDs and wrong dates in earlier runs, even
+with an approving Reviewer. It is **not** the prompt used for the four passing
+walkthroughs. Check the dates and exact source IDs against the tool evidence;
+reject an incorrect draft. Use it to rehearse human scrutiny, not to claim
+saved-booking accuracy has already been established. The main prompt produces
+general notes, whose null source IDs are allowed.
+
+### Show the same run in the terminal
+
+In the Multi-Agent Python environment, substitute the Run ID visible on the
+page. For the isolated recording stack:
+
+```powershell
+python -m multi_agent_service --url http://127.0.0.1:18313 show <run_id>
+python -m multi_agent_service --url http://127.0.0.1:18313 export <run_id> --format markdown
+```
+
+For the standard stack, use `http://127.0.0.1:8013`. Say that a prepared run
+was generated before recording; do not present it as instantaneous generation.
+
 ## Troubleshooting
 
 | Symptom | Check |
