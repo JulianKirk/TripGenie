@@ -8,10 +8,12 @@ short Q&A answers.
 
 > **Status: provisional.** The "Plan my itinerary" panel comes from
 > [PR #189](https://github.com/YourNightmareIsOver/TripGenie/pull/189), which is
-> still a draft and not merged. The labels below were checked against that
-> PR's published head `c7e326d` on 23 Oct 2026. Before recording, check them
-> again against the commit you will actually show. This guide records no
-> runtime result. Every field marked *Pending* must come from a real run.
+> not merged. The labels below were checked against that
+> feature on 23 Oct 2026. Before recording, check them again against the
+> commit you will actually show. Four real Compose/browser decisions are now
+> recorded in PR #189's
+> [runtime evidence](https://github.com/YourNightmareIsOver/TripGenie/blob/aadirai31/student-1-multi-agent/docs/reports/release-2/student-1-multi-agent-runtime-evidence.md).
+> This does not fill in the final-release or recorded-take fields below.
 
 ## What the video needs from Student 1
 
@@ -77,6 +79,38 @@ Use a disposable trip. Never show real personal data.
   Melbourne, 2026-11-12 to 2026-11-13. Cloud SQLite resets on every new
   revision, so anything you create there is temporary.
 
+### Rehearsed small-GPU scenario
+
+On the 4 GB laptop GPU, use PR #189's **Student 1 profile for a 4 GB GPU**
+in the host runbook: `qwen2.5:3b`, 12288 context tokens, 90 s provider timeout,
+180 s agent timeout, and the same model selected in the Multi-Agent Server.
+Keep its normal stage deadlines. The original 8b configuration timed out;
+simply increasing timeouts did not make it suitable for this recording.
+
+The four completed Compose runs used a synthetic Singapore trip, 12-14
+November, one existing dinner on 14 November, and this request:
+
+> Draft exactly two general travel-preparation notes: check travel documents
+> on 2026-11-12, and pack a day bag on 2026-11-13. These are new general notes,
+> not bookings or saved activities. Use category note, null times, and no
+> invented venue.
+
+They reached human review in 25-46 seconds; approve, correct, partial and
+reject saved 2, 2, 1 and 0 items respectively. This proves the workflow and
+decision paths for **general notes**, not saved-booking citation accuracy.
+Other requests produced wrong dates or missing source IDs despite a positive
+Reviewer verdict. Inspect the actual draft; keep the richer saved-item demo
+above as a separate rehearsal requirement rather than claiming it was tested.
+
+An isolated recording stack uses frontend `http://127.0.0.1:18353` and portal
+`http://127.0.0.1:18380`, rather than the standard ports used in the script.
+Its backend is `18301`, with host AI-Mode `18306`, MCP `18312` and Multi-Agent
+`18313`. For its CLI, put the URL before the subcommand, for example
+`python -m multi_agent_service --url http://127.0.0.1:18313 show <run_id>`.
+Only the Student 1
+slice and portal run in this isolated Compose project; it is not the complete
+five-student stack, and its standalone AI/RAG/MCP panels are disabled.
+
 ## Timed script
 
 Times are cumulative. The narration is about 350 words. At 130–150 words a
@@ -111,9 +145,9 @@ you must check or fill in before you say it.
 *Do:* Scroll to **Plan my itinerary**. The pre-run shows **Your plan is ready for a decision** with its Run ID. Open **Planner's plan**, then **Agent steps and tool evidence** (it should show `trip_get_context`). Point at **Deterministic checks** and the **Reviewer** verdict, issues and risks.
 
 > **Say:** "This is Plan my itinerary. I started this run before recording,
-> because a local model takes a minute or more; the run ID is on screen. The
+> so we do not spend the video waiting for generation; the run ID is on screen. The
 > Planner chose what to look up, the Worker called the trip tools through MCP,
-> the server's deterministic checks passed, and the Reviewer flagged risks.
+> the server's deterministic checks passed, and this is the Reviewer's verdict.
 > Nothing has been saved yet."
 
 **Beat 5, 1:05–1:25. Human decision.**
@@ -268,14 +302,16 @@ Tick items only after you have checked them on the version you will submit.
   - [ ] get one RAG answer with citations;
   - [ ] get one MCP tool result;
   - [ ] start one **Plan my itinerary** run.
-- [ ] *Pending:* all four decisions tested on separate real runs:
-  - [ ] approve all;
-  - [ ] save selected (partial);
-  - [ ] save corrections;
-  - [ ] reject, with nothing saved.
+- [x] All four decisions exercised on separate real Compose/browser runs,
+      with the limited general-note scenario described above:
+  - [x] approve all;
+  - [x] save selected (partial);
+  - [x] save corrections;
+  - [x] reject, with nothing saved.
 
-  Also check that repeating a decision shows "Already on the itinerary" and
-  that a conflicting decision is refused.
+  Exact-submission replay created no duplicates, and conflicting decisions
+  returned 409. Repeat the rehearsal after changing the model, shared server,
+  feature code or the intended demo scenario.
 - [ ] One fresh **pre-run** waiting at "Your plan is ready for a decision",
       with no problem badges on the items you will approve. Note its Run ID
       and page URL.
@@ -435,7 +471,7 @@ Notes on the agentic loop
 | **Approve all items** refused, naming an item | That item has a "Cannot be saved as drafted" problem. Untick it and use **Save selected items**, or fix it under **Correct item [n]** and use **Save corrections**. |
 | "Only [k] of [n] approved items are on your itinerary" | Click **Retry saving the missing items**. Only the missing items are written, and saved items are never duplicated. |
 | `MULTI_AGENT_ALREADY_DECIDED` | That run already has a different decision. Use a new run. |
-| Stuck in "planning", "working" or "reviewing" | A cold 8b model is slow. Check the AI-Mode terminal, and use the **Refresh status** link if JavaScript is off. |
+| Stuck in "planning", "working" or "reviewing" | Check the AI-Mode terminal and the tested small-GPU profile above. Do not assume a larger timeout solves an 8b model stall. Use **Refresh status** if JavaScript is off. |
 | The cloud page loads slowly | It is a cold start from zero replicas. Warm it up before recording. |
 | A trip created in the cloud has disappeared | A new revision or restart reset the ephemeral SQLite. Expected. |
 | A review section prints "unavailable" | No Claude credentials, or the model call failed. The checks still set the exit code, but that output is not agentic review evidence. Fix the credentials and rerun before you rely on it, and say so honestly if you show it. |
@@ -443,16 +479,19 @@ Notes on the agentic loop
 ## Q&A cards
 
 **Why does my backend, not the agent server, write itinerary items?**
-The Multi-Agent Server never writes feature data. Its Worker is limited to
-the read-only tools `trip_get_context` and `trips_list_itinerary_items`, and a
-`no_writes` check enforces that. After the human decides, the Student 1
+The Worker is instructed to use only the read-only tools `trip_get_context`
+and `trips_list_itinerary_items`. The `no_writes` check examines calls after
+execution; on this server version it is not a preventive authorization
+boundary, because AI-Mode still advertises the full catalogue. After the human decides, the Student 1
 backend re-validates each approved item and saves it through the existing
 `create_itinerary_item` path, with the same rules as manual CRUD.
 
 **How are drafts grounded and validated?**
 The server runs deterministic checks: `output_schema`, `allowed_tools`,
 `tool_evidence`, `no_writes` and `grounding`. The grounding check requires
-each `source_id` to come from a Student 1 tool result. My backend then
+each non-null `source_id` to come from a Student 1 tool result. General notes
+may have null IDs; this check cannot prove a missing citation or every
+natural-language claim correct. My backend then
 re-checks each draft:
 - **Blocking problems:** dates outside the trip, invalid times, repeats of
   existing items, and domain-rule failures.
