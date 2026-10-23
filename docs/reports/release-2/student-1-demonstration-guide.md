@@ -31,7 +31,8 @@ students. From the Release 2 brief, Student 1's part has to show:
 **Suggested split (provisional; the group decides).** About 90 seconds for the
 Student 1 feature on the local stack, then about 60 seconds for the shared
 work Student 1 owns or contributed to: testing evidence, review output and
-the cloud deployment. That is about 2–2.5 minutes, which leaves time for the
+the cloud deployment. That budget is about 2:30 (90 + 60 seconds), and the
+full script below rehearses at about 2:20–2:40, which leaves time for the
 other four students. This is a planning suggestion, not an assessment rule.
 If the group gives one person all the pre-commit, CI or review footage, cut
 the matching beats below.
@@ -78,8 +79,8 @@ Use a disposable trip. Never show real personal data.
 
 ## Timed script
 
-Times are cumulative. The narration is about 340 words. At 130–150 words a
-minute it runs 2:15–2:40, so rehearse with a timer and use the cuts below if
+Times are cumulative. The narration is about 350 words. At 130–150 words a
+minute it runs 2:20–2:40, so rehearse with a timer and use the cuts below if
 needed. Each **Say** line is the exact narration. Square brackets mark a value
 you must check or fill in before you say it.
 
@@ -125,7 +126,7 @@ you must check or fill in before you say it.
 > the GitHub production approval."
 
 **Beat 6, 1:25–1:32. Terminal view of the same run.**
-*Do:* In the Multi-Agent Server terminal, run `python -m multi_agent_service show <run_id>`, or show that run's export, and highlight the human decision.
+*Do:* In a terminal at `ai-services\multi-agent-server` (the Multi-Agent Server's environment), run `python -m multi_agent_service show <run_id>`, or show that run's export, and highlight the human decision.
 
 > **Say:** "The same run from the terminal: its history and audit log record
 > my decision."
@@ -133,10 +134,11 @@ you must check or fill in before you say it.
 ### Part B: shared evidence and cloud (about 1:00)
 
 **Beat 7, 1:32–1:44. Pre-commit security scan.**
-*Do:* Show the terminal output of the `security` hook on the release commit: three `passed` lines and `Security gate: passed`.
+*Do:* Show the terminal output of a fresh `security` hook run on the release commit: three `passed` lines and `Security gate: passed`.
 
-> **Say:** "Before each commit, our pre-commit hook runs Ruff security rules,
-> detect-secrets and pip-audit. This scan of the release commit passed."
+> **Say:** "Our local pre-commit security gate runs Ruff security rules,
+> detect-secrets and pip-audit. This is a fresh scan of the release commit,
+> and [all three checks passed]."
 
 **Beat 8, 1:44–1:56. Post-commit endpoint tests.**
 *Do:* Open the final Student 1 CI run, show the **Endpoint test summary** table, then the `student-1-endpoint-test-evidence` artifact.
@@ -163,18 +165,20 @@ you must check or fill in before you say it.
 
 ### Cuts and extra footage
 
-- **To reach about 2:00:** drop beat 6 and shorten beat 3 to "CRUD still
-  works". If the group's shared section already covers the pre-commit, CI and
-  review footage, drop beats 7–9 and keep beat 10 plus one sentence on your
-  own evidence.
+- **If a rehearsal runs over the slot the group agrees:** drop beat 6 and
+  shorten beat 3 to "CRUD still works". If the group's shared section already
+  covers the pre-commit, CI and review footage, drop beats 7–9 and keep beat
+  10 plus one sentence on your own evidence. These cuts are provisional; time
+  the shortened take again rather than assuming how much it saves.
 - **Optional backup footage** (record separately; use only if time allows or
   someone asks):
   - **Reject:** a second real pre-run on the same trip, then **Reject plan**.
     The banner should read "Nothing was saved: you rejected this plan."
   - **Correct:** edit one drafted item under **Correct item [n]**, then click
     **Save corrections**.
-  - **Terminal run:** a terminal-only run through the shared server with
-    `run --feature student-1 --trip-id <trip_id> --task "..." --no-review`.
+  - **Terminal run:** a terminal-only run through the shared server, from
+    `ai-services\multi-agent-server` in the server's environment:
+    `python -m multi_agent_service run --feature student-1 --trip-id <trip_id> --task "..." --no-review`.
     It uses the server's generic answer schema, not the Student 1 backend's
     planner prompt, so present it as the shared server's terminal path.
 - Show each decision on its own run. A run takes exactly one decision.
@@ -238,15 +242,25 @@ Tick items only after you have checked them on the version you will submit.
 ### Evidence (Part B)
 
 - [ ] *Pending:* a fresh `pre-commit run security --all-files` on the
-      release commit, with its date and SHA noted. The hook writes JSON to
-      `$(git rev-parse --git-path security-reports/latest.json)`. It does not
-      update the [security report](student-1-pre-commit-security-report.md).
+      release commit, with its date and SHA noted. The hook writes JSON to the
+      path printed by `git rev-parse --git-path security-reports/latest.json`
+      (view it with `Get-Content (git rev-parse --git-path security-reports/latest.json)`).
+      It does not update the [security report](student-1-pre-commit-security-report.md).
 - [ ] *Pending:* the Student 1 CI run for the release SHA is green, its
       **Endpoint test summary** is open, and the test count is filled into
       beat 8.
 - [ ] *Pending:* Student 1's Multi-Agent Review and Testing Review outputs
       exist for this version, and the team has agreed where they are stored
       (see the cheatsheet).
+  - [ ] Both Claude agent sections in each output contain real findings,
+        with the model names recorded. A section that says "unavailable"
+        means the agentic review did not happen.
+  - [ ] Green deterministic checks alone do not satisfy the agentic review
+        requirement. If a model section was unavailable, leave this item
+        *Pending*, rerun with credentials, and do not show or describe that
+        output as a completed review.
+  - [ ] The human decision recorded in each output is your own, made after
+        reading the findings.
 - [ ] *Pending:* the team has agreed the final cloud deployment, and its run
       URL and SHA are recorded.
 - [ ] On the final cloud deployment:
@@ -291,8 +305,8 @@ Tick items only after you have checked them on the version you will submit.
 | Audit export location | *Pending* |
 | Pre-commit scan: date, SHA, result | *Pending* |
 | Student 1 CI run URL and test count | *Pending* |
-| Multi-Agent Review output and run ID it reviewed | *Pending* |
-| Testing Review output | *Pending* |
+| Multi-Agent Review output, run ID it reviewed, and whether both model sections ran | *Pending* |
+| Testing Review output, and whether both model sections ran | *Pending* |
 | Final Cloud Deployment run URL and SHA | *Pending (team decision)* |
 | Cloud Deployment Review output | *Pending* |
 | Cost figure and date range quoted | *Pending* |
@@ -308,26 +322,44 @@ present either as the final release.
 
 ## Command and evidence cheatsheet
 
-Run these from the repository root unless stated otherwise. Startup commands
-are in the [local host services runbook](../release-1/local-host-services-runbook.md)
-and are not repeated here. In Windows PowerShell, set variables with
-`$env:NAME = "value"` and call `curl.exe`.
+Commands are for Windows PowerShell. The **Run from** column gives the working
+directory relative to the repository root; `Set-Location` there first. Startup
+commands are in the [local host services runbook](../release-1/local-host-services-runbook.md)
+and are not repeated here. Call `curl.exe`, not the `curl` alias.
 
-| Purpose | Command or location |
-| --- | --- |
-| Compose status | `docker compose --env-file shared/configuration/.env.example ps` |
-| Host readiness | the runbook's "Verify" section (`:8006`, `:8011`, `:8012`, `:8013`, `:18001`) |
-| Student 1 backend multi-agent API | the curl steps in [PR #189's runbook update](https://github.com/YourNightmareIsOver/TripGenie/pull/189/files): `POST`/`GET /api/trips/{trip_id}/multi-agent-plan[/{run_id}]` and `POST .../review` |
-| Reopen a pre-run in the browser | `http://localhost:8081/trips/<trip_id>/multi-agent-plan/<run_id>` (the page the panel's "Refresh status" link opens) |
-| Runs for Student 1 (from `ai-services/multi-agent-server`) | `python -m multi_agent_service list --feature student-1` |
-| One run's details | `python -m multi_agent_service show <run_id>` |
-| History and audit export | `python -m multi_agent_service export <run_id> --format markdown --output <file>` (also `--format json`) |
-| Pre-commit scan | `pre-commit run security --all-files --verbose` |
-| Student 1 CI evidence | Actions → **Student 1 CI** → **Validate Student 1 Compose Readiness** → **Endpoint test summary**; artifact `student-1-endpoint-test-evidence` |
-| Multi-Agent Review (from `ai-services/agentic-loop`) | `RUN_ID=<run_id> python agentic_loop.py --mode multi-agent` |
-| Testing Review | `python agentic_loop.py --mode testing` (run `gh auth login` first) |
-| Cloud Deployment Review | `python agentic_loop.py --mode cloud` (interactive). Set `CLOUD_RUN_ID` to the final run and, optionally, `CLOUD_URL`. |
-| Cloud frontends | `https://student-1-frontend.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` and `https://shared-ui.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` (listed by run 39870145500; re-check on the final run) |
+Python environments:
+
+- **Multi-Agent Server CLI** (`ai-services\multi-agent-server`): use the
+  environment where you ran `python -m pip install -e ".[dev]"` for the
+  runbook, which is the same one serving `:8013`. `list`, `show` and `export`
+  query the running server at `http://127.0.0.1:8013` (override with `--url`),
+  so the server must be up. A relative `--output` path is resolved from this
+  directory; do not leave stray exports in the repository unless the team
+  commits them as evidence.
+- **Agentic loop** (`ai-services\agentic-loop`): use an environment where you
+  ran `python -m pip install -r requirements.txt`. The Claude credentials must
+  already be in the environment, and the testing and cloud modes need
+  `gh auth login` first.
+- `$env:` variables last for the rest of that PowerShell session. Clear them
+  with `Remove-Item Env:RUN_ID` (or `Env:CLOUD_RUN_ID`, `Env:CLOUD_URL`)
+  before reviewing a different run.
+
+| Purpose | Run from | Command or location |
+| --- | --- | --- |
+| Compose status | repository root | `docker compose --env-file shared\configuration\.env.example ps` |
+| Host readiness | any | the runbook's "Verify" section (`:8006`, `:8011`, `:8012`, `:8013`, `:18001`) |
+| Student 1 backend multi-agent API | any | the curl steps in [PR #189's runbook update](https://github.com/YourNightmareIsOver/TripGenie/pull/189/files): `POST`/`GET /api/trips/{trip_id}/multi-agent-plan[/{run_id}]` and `POST .../review` |
+| Reopen a pre-run in the browser | browser | `http://localhost:8081/trips/<trip_id>/multi-agent-plan/<run_id>` (the page the panel's "Refresh status" link opens) |
+| Runs for Student 1 | `ai-services\multi-agent-server` | `python -m multi_agent_service list --feature student-1` |
+| One run's details | `ai-services\multi-agent-server` | `python -m multi_agent_service show <run_id>` |
+| History and audit export | `ai-services\multi-agent-server` | `python -m multi_agent_service export <run_id> --format markdown --output <file>.md` (or `--format json --output <file>.json`) |
+| Pre-commit scan | repository root | `pre-commit run security --all-files --verbose` |
+| Latest scan JSON | repository root | `Get-Content (git rev-parse --git-path security-reports/latest.json)` |
+| Student 1 CI evidence | browser | Actions → **Student 1 CI** → **Validate Student 1 Compose Readiness** → **Endpoint test summary**; artifact `student-1-endpoint-test-evidence` |
+| Multi-Agent Review | `ai-services\agentic-loop` | `$env:RUN_ID = '<run_id>'; python agentic_loop.py --mode multi-agent` |
+| Testing Review | `ai-services\agentic-loop` | `python agentic_loop.py --mode testing` |
+| Cloud Deployment Review (interactive) | `ai-services\agentic-loop` | `$env:CLOUD_RUN_ID = '<deploy_run_id>'; $env:CLOUD_URL = '<final_student_1_frontend_url>'; python agentic_loop.py --mode cloud` (`CLOUD_URL` is optional) |
+| Cloud frontends | browser | `https://student-1-frontend.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` and `https://shared-ui.lemonrock-5a94d8cd.australiaeast.azurecontainerapps.io` (listed by run 39870145500; re-check on the final run) |
 
 Notes on the agentic loop
 ([README](../../../ai-services/agentic-loop/README.md)):
@@ -362,7 +394,7 @@ Notes on the agentic loop
 | Stuck in "planning", "working" or "reviewing" | A cold 8b model is slow. Check the AI-Mode terminal, and use the **Refresh status** link if JavaScript is off. |
 | The cloud page loads slowly | It is a cold start from zero replicas. Warm it up before recording. |
 | A trip created in the cloud has disappeared | A new revision or restart reset the ephemeral SQLite. Expected. |
-| A review section prints "unavailable" | No Claude credentials. The checks still decide the result; say so honestly. |
+| A review section prints "unavailable" | No Claude credentials, or the model call failed. The checks still set the exit code, but that output is not agentic review evidence. Fix the credentials and rerun before you rely on it, and say so honestly if you show it. |
 
 ## Q&A cards
 
